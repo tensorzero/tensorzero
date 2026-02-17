@@ -896,8 +896,10 @@ mod tests {
 
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
+    use crate::db::inferences::FunctionInfo;
     use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::inference::types::FunctionType;
     use crate::jsonschema_util::JSONSchema;
     use crate::tool::{
         FunctionToolConfig, InferenceResponseToolCall, StaticToolConfig, ToolChoice,
@@ -1105,9 +1107,50 @@ mod tests {
             *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: format!("Episode ID: {episode_id} does not exist"),
-            },
-            "Expected episode not found error"
+            }
         );
+    }
+
+    #[tokio::test]
+    async fn test_feedback_handler_comment_success() {
+        let config = Config::default();
+        let episode_id = Uuid::now_v7();
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(move |_, _| {
+                let episode_id = episode_id;
+                Box::pin(async move {
+                    Ok(Some(FunctionInfo {
+                        function_name: "test_fn".to_string(),
+                        function_type: FunctionType::Chat,
+                        variant_name: "v0".to_string(),
+                        episode_id,
+                    }))
+                })
+            });
+        mock_db
+            .feedback_queries
+            .expect_insert_comment_feedback()
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let params = Params {
+            episode_id: Some(episode_id),
+            inference_id: None,
+            metric_name: "comment".to_string(),
+            value: json!("test comment"),
+            tags: HashMap::new(),
+            internal: false,
+            dryrun: Some(false),
+        };
+        let deferred_tasks = TaskTracker::new();
+        let response = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap();
+        deferred_tasks.close();
+        deferred_tasks.wait().await;
+        assert_ne!(response.feedback_id, Uuid::nil());
     }
 
     #[tokio::test]
@@ -1136,8 +1179,7 @@ mod tests {
             ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
-            },
-            "Expected wrong ID level error for demonstration with episode_id"
+            }
         );
 
         // Test with inference_id (should fail with non-existent ID)
@@ -1164,9 +1206,70 @@ mod tests {
             *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: format!("Inference ID: {inference_id} does not exist"),
-            },
-            "Expected inference not found error"
+            }
         );
+    }
+
+    #[tokio::test]
+    async fn test_feedback_handler_demonstration_success() {
+        // Build a chat function config so demonstration validation can find it
+        let chat_fn = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            description: None,
+            all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
+        });
+        let config = Config {
+            functions: HashMap::from([("test_fn".to_string(), Arc::new(chat_fn))]),
+            ..Default::default()
+        };
+
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(move |_, _| {
+                let episode_id = episode_id;
+                Box::pin(async move {
+                    Ok(Some(FunctionInfo {
+                        function_name: "test_fn".to_string(),
+                        function_type: FunctionType::Chat,
+                        variant_name: "v0".to_string(),
+                        episode_id,
+                    }))
+                })
+            });
+        mock_db
+            .inference_queries
+            .expect_get_chat_inference_tool_params()
+            .returning(|_, _| Box::pin(async { Ok(None) }));
+        mock_db
+            .feedback_queries
+            .expect_insert_demonstration_feedback()
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let params = Params {
+            episode_id: None,
+            inference_id: Some(inference_id),
+            metric_name: "demonstration".to_string(),
+            value: json!("a valid text demonstration"),
+            tags: HashMap::new(),
+            internal: false,
+            dryrun: Some(false),
+        };
+        let deferred_tasks = TaskTracker::new();
+        let response = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap();
+        deferred_tasks.close();
+        deferred_tasks.wait().await;
+        assert_ne!(response.feedback_id, Uuid::nil());
     }
 
     #[tokio::test]
@@ -1208,8 +1311,7 @@ mod tests {
             *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"episode\".".to_string(),
-            },
-            "Expected wrong ID level error for float with inference_id"
+            }
         );
 
         // Test with episode_id (should fail with non-existent ID)
@@ -1235,9 +1337,63 @@ mod tests {
             *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: format!("Episode ID: {episode_id} does not exist"),
-            },
-            "Expected episode not found error"
+            }
         );
+    }
+
+    #[tokio::test]
+    async fn test_feedback_handler_float_success() {
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_float".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                level: MetricConfigLevel::Episode,
+                optimize: MetricConfigOptimize::Max,
+                description: None,
+            },
+        );
+        let config = Config {
+            metrics,
+            ..Default::default()
+        };
+        let episode_id = Uuid::now_v7();
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(move |_, _| {
+                let episode_id = episode_id;
+                Box::pin(async move {
+                    Ok(Some(FunctionInfo {
+                        function_name: "test_fn".to_string(),
+                        function_type: FunctionType::Chat,
+                        variant_name: "v0".to_string(),
+                        episode_id,
+                    }))
+                })
+            });
+        mock_db
+            .feedback_queries
+            .expect_insert_float_feedback()
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let params = Params {
+            episode_id: Some(episode_id),
+            inference_id: None,
+            metric_name: "test_float".to_string(),
+            value: json!(4.5),
+            tags: HashMap::new(),
+            internal: false,
+            dryrun: Some(false),
+        };
+        let deferred_tasks = TaskTracker::new();
+        let response = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap();
+        deferred_tasks.close();
+        deferred_tasks.wait().await;
+        assert_ne!(response.feedback_id, Uuid::nil());
     }
 
     #[tokio::test]
@@ -1281,9 +1437,64 @@ mod tests {
             *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: format!("Inference ID: {inference_id} does not exist"),
-            },
-            "Expected inference not found error"
+            }
         );
+    }
+
+    #[tokio::test]
+    async fn test_feedback_handler_boolean_success() {
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_boolean".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Boolean,
+                level: MetricConfigLevel::Inference,
+                optimize: MetricConfigOptimize::Max,
+                description: None,
+            },
+        );
+        let config = Config {
+            metrics,
+            ..Default::default()
+        };
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(move |_, _| {
+                let episode_id = episode_id;
+                Box::pin(async move {
+                    Ok(Some(FunctionInfo {
+                        function_name: "test_fn".to_string(),
+                        function_type: FunctionType::Chat,
+                        variant_name: "v0".to_string(),
+                        episode_id,
+                    }))
+                })
+            });
+        mock_db
+            .feedback_queries
+            .expect_insert_boolean_feedback()
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let params = Params {
+            episode_id: None,
+            inference_id: Some(inference_id),
+            metric_name: "test_boolean".to_string(),
+            value: json!(true),
+            tags: HashMap::new(),
+            internal: false,
+            dryrun: Some(false),
+        };
+        let deferred_tasks = TaskTracker::new();
+        let response = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap();
+        deferred_tasks.close();
+        deferred_tasks.wait().await;
+        assert_ne!(response.feedback_id, Uuid::nil());
     }
 
     #[tokio::test]
