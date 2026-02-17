@@ -1322,6 +1322,7 @@ jobs:
         build-ui-container,
         build-mock-provider-api-container,
         build-provider-proxy-container,
+        build-fixtures-container,
       ]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
