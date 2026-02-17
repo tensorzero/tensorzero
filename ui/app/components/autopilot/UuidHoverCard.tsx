@@ -54,7 +54,7 @@ export function UuidHoverCard({ uuid, obj, children }: UuidHoverCardProps) {
             "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           )}
         >
-          <HoverCardContent uuid={uuid} obj={obj} url={url} isOpen={isOpen} />
+          <HoverCardContent uuid={uuid} obj={obj} isOpen={isOpen} />
         </HoverCard.Content>
       </HoverCard.Portal>
     </HoverCard.Root>
@@ -64,21 +64,18 @@ export function UuidHoverCard({ uuid, obj, children }: UuidHoverCardProps) {
 interface HoverCardContentProps {
   uuid: string;
   obj: ResolvedObject;
-  url: string;
   isOpen: boolean;
 }
 
-function HoverCardContent({ uuid, obj, url, isOpen }: HoverCardContentProps) {
+function HoverCardContent({ uuid, obj, isOpen }: HoverCardContentProps) {
   switch (obj.type) {
     case "inference":
-      return (
-        <InferenceContent uuid={uuid} obj={obj} url={url} isOpen={isOpen} />
-      );
+      return <InferenceContent uuid={uuid} obj={obj} isOpen={isOpen} />;
     case "episode":
-      return <EpisodeContent uuid={uuid} url={url} isOpen={isOpen} />;
+      return <EpisodeContent uuid={uuid} obj={obj} isOpen={isOpen} />;
     case "chat_datapoint":
     case "json_datapoint":
-      return <DatapointContent obj={obj} url={url} />;
+      return <DatapointContent uuid={uuid} obj={obj} />;
     case "model_inference":
     case "boolean_feedback":
     case "float_feedback":
@@ -95,11 +92,10 @@ function HoverCardContent({ uuid, obj, url, isOpen }: HoverCardContentProps) {
 interface InferenceContentProps {
   uuid: string;
   obj: Extract<ResolvedObject, { type: "inference" }>;
-  url: string;
   isOpen: boolean;
 }
 
-function InferenceContent({ uuid, obj, url, isOpen }: InferenceContentProps) {
+function InferenceContent({ uuid, obj, isOpen }: InferenceContentProps) {
   const { data, isLoading } = useEntityPreview<InferencePreview>({
     type: EntityPreviewType.Inference,
     id: uuid,
@@ -111,7 +107,9 @@ function InferenceContent({ uuid, obj, url, isOpen }: InferenceContentProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <TypeBadgeLink url={url}>Inference</TypeBadgeLink>
+      <TypeBadgeLink uuid={uuid} obj={obj}>
+        Inference
+      </TypeBadgeLink>
       <FunctionItem
         functionName={obj.function_name}
         functionType={obj.function_type}
@@ -129,11 +127,11 @@ function InferenceContent({ uuid, obj, url, isOpen }: InferenceContentProps) {
 
 interface EpisodeContentProps {
   uuid: string;
-  url: string;
+  obj: ResolvedObject;
   isOpen: boolean;
 }
 
-function EpisodeContent({ uuid, url, isOpen }: EpisodeContentProps) {
+function EpisodeContent({ uuid, obj, isOpen }: EpisodeContentProps) {
   const { data, isLoading } = useEntityPreview<EpisodePreview>({
     type: EntityPreviewType.Episode,
     id: uuid,
@@ -146,7 +144,9 @@ function EpisodeContent({ uuid, url, isOpen }: EpisodeContentProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <TypeBadgeLink url={url}>Episode</TypeBadgeLink>
+      <TypeBadgeLink uuid={uuid} obj={obj}>
+        Episode
+      </TypeBadgeLink>
       <InfoItem
         label="Inferences"
         value={inferenceCountText}
@@ -157,17 +157,19 @@ function EpisodeContent({ uuid, url, isOpen }: EpisodeContentProps) {
 }
 
 interface DatapointContentProps {
+  uuid: string;
   obj: Extract<ResolvedObject, { type: "chat_datapoint" | "json_datapoint" }>;
-  url: string;
 }
 
-function DatapointContent({ obj, url }: DatapointContentProps) {
+function DatapointContent({ uuid, obj }: DatapointContentProps) {
   const typeLabel =
     obj.type === "chat_datapoint" ? "Chat Datapoint" : "JSON Datapoint";
 
   return (
     <div className="flex flex-col gap-2">
-      <TypeBadgeLink url={url}>{typeLabel}</TypeBadgeLink>
+      <TypeBadgeLink uuid={uuid} obj={obj}>
+        {typeLabel}
+      </TypeBadgeLink>
       <InfoItem label="Dataset" value={obj.dataset_name} mono />
       <InfoItem label="Function" value={obj.function_name} mono />
     </div>
@@ -175,11 +177,15 @@ function DatapointContent({ obj, url }: DatapointContentProps) {
 }
 
 interface TypeBadgeLinkProps {
+  uuid: string;
+  obj: ResolvedObject;
   children: React.ReactNode;
-  url: string;
 }
 
-function TypeBadgeLink({ children, url }: TypeBadgeLinkProps) {
+function TypeBadgeLink({ uuid, obj, children }: TypeBadgeLinkProps) {
+  const url = toResolvedObjectUrl(uuid, obj);
+  if (!url) return null;
+
   return (
     <Link
       to={url}
@@ -193,18 +199,12 @@ function TypeBadgeLink({ children, url }: TypeBadgeLinkProps) {
 
 interface ItemProps {
   label: string;
-  align?: "baseline" | "center";
   children: React.ReactNode;
 }
 
-function Item({ label, align = "baseline", children }: ItemProps) {
+function Item({ label, children }: ItemProps) {
   return (
-    <div
-      className={cn(
-        "grid grid-cols-[4rem_1fr] gap-2",
-        align === "center" ? "items-center" : "items-baseline",
-      )}
-    >
+    <div className="grid grid-cols-[4rem_1fr] items-baseline gap-2">
       <span className="text-muted-foreground text-xs">{label}</span>
       {children}
     </div>
@@ -219,7 +219,7 @@ interface FunctionItemProps {
 function FunctionItem({ functionName, functionType }: FunctionItemProps) {
   const iconConfig = getFunctionTypeIcon(functionType);
   return (
-    <Item label="Function" align="center">
+    <Item label="Function">
       <span
         className="text-foreground inline-flex min-w-0 items-center gap-1 font-mono text-xs"
         title={`${functionName} · ${functionType}`}
