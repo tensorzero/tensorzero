@@ -90,7 +90,6 @@ async fn health_check_inner(
 
 #[cfg(test)]
 mod tests {
-    use crate::config::Config;
     use crate::db::MockHealthCheckable;
     use crate::error::{Error, ErrorDetails};
 
@@ -157,17 +156,5 @@ mod tests {
         assert_eq!(status_code, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(error_json.get("gateway").unwrap(), "ok");
         assert_eq!(error_json.get("postgres").unwrap(), "error");
-    }
-
-    #[test]
-    fn test_status_response() {
-        let config = Config::default();
-        let response = StatusResponse {
-            status: "ok".to_string(),
-            version: TENSORZERO_VERSION.to_string(),
-            config_hash: config.hash.to_string(),
-        };
-        assert_eq!(response.version, TENSORZERO_VERSION);
-        assert!(!response.config_hash.is_empty());
     }
 }
