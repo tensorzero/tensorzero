@@ -116,7 +116,7 @@ function InferenceContent({ uuid, obj, isOpen }: InferenceContentProps) {
         secondaryValue={variantType}
         mono
       />
-      <TimestampItem data={data} isLoading={isLoading} />
+      <Timestamp data={data} isLoading={isLoading} />
     </div>
   );
 }
@@ -138,10 +138,6 @@ function EpisodeContent({ uuid, obj, isOpen }: EpisodeContentProps) {
     enabled: isOpen,
   });
 
-  const inferenceCountText = data
-    ? `${data.inference_count} inference${data.inference_count !== 1 ? "s" : ""}`
-    : null;
-
   return (
     <div className="flex flex-col gap-2">
       <TypeBadgeLink uuid={uuid} obj={obj}>
@@ -149,8 +145,9 @@ function EpisodeContent({ uuid, obj, isOpen }: EpisodeContentProps) {
       </TypeBadgeLink>
       <InfoItem
         label="Inferences"
-        value={inferenceCountText}
+        value={data ? String(data.inference_count) : null}
         isLoading={isLoading}
+        mono
       />
     </div>
   );
@@ -276,12 +273,12 @@ function InfoItem({
   );
 }
 
-interface TimestampItemProps {
+interface TimestampProps {
   data: InferencePreview | null;
   isLoading: boolean;
 }
 
-function TimestampItem({ data, isLoading }: TimestampItemProps) {
+function Timestamp({ data, isLoading }: TimestampProps) {
   if (data) {
     const date = new Date(data.timestamp);
     const { formattedDate, formattedTime } = getTimestampTooltipData(
