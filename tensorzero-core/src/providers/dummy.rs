@@ -1026,7 +1026,12 @@ impl EmbeddingProvider for DummyProvider {
             raw_response,
             usage,
             latency,
-            raw_usage: None,
+            raw_usage: Some(vec![RawUsageEntry {
+                model_inference_id: id,
+                provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
+                data: serde_json::Value::Null,
+            }]),
         })
     }
 }
