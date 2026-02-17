@@ -9,7 +9,7 @@ export function useQuestionCardState(
   eventId: string,
   onSubmit: (
     eventId: string,
-    responses: Record<string, UserQuestionAnswer>,
+    answers: Record<string, UserQuestionAnswer>,
   ) => void,
 ) {
   const [activeStep, setActiveStep] = useState(0);
@@ -70,27 +70,27 @@ export function useQuestionCardState(
   const allStepsValid = payload.questions.every((_, idx) => isStepValid(idx));
 
   const handleSubmit = () => {
-    const responses: Record<string, UserQuestionAnswer> = {};
+    const answers: Record<string, UserQuestionAnswer> = {};
     payload.questions.forEach((question, idx) => {
       switch (question.type) {
         case "multiple_choice": {
           const selected = selections.get(idx);
           if (!selected || selected.size === 0) return;
-          responses[question.id] = {
+          answers[question.id] = {
             type: "multiple_choice",
             selected: Array.from(selected),
           };
           break;
         }
         case "free_response":
-          responses[question.id] = {
+          answers[question.id] = {
             type: "free_response",
             text: freeTexts.get(idx) ?? "",
           };
           break;
       }
     });
-    onSubmit(eventId, responses);
+    onSubmit(eventId, answers);
   };
 
   const getStepData = (idx: number) => {
