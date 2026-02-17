@@ -2650,9 +2650,8 @@ assistant_template = "./functions/draft-email/prompt-v1/assistant_template.minij
 - **Type:** string
 - **Required:** no
 
-Defines a description of the function.
-
-In the future, this description will inform automated optimization recipes.
+An optional description of the function.
+It helps TensorZero Autopilot understand the intent behind the function.
 
 ```toml title="tensorzero.toml"
 [functions.extract_data]
@@ -4366,6 +4365,21 @@ For example, periods are not allowed in basic strings, so you can define `beats-
 [metrics.user-rating]
 # fieldA = ...
 # fieldB = ...
+# ...
+```
+
+### `description`
+
+- **Type:** string
+- **Required:** no
+
+An optional description of the metric.
+It helps TensorZero Autopilot understand the intent behind the metric.
+
+```toml title="tensorzero.toml"
+[metrics.task-completed]
+# ...
+description = "Whether the task was completed successfully"
 # ...
 ```
 
