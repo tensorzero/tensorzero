@@ -3,12 +3,10 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
-use tensorzero::{ClientExt, GetDatapointParams, StoredDatapoint};
+use tensorzero::{GetDatapointParams, StoredDatapoint};
 use tensorzero_core::db::datasets::DatasetQueries;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
-use tensorzero_core::db::inferences::{
-    InferenceOutputSource, InferenceQueries, ListInferencesParams,
-};
+use tensorzero_core::db::inferences::InferenceOutputSource;
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse,
@@ -27,18 +25,9 @@ use crate::common::get_gateway_endpoint;
 async fn test_clone_datapoint_preserves_source_inference_id() {
     let client = Client::new();
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
-    let embedded_client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let config = embedded_client.get_config().unwrap();
-
-    // Step 1: Get an existing inference from the database
-    let params = ListInferencesParams {
-        function_name: Some("write_haiku"),
-        limit: 1,
-        ..Default::default()
-    };
-    let inferences = database.list_inferences(&config, &params).await.unwrap();
-    assert!(!inferences.is_empty(), "Need at least 1 inference for test");
-    let inference_id = inferences[0].id();
+    // Step 1: Use an existing inference (hard-coded from small fixtures)
+    let inference_id = Uuid::parse_str("0196c682-72e0-7c83-a92b-9d1a3c7630f2")
+        .expect("Uuid parsing should succeed");
 
     // Step 2: Create a datapoint from this inference
     let source_dataset = format!("test_clone_source_{}", Uuid::now_v7());

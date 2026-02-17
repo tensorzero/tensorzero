@@ -14,7 +14,7 @@ async fn get_providers() -> E2ETestProviders {
     let providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm".to_string(),
-        model_name: "qwen2.5-0.5b-instruct-vllm".into(),
+        model_name: "qwen3-1.7b-vllm".into(),
         model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
@@ -22,7 +22,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm-extra-body".to_string(),
-        model_name: "qwen2.5-0.5b-instruct-vllm".into(),
+        model_name: "qwen3-1.7b-vllm".into(),
         model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
@@ -30,7 +30,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm-extra-headers".to_string(),
-        model_name: "qwen2.5-0.5b-instruct-vllm".into(),
+        model_name: "qwen3-1.7b-vllm".into(),
         model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
@@ -39,14 +39,14 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "vllm".to_string(),
-            model_name: "qwen2.5-0.5b-instruct-vllm".into(),
+            model_name: "qwen3-1.7b-vllm".into(),
             model_provider_name: "vllm".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "vllm-strict".to_string(),
-            model_name: "qwen2.5-0.5b-instruct-vllm".into(),
+            model_name: "qwen3-1.7b-vllm".into(),
             model_provider_name: "vllm".into(),
             credentials: HashMap::new(),
         },
@@ -55,7 +55,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm-dynamic".to_string(),
-        model_name: "qwen2.5-0.5b-instruct-vllm-dynamic".into(),
+        model_name: "qwen3-1.7b-vllm-dynamic".into(),
         model_provider_name: "vllm".into(),
         credentials,
     }];
@@ -63,20 +63,18 @@ async fn get_providers() -> E2ETestProviders {
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "vllm".to_string(),
-        model_name: "qwen2.5-0.5b-instruct-vllm".to_string(),
+        model_name: "qwen3-1.7b-vllm".to_string(),
         model_provider_name: "vllm".to_string(),
         credentials: HashMap::new(),
     }];
 
-    // TODO: Re-enable once we can switch to a T4 GPU
-    /*let reasoning_providers = vec![E2ETestProvider {
+    let reasoning_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
-        variant_name: "vllm-gpt-oss-20b".to_string(),
-        model_name: "gpt-oss-20b-vllm".to_string(),
+        variant_name: "vllm-reasoning".to_string(),
+        model_name: "qwen3-1.7b-vllm".to_string(),
         model_provider_name: "vllm".to_string(),
         credentials: HashMap::new(),
-    }];*/
-    let reasoning_providers = vec![];
+    }];
 
     // vllm requires api_base parameter, so it can't be tested with just default credentials
     let provider_type_default_credentials_providers = vec![];
@@ -84,13 +82,10 @@ async fn get_providers() -> E2ETestProviders {
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "vllm".into(),
         model_info: HashMap::from([
-            (
-                "model_name".to_string(),
-                "Qwen/Qwen2.5-0.5B-Instruct".to_string(),
-            ),
+            ("model_name".to_string(), "Qwen/Qwen3-1.7B".to_string()),
             (
                 "api_base".to_string(),
-                "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/".to_string(),
+                "https://tensorzero--vllm-qwen3-inference-vllm-inference.modal.run/v1/".to_string(),
             ),
         ]),
         use_modal_headers: true,

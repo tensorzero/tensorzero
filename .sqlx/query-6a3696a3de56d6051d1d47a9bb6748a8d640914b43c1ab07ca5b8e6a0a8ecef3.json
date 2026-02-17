@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT io.output\n                    FROM tensorzero.chat_inferences i\n                    INNER JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at\n                    WHERE i.id = $1\n                      AND i.episode_id = $2\n                      AND i.function_name = $3\n                      AND i.variant_name = $4\n                    LIMIT 1\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "output",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.chat_inference_data",
+            "name": "output"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6a3696a3de56d6051d1d47a9bb6748a8d640914b43c1ab07ca5b8e6a0a8ecef3"
+}

@@ -49,9 +49,6 @@ COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.no
 # Copy the rest of the code
 COPY . .
 
-# Install buildkite-test-collector for test reporting
-RUN pnpm add -D -w buildkite-test-collector
-
 # Set CI environment variable for non-interactive mode
 ENV CI=true
 

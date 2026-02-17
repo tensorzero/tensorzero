@@ -506,24 +506,24 @@ impl StoredSample for StoredSampleItem {
         }
     }
 
-    fn input(&self) -> &StoredInput {
+    fn input(&self) -> Option<&StoredInput> {
         match self {
             StoredSampleItem::StoredInference(inference) => inference.input(),
-            StoredSampleItem::Datapoint(datapoint) => datapoint.input(),
+            StoredSampleItem::Datapoint(datapoint) => StoredSample::input(datapoint),
         }
     }
 
-    fn input_mut(&mut self) -> &mut StoredInput {
+    fn input_mut(&mut self) -> Option<&mut StoredInput> {
         match self {
             StoredSampleItem::StoredInference(inference) => inference.input_mut(),
-            StoredSampleItem::Datapoint(datapoint) => datapoint.input_mut(),
+            StoredSampleItem::Datapoint(datapoint) => StoredSample::input_mut(datapoint),
         }
     }
 
-    fn into_input(self) -> StoredInput {
+    fn into_input(self) -> Option<StoredInput> {
         match self {
             StoredSampleItem::StoredInference(inference) => inference.into_input(),
-            StoredSampleItem::Datapoint(datapoint) => datapoint.into_input(),
+            StoredSampleItem::Datapoint(datapoint) => StoredSample::into_input(datapoint),
         }
     }
 

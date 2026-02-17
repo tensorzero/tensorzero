@@ -83,8 +83,9 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
 #[async_trait]
 impl<T> TaskTool for ClientTaskToolWrapper<T>
 where
-    T: TaskTool<SideInfo = AutopilotSideInfo>,
+    T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
 {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,
@@ -220,6 +221,7 @@ struct SimpleToolStepParams<L, S> {
 
 #[async_trait]
 impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolWrapper<T> {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,
@@ -343,17 +345,6 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
                 })
             })
         }
-        ToolError::Serialization(err) => {
-            let failure = ToolFailure::Serialization {
-                message: err.to_string(),
-            };
-            serde_json::to_value(failure).unwrap_or_else(|e| {
-                serde_json::json!({
-                    "kind": "serialization",
-                    "message": format!("Failed to serialize serialization error: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                })
-            })
-        }
     }
 }
 
@@ -363,7 +354,6 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
 #[serde(tag = "kind")]
 pub enum ToolFailure {
     Control { message: String },
-    Serialization { message: String },
     Tool { error: NonControlToolError },
     Database { message: String },
 }
@@ -551,6 +541,7 @@ mod tests {
 
     #[async_trait]
     impl TaskTool for TestTaskTool {
+        type ExtraState = ();
         async fn execute(
             &self,
             llm_params: Self::LlmParams,

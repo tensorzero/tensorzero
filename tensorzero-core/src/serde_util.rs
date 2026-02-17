@@ -16,6 +16,24 @@ where
     serializer.serialize_str(&json_str)
 }
 
+/// Serializes an optional value as a JSON string, or `null` when absent.
+pub fn serialize_optional_json_string<S, T>(
+    value: &Option<T>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: Serialize,
+{
+    match value {
+        Some(value) => {
+            let json_str = serde_json::to_string(value).map_err(serde::ser::Error::custom)?;
+            serializer.serialize_some(&json_str)
+        }
+        None => serializer.serialize_none(),
+    }
+}
+
 /// Deserializes a "doubly-serialized" field of a struct.
 /// If you have a struct like this:
 /// ```ignore

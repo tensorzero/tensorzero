@@ -202,6 +202,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .header("x-goog-api-key", api_key.expose_secret());
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -221,6 +222,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -233,6 +235,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -257,11 +260,12 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
-            handle_google_ai_studio_error(response_code, error_body)
+            handle_google_ai_studio_error(response_code, error_body, ApiType::ChatCompletions)
         }
     }
 
@@ -299,6 +303,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .header("x-goog-api-key", api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -366,7 +371,7 @@ fn stream_google_ai_studio_gemini(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -375,6 +380,7 @@ fn stream_google_ai_studio_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                             })
@@ -424,11 +430,7 @@ struct GeminiTool<'a> {
 
 impl<'a> GeminiFunctionDeclaration<'a> {
     fn from_tool_config(tool: &'a FunctionToolConfig) -> Self {
-        let mut parameters = tool.parameters().clone();
-        if let Some(obj) = parameters.as_object_mut() {
-            obj.remove("additionalProperties");
-            obj.remove("$schema");
-        }
+        let parameters = process_jsonschema_for_gcp_vertex_gemini(tool.parameters());
 
         GeminiFunctionDeclaration {
             name: tool.name(),
@@ -780,6 +782,7 @@ fn content_part_to_tensorzero_chunk(
                         "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
                 }));
@@ -1070,6 +1073,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -1092,6 +1096,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
         let raw_usage = google_ai_studio_usage_from_raw_response(&raw_response).map(|usage| {
@@ -1159,6 +1164,7 @@ fn convert_stream_response_with_metadata_to_chunk(
             raw_request: None,
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -1230,6 +1236,7 @@ fn google_ai_studio_usage_from_raw_response(raw_response: &str) -> Option<Value>
 fn handle_google_ai_studio_error(
     response_code: StatusCode,
     response_body: String,
+    api_type: ApiType,
 ) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
@@ -1241,6 +1248,7 @@ fn handle_google_ai_studio_error(
             raw_request: None,
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
@@ -1250,6 +1258,7 @@ fn handle_google_ai_studio_error(
             raw_request: None,
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
         }
         .into()),
     }

@@ -8,7 +8,6 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_no_params() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/inference_metadata");
 
@@ -37,7 +36,6 @@ async fn test_list_inference_metadata_no_params() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_with_limit() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/inference_metadata?limit=5");
 
@@ -66,7 +64,6 @@ async fn test_list_inference_metadata_with_limit() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_before_and_after_mutually_exclusive() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let id = Uuid::now_v7();
     let url = get_gateway_endpoint(&format!(
@@ -82,7 +79,6 @@ async fn test_list_inference_metadata_before_and_after_mutually_exclusive() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_with_before() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use a UUID that is likely after any existing data
     let cursor = Uuid::now_v7();
@@ -113,7 +109,6 @@ async fn test_list_inference_metadata_with_before() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_with_after() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // Use a UUID that is likely before any existing data (nil UUID)
     let cursor = Uuid::nil();
@@ -144,7 +139,6 @@ async fn test_list_inference_metadata_with_after() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_with_function_name() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url =
         get_gateway_endpoint("/internal/inference_metadata?function_name=basic_test&limit=10");
@@ -168,7 +162,6 @@ async fn test_list_inference_metadata_with_function_name() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_with_variant_name() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/inference_metadata?variant_name=test&limit=10");
 
@@ -191,7 +184,6 @@ async fn test_list_inference_metadata_with_variant_name() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_with_episode_id() {
-    skip_for_postgres!();
     let http_client = Client::new();
     // First, get some inference metadata to find a valid episode_id
     let url = get_gateway_endpoint("/internal/inference_metadata?limit=1");
@@ -229,7 +221,6 @@ async fn test_list_inference_metadata_with_episode_id() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inference_metadata_with_multiple_filters() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint(
         "/internal/inference_metadata?function_name=basic_test&variant_name=test&limit=10",

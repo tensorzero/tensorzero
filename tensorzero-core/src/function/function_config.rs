@@ -110,6 +110,23 @@ impl FunctionConfigType {
             FunctionConfigType::Json => "JsonInferenceDatapoint",
         }
     }
+
+    /// Returns the Postgres datapoint table name for the given function type.
+    pub fn postgres_datapoint_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "tensorzero.chat_datapoints",
+            FunctionConfigType::Json => "tensorzero.json_datapoints",
+        }
+    }
+
+    /// Returns the Postgres inference data table name for the given function type.
+    /// This is the split table that stores input/output payloads separately from metadata.
+    pub fn postgres_inference_data_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "tensorzero.chat_inference_data",
+            FunctionConfigType::Json => "tensorzero.json_inference_data",
+        }
+    }
 }
 
 impl FunctionConfig {
@@ -1930,12 +1947,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -1998,12 +2017,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2052,12 +2073,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2106,6 +2129,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
@@ -2114,6 +2138,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2160,6 +2185,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ContentFilter),
             latency: Latency::NonStreaming {
@@ -2168,6 +2194,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2214,6 +2241,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency: Latency::NonStreaming {
@@ -2222,6 +2250,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2289,12 +2318,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2337,12 +2368,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: None,
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2390,6 +2423,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
@@ -2398,6 +2432,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2443,6 +2478,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: None,
             latency: Latency::NonStreaming {
@@ -2451,6 +2487,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2505,12 +2542,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
