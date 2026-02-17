@@ -214,32 +214,42 @@ async fn test_query_episode_table_with_function_name_and_filter(conn: impl Episo
     }
 
     // Verify that counts reflect full episode stats (not just filtered inferences)
-    // by comparing with unfiltered results for the same function
-    let unfiltered_episodes = conn
-        .query_episode_table(
-            &config,
-            10,
-            None,
-            None,
-            Some("extract_entities".to_string()),
-            None,
-        )
-        .await
-        .unwrap();
+    // by comparing with unfiltered results for the same function.
+    // Paginate through all unfiltered episodes to build a complete map.
+    let mut unfiltered_map = std::collections::HashMap::new();
+    let mut before_cursor = None;
+    loop {
+        let page = conn
+            .query_episode_table(
+                &config,
+                100,
+                before_cursor,
+                None,
+                Some("extract_entities".to_string()),
+                None,
+            )
+            .await
+            .unwrap();
+        if page.is_empty() {
+            break;
+        }
+        before_cursor = Some(page.last().unwrap().episode_id);
+        for ep in page {
+            unfiltered_map.insert(ep.episode_id, ep);
+        }
+    }
 
     // The filtered result should be a subset of the unfiltered result
     for filtered_ep in &episodes {
-        let matching_unfiltered = unfiltered_episodes
-            .iter()
-            .find(|e| e.episode_id == filtered_ep.episode_id);
+        let unfiltered_ep = unfiltered_map.get(&filtered_ep.episode_id);
         assert!(
-            matching_unfiltered.is_some(),
+            unfiltered_ep.is_some(),
             "Filtered episode {} should also appear in unfiltered results",
             filtered_ep.episode_id
         );
         // Episode stats should match (count, start_time, end_time, last_inference_id)
         // because filtering only selects which episodes to return, not which inferences to count
-        let unfiltered_ep = matching_unfiltered.unwrap();
+        let unfiltered_ep = unfiltered_ep.unwrap();
         assert_eq!(
             filtered_ep.count, unfiltered_ep.count,
             "Episode {} count should match between filtered and unfiltered queries",
