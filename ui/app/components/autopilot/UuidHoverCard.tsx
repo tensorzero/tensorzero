@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
+import { HoverCard } from "radix-ui";
 import type { ResolvedObject } from "~/types/tensorzero";
 import { useEntityPreview } from "~/hooks/useEntityPreview";
 import { getRelativeTimeString, getTimestampTooltipData } from "~/utils/date";
@@ -20,34 +22,73 @@ interface EpisodePreview {
   inference_count: number;
 }
 
-interface UuidHoverCardContentProps {
+interface UuidHoverCardProps {
+  uuid: string;
+  obj: ResolvedObject;
+  url: string;
+  children: React.ReactNode;
+}
+
+export function UuidHoverCard({
+  uuid,
+  obj,
+  url,
+  children,
+}: UuidHoverCardProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <HoverCard.Root openDelay={300} closeDelay={200} onOpenChange={setIsOpen}>
+      <HoverCard.Trigger asChild>{children}</HoverCard.Trigger>
+      <HoverCard.Portal>
+        <HoverCard.Content
+          side="top"
+          sideOffset={4}
+          className={cn(
+            "bg-popover text-popover-foreground z-50 rounded-md border p-3 shadow-md",
+            obj.type === "inference" ? "w-80" : "w-56",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
+            "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          )}
+        >
+          <HoverCardContent
+            uuid={uuid}
+            obj={obj}
+            url={url}
+            isOpen={isOpen}
+          />
+        </HoverCard.Content>
+      </HoverCard.Portal>
+    </HoverCard.Root>
+  );
+}
+
+interface HoverCardContentProps {
   uuid: string;
   obj: ResolvedObject;
   url: string;
   isOpen: boolean;
 }
 
-export function UuidHoverCardContent({
+function HoverCardContent({
   uuid,
   obj,
   url,
   isOpen,
-}: UuidHoverCardContentProps) {
+}: HoverCardContentProps) {
   switch (obj.type) {
     case "inference":
       return (
-        <InferenceHoverContent
-          uuid={uuid}
-          obj={obj}
-          url={url}
-          isOpen={isOpen}
-        />
+        <InferenceContent uuid={uuid} obj={obj} url={url} isOpen={isOpen} />
       );
     case "episode":
-      return <EpisodeHoverContent uuid={uuid} url={url} isOpen={isOpen} />;
+      return <EpisodeContent uuid={uuid} url={url} isOpen={isOpen} />;
     case "chat_datapoint":
     case "json_datapoint":
-      return <DatapointHoverContent obj={obj} url={url} />;
+      return <DatapointContent obj={obj} url={url} />;
     case "model_inference":
     case "boolean_feedback":
     case "float_feedback":
@@ -61,19 +102,19 @@ export function UuidHoverCardContent({
   }
 }
 
-interface InferenceHoverContentProps {
+interface InferenceContentProps {
   uuid: string;
   obj: Extract<ResolvedObject, { type: "inference" }>;
   url: string;
   isOpen: boolean;
 }
 
-function InferenceHoverContent({
+function InferenceContent({
   uuid,
   obj,
   url,
   isOpen,
-}: InferenceHoverContentProps) {
+}: InferenceContentProps) {
   const { data, isLoading } = useEntityPreview<InferencePreview>(
     `/api/tensorzero/inference_preview/${encodeURIComponent(uuid)}`,
     isOpen,
@@ -100,17 +141,13 @@ function InferenceHoverContent({
   );
 }
 
-interface EpisodeHoverContentProps {
+interface EpisodeContentProps {
   uuid: string;
   url: string;
   isOpen: boolean;
 }
 
-function EpisodeHoverContent({
-  uuid,
-  url,
-  isOpen,
-}: EpisodeHoverContentProps) {
+function EpisodeContent({ uuid, url, isOpen }: EpisodeContentProps) {
   const { data, isLoading } = useEntityPreview<EpisodePreview>(
     `/api/tensorzero/episode_preview/${encodeURIComponent(uuid)}`,
     isOpen,
@@ -132,12 +169,12 @@ function EpisodeHoverContent({
   );
 }
 
-interface DatapointHoverContentProps {
+interface DatapointContentProps {
   obj: Extract<ResolvedObject, { type: "chat_datapoint" | "json_datapoint" }>;
   url: string;
 }
 
-function DatapointHoverContent({ obj, url }: DatapointHoverContentProps) {
+function DatapointContent({ obj, url }: DatapointContentProps) {
   const typeLabel =
     obj.type === "chat_datapoint" ? "Chat Datapoint" : "JSON Datapoint";
 
