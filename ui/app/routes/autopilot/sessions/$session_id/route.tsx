@@ -138,16 +138,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-      // Compute pending user questions: user_questions events without a matching user_questions_answers
-      const answeredQuestionEventIds = new Set(
-        events
-          .filter((e) => e.payload.type === "user_questions_answers")
-          .map((e) =>
-            e.payload.type === "user_questions_answers"
-              ? e.payload.user_questions_event_id
-              : "",
-          ),
-      );
+      // Compute pending user questions: user_questions events without a matching user_questions_answers.
+      // NOTE: This is derived from the paginated event window (EVENTS_PER_PAGE). If a user_questions
+      // event is older than the window, it won't appear here on initial load. In practice this is
+      // unlikely since the agent blocks until questions are answered, but a server-side
+      // `pending_user_questions` field (like `pending_tool_calls`) would be more robust.
+      const answeredQuestionEventIds = new Set<string>();
+      for (const event of events) {
+        if (event.payload.type === "user_questions_answers") {
+          answeredQuestionEventIds.add(event.payload.user_questions_event_id);
+        }
+      }
       const pendingUserQuestions = events
         .filter(
           (e) =>

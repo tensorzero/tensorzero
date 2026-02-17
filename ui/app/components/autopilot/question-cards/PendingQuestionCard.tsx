@@ -74,7 +74,8 @@ export function PendingQuestionCard({
           <button
             type="button"
             onClick={onSkip}
-            className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-400 transition-colors hover:text-purple-600 dark:text-purple-500 dark:hover:text-purple-300"
+            disabled={isLoading}
+            className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-400 transition-colors hover:text-purple-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-purple-500 dark:hover:text-purple-300"
             aria-label="Dismiss questions"
           >
             <X className="h-4 w-4" />
