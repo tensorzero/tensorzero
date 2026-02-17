@@ -1432,6 +1432,7 @@ mod tests {
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
@@ -1552,6 +1553,7 @@ mod tests {
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1628,6 +1630,7 @@ mod tests {
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1724,6 +1727,7 @@ mod tests {
                 )]),
                 timeouts: Default::default(),
                 skip_relay: false,
+                namespace: None,
             },
         );
         let provider_types = ProviderTypesConfig::default();

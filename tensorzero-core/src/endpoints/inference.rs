@@ -73,6 +73,9 @@ use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
+use crate::endpoints::namespace::{
+    validate_model_namespace, validate_variant_namespace_at_inference,
+};
 use crate::endpoints::validate_tags;
 use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
@@ -386,14 +389,12 @@ pub async fn inference(
     }
 
     // Store namespace as a tag (validation happens during deserialization)
-    let namespace = if let Some(ref ns) = params.namespace {
+    let namespace = params.namespace.as_ref();
+    if let Some(ns) = namespace {
         params
             .tags
             .insert("tensorzero::namespace".to_string(), ns.to_string());
-        Some(ns.as_str())
-    } else {
-        None
-    };
+    }
 
     let (function, function_name) = find_function(&params, &config).await?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
@@ -437,11 +438,15 @@ pub async fn inference(
     let needs_sampling = prepare_candidate_variants(
         &mut candidate_variants,
         &mut params.tags,
-        params.variant_name.as_deref(),
-        params.internal_dynamic_variant_config,
         &mut templates,
-        &function,
-        function_name.clone(),
+        PrepareCandidateVariantsArgs {
+            pinned_variant_name: params.variant_name.as_deref(),
+            dynamic_variant_config: params.internal_dynamic_variant_config,
+            function: &function,
+            function_name: function_name.clone(),
+            models: &config.models,
+            request_namespace: namespace,
+        },
     )?;
     let templates = &templates;
 
@@ -985,6 +990,9 @@ async fn find_function(
                 }
                 .into());
             }
+
+            // Validate namespace compatibility for the model
+            validate_model_namespace(model_name, &config.models, params.namespace.as_ref())?;
 
             // Validate extra_body and extra_headers filters
             validate_inference_filters(
@@ -2184,15 +2192,29 @@ impl ChatCompletionInferenceParams {
 ///
 /// Returns `Ok(true)` if experimentation/sampling is needed (multiple candidate variants)
 /// Returns `Ok(false)` if direct inference is needed (single predetermined variant - no sampling)
+struct PrepareCandidateVariantsArgs<'a> {
+    pinned_variant_name: Option<&'a str>,
+    dynamic_variant_config: Option<UninitializedVariantInfo>,
+    function: &'a FunctionConfig,
+    function_name: String,
+    models: &'a ModelTable,
+    request_namespace: Option<&'a Namespace>,
+}
+
 fn prepare_candidate_variants(
     candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
-    pinned_variant_name: Option<&str>,
-    dynamic_variant_config: Option<UninitializedVariantInfo>,
     template_config: &mut Arc<TemplateConfig<'static>>,
-    function: &FunctionConfig,
-    function_name: String,
+    args: PrepareCandidateVariantsArgs<'_>,
 ) -> Result<bool, Error> {
+    let PrepareCandidateVariantsArgs {
+        pinned_variant_name,
+        dynamic_variant_config,
+        function,
+        function_name,
+        models,
+        request_namespace,
+    } = args;
     let needs_sampling = match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
         (Some(variant_name), None) => {
@@ -2205,6 +2227,18 @@ fn prepare_candidate_variants(
                 }
                 .into());
             }
+
+            // Validate namespace compatibility for the pinned variant
+            if let Some(variant_info) = candidate_variants.get(variant_name) {
+                validate_variant_namespace_at_inference(
+                    variant_name,
+                    &variant_info.inner,
+                    models,
+                    request_namespace,
+                    function,
+                )?;
+            }
+
             tags.insert(
                 "tensorzero::variant_pinned".to_string(),
                 variant_name.to_string(),
@@ -2234,6 +2268,16 @@ fn prepare_candidate_variants(
                     .add_template(template_name, path_with_contents.contents.clone())?;
             }
             *template_config = Arc::new(dynamic_template_config);
+
+            // Validate namespace compatibility for the dynamic variant
+            validate_variant_namespace_at_inference(
+                "tensorzero::dynamic_variant",
+                &candidate_variant_info.inner,
+                models,
+                request_namespace,
+                function,
+            )?;
+
             candidate_variants.clear();
             candidate_variants.insert(
                 "tensorzero::dynamic_variant".to_string(),
