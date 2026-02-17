@@ -149,7 +149,7 @@ interface EpisodePreview {
 
 interface EpisodeContentProps {
   uuid: string;
-  obj: ResolvedObject;
+  obj: Extract<ResolvedObject, { type: "episode" }>;
   isOpen: boolean;
 }
 
