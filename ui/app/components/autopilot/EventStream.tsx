@@ -635,7 +635,7 @@ function EventItem({
             type="button"
             aria-expanded={isExpanded}
             aria-label={
-              isExpanded ? "Collapse tool details" : "Expand tool details"
+              isExpanded ? "Collapse event details" : "Expand event details"
             }
             className="inline-flex cursor-pointer items-center gap-2 text-left"
             onClick={() => setIsExpanded((current) => !current)}

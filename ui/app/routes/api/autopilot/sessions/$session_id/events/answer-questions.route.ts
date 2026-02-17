@@ -35,11 +35,13 @@ export async function action({ params, request }: ActionFunctionArgs) {
   }
 
   if (!body.user_questions_event_id) {
-    return new Response("user_questions_event_id is required", { status: 400 });
+    return new Response("`user_questions_event_id` is required", {
+      status: 400,
+    });
   }
 
   if (!body.responses || typeof body.responses !== "object") {
-    return new Response("responses is required", { status: 400 });
+    return new Response("`responses` is required", { status: 400 });
   }
 
   const client = getAutopilotClient();
