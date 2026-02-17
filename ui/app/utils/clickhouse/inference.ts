@@ -4,11 +4,11 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
   displayInputSchema,
-  displayModelInferenceInputMessageSchema,
   modelInferenceOutputContentBlockSchema,
   ZodJsonValueSchema,
 } from "./common";
 import type {
+  InputMessage,
   JsonInferenceOutput,
   ContentBlockChatOutput,
   Tool,
@@ -199,7 +199,7 @@ const parsedModelInferenceRowSchema = z.object({
   ttft_ms: z.number().nullable(),
   timestamp: z.string().datetime(),
   system: z.string().nullable(),
-  input_messages: z.array(displayModelInferenceInputMessageSchema),
+  input_messages: z.custom<InputMessage[]>(),
   output: z.array(modelInferenceOutputContentBlockSchema),
   cached: z.boolean(),
 });

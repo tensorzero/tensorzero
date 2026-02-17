@@ -1,11 +1,5 @@
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { InputElement } from "~/components/input_output/InputElement";
-import type {
-  Detail,
-  Input,
-  InputMessageContent,
-  StoragePath,
-} from "~/types/tensorzero";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -120,7 +114,12 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <InputElement input={modelInferenceToInput(inference)} />
+          <InputElement
+            input={{
+              system: inference.system ?? undefined,
+              messages: inference.input_messages,
+            }}
+          />
         </SectionLayout>
 
         <SectionLayout>
@@ -176,69 +175,4 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
       </SectionsGroup>
     </PageLayout>
   );
-}
-
-/**
- * Converts a ParsedModelInferenceRow's input fields into the modern Input type
- * expected by InputElement. The display types (from the ClickHouse/resolve layer)
- * are structurally compatible for text/tool_call/tool_result/thought, but files
- * need reshaping from the resolved base64 format to the File union type.
- */
-function modelInferenceToInput(inference: ParsedModelInferenceRow): Input {
-  return {
-    system: inference.system ?? undefined,
-    messages: inference.input_messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content.map(
-        (block): InputMessageContent =>
-          displayContentToInputContent(
-            block as { type: string } & Record<string, unknown>,
-          ),
-      ),
-    })),
-  };
-}
-
-function displayContentToInputContent(
-  block: { type: string } & Record<string, unknown>,
-): InputMessageContent {
-  switch (block.type) {
-    case "text":
-    case "tool_call":
-    case "tool_result":
-    case "thought":
-    case "unknown":
-      return block as InputMessageContent;
-    case "file": {
-      const file = block.file as { data: string; mime_type: string };
-      return {
-        type: "file",
-        file_type: "object_storage",
-        data: file.data,
-        mime_type: file.mime_type,
-        storage_path: block.storage_path as StoragePath,
-        source_url: (block.source_url as string) ?? undefined,
-        detail: (block.detail as Detail) ?? undefined,
-        filename: (block.filename as string) ?? undefined,
-      };
-    }
-    case "file_error": {
-      const file = block.file as { mime_type: string };
-      return {
-        type: "file",
-        file_type: "object_storage_error",
-        error: (block.error as string) ?? undefined,
-        mime_type: file.mime_type,
-        storage_path: block.storage_path as StoragePath,
-        source_url: (block.source_url as string) ?? undefined,
-        detail: (block.detail as Detail) ?? undefined,
-        filename: (block.filename as string) ?? undefined,
-      };
-    }
-    default:
-      return {
-        type: "unknown",
-        data: JSON.parse(JSON.stringify(block)),
-      };
-  }
 }
