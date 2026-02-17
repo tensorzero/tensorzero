@@ -37,9 +37,6 @@ export async function resolveModelInferences(
       );
       return {
         ...row,
-        raw_request: row.raw_request ?? "",
-        raw_response: row.raw_response ?? "",
-        system: row.system ?? null,
         input_messages: resolvedMessages,
         output: row.output ?? [],
       } as ParsedModelInferenceRow;

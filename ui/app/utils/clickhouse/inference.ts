@@ -11,6 +11,7 @@ import type {
   InputMessage,
   JsonInferenceOutput,
   ContentBlockChatOutput,
+  ModelInference,
   Tool,
 } from "~/types/tensorzero";
 
@@ -184,22 +185,12 @@ export function parseInferenceOutput(
   return jsonInferenceOutputSchema.parse(parsed);
 }
 
-export type ParsedModelInferenceRow = {
-  id: string;
-  inference_id: string;
-  raw_request: string;
-  raw_response: string;
-  model_name: string;
-  model_provider_name: string;
-  input_tokens?: number;
-  output_tokens?: number;
-  response_time_ms: number | null;
-  ttft_ms: number | null;
-  timestamp: string;
-  system: string | null;
+export type ParsedModelInferenceRow = Omit<
+  ModelInference,
+  "input_messages" | "output"
+> & {
   input_messages: InputMessage[];
   output: ZodModelInferenceOutputContentBlock[];
-  cached: boolean;
 };
 
 /// Hacky helper to determine if the output is JSON
