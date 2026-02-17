@@ -1,0 +1,33 @@
+services:
+  provider-proxy:
+    image: tensorzero/provider-proxy:${TENSORZERO_PROVIDER_PROXY_TAG:-latest}
+    build:
+      context: ../../
+      dockerfile: provider-proxy/Dockerfile
+      target: provider-proxy
+    ports:
+      - "3003:3003"
+    volumes:
+      - ../../ci/provider-proxy-cache-ui:/app/ci/provider-proxy-cache-ui
+    command:
+      [
+        "--cache-path",
+        "/app/ci/provider-proxy-cache-ui",
+        "--mode",
+        "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
+      ]
+    healthcheck:
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
+  gateway-postgres-migrations:
+    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_E2E_TAG:-latest}
+
+  gateway:
+    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_E2E_TAG:-latest}
+    environment:
+      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
+    depends_on:
+      provider-proxy:
+        condition: service_healthy
