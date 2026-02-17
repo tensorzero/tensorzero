@@ -160,6 +160,25 @@ If you don't provide this environment variable, observability will be disabled.
 
 We recommend setting up observability early to monitor your LLM application and collect data for future optimization, but this can be done incrementally as needed.
 
+### Customize the bind address and port
+
+By default, the gateway binds to `[::]:3000`.
+You can customize the bind address and port in the configuration ([`gateway.bind_address`](/gateway/configuration-reference#bind_address)), with the `--bind-address` CLI flag, or with the `TENSORZERO_GATEWAY_BIND_ADDRESS` environment variable.
+Only one of these methods can be used at a time.
+
+```toml title="tensorzero.toml"
+[gateway]
+bind_address = "0.0.0.0:3000"
+```
+
+```bash
+gateway --bind-address 0.0.0.0:3000 --config-file tensorzero.toml
+```
+
+```bash
+TENSORZERO_GATEWAY_BIND_ADDRESS=0.0.0.0:3000 gateway --config-file tensorzero.toml
+```
+
 ### Customize the logging format
 
 Optionally, you can provide the following command line argument to customize the gateway's logging format:
