@@ -3,17 +3,14 @@ import { cn } from "~/utils/common";
 
 type StepState = "completed" | "active" | "upcoming";
 
-export function StepTab({
-  index,
-  label,
-  state,
-  onClick,
-}: {
+type StepTabProps = {
   index: number;
   label: string;
   state: StepState;
   onClick: () => void;
-}) {
+};
+
+export function StepTab({ index, label, state, onClick }: StepTabProps) {
   return (
     <button
       type="button"

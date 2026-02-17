@@ -55,6 +55,10 @@ export function PendingQuestionCard({
             onTextChange={data.onFreeTextChange}
           />
         );
+      default: {
+        const _exhaustiveCheck: never = data.question;
+        return _exhaustiveCheck;
+      }
     }
   };
 

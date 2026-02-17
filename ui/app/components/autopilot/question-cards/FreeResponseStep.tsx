@@ -1,15 +1,17 @@
 import { Textarea } from "~/components/ui/textarea";
 import type { EventPayloadUserQuestion } from "~/types/tensorzero";
 
+type FreeResponseStepProps = {
+  question: Extract<EventPayloadUserQuestion, { type: "free_response" }>;
+  text: string;
+  onTextChange: (text: string) => void;
+};
+
 export function FreeResponseStep({
   question,
   text,
   onTextChange,
-}: {
-  question: Extract<EventPayloadUserQuestion, { type: "free_response" }>;
-  text: string;
-  onTextChange: (text: string) => void;
-}) {
+}: FreeResponseStepProps) {
   return (
     <div className="flex flex-col gap-3">
       <span className="text-fg-primary text-sm font-medium">

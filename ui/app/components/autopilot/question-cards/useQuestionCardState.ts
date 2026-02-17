@@ -64,6 +64,10 @@ export function useQuestionCardState(
       }
       case "free_response":
         return (freeTexts.get(idx) ?? "").trim().length > 0;
+      default: {
+        const _exhaustiveCheck: never = question;
+        return _exhaustiveCheck;
+      }
     }
   };
 
@@ -88,6 +92,10 @@ export function useQuestionCardState(
             text: freeTexts.get(idx) ?? "",
           };
           break;
+        default: {
+          const _exhaustiveCheck: never = question;
+          return _exhaustiveCheck;
+        }
       }
     });
     onSubmit(eventId, responses);

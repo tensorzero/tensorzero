@@ -1,15 +1,17 @@
 import { cn } from "~/utils/common";
 import type { EventPayloadUserQuestion } from "~/types/tensorzero";
 
+type MultipleChoiceStepProps = {
+  question: Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>;
+  selectedValues: Set<string>;
+  onToggle: (value: string) => void;
+};
+
 export function MultipleChoiceStep({
   question,
   selectedValues,
   onToggle,
-}: {
-  question: Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>;
-  selectedValues: Set<string>;
-  onToggle: (value: string) => void;
-}) {
+}: MultipleChoiceStepProps) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">

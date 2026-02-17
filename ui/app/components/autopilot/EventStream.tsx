@@ -38,6 +38,7 @@ import type {
   VisualizationType,
 } from "~/types/tensorzero";
 import { formatResponse } from "~/components/autopilot/question-cards/formatResponse";
+import { hasAnsweredResponse } from "~/components/autopilot/question-cards/responseStatus";
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
@@ -456,14 +457,11 @@ function renderEventTitle(event: GatewayEvent) {
       );
     }
     case "user_questions_answers": {
-      const allSkipped = Object.values(payload.responses).every(
-        (r) => r.type === "skipped",
-      );
       return (
         <span className="inline-flex items-center gap-2">
           Question
           <DotSeparator />
-          {allSkipped ? "Skipped" : "Answered"}
+          {hasAnsweredResponse(payload.responses) ? "Answered" : "Skipped"}
         </span>
       );
     }
@@ -590,21 +588,23 @@ function UserQuestionsAnswersContent({
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
-function EventItem({
-  event,
-  questionsMap,
-  isPending = false,
-  isPendingQuestion = false,
-  configApplyEnabled = false,
-  sessionId,
-}: {
+type EventItemProps = {
   event: GatewayEvent;
   questionsMap?: Map<string, EventPayloadUserQuestion[]>;
-  isPending?: boolean;
+  isPendingToolCall?: boolean;
   isPendingQuestion?: boolean;
   configApplyEnabled?: boolean;
   sessionId?: string;
-}) {
+};
+
+function EventItem({
+  event,
+  questionsMap,
+  isPendingToolCall = false,
+  isPendingQuestion = false,
+  configApplyEnabled = false,
+  sessionId,
+}: EventItemProps) {
   const { yoloMode } = useAutopilotSession();
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
@@ -647,7 +647,7 @@ function EventItem({
             >
               <ChevronRight className="h-4 w-4" />
             </span>
-            {((isPending && !yoloMode) || isPendingQuestion) && (
+            {((isPendingToolCall && !yoloMode) || isPendingQuestion) && (
               <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                 Action Required
               </span>
@@ -880,7 +880,7 @@ export default function EventStream({
           <EventItem
             event={event}
             questionsMap={questionsMap}
-            isPending={pendingToolCallIds?.has(event.id)}
+            isPendingToolCall={pendingToolCallIds?.has(event.id)}
             isPendingQuestion={pendingUserQuestionIds?.has(event.id)}
             configApplyEnabled={configApplyEnabled}
             sessionId={sessionId}

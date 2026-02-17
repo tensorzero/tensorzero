@@ -236,8 +236,10 @@ test.describe("User questions", () => {
     // Multi-question cards show "Questions" header and step tabs
     await expect(page.getByText("Questions").first()).toBeVisible();
 
-    // Select React for the first question
-    await page.getByText("React").click();
+    // Select React for the first question (use role to avoid matching description text)
+    await page
+      .getByRole("button", { name: "React React with TypeScript" })
+      .click();
 
     // Click Next to move to the second question
     await page.getByRole("button", { name: /next/i }).click();
@@ -341,14 +343,15 @@ test.describe("User questions", () => {
   }) => {
     test.setTimeout(120000);
 
-    // Track answer-questions requests
+    const sessionId = await createAndInterruptSession(page);
+
+    // Track answer-questions requests (set up after navigation so the
+    // route handler survives for the rest of the test)
     let answerRequestCount = 0;
     await page.route("**/events/answer-questions", async (route) => {
       answerRequestCount++;
       await route.continue();
     });
-
-    const sessionId = await createAndInterruptSession(page);
 
     const eventId = v7();
     const { payload } = buildMultipleChoicePayload();
