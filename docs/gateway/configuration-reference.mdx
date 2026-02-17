@@ -1050,7 +1050,7 @@ The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
 api_key_location = "dynamic::azure_api_key"
@@ -1069,10 +1069,10 @@ Defines the deployment ID of the Azure OpenAI deployment.
 See <a href="https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models" target="_blank">Azure OpenAI's documentation</a> for the list of available models.
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
+deployment_id = "gpt-5-mini"
 # ...
 ```
 
@@ -1084,7 +1084,7 @@ deployment_id = "gpt4o-mini-20240718"
 Defines the endpoint of the Azure OpenAI deployment (protocol and hostname).
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
 endpoint = "https://<your-endpoint>.openai.azure.com"
