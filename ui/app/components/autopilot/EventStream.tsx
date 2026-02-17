@@ -30,11 +30,14 @@ import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
   AutopilotStatus,
   EventPayloadMessageContent,
+  EventPayloadUserQuestion,
   GatewayEvent,
   GatewayEventPayload,
   TopKEvaluationVisualization,
+  UserQuestionAnswer,
   VisualizationType,
 } from "~/types/tensorzero";
+import { formatResponse } from "~/components/autopilot/question-cards/formatResponse";
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
@@ -77,6 +80,7 @@ type EventStreamProps = {
   onRetryLoad?: () => void;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
+  pendingUserQuestionIds?: Set<string>;
   optimisticMessages?: OptimisticMessage[];
   status?: AutopilotStatus;
   configApplyEnabled?: boolean;
@@ -277,11 +281,12 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
         description: payload.message,
       };
     case "visualization":
-    case "user_questions":
-    case "user_questions_answers":
     case "unknown":
       // Visualization events render their own content, no text description needed
-      // TODO (#6270): add a real component for `user_questions` and `user_responses`
+      return {};
+    case "user_questions":
+      return {};
+    case "user_questions_answers":
       return {};
   }
 }
@@ -442,8 +447,22 @@ function renderEventTitle(event: GatewayEvent) {
           <span>{getVisualizationTitle(payload.visualization)}</span>
         </span>
       );
-    case "user_questions":
+    case "user_questions": {
+      const questionCount = payload.questions.length;
+      return (
+        <span className="inline-flex items-center gap-2">
+          {questionCount === 1 ? "Question" : "Questions"}
+        </span>
+      );
+    }
     case "user_questions_answers":
+      return (
+        <span className="inline-flex items-center gap-2">
+          Question
+          <DotSeparator />
+          Answered
+        </span>
+      );
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -521,17 +540,79 @@ class EventErrorBoundary extends Component<
   }
 }
 
+function UserQuestionsContent({
+  questions,
+}: {
+  questions: EventPayloadUserQuestion[];
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {questions.map((q) => (
+        <div key={q.id} className="flex flex-col gap-0.5">
+          <span className="text-fg-muted text-xs font-medium">{q.header}</span>
+          <span className="text-fg-secondary text-sm">{q.question}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function UserQuestionsAnswersContent({
+  responses,
+  userQuestionsEventId,
+  events,
+}: {
+  responses: Record<string, UserQuestionAnswer>;
+  userQuestionsEventId: string;
+  events: GatewayEvent[];
+}) {
+  // Look up the original questions event to resolve labels
+  const questionsEvent = events.find((e) => e.id === userQuestionsEventId);
+  const questions: EventPayloadUserQuestion[] =
+    questionsEvent?.payload.type === "user_questions"
+      ? questionsEvent.payload.questions
+      : [];
+
+  return (
+    <div className="flex flex-col gap-2">
+      {Object.entries(responses).map(([questionId, response]) => {
+        const question = questions.find((q) => q.id === questionId);
+        return (
+          <div key={questionId} className="flex flex-col gap-0.5">
+            <span className="text-fg-muted text-xs font-medium">
+              {question?.header ?? questionId}
+            </span>
+            <span className="text-fg-primary text-sm">
+              {question
+                ? formatResponse(response, question)
+                : response.type === "free_response"
+                  ? response.text
+                  : response.type === "multiple_choice"
+                    ? response.selected.join(", ")
+                    : "Skipped"}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
 function EventItem({
   event,
+  events,
   isPending = false,
+  isPendingQuestion = false,
   configApplyEnabled = false,
   sessionId,
 }: {
   event: GatewayEvent;
+  events: GatewayEvent[];
   isPending?: boolean;
+  isPendingQuestion?: boolean;
   configApplyEnabled?: boolean;
   sessionId?: string;
 }) {
@@ -544,6 +625,8 @@ function EventItem({
     event.payload.type === "tool_call" ||
     event.payload.type === "error" ||
     event.payload.type === "visualization" ||
+    event.payload.type === "user_questions" ||
+    event.payload.type === "user_questions_answers" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
@@ -575,7 +658,7 @@ function EventItem({
             >
               <ChevronRight className="h-4 w-4" />
             </span>
-            {isPending && !yoloMode && (
+            {(isPending || isPendingQuestion) && !yoloMode && (
               <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                 Action Required
               </span>
@@ -631,6 +714,16 @@ function EventItem({
       )}
       {shouldShowDetails && event.payload.type === "visualization" && (
         <VisualizationRenderer visualization={event.payload.visualization} />
+      )}
+      {shouldShowDetails && event.payload.type === "user_questions" && (
+        <UserQuestionsContent questions={event.payload.questions} />
+      )}
+      {shouldShowDetails && event.payload.type === "user_questions_answers" && (
+        <UserQuestionsAnswersContent
+          responses={event.payload.responses}
+          userQuestionsEventId={event.payload.user_questions_event_id}
+          events={events}
+        />
       )}
     </div>
   );
@@ -746,6 +839,7 @@ export default function EventStream({
   onRetryLoad,
   topSentinelRef,
   pendingToolCallIds,
+  pendingUserQuestionIds,
   optimisticMessages = [],
   status,
   configApplyEnabled = false,
@@ -783,7 +877,9 @@ export default function EventStream({
         <EventErrorBoundary key={event.id} eventId={event.id}>
           <EventItem
             event={event}
+            events={events}
             isPending={pendingToolCallIds?.has(event.id)}
+            isPendingQuestion={pendingUserQuestionIds?.has(event.id)}
             configApplyEnabled={configApplyEnabled}
             sessionId={sessionId}
           />

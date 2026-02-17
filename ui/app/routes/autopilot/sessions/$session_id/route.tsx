@@ -23,6 +23,7 @@ import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
+import { PendingQuestionCard } from "~/components/autopilot/question-cards";
 import { ApplySessionConfigChangesButton } from "~/components/autopilot/ApplySessionConfigChangesButton";
 import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
 import {
@@ -44,7 +45,11 @@ import {
   AutopilotSessionProvider,
   useAutopilotSession,
 } from "~/contexts/AutopilotSessionContext";
-import type { AutopilotStatus, GatewayEvent } from "~/types/tensorzero";
+import type {
+  AutopilotStatus,
+  GatewayEvent,
+  UserQuestionAnswer,
+} from "~/types/tensorzero";
 import { useToast } from "~/hooks/use-toast";
 import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -81,6 +86,7 @@ export type EventsData = {
   events: GatewayEvent[];
   hasMoreEvents: boolean;
   pendingToolCalls: GatewayEvent[];
+  pendingUserQuestions: GatewayEvent[];
   status: AutopilotStatus;
 };
 
@@ -103,6 +109,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         events: [] as GatewayEvent[],
         hasMoreEvents: false,
         pendingToolCalls: [] as GatewayEvent[],
+        pendingUserQuestions: [] as GatewayEvent[],
         status: { status: "idle" } as AutopilotStatus,
       },
       isNewSession: true,
@@ -131,10 +138,31 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
+      // Compute pending user questions: user_questions events without a matching user_questions_answers
+      const answeredQuestionEventIds = new Set(
+        events
+          .filter((e) => e.payload.type === "user_questions_answers")
+          .map((e) =>
+            e.payload.type === "user_questions_answers"
+              ? e.payload.user_questions_event_id
+              : "",
+          ),
+      );
+      const pendingUserQuestions = events
+        .filter(
+          (e) =>
+            e.payload.type === "user_questions" &&
+            !answeredQuestionEventIds.has(e.id),
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
       return {
         events,
         hasMoreEvents,
         pendingToolCalls,
+        pendingUserQuestions,
         status: response.status,
       };
     });
@@ -193,10 +221,12 @@ function EventStreamContent({
   onLoaded,
   onStatusChange,
   onPendingToolCallsChange,
+  onPendingUserQuestionsChange,
   onErrorChange,
   onHasReachedStartChange,
   configApplyEnabled,
   pendingToolCallIds,
+  pendingUserQuestionIds,
 }: {
   sessionId: string;
   eventsData: EventsData;
@@ -207,15 +237,18 @@ function EventStreamContent({
   onLoaded: () => void;
   onStatusChange: (status: AutopilotStatus) => void;
   onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
+  onPendingUserQuestionsChange: (pendingUserQuestions: GatewayEvent[]) => void;
   onErrorChange: (error: string | null, isRetrying: boolean) => void;
   onHasReachedStartChange: (hasReachedStart: boolean) => void;
   configApplyEnabled: boolean;
   pendingToolCallIds: Set<string>;
+  pendingUserQuestionIds: Set<string>;
 }) {
   const {
     events: initialEvents,
     hasMoreEvents: initialHasMore,
     pendingToolCalls: initialPendingToolCalls,
+    pendingUserQuestions: initialPendingUserQuestions,
     status: initialStatus,
   } = eventsData;
 
@@ -225,14 +258,22 @@ function EventStreamContent({
   }, [onLoaded]);
 
   // Now that we have resolved events, start SSE with the correct lastEventId
-  const { events, pendingToolCalls, status, error, isRetrying, prependEvents } =
-    useAutopilotEventStream({
-      sessionId: isNewSession ? NIL_UUID : sessionId,
-      initialEvents,
-      initialPendingToolCalls,
-      initialStatus,
-      enabled: !isNewSession,
-    });
+  const {
+    events,
+    pendingToolCalls,
+    pendingUserQuestions,
+    status,
+    error,
+    isRetrying,
+    prependEvents,
+  } = useAutopilotEventStream({
+    sessionId: isNewSession ? NIL_UUID : sessionId,
+    initialEvents,
+    initialPendingToolCalls,
+    initialPendingUserQuestions,
+    initialStatus,
+    enabled: !isNewSession,
+  });
 
   // Notify parent of status changes
   useEffect(() => {
@@ -243,6 +284,11 @@ function EventStreamContent({
   useEffect(() => {
     onPendingToolCallsChange(pendingToolCalls);
   }, [pendingToolCalls, onPendingToolCallsChange]);
+
+  // Notify parent of pending user questions changes
+  useEffect(() => {
+    onPendingUserQuestionsChange(pendingUserQuestions);
+  }, [pendingUserQuestions, onPendingUserQuestionsChange]);
 
   // Notify parent of error state changes
   useEffect(() => {
@@ -371,6 +417,7 @@ function EventStreamContent({
       onRetryLoad={retryPagination}
       topSentinelRef={topSentinelRef}
       pendingToolCallIds={pendingToolCallIds}
+      pendingUserQuestionIds={pendingUserQuestionIds}
       optimisticMessages={visibleOptimisticMessages}
       status={isNewSession ? undefined : status}
       configApplyEnabled={configApplyEnabled}
@@ -427,6 +474,28 @@ function AutopilotSessionEventsPageContent({
     [],
   );
 
+  // Pending user questions state - lifted from EventStreamContent for footer rendering
+  const [pendingUserQuestions, setPendingUserQuestions] = useState<
+    GatewayEvent[]
+  >([]);
+
+  const pendingUserQuestionIds = useMemo(
+    () => new Set(pendingUserQuestions.map((q) => q.id)),
+    [pendingUserQuestions],
+  );
+
+  const handlePendingUserQuestionsChange = useCallback(
+    (questions: GatewayEvent[]) => {
+      setPendingUserQuestions(questions);
+    },
+    [],
+  );
+
+  const oldestPendingUserQuestion = pendingUserQuestions[0] ?? null;
+
+  // Loading state for question submission
+  const [isQuestionSubmitting, setIsQuestionSubmitting] = useState(false);
+
   // Derived values for queue-based approval UI
   const oldestPendingToolCall = pendingToolCalls[0] ?? null;
 
@@ -480,6 +549,8 @@ function AutopilotSessionEventsPageContent({
     setHasReachedStart(false);
     setAutopilotStatus({ status: "idle" });
     setPendingToolCalls([]);
+    setPendingUserQuestions([]);
+    setIsQuestionSubmitting(false);
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
     prevQueueTopRef.current = null;
@@ -592,6 +663,47 @@ function AutopilotSessionEventsPageContent({
       });
     }
   }, [pendingToolCalls, manualAuthorization, toast]);
+
+  const handleAnswerQuestions = useCallback(
+    async (eventId: string, responses: Record<string, UserQuestionAnswer>) => {
+      setIsQuestionSubmitting(true);
+      try {
+        const res = await fetch(
+          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/answer-questions`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_questions_event_id: eventId,
+              responses,
+            }),
+          },
+        );
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+      } catch {
+        toast.error({
+          title: "Failed to submit answers",
+          description: "Could not submit question responses. Please try again.",
+        });
+      } finally {
+        setIsQuestionSubmitting(false);
+      }
+    },
+    [sessionId, toast],
+  );
+
+  const handleSkipQuestions = useCallback(
+    async (eventId: string, questionIds: string[]) => {
+      const responses: Record<string, UserQuestionAnswer> = {};
+      for (const qId of questionIds) {
+        responses[qId] = { type: "skipped" };
+      }
+      await handleAnswerQuestions(eventId, responses);
+    },
+    [handleAnswerQuestions],
+  );
 
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
@@ -838,10 +950,14 @@ function AutopilotSessionEventsPageContent({
                   onLoaded={handleEventsLoaded}
                   onStatusChange={handleStatusChange}
                   onPendingToolCallsChange={handlePendingToolCallsChange}
+                  onPendingUserQuestionsChange={
+                    handlePendingUserQuestionsChange
+                  }
                   onErrorChange={handleErrorChange}
                   onHasReachedStartChange={handleHasReachedStartChange}
                   configApplyEnabled={configApplyEnabled}
                   pendingToolCallIds={pendingToolCallIds}
+                  pendingUserQuestionIds={pendingUserQuestionIds}
                 />
               )}
             </Await>
@@ -871,20 +987,43 @@ function AutopilotSessionEventsPageContent({
                   Retrying in background...
                 </AutopilotStatusBanner>
               )}
-              {oldestPendingToolCall && !yoloMode && (
-                <PendingToolCallCard
-                  key={oldestPendingToolCall.id}
-                  event={oldestPendingToolCall}
-                  isLoading={authLoadingStates.has(oldestPendingToolCall.id)}
-                  loadingAction={authLoadingStates.get(
-                    oldestPendingToolCall.id,
-                  )}
-                  onApprove={() => handleApprove(oldestPendingToolCall.id)}
-                  onReject={() => handleReject(oldestPendingToolCall.id)}
-                  onApproveAll={handleApproveAll}
-                  additionalCount={pendingToolCalls.length - 1}
-                  isInCooldown={isInCooldown}
+              {oldestPendingUserQuestion &&
+              oldestPendingUserQuestion.payload.type === "user_questions" ? (
+                <PendingQuestionCard
+                  key={oldestPendingUserQuestion.id}
+                  eventId={oldestPendingUserQuestion.id}
+                  payload={oldestPendingUserQuestion.payload}
+                  isLoading={isQuestionSubmitting}
+                  onSubmit={handleAnswerQuestions}
+                  onSkip={() =>
+                    handleSkipQuestions(
+                      oldestPendingUserQuestion.id,
+                      oldestPendingUserQuestion.payload.type ===
+                        "user_questions"
+                        ? oldestPendingUserQuestion.payload.questions.map(
+                            (q) => q.id,
+                          )
+                        : [],
+                    )
+                  }
                 />
+              ) : (
+                oldestPendingToolCall &&
+                !yoloMode && (
+                  <PendingToolCallCard
+                    key={oldestPendingToolCall.id}
+                    event={oldestPendingToolCall}
+                    isLoading={authLoadingStates.has(oldestPendingToolCall.id)}
+                    loadingAction={authLoadingStates.get(
+                      oldestPendingToolCall.id,
+                    )}
+                    onApprove={() => handleApprove(oldestPendingToolCall.id)}
+                    onReject={() => handleReject(oldestPendingToolCall.id)}
+                    onApproveAll={handleApproveAll}
+                    additionalCount={pendingToolCalls.length - 1}
+                    isInCooldown={isInCooldown}
+                  />
+                )
               )}
               <ChatInput
                 sessionId={isNewSession ? NIL_UUID : sessionId}
