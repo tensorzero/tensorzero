@@ -103,7 +103,7 @@ When `type` is `"inference_ids"`:
 - `inference_ids` (list of UUIDs, required) - the inference IDs to create datapoints from
 - `output_source` (string, optional, defaults to `"inference"`) - the source of the output for the datapoint (`"inference"`, `"demonstration"`, or `"none"`)
 
-When `type` is `"inference_query"`, the request body accepts the same parameters as the [List Inferences](/gateway/api-reference/stored-inferences) endpoint (e.g. `function_name`, `variant_name`, `output_source`, `filters`, etc.).
+When `type` is `"inference_query"`, the request body accepts the same parameters as the [List Inferences](/observability/query-historical-inferences) endpoint (e.g. `function_name`, `variant_name`, `output_source`, `filters`, etc.).
 
 The endpoint returns an object with `ids`, a list of IDs (strings, UUIDv7) of the newly created datapoints.
 
