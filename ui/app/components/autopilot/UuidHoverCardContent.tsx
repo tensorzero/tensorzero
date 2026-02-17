@@ -229,7 +229,7 @@ function ViewDetailsLink({ url }: { url: string }) {
   return (
     <Link
       to={url}
-      className="text-muted-foreground hover:text-foreground -mx-3 -mb-3 mt-1 border-t px-3 pb-3 pt-3 text-xs transition-colors"
+      className="text-muted-foreground hover:text-foreground -mx-3 mt-1 -mb-3 border-t px-3 pt-3 pb-3 text-xs transition-colors"
     >
       View details &rarr;
     </Link>
