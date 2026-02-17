@@ -11,6 +11,7 @@ import {
   TooltipContent,
 } from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
+import { Skeleton } from "~/components/ui/skeleton";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 import { toResolvedObjectUrl } from "~/utils/urls";
@@ -259,7 +260,7 @@ function InfoItem({ label, value, secondaryValue, isLoading }: InfoItemProps) {
           )}
         </span>
       ) : isLoading ? (
-        <span className="bg-muted h-4 w-20 animate-pulse rounded" />
+        <Skeleton className="h-4 w-20" />
       ) : null}
     </Item>
   );
@@ -293,7 +294,7 @@ function Timestamp({ data, isLoading }: TimestampProps) {
     );
   }
   if (isLoading) {
-    return <span className="bg-muted h-4 w-16 animate-pulse rounded" />;
+    return <Skeleton className="h-4 w-16" />;
   }
   return null;
 }
