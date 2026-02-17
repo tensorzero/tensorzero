@@ -73,7 +73,7 @@ See [Deploy Valkey / Redis](/deployment/valkey-redis#eviction-policy) for more d
   and so on.
 - The `max_age_s` parameter applies to the retrieval of cached responses.
   When using ClickHouse, old entries are not automatically deleted.
-  When using Valkey, entries expire according to the configured TTL (`cache.valkey.ttl_s`).
+  When using Valkey, entries expire according to the configured TTL (`cache.valkey.ttl_s`). The default is 24h.
 - When the gateway serves a cached response, the usage fields are set to zero.
 - For batch inference, the gateway only writes to the cache but does not serve cached responses.
 - Inference caching also works for embeddings, using the same cache modes and options as chat completion inference.
