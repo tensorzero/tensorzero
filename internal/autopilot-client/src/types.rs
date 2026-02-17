@@ -859,6 +859,7 @@ pub struct S3UploadRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct S3UploadResponse {
     pub bucket: String,
+    pub key: String,
     pub region: String,
     // Credentials can be null when running locally
     pub access_key_id: Option<String>,

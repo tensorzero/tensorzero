@@ -21,7 +21,7 @@ use serde_arrow::ArrayBuilder;
 use tensorzero::ListDatapointsRequest;
 
 use autopilot_client::AutopilotSideInfo;
-use durable_tools::tensorzero_client::S3UploadRequest;
+use durable_tools::tensorzero_client::{S3UploadRequest, S3UploadResponse};
 
 /// Parameters for the upload_dataset tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -60,16 +60,6 @@ pub struct UploadDatasetToolOutput {
     /// Total number of rows uploaded.
     pub total_rows: u32,
     pub format: UploadDatasetFormat,
-}
-
-/// Serializable credentials for checkpointing between steps.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct S3Credentials {
-    bucket: String,
-    region: String,
-    access_key_id: Option<String>,
-    secret_access_key: Option<String>,
-    session_token: Option<String>,
 }
 
 /// Tool for uploading a dataset to S3 as Parquet.
@@ -227,6 +217,8 @@ impl ToolMetadata for UploadDatasetTool {
 
 #[async_trait]
 impl TaskTool for UploadDatasetTool {
+    type ExtraState = ();
+
     async fn execute(
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
@@ -234,7 +226,7 @@ impl TaskTool for UploadDatasetTool {
         ctx: &mut ToolContext<'_>,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Step 1: Get S3 credentials
-        let credentials: S3Credentials = ctx
+        let credentials: S3UploadResponse = ctx
             .step(
                 "get_credentials",
                 side_info.tool_call_event_id,
@@ -244,14 +236,7 @@ impl TaskTool for UploadDatasetTool {
                         .s3_initiate_upload(S3UploadRequest { tool_call_event_id })
                         .await
                         .map_err(|e| anyhow::Error::msg(e.to_string()))?;
-
-                    Ok(S3Credentials {
-                        bucket: response.bucket,
-                        region: response.region,
-                        access_key_id: response.access_key_id,
-                        secret_access_key: response.secret_access_key,
-                        session_token: response.session_token,
-                    })
+                    Ok(response)
                 },
             )
             .await?;
@@ -284,8 +269,7 @@ impl TaskTool for UploadDatasetTool {
                         anyhow::Error::msg(format!("Failed to build S3 client: {e}"))
                     })?);
 
-                    let object_key = format!("datasets/{dataset_name}/dataset.parquet");
-                    let path = ObjectStorePath::from(object_key.clone());
+                    let path = ObjectStorePath::from(creds.key.clone());
 
                     let total_rows = upload_dataset_parquet(
                         s3,
@@ -296,7 +280,7 @@ impl TaskTool for UploadDatasetTool {
                     )
                     .await?;
 
-                    let s3_uri = format!("s3://{}/{object_key}", creds.bucket);
+                    let s3_uri = format!("s3://{}/{}", creds.bucket, creds.key);
 
                     Ok(UploadDatasetToolOutput {
                         s3_uri,
