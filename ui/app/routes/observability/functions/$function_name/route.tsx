@@ -8,6 +8,8 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
+import { useAutopilotAvailable } from "~/context/autopilot-available";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
@@ -58,6 +60,8 @@ function FunctionDetailPageHeader({
   functionName: string;
   functionConfig: FunctionConfig | null;
 }) {
+  const autopilotAvailable = useAutopilotAvailable();
+
   return (
     <PageHeader
       eyebrow={
@@ -73,6 +77,9 @@ function FunctionDetailPageHeader({
       }
     >
       {functionConfig && <BasicInfo functionConfig={functionConfig} />}
+      {autopilotAvailable && (
+        <AskAutopilotButton message={`Function: ${functionName}\n\n`} />
+      )}
     </PageHeader>
   );
 }

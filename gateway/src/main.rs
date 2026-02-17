@@ -22,7 +22,7 @@ use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_mi
 use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error;
+use tensorzero_core::error::{self, Error, ErrorDetails};
 use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
@@ -56,6 +56,28 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
     // Print only the API key to stdout for easy machine parsing
     print_key(&key);
 
+    Ok(())
+}
+
+async fn run_optimization_postgres_migrations() -> Result<(), Error> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
+        })
+    })?;
+    let pool = sqlx::PgPool::connect(&postgres_url).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: e.to_string(),
+        })
+    })?;
+    tensorzero_optimizers::postgres::make_migrator()
+        .run(&pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresMigration {
+                message: format!("Failed to run optimization migrations: {e}"),
+            })
+        })?;
     Ok(())
 }
 
@@ -116,10 +138,18 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_postgres_migrations {
-        tracing::info!("Applying PostgreSQL migrations...");
+        tracing::info!("Applying Postgres migrations...");
         manual_run_postgres_migrations()
             .await
-            .log_err_pretty("Failed to run PostgreSQL migrations")?;
+            .log_err_pretty("Failed to run Postgres migrations")?;
+        if args
+            .postgres_migration_args
+            .enable_optimization_postgres_migrations
+        {
+            run_optimization_postgres_migrations()
+                .await
+                .log_err_pretty("Failed to run optimization Postgres migrations")?;
+        }
         tracing::info!("Postgres is ready.");
         return Ok(());
     }
@@ -280,7 +310,7 @@ async fn run() -> Result<(), ExitCode> {
     // Bind to the socket address specified in the CLI, config, or default to 0.0.0.0:3000
     if args.bind_address.is_some() && config.gateway.bind_address.is_some() {
         tracing::error!(
-            "You must not specify both `--bind-address` and `gateway.bind_address` in the config file."
+            "You must only specify one of `--bind-address` (CLI), `TENSORZERO_GATEWAY_BIND_ADDRESS` (environment variable), or `gateway.bind_address` (configuration)."
         );
         return Err(ExitCode::FAILURE);
     }
@@ -349,6 +379,11 @@ async fn run() -> Result<(), ExitCode> {
     let valkey_enabled_pretty =
         get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info);
     tracing::info!("├ Valkey: {valkey_enabled_pretty}");
+    if std::env::var("TENSORZERO_VALKEY_CACHE_URL").is_ok() {
+        let valkey_cache_enabled_pretty =
+            get_valkey_status_string(&gateway_handle.app_state.valkey_cache_connection_info);
+        tracing::info!("├ Valkey (cache): {valkey_cache_enabled_pretty}");
+    }
 
     if let Some(gateway_url) = config
         .gateway

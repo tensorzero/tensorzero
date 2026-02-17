@@ -56,7 +56,7 @@ async fn test_mutate_variant_chat() {
     // Evaluate parent
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -191,7 +191,7 @@ async fn test_mutate_variant_json() {
     // Evaluate parent
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -300,7 +300,7 @@ async fn test_mutate_variant_preserves_variables() {
     // Evaluate and analyze
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -397,7 +397,7 @@ async fn test_mutate_variant_preserves_schema_references() {
     // Evaluate and analyze
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -512,7 +512,7 @@ async fn test_mutate_variant_naming() {
     // Evaluate and analyze
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),

@@ -12,6 +12,7 @@ use tensorzero_core::client::client_inference_params::ClientInferenceParams;
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::config::{Config, RuntimeOverlay};
 use tensorzero_core::db::ConfigQueries;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::{FeedbackResponse, Params as FeedbackParams};
 use tensorzero_core::endpoints::inference::{InferenceOutput, InferenceResponse, inference};
@@ -81,11 +82,12 @@ pub async fn get_or_load_config(
         return Ok(config);
     }
 
-    // Cache miss: load from ClickHouse
-    let snapshot = app_state
-        .clickhouse_connection_info
-        .get_config_snapshot(snapshot_hash.clone())
-        .await?;
+    // Cache miss: load from database
+    let db = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let snapshot = db.get_config_snapshot(snapshot_hash.clone()).await?;
 
     let runtime_overlay = RuntimeOverlay::from_config(&app_state.config);
 
@@ -128,6 +130,7 @@ pub async fn action(
                 &app_state.http_client,
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
+                app_state.cache_manager.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.rate_limiting_manager.clone(),
                 (*inference_params).try_into()?,
@@ -153,6 +156,7 @@ pub async fn action(
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
                 app_state.valkey_connection_info.clone(),
+                app_state.valkey_cache_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.shutdown_token.clone(),
             )?;
@@ -168,6 +172,7 @@ pub async fn action(
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
                 app_state.valkey_connection_info.clone(),
+                app_state.valkey_cache_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.shutdown_token.clone(),
             )?;

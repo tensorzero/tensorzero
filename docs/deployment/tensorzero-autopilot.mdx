@@ -55,6 +55,35 @@ Learn more about how to:
 
 </Step>
 
+<Step title="Allow TensorZero Autopilot to edit your local configuration (optional)">
+
+TensorZero Autopilot can edit your local TensorZero configuration.
+
+When this feature is enabled, an "Apply changes" button appears in the UI, allowing you to easily apply any configuration changes proposed by Autopilot.
+
+<Warning>
+
+We recommend enabling this feature only in a local setup.
+Do not enable this feature if the TensorZero UI is shared by multiple users.
+
+</Warning>
+
+To enable it, mount the configuration directory as a writable volume and pass the `--config-file` flag to the TensorZero UI container.
+For example:
+
+```yaml
+# ...
+ui:
+  image: tensorzero/ui
+  # ...
+  command: --config-file /app/config/tensorzero.toml
+  volumes:
+    - ./config:/app/config
+  # ...
+```
+
+</Step>
+
 <Step title="Use TensorZero Autopilot">
 
 Visit `/autopilot` in the self-hosted TensorZero UI to use Autopilot.

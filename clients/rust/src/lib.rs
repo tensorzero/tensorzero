@@ -2,8 +2,10 @@
 
 use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::config::snapshot::ConfigSnapshot;
-use tensorzero_core::config::write_config_snapshot;
+use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::HealthCheckable;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
 use tensorzero_core::endpoints::stored_inferences::render_samples;
@@ -1321,10 +1323,12 @@ impl ClientExt for Client {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(Box::pin(with_embedded_timeout(*timeout, async {
+                    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+                        Arc::new(gateway.handle.app_state.clickhouse_connection_info.clone());
                     launch_optimization(
                         &gateway.handle.app_state.http_client,
                         params,
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        db,
                         gateway.handle.app_state.config.clone(),
                     )
                     .await
@@ -1351,10 +1355,12 @@ impl ClientExt for Client {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Box::pin(with_embedded_timeout(*timeout, async {
+                    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+                        Arc::new(gateway.handle.app_state.clickhouse_connection_info.clone());
                     launch_optimization_workflow(
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.config.clone(),
-                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &db,
                         params,
                     )
                     .await
@@ -1523,12 +1529,13 @@ impl ClientExt for Client {
 
                     let hash = snapshot.hash.to_string();
 
-                    write_config_snapshot(
-                        &gateway.handle.app_state.clickhouse_connection_info,
-                        snapshot,
-                    )
-                    .await
-                    .map_err(err_to_http)?;
+                    let db = DelegatingDatabaseConnection::new(
+                        gateway.handle.app_state.clickhouse_connection_info.clone(),
+                        gateway.handle.app_state.postgres_connection_info.clone(),
+                    );
+                    db.write_config_snapshot(&snapshot)
+                        .await
+                        .map_err(err_to_http)?;
 
                     Ok(WriteConfigResponse { hash })
                 }))

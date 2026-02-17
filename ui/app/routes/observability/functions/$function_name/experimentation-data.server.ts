@@ -28,10 +28,11 @@ export async function fetchExperimentationSectionData(params: {
   const client = getTensorZeroClient();
 
   const feedbackParams =
-    function_config.experimentation.type === "track_and_stop"
+    function_config.experimentation.base.type === "track_and_stop"
       ? {
-          metric_name: function_config.experimentation.metric,
-          variant_names: function_config.experimentation.candidate_variants,
+          metric_name: function_config.experimentation.base.metric,
+          variant_names:
+            function_config.experimentation.base.candidate_variants,
         }
       : null;
 

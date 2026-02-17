@@ -27,6 +27,8 @@ services:
       context: ../..
       dockerfile: gateway/Dockerfile
       target: gateway
+      args:
+        PROFILE: dev
     volumes:
       - ./config:/app/config:ro
       # Mount GCP JWT key file (optional - only needed for GCP providers)

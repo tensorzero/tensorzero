@@ -373,11 +373,13 @@ test.describe("should be able to add demonstration feedback via Try with X flows
     test(buttonText, async ({ page }) => {
       await page.goto(`/observability/inferences/${inference}`);
 
-      // Wait for the page to load
+      // Wait for the page to load and the action bar to resolve
       await page.waitForLoadState("networkidle");
+      const tryButton = page.getByText(buttonText);
+      await expect(tryButton).toBeEnabled();
 
       // Click on "Try with variant" button
-      await page.getByText(buttonText).click();
+      await tryButton.click();
 
       // Wait for the dropdown menu to appear and select a variant
       // Look for variant options and click on one that's not the current variant
@@ -448,11 +450,13 @@ test.describe("should navigate to inference from Try with X modal and verify tag
     test(buttonText, async ({ page }) => {
       await page.goto(`/observability/inferences/${inference}`);
 
-      // Wait for the page to load
+      // Wait for the page to load and the action bar to resolve
       await page.waitForLoadState("networkidle");
+      const tryButton = page.getByText(buttonText);
+      await expect(tryButton).toBeEnabled();
 
       // Click on "Try with variant/model" button
-      await page.getByText(buttonText).click();
+      await tryButton.click();
 
       // Wait for the dropdown menu to appear and select a variant
       // ButtonSelect uses cmdk CommandItem which has role="option"

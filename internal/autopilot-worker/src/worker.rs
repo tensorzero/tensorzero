@@ -10,7 +10,6 @@ use autopilot_tools::tools::AutoRejectToolCallTool;
 use durable_tools::{
     SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
 };
-use serde::Serialize;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -80,7 +79,7 @@ impl AutopilotWorker {
     ///
     /// Returns an error if the executor cannot be created.
     pub async fn new(config: AutopilotWorkerConfig) -> Result<Self> {
-        let executor = ToolExecutor::builder()
+        let executor = ToolExecutor::builder(())
             .pool(config.pool)
             .queue_name(&config.queue_name)
             .t0_client(config.t0_client)
@@ -165,9 +164,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
 
     async fn visit_task_tool<T>(&self, tool: T) -> Result<(), ToolError>
     where
-        T: TaskTool,
-        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+        T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
     {
         self.executor
             .register_task_tool_instance(ClientTaskToolWrapper::new(tool))
@@ -177,9 +174,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
 
     async fn visit_simple_tool<T>(&self) -> Result<(), ToolError>
     where
-        T: SimpleTool + Default,
-        T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-        <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+        T: SimpleTool<SideInfo = AutopilotSideInfo> + Default,
     {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
         self.executor

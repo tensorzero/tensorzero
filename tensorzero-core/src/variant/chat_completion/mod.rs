@@ -892,20 +892,20 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::cache::{CacheEnabledMode, CacheOptions};
+    use crate::cache::{CacheEnabledMode, CacheManager, CacheOptions};
     use crate::config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig};
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
     };
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::Template;
     use crate::inference::types::{
         Arguments, ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode,
-        Usage,
+        Usage, usage::ApiType,
     };
     use crate::jsonschema_util::JSONSchema;
     use crate::minijinja_util::tests::{
@@ -1302,6 +1302,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -1358,7 +1359,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -1621,7 +1622,7 @@ mod tests {
         let details = err.get_details();
         assert_eq!(
             *details,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "error".to_string(),
                     Error::new(ErrorDetails::InferenceClient {
@@ -1631,6 +1632,7 @@ mod tests {
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
                         provider_type: "dummy".to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 )])
             }
@@ -1872,7 +1874,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let inference_config = InferenceConfig {
             templates: templates.clone(),
@@ -2061,7 +2063,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -2193,7 +2195,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -2318,6 +2320,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -2347,7 +2350,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
 
         let system_template = get_system_template();
@@ -2493,7 +2496,7 @@ mod tests {
             Err(e) => e,
         };
         match err.get_details() {
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors, ..
             } => {
                 assert_eq!(provider_errors.len(), 1);
@@ -2502,7 +2505,7 @@ mod tests {
                     ErrorDetails::InferenceClient { .. }
                 ));
             }
-            _ => panic!("Expected ModelProvidersExhausted error, got {err:?}"),
+            _ => panic!("Expected AllModelProvidersFailed error, got {err:?}"),
         }
 
         // Test case 2: Model inference succeeds
@@ -2647,7 +2650,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {

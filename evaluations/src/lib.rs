@@ -13,6 +13,7 @@ pub use stats::{
     EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate, EvaluatorStats,
     PerEvaluatorStats,
 };
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
 pub use tensorzero_core::statistics_util::{mean, std_deviation};
 use tensorzero_core::utils::gateway::AppStateData;
@@ -32,9 +33,11 @@ use tensorzero_core::endpoints::datasets::v1::{
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::inference::types::InputExt;
+use tensorzero_core::utils::gateway::setup_postgres;
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
-    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
+    config::Config, db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries, endpoints::datasets::Datapoint,
 };
 use tokio::{
     sync::{Semaphore, mpsc},
@@ -76,7 +79,7 @@ pub(crate) fn merge_tags(
 
 pub struct Clients {
     pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
-    pub clickhouse_client: ClickHouseConnectionInfo,
+    pub db: Arc<dyn DelegatingDatabaseQueries>,
 }
 
 /// High-level wrapper function for running evaluations called from the CLI.
@@ -150,9 +153,9 @@ pub async fn run_evaluation(
     debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
     if let Some(postgres_url) = postgres_url.as_ref() {
-        debug!(postgres_url = %postgres_url, "PostgreSQL URL resolved");
+        debug!(postgres_url = %postgres_url, "Postgres URL resolved");
     } else {
-        debug!("PostgreSQL URL not provided");
+        debug!("Postgres URL not provided");
     }
     let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
     if let Some(valkey_url) = valkey_url.as_ref() {
@@ -160,7 +163,6 @@ pub async fn run_evaluation(
     } else {
         debug!("Valkey URL not provided");
     }
-
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
@@ -169,6 +171,7 @@ pub async fn run_evaluation(
         false,
     )
     .await?;
+
     let clickhouse_client = ClickHouseConnectionInfo::new(
         &clickhouse_url,
         unwritten_config.gateway.observability.batch_writes.clone(),
@@ -177,6 +180,10 @@ pub async fn run_evaluation(
     let config = Box::pin(unwritten_config.into_config(&clickhouse_client)).await?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
+
+    let postgres_connection = setup_postgres(&config, postgres_url.as_deref()).await?;
+    let database =
+        DelegatingDatabaseConnection::new(clickhouse_client.clone(), postgres_connection.clone());
 
     // Look up evaluation config from the loaded config
     let evaluation_config = config
@@ -216,7 +223,7 @@ pub async fn run_evaluation(
 
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client: clickhouse_client.clone(),
+        db: Arc::new(database),
         evaluation_config,
         function_configs,
         dataset_name: args.dataset_name,
@@ -294,13 +301,14 @@ pub async fn run_evaluation(
     // (since Tokio will wait for the `spawn_blocking` task to finish before shutting down the runtime).
     // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
     // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
-    if let Some(handle) = clickhouse_client.batcher_join_handle() {
-        drop(clickhouse_client);
-        tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
-        handle
-            .await
-            .map_err(|e| anyhow!("Error waiting for ClickHouse batch writer: {e}"))?;
-        tracing::info!("Evaluations ClickHouse batch writer finished");
+    if !result.batcher_join_handles.is_empty() {
+        tracing::info!("Waiting for evaluations batch writers to finish");
+        for handle in result.batcher_join_handles {
+            handle
+                .await
+                .map_err(|e| anyhow!("Error waiting for batch writer: {e}"))?;
+        }
+        tracing::info!("Evaluations batch writers finished");
     }
 
     Ok(())
@@ -337,6 +345,7 @@ pub async fn run_evaluation_with_app_state(
         .recreate()
         .await
         .map_err(|e| anyhow!("Failed to create ClickHouse client for evaluation: {e}"))?;
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse_client);
 
     // Create AppStateInferenceExecutor to call handlers directly without HTTP overhead
     let inference_executor = Arc::new(AppStateInferenceExecutor::new(app_state));
@@ -356,7 +365,7 @@ pub async fn run_evaluation_with_app_state(
     // Build the core args
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client,
+        db,
         evaluation_config: Arc::new(params.evaluation_config),
         function_configs,
         dataset_name: params.dataset_name,
@@ -447,11 +456,14 @@ pub async fn run_evaluation_core_streaming(
 
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
+    // Extract batch writer handles before moving args.db into Clients
+    let batcher_join_handles = args.db.batcher_join_handles();
+
     // Build the semaphore and clients
     let semaphore = Arc::new(Semaphore::new(args.concurrency));
     let clients = Arc::new(Clients {
         inference_executor: args.inference_executor,
-        clickhouse_client: args.clickhouse_client,
+        db: args.db,
     });
 
     // Use the pre-resolved evaluation configuration
@@ -493,7 +505,7 @@ pub async fn run_evaluation_core_streaming(
             offset: Some(0),
             ..Default::default()
         };
-        list_datapoints(&clients.clickhouse_client, dataset_name.clone(), request)
+        list_datapoints(clients.db.as_ref(), dataset_name.clone(), request)
             .await?
             .datapoints
     } else {
@@ -501,13 +513,9 @@ pub async fn run_evaluation_core_streaming(
         let request = GetDatapointsRequest {
             ids: datapoint_ids.clone(),
         };
-        get_datapoints(
-            &clients.clickhouse_client,
-            /*dataset_name=*/ None,
-            request,
-        )
-        .await?
-        .datapoints
+        get_datapoints(clients.db.as_ref(), /*dataset_name=*/ None, request)
+            .await?
+            .datapoints
     };
     info!(
         dataset_size = dataset.len(),
@@ -543,9 +551,6 @@ pub async fn run_evaluation_core_streaming(
 
     // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
     let cancellation_tokens_arc = Arc::new(stopping_manager.get_tokens().clone());
-
-    // Save batcher_join_handle before moving clients into batch_params
-    let batcher_join_handle = clients.clickhouse_client.batcher_join_handle();
 
     // Build batch processing params
     let batch_params = ProcessBatchParams {
@@ -619,7 +624,7 @@ pub async fn run_evaluation_core_streaming(
         receiver,
         run_info,
         evaluation_config: evaluators,
-        batcher_join_handle,
+        batcher_join_handles,
     })
 }
 
@@ -776,6 +781,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         cache_options: get_cache_options(inference_cache),
         dryrun: Some(dryrun),
         episode_id: None,
+        namespace: None,
         model_name: None,
         stream: Some(false),
         params: InferenceParams::default(),

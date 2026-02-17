@@ -2844,7 +2844,7 @@ async fn deny_bad_timeouts_streaming_field() {
 
     assert_eq!(
         err.to_string(),
-        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
+        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms` or `total_ms`"
     );
 }
 
@@ -3458,4 +3458,112 @@ async fn test_nested_skip_credential_validation() {
     })
     .await;
     assert!(!skip_credential_validation());
+}
+
+#[tokio::test]
+async fn test_experimentation_with_namespaces_valid() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "uniform"
+
+        [functions.test_function.experimentation.namespaces.mobile]
+        type = "static_weights"
+        candidate_variants = {"variant_a" = 1.0}
+
+        [functions.test_function.experimentation.namespaces.web]
+        type = "uniform"
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse TOML config");
+    let loaded = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Config with valid namespace experimentation should load successfully");
+
+    let func = loaded
+        .functions
+        .get("test_function")
+        .expect("test_function should exist");
+    let exp = func.experimentation_with_namespaces();
+    assert!(
+        exp.has_namespace_config("mobile"),
+        "Should have a `mobile` namespace config"
+    );
+    assert!(
+        exp.has_namespace_config("web"),
+        "Should have a `web` namespace config"
+    );
+}
+
+// TODO: implement track-and-stop for namespaces, delete
+#[tokio::test]
+async fn test_experimentation_namespace_track_and_stop_rejected() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [metrics.test_metric]
+        type = "boolean"
+        optimize = "max"
+        level = "inference"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "uniform"
+
+        [functions.test_function.experimentation.namespaces.mobile]
+        type = "track_and_stop"
+        metric = "test_metric"
+        candidate_variants = ["variant_a", "variant_b"]
+        min_samples_per_variant = 10
+        delta = 0.05
+        epsilon = 0.1
+        update_period_s = 60
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse TOML config");
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Namespace with track_and_stop should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("track_and_stop"),
+        "Error should mention `track_and_stop`: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("mobile"),
+        "Error should mention the namespace name: {err_msg}"
+    );
 }

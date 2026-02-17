@@ -1494,7 +1494,8 @@ async fn test_list_inferences_with_demonstration_output_source_chat(conn: impl I
         {
             // The output should be the demonstration, dispreferred should be the original
             assert_ne!(
-                chat.output, chat.dispreferred_outputs[0],
+                chat.output.as_ref().unwrap(),
+                &chat.dispreferred_outputs[0],
                 "Output (demonstration) should differ from dispreferred_outputs (original)"
             );
         }

@@ -26,12 +26,16 @@ pub struct GatewayArgs {
     pub log_format: LogFormat,
 
     /// Sets the socket address the gateway will bind to (e.g., "127.0.0.1:8080").
-    #[arg(long)]
+    #[arg(long, env = "TENSORZERO_GATEWAY_BIND_ADDRESS")]
     pub bind_address: Option<SocketAddr>,
 
     /// These commands trigger some workflow then exit without launching the gateway.
     #[command(flatten)]
     pub early_exit_commands: EarlyExitCommands,
+
+    /// Arguments that control the behavior of Postgres migrations.
+    #[command(flatten)]
+    pub postgres_migration_args: PostgresMigrationArgs,
 }
 
 #[derive(Args, Debug)]
@@ -41,7 +45,7 @@ pub struct EarlyExitCommands {
     #[arg(long, alias = "run-migrations")] // TODO: remove (deprecated)
     pub run_clickhouse_migrations: bool,
 
-    /// Run PostgreSQL migrations manually then exit.
+    /// Run Postgres migrations manually then exit.
     #[arg(long)]
     pub run_postgres_migrations: bool,
 
@@ -56,4 +60,11 @@ pub struct EarlyExitCommands {
     /// Validate the config file then exit.
     #[arg(long)]
     pub validate_and_exit: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct PostgresMigrationArgs {
+    /// Run Postgres migrations for optimizations.
+    #[arg(long, default_value_t = false)]
+    pub enable_optimization_postgres_migrations: bool,
 }

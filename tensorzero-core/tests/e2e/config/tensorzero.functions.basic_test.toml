@@ -197,29 +197,29 @@ max_tokens = 100
 
 [functions.basic_test.variants.fireworks]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 500
+max_tokens = 1500
 
 [functions.basic_test.variants.fireworks-extra-body]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.fireworks-extra-headers]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-r1-0528"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 extra_headers = [{ name = "Authorization", value = "invalid_fireworks_auth" }]
 
 [functions.basic_test.variants.fireworks-dynamic]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.basic_test.variants.fireworks-shorthand]
 type = "chat_completion"
@@ -231,20 +231,20 @@ max_tokens = 100
 type = "chat_completion"
 model = "gcp-gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 200
 
 [functions.basic_test.variants.gcp-vertex-gemini-flash-extra-body]
 type = "chat_completion"
 model = "gcp-gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 200
 extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.gcp-vertex-gemini-flash-extra-headers]
 type = "chat_completion"
 model = "gcp-gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 200
 extra_headers = [{ name = "Authorization", value = "invalid_gcp_vertex_auth" }]
 
 [functions.basic_test.variants.gcp-vertex-gemini-pro]
@@ -378,6 +378,18 @@ model = "groq-qwen-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.groq-reasoning]
+type = "chat_completion"
+model = "groq-qwen3-32b"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.groq-reasoning-usage]
+type = "chat_completion"
+model = "groq-gpt-oss-20b"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.mistral]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
@@ -409,6 +421,12 @@ type = "chat_completion"
 model = "mistral::open-mistral-nemo-2407"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+[functions.basic_test.variants.mistral-reasoning]
+type = "chat_completion"
+model = "magistral-small-latest"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
 
 [functions.basic_test.variants.openai]
 type = "chat_completion"
@@ -474,7 +492,7 @@ max_tokens = 100
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 200
 
 [functions.basic_test.variants.gcp_vertex_gemini_shorthand_endpoint]
 type = "chat_completion"
@@ -592,28 +610,40 @@ max_tokens = 100
 
 [functions.basic_test.variants.together-tool]
 type = "chat_completion"
-model = "llama3.1-405b-instruct-turbo-together"
+model = "llama4-maverick-instruct-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.sglang]
 type = "chat_completion"
-model = "Qwen/Qwen2.5-1.5B-Instruct"
+model = "Qwen/Qwen3-1.7B"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.basic_test.variants.sglang-extra-body]
 type = "chat_completion"
-model = "Qwen/Qwen2.5-1.5B-Instruct"
+model = "Qwen/Qwen3-1.7B"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_body = [{ pointer = "/temperature", value = 0.123 }]
+extra_body = [
+    { pointer = "/temperature", value = 0.123 },
+    { pointer = "/chat_template_kwargs/enable_thinking", value = false },
+]
+
+[functions.basic_test.variants.sglang-reasoning]
+type = "chat_completion"
+model = "Qwen/Qwen3-1.7B"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 1024
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true }]
 
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.basic_test.variants.vllm-gpt-oss-20b]
 type = "chat_completion"
@@ -623,23 +653,32 @@ max_tokens = 100
 
 [functions.basic_test.variants.vllm-extra-body]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_body = [{ pointer = "/temperature", value = 0.123 }]
+extra_body = [{ pointer = "/temperature", value = 0.123 }, { pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.basic_test.variants.vllm-extra-headers]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 extra_headers = [{ name = "Authorization", value = "invalid_vllm_auth" }]
 
 [functions.basic_test.variants.vllm-dynamic]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm-dynamic"
+model = "qwen3-1.7b-vllm-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
+
+[functions.basic_test.variants.vllm-reasoning]
+type = "chat_completion"
+model = "qwen3-1.7b-vllm"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 1024
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true }]
 
 [functions.basic_test.variants.xai]
 type = "chat_completion"
@@ -675,7 +714,7 @@ max_tokens = 100
 
 [functions.basic_test.variants.xai-reasoning]
 type = "chat_completion"
-model = "grok-3-mini"
+model = "grok-code-fast-1"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
@@ -769,15 +808,15 @@ model = "deepseek::deepseek-chat"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.fireworks-deepseek]
+[functions.basic_test.variants.fireworks-kimi-k2p5-reasoning]
 type = "chat_completion"
-model = "deepseek-r1"
+model = "kimi-k2p5-fireworks-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
-[functions.basic_test.variants.fireworks-gpt-oss-20b]
+[functions.basic_test.variants.fireworks-kimi-k2p5]
 type = "chat_completion"
-model = "gpt-oss-20b-fireworks"
+model = "kimi-k2p5-fireworks"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
@@ -791,6 +830,12 @@ retries = { num_retries = 5, max_delay_s = 0.1 }
 [functions.basic_test.variants.err_in_stream]
 type = "chat_completion"
 model = "err_in_stream"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.err_in_stream_with_raw_response]
+type = "chat_completion"
+model = "err_in_stream_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -868,7 +913,7 @@ max_tokens = 2048
 # Grok 3 Mini with effort-based reasoning
 [functions.basic_test.variants.openrouter-grok-reasoning]
 type = "chat_completion"
-model = "grok-3-mini-openrouter"
+model = "grok-code-fast-1-openrouter"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 reasoning_effort = "low"
@@ -880,3 +925,16 @@ model = "claude-haiku-4-5-openrouter"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 thinking_budget_tokens = 1024
+
+# Model fallback variants for raw_response fallback tests
+[functions.basic_test.variants.model_fallback_with_raw_response]
+type = "chat_completion"
+model = "test_fallback_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.model_both_error_with_raw_response]
+type = "chat_completion"
+model = "test_both_error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100

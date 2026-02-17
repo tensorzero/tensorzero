@@ -2,7 +2,7 @@ use crate::config::SchemaData;
 use crate::config::gateway::GatewayConfig;
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::experimentation::ExperimentationConfig;
+use crate::experimentation::{ExperimentationConfig, ExperimentationConfigWithNamespaces};
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 #[cfg(feature = "pyo3")]
@@ -110,6 +110,14 @@ impl FunctionConfigType {
             FunctionConfigType::Json => "JsonInferenceDatapoint",
         }
     }
+
+    /// Returns the Postgres datapoint table name for the given function type.
+    pub fn postgres_datapoint_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "tensorzero.chat_datapoints",
+            FunctionConfigType::Json => "tensorzero.json_datapoints",
+        }
+    }
 }
 
 impl FunctionConfig {
@@ -130,7 +138,26 @@ impl FunctionConfig {
         self.config_type().postgres_table_name()
     }
 
+    /// Returns the experimentation config for this function.
+    /// Returns the base experimentation config (ignoring namespace-specific configs).
     pub fn experimentation(&self) -> &ExperimentationConfig {
+        match self {
+            FunctionConfig::Chat(config) => &config.experimentation.base,
+            FunctionConfig::Json(config) => &config.experimentation.base,
+        }
+    }
+
+    /// Returns the experimentation config for a given namespace.
+    /// If namespace is None or doesn't have a specific config, returns the base config.
+    pub fn experimentation_for_namespace(&self, namespace: Option<&str>) -> &ExperimentationConfig {
+        match self {
+            FunctionConfig::Chat(config) => config.experimentation.get_for_namespace(namespace),
+            FunctionConfig::Json(config) => config.experimentation.get_for_namespace(namespace),
+        }
+    }
+
+    /// Returns the full experimentation config with namespaces.
+    pub fn experimentation_with_namespaces(&self) -> &ExperimentationConfigWithNamespaces {
         match self {
             FunctionConfig::Chat(config) => &config.experimentation,
             FunctionConfig::Json(config) => &config.experimentation,
@@ -287,7 +314,7 @@ pub struct FunctionConfigChat {
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub description: Option<String>,
-    pub experimentation: ExperimentationConfig,
+    pub experimentation: ExperimentationConfigWithNamespaces,
     // Holds all template names (e.g. 'user', 'my_custom_template'
     // which can be invoked through a `{"type": "template", "name": "..."}` input block)
     // This is used to perform early rejection of a template invocation,
@@ -314,7 +341,7 @@ pub struct FunctionConfigJson {
     pub output_schema: JSONSchema, // schema is mandatory for JSON functions
     pub json_mode_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
-    pub experimentation: ExperimentationConfig,
+    pub experimentation: ExperimentationConfigWithNamespaces,
     // See `FunctionConfigChat.all_explicit_template_names`.
     #[serde(skip)]
     pub all_explicit_template_names: HashSet<String>,
@@ -1419,7 +1446,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1506,7 +1533,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1581,7 +1608,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1656,7 +1683,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1734,7 +1761,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1818,7 +1845,7 @@ mod tests {
             parallel_tool_calls: None,
             description: Some("A chat function description".to_string()),
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(
@@ -1836,7 +1863,7 @@ mod tests {
             json_mode_tool_call_config,
             description: Some("A JSON function description".to_string()),
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         };
         let function_config = FunctionConfig::Json(json_config);
         assert_eq!(
@@ -1853,7 +1880,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(function_config.description(), None);
@@ -1888,7 +1915,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         });
         let raw_request = "raw_request".to_string();
 
@@ -1911,12 +1938,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -1979,12 +2008,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2033,12 +2064,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2087,6 +2120,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
@@ -2095,6 +2129,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2141,6 +2176,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ContentFilter),
             latency: Latency::NonStreaming {
@@ -2149,6 +2185,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2195,6 +2232,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency: Latency::NonStreaming {
@@ -2203,6 +2241,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2270,12 +2309,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2318,12 +2359,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: None,
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2371,6 +2414,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
@@ -2379,6 +2423,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2424,6 +2469,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: None,
             latency: Latency::NonStreaming {
@@ -2432,6 +2478,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2466,7 +2513,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         });
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
@@ -2486,12 +2533,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2650,5 +2699,64 @@ mod tests {
             }
             _ => panic!("Expected Thought block"),
         }
+    }
+
+    /// Helper: build a minimal FunctionConfigChat with the given experimentation config.
+    fn make_chat_function_config(
+        experimentation: ExperimentationConfigWithNamespaces,
+    ) -> FunctionConfig {
+        FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::default(),
+            parallel_tool_calls: None,
+            description: None,
+            experimentation,
+            all_explicit_templates_names: HashSet::new(),
+        })
+    }
+
+    #[test]
+    fn test_experimentation_for_namespace_none() {
+        let config = make_chat_function_config(ExperimentationConfigWithNamespaces::default());
+        let exp = config.experimentation_for_namespace(None);
+        assert!(
+            matches!(exp, ExperimentationConfig::Uniform(_)),
+            "None namespace should return the base (default uniform) config"
+        );
+    }
+
+    #[test]
+    fn test_experimentation_for_namespace_with_override() {
+        let mut namespaces = HashMap::new();
+        namespaces.insert(
+            "mobile".to_string(),
+            ExperimentationConfig::StaticWeights(
+                serde_json::from_value(serde_json::json!({
+                    "candidate_variants": {"v1": 1.0}
+                }))
+                .unwrap(),
+            ),
+        );
+        let config = make_chat_function_config(ExperimentationConfigWithNamespaces {
+            base: ExperimentationConfig::default(),
+            namespaces,
+        });
+        let exp = config.experimentation_for_namespace(Some("mobile"));
+        assert!(
+            matches!(exp, ExperimentationConfig::StaticWeights(_)),
+            "Known namespace should return the namespace-specific config"
+        );
+    }
+
+    #[test]
+    fn test_experimentation_for_namespace_unknown_returns_base() {
+        let config = make_chat_function_config(ExperimentationConfigWithNamespaces::default());
+        let exp = config.experimentation_for_namespace(Some("nonexistent"));
+        assert!(
+            matches!(exp, ExperimentationConfig::Uniform(_)),
+            "Unknown namespace should fall back to the base config"
+        );
     }
 }
