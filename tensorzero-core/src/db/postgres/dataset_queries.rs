@@ -633,7 +633,6 @@ async fn insert_chat_datapoints(
     qb.push_values(
         datapoints.iter().zip(&timestamps),
         |mut b, (dp, (staled_at, created_at))| {
-            let snapshot_hash_bytes = dp.snapshot_hash.as_ref().map(|h| h.as_bytes());
             let tool_params_ref = dp.tool_params.as_ref();
 
             b.push_bind(dp.id)
@@ -659,7 +658,7 @@ async fn insert_chat_datapoints(
                 .push_bind(dp.is_custom)
                 .push_bind(dp.source_inference_id)
                 .push_bind(&dp.name)
-                .push_bind(snapshot_hash_bytes)
+                .push_bind(dp.snapshot_hash.as_ref())
                 .push_bind(*staled_at)
                 .push_bind(*created_at);
         },
@@ -733,8 +732,6 @@ async fn insert_json_datapoints(
     qb.push_values(
         datapoints.iter().zip(&timestamps),
         |mut b, (dp, (staled_at, created_at))| {
-            let snapshot_hash_bytes = dp.snapshot_hash.as_ref().map(|h| h.as_bytes());
-
             b.push_bind(dp.id)
                 .push_bind(&dp.dataset_name)
                 .push_bind(&dp.function_name)
@@ -746,7 +743,7 @@ async fn insert_json_datapoints(
                 .push_bind(dp.is_custom)
                 .push_bind(dp.source_inference_id)
                 .push_bind(&dp.name)
-                .push_bind(snapshot_hash_bytes)
+                .push_bind(dp.snapshot_hash.as_ref())
                 .push_bind(*staled_at)
                 .push_bind(*created_at);
         },
@@ -793,7 +790,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredChatInferenceDatapoi
         let tool_choice: Option<Json<ToolChoice>> = row.try_get("tool_choice")?;
         let parallel_tool_calls: Option<bool> = row.try_get("parallel_tool_calls")?;
         let tags: Json<HashMap<String, String>> = row.try_get("tags")?;
-        let snapshot_hash_bytes: Option<Vec<u8>> = row.try_get("snapshot_hash")?;
+        let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
         let staled_at: Option<DateTime<Utc>> = row.try_get("staled_at")?;
         let updated_at: DateTime<Utc> = row.try_get("updated_at")?;
 
@@ -804,8 +801,6 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredChatInferenceDatapoi
             tool_choice.map(|v| v.0),
             parallel_tool_calls,
         );
-
-        let snapshot_hash = snapshot_hash_bytes.map(|b| SnapshotHash::from_bytes(&b));
         let tags = tags.0;
 
         Ok(StoredChatInferenceDatapoint {
@@ -838,11 +833,9 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredJsonInferenceDatapoi
         let output: Option<Json<JsonInferenceOutput>> = row.try_get("output")?;
         let output_schema: serde_json::Value = row.try_get("output_schema")?;
         let tags: Json<HashMap<String, String>> = row.try_get("tags")?;
-        let snapshot_hash_bytes: Option<Vec<u8>> = row.try_get("snapshot_hash")?;
+        let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
         let staled_at: Option<DateTime<Utc>> = row.try_get("staled_at")?;
         let updated_at: DateTime<Utc> = row.try_get("updated_at")?;
-
-        let snapshot_hash = snapshot_hash_bytes.map(|b| SnapshotHash::from_bytes(&b));
         let tags = tags.0;
 
         Ok(StoredJsonInferenceDatapoint {

@@ -249,7 +249,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
             &tags_json,
             project_name,
             run_display_name,
-            snapshot_hash.as_bytes(),
+            snapshot_hash,
             created_at,
         );
 
@@ -284,7 +284,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
             run_id,
             task_name,
             &tags_json,
-            snapshot_hash.as_bytes(),
+            snapshot_hash,
             created_at,
         );
 
@@ -746,7 +746,7 @@ fn build_insert_workflow_evaluation_run_query(
     tags_json: &serde_json::Value,
     project_name: Option<&str>,
     run_display_name: Option<&str>,
-    snapshot_hash_bytes: &[u8],
+    snapshot_hash: &SnapshotHash,
     created_at: DateTime<Utc>,
 ) -> QueryBuilder<sqlx::Postgres> {
     let mut qb = QueryBuilder::new(
@@ -765,7 +765,7 @@ fn build_insert_workflow_evaluation_run_query(
     qb.push(", ");
     qb.push_bind(run_display_name.map(|s| s.to_string()));
     qb.push(", ");
-    qb.push_bind(snapshot_hash_bytes.to_vec());
+    qb.push_bind(snapshot_hash);
     qb.push(", ");
     qb.push_bind(created_at);
     qb.push(")");
@@ -779,7 +779,7 @@ fn build_insert_workflow_evaluation_run_episode_query(
     run_id: Uuid,
     task_name: Option<&str>,
     tags_json: &serde_json::Value,
-    snapshot_hash_bytes: &[u8],
+    snapshot_hash: &SnapshotHash,
     created_at: DateTime<Utc>,
 ) -> QueryBuilder<sqlx::Postgres> {
     let mut qb = QueryBuilder::new(
@@ -801,7 +801,7 @@ fn build_insert_workflow_evaluation_run_episode_query(
     qb.push(", r.tags || ");
     qb.push_bind(tags_json.clone());
     qb.push(", ");
-    qb.push_bind(snapshot_hash_bytes.to_vec());
+    qb.push_bind(snapshot_hash);
     qb.push(", ");
     qb.push_bind(created_at);
     qb.push(
@@ -1299,7 +1299,7 @@ mod tests {
         let run_id = Uuid::now_v7();
         let variant_pins_json = serde_json::json!({});
         let tags_json = serde_json::json!({});
-        let snapshot_hash_bytes = vec![0u8; 32];
+        let snapshot_hash = SnapshotHash::from_bytes(&[0u8; 32]);
         let created_at = Utc::now();
 
         let qb = build_insert_workflow_evaluation_run_query(
@@ -1308,7 +1308,7 @@ mod tests {
             &tags_json,
             Some("my_project"),
             Some("my_run"),
-            &snapshot_hash_bytes,
+            &snapshot_hash,
             created_at,
         );
         let sql = qb.sql();
@@ -1329,7 +1329,7 @@ mod tests {
         let episode_id = Uuid::now_v7();
         let run_id = Uuid::now_v7();
         let tags_json = serde_json::json!({});
-        let snapshot_hash_bytes = vec![0u8; 32];
+        let snapshot_hash = SnapshotHash::from_bytes(&[0u8; 32]);
         let created_at = Utc::now();
 
         let qb = build_insert_workflow_evaluation_run_episode_query(
@@ -1337,7 +1337,7 @@ mod tests {
             run_id,
             Some("my_task"),
             &tags_json,
-            &snapshot_hash_bytes,
+            &snapshot_hash,
             created_at,
         );
         let sql = qb.sql();
