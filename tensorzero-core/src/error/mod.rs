@@ -325,6 +325,7 @@ pub enum ErrorDetails {
         // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
         errors: IndexMap<String, Error>,
     },
+    /// Error when all candidates for best/mixture-of-N fails; this corresponds to a single variant failure
     AllCandidatesFailed {
         candidate_errors: IndexMap<String, Error>,
     },
