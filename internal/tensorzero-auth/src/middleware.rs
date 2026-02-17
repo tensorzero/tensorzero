@@ -141,6 +141,8 @@ pub async fn tensorzero_auth_middleware(
             if let Some(cached_result) = cache.get(&cache_key) {
                 return match cached_result {
                     AuthResult::Success(key_info) => {
+                        // The cache entry may have been stored before the key expired,
+                        // so we re-check expiration here.
                         if let Some(expires_at) = key_info.expires_at
                             && expires_at <= Utc::now()
                         {
