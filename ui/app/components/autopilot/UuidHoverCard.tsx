@@ -15,14 +15,6 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 import { toResolvedObjectUrl } from "~/utils/urls";
 
-interface InferencePreview {
-  timestamp: string;
-}
-
-interface EpisodePreview {
-  inference_count: number;
-}
-
 interface UuidHoverCardProps {
   uuid: string;
   obj: ResolvedObject;
@@ -89,6 +81,10 @@ function HoverCardContent({ uuid, obj, isOpen }: HoverCardContentProps) {
   }
 }
 
+interface InferencePreview {
+  timestamp: string;
+}
+
 interface InferenceContentProps {
   uuid: string;
   obj: Extract<ResolvedObject, { type: "inference" }>;
@@ -123,6 +119,10 @@ function InferenceContent({ uuid, obj, isOpen }: InferenceContentProps) {
       <TimestampItem data={data} isLoading={isLoading} />
     </div>
   );
+}
+
+interface EpisodePreview {
+  inference_count: number;
 }
 
 interface EpisodeContentProps {
