@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import { useToast } from "~/hooks/use-toast";
 
@@ -15,6 +15,7 @@ export function useCancelEvaluation({
   const { toast } = useToast();
   const fetcher = useFetcher<CancelEvaluationResponse>();
   const [isCancelling, setIsCancelling] = useState(false);
+  const hasSubmittedRef = useRef(false);
 
   const anyEvaluationIsRunning =
     runningEvaluationRunIds.length > 0 && !isCancelling;
@@ -26,21 +27,28 @@ export function useCancelEvaluation({
     }
   }, [isCancelling, runningEvaluationRunIds]);
 
-  // Handle fetcher response
+  // Handle fetcher response (success, error response, or network error)
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data) {
-      if (fetcher.data.success) {
-        const { dismiss } = toast.success({ title: "Evaluation stopped" });
-        return () => dismiss({ immediate: true });
-      } else if (fetcher.data.error) {
-        toast.error({
-          title: "Failed to stop evaluation",
-          description: fetcher.data.error,
-        });
-        setIsCancelling(false);
-      }
+    if (fetcher.state !== "idle") {
+      hasSubmittedRef.current = true;
+      return;
     }
-    return;
+    if (!hasSubmittedRef.current) return;
+    hasSubmittedRef.current = false;
+
+    if (fetcher.data?.success) {
+      const { dismiss } = toast.success({ title: "Evaluation stopped" });
+      return () => dismiss({ immediate: true });
+    }
+
+    // Error response or network error — reset so user can retry
+    if (fetcher.data?.error) {
+      toast.error({
+        title: "Failed to stop evaluation",
+        description: fetcher.data.error,
+      });
+    }
+    setIsCancelling(false);
   }, [fetcher.state, fetcher.data, toast]);
 
   const handleCancelEvaluation = useCallback(() => {

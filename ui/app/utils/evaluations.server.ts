@@ -91,10 +91,10 @@ export function cancelEvaluation(evaluationRunId: string): boolean {
   if (!evaluation) {
     return false;
   }
+  evaluation.cancelled = true;
   if (!evaluation.completed) {
     evaluation.abortController.abort();
     evaluation.completed = new Date();
-    evaluation.cancelled = true;
   }
   return true;
 }

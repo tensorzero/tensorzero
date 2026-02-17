@@ -31,7 +31,7 @@ describe("cancelEvaluation", () => {
     expect(evaluation?.cancelled).toBe(true);
   });
 
-  test("should not abort a naturally completed evaluation", () => {
+  test("should not abort a naturally completed evaluation but should mark as cancelled", () => {
     const abortController = new AbortController();
     _test_registerRunningEvaluation("run-2", abortController, {
       completed: new Date(),
@@ -43,5 +43,11 @@ describe("cancelEvaluation", () => {
       abortController.signal.aborted,
       "Should not abort a naturally completed evaluation",
     ).toBe(false);
+
+    const evaluation = getRunningEvaluation("run-2");
+    expect(
+      evaluation?.cancelled,
+      "Should still set cancelled flag to bypass grace period",
+    ).toBe(true);
   });
 });

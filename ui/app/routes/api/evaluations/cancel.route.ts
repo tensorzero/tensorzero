@@ -29,7 +29,7 @@ export async function action({ request }: ActionFunctionArgs) {
     return Response.json(
       {
         success: false,
-        error: "evaluation_run_ids must be a non-empty array of strings",
+        error: "`evaluation_run_ids` must be a non-empty array of strings",
       },
       { status: 400 },
     );
