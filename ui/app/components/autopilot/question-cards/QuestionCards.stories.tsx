@@ -5,8 +5,7 @@ import type {
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 import { PendingQuestionCard } from "./PendingQuestionCard";
-import { AnsweredQuestionCard } from "./AnsweredQuestionCard";
-import { SkippedQuestionCard } from "./SkippedQuestionCard";
+import { CompletedQuestionCard } from "./CompletedQuestionCard";
 
 // ── Fixtures ──────────────────────────────────────────────────────────
 
@@ -259,13 +258,13 @@ export const Interactive: Story = {
   render: () => <InteractivePending />,
 };
 
-// ── AnsweredQuestionCard ──────────────────────────────────────────────
+// ── CompletedQuestionCard ─────────────────────────────────────────────
 
 export const AnsweredSingle: Story = {
   args: dummyArgs,
   render: () => (
     <div className="w-[500px] p-4">
-      <AnsweredQuestionCard
+      <CompletedQuestionCard
         payload={singleMcPayload}
         responses={answeredResponses}
         eventId="evt-answered-1"
@@ -279,7 +278,7 @@ export const AnsweredMulti: Story = {
   args: dummyArgs,
   render: () => (
     <div className="w-[500px] p-4">
-      <AnsweredQuestionCard
+      <CompletedQuestionCard
         payload={multiQuestionPayload}
         responses={multiAnsweredResponses}
         eventId="evt-answered-2"
@@ -289,13 +288,11 @@ export const AnsweredMulti: Story = {
   ),
 };
 
-// ── SkippedQuestionCard ───────────────────────────────────────────────
-
 export const Skipped: Story = {
   args: dummyArgs,
   render: () => (
     <div className="w-[500px] p-4">
-      <SkippedQuestionCard
+      <CompletedQuestionCard
         payload={multiQuestionPayload}
         eventId="evt-skipped-1"
         timestamp={new Date().toISOString()}

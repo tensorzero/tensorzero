@@ -4,15 +4,21 @@ import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { ToolEventId } from "~/components/autopilot/EventStream";
 import { cn } from "~/utils/common";
-import type { EventPayloadUserQuestions } from "~/types/tensorzero";
+import type {
+  EventPayloadUserQuestions,
+  UserQuestionAnswer,
+} from "~/types/tensorzero";
+import { formatResponse } from "./formatResponse";
 
-export function SkippedQuestionCard({
+export function CompletedQuestionCard({
   payload,
+  responses,
   eventId,
   timestamp,
   className,
 }: {
   payload: EventPayloadUserQuestions;
+  responses?: Record<string, UserQuestionAnswer>;
   eventId: string;
   timestamp: string;
   className?: string;
@@ -39,7 +45,7 @@ export function SkippedQuestionCard({
           <span className="inline-flex items-center gap-2 text-sm font-medium">
             Question
             <DotSeparator />
-            Skipped
+            {responses ? "Answered" : "Skipped"}
           </span>
           <span
             className={cn(
@@ -64,7 +70,15 @@ export function SkippedQuestionCard({
               <span className="text-fg-muted text-xs font-medium">
                 {q.header}
               </span>
-              <span className="text-fg-muted text-sm italic">{q.question}</span>
+              {responses ? (
+                <span className="text-fg-primary text-sm">
+                  {formatResponse(responses[q.id], q)}
+                </span>
+              ) : (
+                <span className="text-fg-muted text-sm italic">
+                  {q.question}
+                </span>
+              )}
             </div>
           ))}
         </div>
