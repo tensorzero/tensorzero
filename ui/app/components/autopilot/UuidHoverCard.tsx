@@ -114,7 +114,6 @@ function InferenceContent({ uuid, obj, isOpen }: InferenceContentProps) {
         label="Variant"
         value={obj.variant_name}
         secondaryValue={variantType}
-        mono
       />
       <Timestamp data={data} isLoading={isLoading} />
     </div>
@@ -147,7 +146,6 @@ function EpisodeContent({ uuid, obj, isOpen }: EpisodeContentProps) {
         label="Inferences"
         value={data ? String(data.inference_count) : null}
         isLoading={isLoading}
-        mono
       />
     </div>
   );
@@ -167,8 +165,8 @@ function DatapointContent({ uuid, obj }: DatapointContentProps) {
       <TypeBadgeLink uuid={uuid} obj={obj}>
         {typeLabel}
       </TypeBadgeLink>
-      <InfoItem label="Dataset" value={obj.dataset_name} mono />
-      <InfoItem label="Function" value={obj.function_name} mono />
+      <InfoItem label="Dataset" value={obj.dataset_name} />
+      <InfoItem label="Function" value={obj.function_name} />
     </div>
   );
 }
@@ -240,7 +238,6 @@ interface InfoItemProps {
   label: string;
   value?: string | null;
   secondaryValue?: string | null;
-  mono?: boolean;
   isLoading?: boolean;
 }
 
@@ -248,17 +245,13 @@ function InfoItem({
   label,
   value,
   secondaryValue,
-  mono,
   isLoading,
 }: InfoItemProps) {
   return (
     <Item label={label}>
       {value ? (
         <span
-          className={cn(
-            "text-foreground min-w-0 truncate text-xs",
-            mono && "font-mono",
-          )}
+          className="text-foreground min-w-0 truncate font-mono text-xs"
           title={secondaryValue ? `${value} · ${secondaryValue}` : value}
         >
           {value}
