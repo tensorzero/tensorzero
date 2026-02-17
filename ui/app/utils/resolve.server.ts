@@ -5,22 +5,12 @@
  */
 
 import type {
-  ZodDisplayInput,
-  ZodDisplayInputMessage,
-  ZodDisplayInputMessageContent,
   ZodFileContent,
-  ZodInput,
-  ZodInputMessage,
-  ZodInputMessageContent,
   ZodResolvedBase64File,
-  ZodRole,
-  ZodLegacyTextInput,
 } from "./clickhouse/common";
 import type {
   File,
-  FunctionConfig,
   InputMessage,
-  JsonValue,
   Input,
   InputMessageContent,
   StoredInput,
@@ -32,31 +22,6 @@ import type {
 } from "~/types/tensorzero";
 import { getTensorZeroClient } from "./tensorzero.server";
 import type { ParsedModelInferenceRow } from "./clickhouse/inference";
-
-export async function resolveInput(
-  input: ZodInput,
-  functionConfig: FunctionConfig | null,
-): Promise<ZodDisplayInput> {
-  const resolvedMessages = await resolveMessages(
-    input.messages,
-    functionConfig,
-  );
-  return {
-    ...input,
-    messages: resolvedMessages,
-  };
-}
-
-export async function resolveMessages(
-  messages: ZodInputMessage[],
-  functionConfig: FunctionConfig | null,
-): Promise<ZodDisplayInputMessage[]> {
-  return Promise.all(
-    messages.map(async (message) => {
-      return resolveMessage(message, functionConfig);
-    }),
-  );
-}
 
 /**
  * Resolves model inferences by transforming input_messages for display.
@@ -95,21 +60,6 @@ async function resolveModelInferenceMessages(
   );
 }
 
-async function resolveMessage(
-  message: ZodInputMessage,
-  functionConfig: FunctionConfig | null,
-): Promise<ZodDisplayInputMessage> {
-  const resolvedContent = await Promise.all(
-    message.content.map(async (content) => {
-      return resolveContent(content, message.role, functionConfig);
-    }),
-  );
-  return {
-    ...message,
-    content: resolvedContent,
-  };
-}
-
 async function resolveModelInferenceMessage(
   message: StoredRequestMessage,
 ): Promise<InputMessage> {
@@ -122,59 +72,6 @@ async function resolveModelInferenceMessage(
     ...message,
     content: resolvedContent,
   };
-}
-
-async function resolveContent(
-  content: ZodInputMessageContent,
-  role: ZodRole,
-  functionConfig: FunctionConfig | null,
-): Promise<ZodDisplayInputMessageContent> {
-  switch (content.type) {
-    case "tool_call":
-    case "tool_result":
-    case "raw_text":
-    case "thought":
-    case "unknown":
-    case "template":
-      return content;
-    case "text":
-      return prepareDisplayText(content, role, functionConfig);
-    case "image":
-      try {
-        return {
-          type: "file",
-          file: await resolveFile({
-            type: "file",
-            file: content.image,
-            storage_path: content.storage_path,
-          }),
-          storage_path: content.storage_path,
-        };
-      } catch (error) {
-        return {
-          file: {
-            url: content.image.url,
-            mime_type: content.image.mime_type,
-          },
-          storage_path: content.storage_path,
-          type: "file_error",
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-    case "file":
-      try {
-        return {
-          ...content,
-          file: await resolveFile(content),
-        };
-      } catch (error) {
-        return {
-          ...content,
-          type: "file_error",
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-  }
 }
 
 async function resolveModelInferenceContent(
@@ -227,85 +124,6 @@ async function resolveFile(
   return {
     data,
     mime_type: content.file.mime_type,
-  };
-}
-
-// In the current data model we can't distinguish between a message being a structured one from a schema
-// or an unstructured one without a schema without knowing the function config.
-// So as we prepare the input for display, we check this and return an unambiguous type of structured or unstructured text.
-// TODO (Gabriel): this function uses legacy types and should be deprecated ASAP. It won't handle sad paths very well.
-function prepareDisplayText(
-  textBlock: ZodLegacyTextInput,
-  role: ZodRole,
-  functionConfig: FunctionConfig | null,
-): ZodDisplayInputMessageContent {
-  // If there's no function config, we can't do any templating because of legacy templates...
-  if (!functionConfig) {
-    return {
-      type: "missing_function_text",
-      value:
-        typeof textBlock.value === "string"
-          ? textBlock.value
-          : JSON.stringify(textBlock.value),
-    };
-  }
-
-  if (textBlock.text !== undefined) {
-    return {
-      type: "text",
-      text: textBlock.text,
-    };
-  }
-
-  // Handle the legacy structured prompts that were stored as text content blocks
-  if (role === "user" && functionConfig.schemas["user"] !== undefined) {
-    return {
-      type: "template",
-      name: "user",
-      arguments: (() => {
-        if (
-          typeof textBlock.value === "object" &&
-          textBlock.value !== null &&
-          !Array.isArray(textBlock.value)
-        ) {
-          return textBlock.value as Record<string, JsonValue>;
-        }
-        throw new Error(
-          `Invalid arguments for user template: expected object, got ${typeof textBlock.value}`,
-        );
-      })(),
-    };
-  }
-
-  if (
-    role === "assistant" &&
-    functionConfig.schemas["assistant"] !== undefined
-  ) {
-    return {
-      type: "template",
-      name: "assistant",
-      arguments: (() => {
-        if (
-          typeof textBlock.value === "object" &&
-          textBlock.value !== null &&
-          !Array.isArray(textBlock.value)
-        ) {
-          return textBlock.value as Record<string, JsonValue>;
-        }
-        throw new Error(
-          `Invalid arguments for assistant template: expected object, got ${typeof textBlock.value}`,
-        );
-      })(),
-    };
-  }
-
-  // Otherwise it's just unstructured text
-  return {
-    type: "text",
-    text:
-      typeof textBlock.value === "string"
-        ? textBlock.value
-        : JSON.stringify(textBlock.value),
   };
 }
 
