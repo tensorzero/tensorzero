@@ -21,10 +21,12 @@ export function insertEvent(
   payload: object,
 ): void {
   const payloadJson = JSON.stringify(payload);
-  execSync(
-    `psql "${POSTGRES_URL}" -q -c "INSERT INTO autopilot.events (id, payload, session_id) VALUES ('${eventId}', \\$json\\$${payloadJson}\\$json\\$::jsonb, '${sessionId}')"`,
-    { timeout: 5000, stdio: "pipe" },
-  );
+  const sql = `INSERT INTO autopilot.events (id, payload, session_id) VALUES ('${eventId}', $json$${payloadJson}$json$::jsonb, '${sessionId}')`;
+  execSync(`psql "${POSTGRES_URL}" -q`, {
+    input: sql,
+    timeout: 5000,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 }
 
 /**
