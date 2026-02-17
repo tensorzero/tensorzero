@@ -113,12 +113,14 @@ pub async fn embeddings(
         .await?;
     let usage = response.usage_considering_cached();
     let tensorzero_raw_response = if params.include_raw_response && !response.cached {
-        Some(vec![RawResponseEntry {
+        let mut entries = response.failed_raw_response.clone();
+        entries.push(RawResponseEntry {
             model_inference_id: Some(response.id),
             provider_type: response.provider_type.to_string(),
             api_type: ApiType::Embeddings,
             data: response.raw_response.clone(),
-        }])
+        });
+        Some(entries)
     } else if params.include_raw_response {
         Some(vec![]) // Empty array for cached responses
     } else {

@@ -997,3 +997,27 @@ routing = ["error_with_raw"]
 [models.error_with_raw_response.providers.error_with_raw]
 type = "dummy"
 model_name = "error_with_raw_response"
+
+# Embedding model with fallback: first provider errors with raw_response, second succeeds
+[embedding_models.embedding_fallback_with_raw_response]
+routing = ["error_provider", "good_provider"]
+
+[embedding_models.embedding_fallback_with_raw_response.providers.error_provider]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+[embedding_models.embedding_fallback_with_raw_response.providers.good_provider]
+type = "dummy"
+model_name = "test-embeddings"
+
+# Embedding model where all providers error with raw_response
+[embedding_models.embedding_both_error_with_raw_response]
+routing = ["error_provider_1", "error_provider_2"]
+
+[embedding_models.embedding_both_error_with_raw_response.providers.error_provider_1]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+[embedding_models.embedding_both_error_with_raw_response.providers.error_provider_2]
+type = "dummy"
+model_name = "error_with_raw_response"
