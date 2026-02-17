@@ -64,9 +64,8 @@ pub struct Usage {
     pub output_tokens: Option<u32>,
     /// Cost of this inference in dollars, computed from the provider response
     /// using the user-configured cost pointer mappings on the model provider.
-    /// `None` means cost tracking is not configured for this provider.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional, type = "number"))]
+    /// `None` means cost tracking was not configured for this provider or the provider did not send the necessary information.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub cost: Option<Cost>,
 }
 

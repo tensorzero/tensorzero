@@ -33,14 +33,13 @@
 //!
 //! ## Decimal Precision
 //!
-//! Cost rates are deserialized from TOML using a custom serde visitor
-//! (`decimal_from_value`) that formats `f64` values to their shortest decimal
-//! string (via Ryu) before parsing into `Decimal`. This avoids the binary
-//! floating-point noise that `Decimal::try_from(f64)` would introduce.
+//! Cost rates are deserialized from TOML using `rust_decimal::serde::float`,
+//! which formats `f64` values to their shortest decimal string before parsing
+//! into `Decimal`. This avoids the binary floating-point noise that
+//! `Decimal::try_from(f64)` would introduce.
 //!
 //! For example, `cost_per_million = 0.1` in TOML produces exactly `Decimal(0.1)`,
-//! not `Decimal(0.1000000000000000055...)`. String values are also accepted
-//! for users who prefer quoting (`cost_per_million = "0.1"`).
+//! not `Decimal(0.1000000000000000055...)`.
 
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -66,67 +65,6 @@ pub enum ResponseMode {
 /// 18 total digits with 9 fractional digits gives us up to 999,999,999 dollars
 /// with sub-nanocent precision — more than enough for inference cost tracking.
 pub type Cost = Decimal;
-
-// ─── Decimal serde helpers ───────────────────────────────────────────────────
-
-/// Serde helper for `Decimal` fields that avoids f64 precision loss.
-///
-/// When deserializing from TOML (or JSON), numeric values are first formatted
-/// to their shortest decimal string (via the `Display` impl for `f64`), then
-/// parsed into `Decimal`. This gives exact results for "normal" config values
-/// like `1.50`, `0.25`, `3.00` — whereas `Decimal::try_from(f64)` would pick
-/// up binary floating-point noise.
-///
-/// Also accepts string values (`"1.50"`) for users who prefer quoting.
-mod decimal_from_value {
-    use rust_decimal::Decimal;
-    use serde::{self, Deserializer, Serializer};
-
-    pub fn serialize<S>(value: &Decimal, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        // Delegate to the crate-wide serde impl (serde-float)
-        serde::Serialize::serialize(value, serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Decimal, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use serde::de;
-
-        struct DecimalVisitor;
-
-        impl<'de> de::Visitor<'de> for DecimalVisitor {
-            type Value = Decimal;
-
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("a decimal number or numeric string")
-            }
-
-            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
-                Ok(Decimal::from(v))
-            }
-
-            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                Ok(Decimal::from(v))
-            }
-
-            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
-                // Format to shortest decimal string, then parse to Decimal.
-                // This avoids binary float noise (e.g. 0.1 → 0.1, not 0.1000000000000000055...).
-                v.to_string().parse::<Decimal>().map_err(E::custom)
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                v.parse::<Decimal>().map_err(E::custom)
-            }
-        }
-
-        deserializer.deserialize_any(DecimalVisitor)
-    }
-}
 
 // ─── Uninitialized (user-facing) types ───────────────────────────────────────
 
@@ -161,13 +99,13 @@ pub enum UninitializedCostRate {
     /// Cost per million units (e.g., cost per million tokens).
     PerMillion {
         #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-        #[serde(with = "decimal_from_value")]
+        #[serde(with = "rust_decimal::serde::float")]
         cost_per_million: Decimal,
     },
     /// Cost per single unit (e.g., cost per web search).
     PerUnit {
         #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-        #[serde(with = "decimal_from_value")]
+        #[serde(with = "rust_decimal::serde::float")]
         cost_per_unit: Decimal,
     },
 }

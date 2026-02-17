@@ -84,8 +84,8 @@ pub struct ModelInference {
     /// Whether the inference was cached.
     pub cached: bool,
 
-    /// Cost of this inference in dollars.
-    /// `None` means cost tracking was not configured for this provider.
+    /// Cost of this model inference in dollars.
+    /// `None` means cost tracking was not configured for this provider or the provider did not send the necessary information.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub cost: Option<Cost>,

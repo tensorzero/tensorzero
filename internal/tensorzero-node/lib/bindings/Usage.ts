@@ -6,7 +6,7 @@ export type Usage = {
   /**
    * Cost of this inference in dollars, computed from the provider response
    * using the user-configured cost pointer mappings on the model provider.
-   * `None` means cost tracking is not configured for this provider.
+   * `None` means cost tracking was not configured for this provider or the provider did not send the necessary information.
    */
-  cost?: number;
+  cost: number | null;
 };

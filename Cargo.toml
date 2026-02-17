@@ -117,7 +117,7 @@ durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"
-rust_decimal = { version = "1.37", features = ["serde-float"] }
+rust_decimal = { version = "1.37", features = ["serde-float", "serde-with-float"] }
 redis = { version = "1.0.2", features = [
     "tokio-comp",
     "connection-manager",
