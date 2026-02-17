@@ -62,7 +62,8 @@ export function UuidLink({ uuid }: { uuid: string }) {
           side="top"
           sideOffset={4}
           className={cn(
-            "bg-popover text-popover-foreground z-50 w-64 rounded-md border p-3 shadow-md",
+            "bg-popover text-popover-foreground z-50 rounded-md border p-3 shadow-md",
+            obj.type === "episode" ? "w-56" : "w-80",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",

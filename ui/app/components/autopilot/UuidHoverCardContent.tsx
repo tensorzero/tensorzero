@@ -1,15 +1,16 @@
+import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import type { ResolvedObject } from "~/types/tensorzero";
 import { useEntityPreview } from "~/hooks/useEntityPreview";
-import { getRelativeTimeString } from "~/utils/date";
-import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
+import { getRelativeTimeString, getTimestampTooltipData } from "~/utils/date";
 import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
 } from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
-import { DotSeparator } from "~/components/ui/DotSeparator";
+import { getFunctionTypeIcon } from "~/utils/icon";
+import { useFunctionConfig } from "~/context/config";
 
 interface InferencePreview {
   timestamp: string;
@@ -75,20 +76,24 @@ function InferenceHoverContent({
     `/api/tensorzero/inference_preview/${encodeURIComponent(uuid)}`,
     isOpen,
   );
+  const functionConfig = useFunctionConfig(obj.function_name);
+  const variantType =
+    functionConfig?.variants[obj.variant_name]?.inner.type ?? null;
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between">
-        <TypeBadge>
-          Inference <DotSeparator /> {obj.function_type}
-        </TypeBadge>
-        <LazyTimestamp data={data} isLoading={isLoading} />
-      </div>
-      <div className="flex flex-col gap-1">
-        <InfoRow label="Function" value={obj.function_name} mono />
-        <InfoRow label="Variant" value={obj.variant_name} mono />
-      </div>
-      <ViewDetailsLink url={url} />
+      <TypeBadgeLink url={url}>Inference</TypeBadgeLink>
+      <FunctionRow
+        functionName={obj.function_name}
+        functionType={obj.function_type}
+      />
+      <InfoRow
+        label="Variant"
+        value={obj.variant_name}
+        secondaryValue={variantType}
+        mono
+      />
+      <LazyTimestamp data={data} isLoading={isLoading} />
     </div>
   );
 }
@@ -109,18 +114,15 @@ function EpisodeHoverContent({
 
   return (
     <div className="flex flex-col gap-2">
-      <TypeBadge>Episode</TypeBadge>
-      <div className="flex flex-col gap-1">
-        <LazyInfoRow
-          label="Inferences"
-          data={data}
-          isLoading={isLoading}
-          render={(d) =>
-            `${d.inference_count} inference${d.inference_count !== 1 ? "s" : ""}`
-          }
-        />
-      </div>
-      <ViewDetailsLink url={url} />
+      <TypeBadgeLink url={url}>Episode</TypeBadgeLink>
+      <LazyInfoRow
+        label="Inferences"
+        data={data}
+        isLoading={isLoading}
+        render={(d) =>
+          `${d.inference_count} inference${d.inference_count !== 1 ? "s" : ""}`
+        }
+      />
     </div>
   );
 }
@@ -137,20 +139,57 @@ function DatapointHoverContent({
 
   return (
     <div className="flex flex-col gap-2">
-      <TypeBadge>{typeLabel}</TypeBadge>
-      <div className="flex flex-col gap-1">
-        <InfoRow label="Dataset" value={obj.dataset_name} mono />
-        <InfoRow label="Function" value={obj.function_name} mono />
-      </div>
-      <ViewDetailsLink url={url} />
+      <TypeBadgeLink url={url}>{typeLabel}</TypeBadgeLink>
+      <InfoRow label="Dataset" value={obj.dataset_name} mono />
+      <InfoRow label="Function" value={obj.function_name} mono />
     </div>
   );
 }
 
-function TypeBadge({ children }: { children: React.ReactNode }) {
+function TypeBadgeLink({
+  children,
+  url,
+}: {
+  children: React.ReactNode;
+  url: string;
+}) {
   return (
-    <div className="text-muted-foreground inline-flex items-center gap-1 text-xs font-medium tracking-wide uppercase">
+    <Link
+      to={url}
+      className="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
+    >
       {children}
+      <ChevronRight className="ml-0.5 h-3 w-3" />
+    </Link>
+  );
+}
+
+function FunctionRow({
+  functionName,
+  functionType,
+}: {
+  functionName: string;
+  functionType: string;
+}) {
+  const iconConfig = getFunctionTypeIcon(functionType);
+  return (
+    <div className="grid grid-cols-[4rem_1fr] items-center gap-2">
+      <span className="text-muted-foreground text-xs">Function</span>
+      <span
+        className="text-foreground inline-flex min-w-0 items-center gap-1 font-mono text-xs"
+        title={`${functionName} · ${functionType}`}
+      >
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center justify-center rounded p-0.5",
+            iconConfig.iconBg,
+          )}
+        >
+          {iconConfig.icon}
+        </span>
+        <span className="truncate">{functionName}</span>
+        <span className="text-muted-foreground shrink-0">· {functionType}</span>
+      </span>
     </div>
   );
 }
@@ -158,17 +197,28 @@ function TypeBadge({ children }: { children: React.ReactNode }) {
 function InfoRow({
   label,
   value,
+  secondaryValue,
   mono,
 }: {
   label: string;
   value: string;
+  secondaryValue?: string | null;
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
+    <div className="grid grid-cols-[4rem_1fr] items-baseline gap-2">
       <span className="text-muted-foreground text-xs">{label}</span>
-      <span className={cn("text-foreground text-xs", mono && "font-mono")}>
+      <span
+        className={cn(
+          "text-foreground min-w-0 truncate text-xs",
+          mono && "font-mono",
+        )}
+        title={secondaryValue ? `${value} · ${secondaryValue}` : value}
+      >
         {value}
+        {secondaryValue && (
+          <span className="text-muted-foreground"> · {secondaryValue}</span>
+        )}
       </span>
     </div>
   );
@@ -186,12 +236,12 @@ function LazyInfoRow<T>({
   render: (data: T) => string;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
+    <div className="grid grid-cols-[4rem_1fr] items-baseline gap-2">
       <span className="text-muted-foreground text-xs">{label}</span>
       {data ? (
         <span className="text-foreground text-xs">{render(data)}</span>
       ) : isLoading ? (
-        <span className="bg-muted h-3 w-20 animate-pulse rounded" />
+        <span className="bg-muted h-4 w-20 animate-pulse rounded" />
       ) : null}
     </div>
   );
@@ -206,32 +256,27 @@ function LazyTimestamp({
 }) {
   if (data) {
     const date = new Date(data.timestamp);
+    const { formattedDate, formattedTime } = getTimestampTooltipData(
+      data.timestamp,
+    );
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="text-muted-foreground cursor-default text-xs">
+          <span className="text-muted-foreground w-fit cursor-default text-xs">
             {getRelativeTimeString(date)}
           </span>
         </TooltipTrigger>
         <TooltipContent className="border-border bg-bg-secondary text-fg-primary border shadow-lg">
-          <TimestampTooltip timestamp={data.timestamp} />
+          <div className="flex flex-col gap-1">
+            <div>{formattedDate}</div>
+            <div>{formattedTime}</div>
+          </div>
         </TooltipContent>
       </Tooltip>
     );
   }
   if (isLoading) {
-    return <span className="bg-muted h-3 w-16 animate-pulse rounded" />;
+    return <span className="bg-muted h-4 w-16 animate-pulse rounded" />;
   }
   return null;
-}
-
-function ViewDetailsLink({ url }: { url: string }) {
-  return (
-    <Link
-      to={url}
-      className="text-muted-foreground hover:text-foreground -mx-3 mt-1 -mb-3 border-t px-3 pt-3 pb-3 text-xs transition-colors"
-    >
-      View details &rarr;
-    </Link>
-  );
 }
