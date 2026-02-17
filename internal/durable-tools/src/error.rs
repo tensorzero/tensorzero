@@ -19,13 +19,17 @@ pub enum ToolError {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
-    /// JSON serialization/deserialization error.
-    #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
-
     /// A serializable tool error.
     #[error(transparent)]
     NonControl(#[from] NonControlToolError),
+}
+
+impl From<serde_json::Error> for ToolError {
+    fn from(err: serde_json::Error) -> Self {
+        ToolError::NonControl(NonControlToolError::Serialization {
+            message: err.to_string(),
+        })
+    }
 }
 
 /// Serializable error type for tool execution.
@@ -40,6 +44,10 @@ pub enum NonControlToolError {
     /// Step error.
     #[error("Step error: {base_name}: {error}")]
     Step { base_name: String, error: String },
+
+    /// Serialization error.
+    #[error("Serialization error: {message}")]
+    Serialization { message: String },
 
     /// Task panic error.
     #[error("Task panicked: {message}")]
@@ -141,7 +149,6 @@ impl<T> ToolResultExt<T> for ToolResult<T> {
             Ok(v) => Ok(Ok(v)),
             Err(ToolError::Control(cf)) => Err(ToolError::Control(cf)),
             Err(ToolError::Database(e)) => Err(ToolError::Database(e)),
-            Err(ToolError::Serialization(e)) => Err(ToolError::Serialization(e)),
             Err(ToolError::NonControl(e)) => Ok(Err(e)),
         }
     }
@@ -152,7 +159,11 @@ impl From<TaskError> for ToolError {
         match err {
             TaskError::Control(cf) => ToolError::Control(cf),
             TaskError::Database(e) => ToolError::Database(e),
-            TaskError::Serialization(e) => ToolError::Serialization(e),
+            TaskError::Serialization(e) => {
+                ToolError::NonControl(NonControlToolError::Serialization {
+                    message: e.to_string(),
+                })
+            }
             TaskError::Timeout { step_name } => {
                 ToolError::NonControl(NonControlToolError::Timeout { step_name })
             }
@@ -202,7 +213,6 @@ impl From<ToolError> for TaskError {
         match err {
             ToolError::Control(cf) => TaskError::Control(cf),
             ToolError::Database(e) => TaskError::Database(e),
-            ToolError::Serialization(e) => TaskError::Serialization(e),
             ToolError::NonControl(e) => e.into(),
         }
     }
@@ -248,7 +258,11 @@ impl From<DurableError> for ToolError {
     fn from(err: DurableError) -> Self {
         match err {
             DurableError::Database(e) => ToolError::Database(e),
-            DurableError::Serialization(e) => ToolError::Serialization(e),
+            DurableError::Serialization(e) => {
+                ToolError::NonControl(NonControlToolError::Serialization {
+                    message: e.to_string(),
+                })
+            }
             DurableError::TaskNotRegistered { task_name } => {
                 ToolError::NonControl(NonControlToolError::ToolNotFound { name: task_name })
             }

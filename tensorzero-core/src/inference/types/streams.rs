@@ -15,6 +15,7 @@ use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::{ToolCallChunk, ToolCallConfig};
 use futures::Stream;
+use futures::StreamExt;
 use futures::stream::Peekable;
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
@@ -255,6 +256,7 @@ pub struct CollectChunksArgs {
     pub function: Arc<FunctionConfig>,
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub raw_request: String,
     /// We may sometimes construct a fake stream from a non-streaming response
     /// (e.g. in `mixture_of_n` if we have a successful non-streaming candidate, but
@@ -290,6 +292,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         function,
         model_name,
         model_provider_name,
+        provider_type,
         raw_request,
         raw_response,
         inference_params,
@@ -736,7 +739,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         id: model_inference_id,
     });
     let model_inference_response =
-        ModelInferenceResponse::new(model_response, model_provider_name, cached);
+        ModelInferenceResponse::new(model_response, model_provider_name, provider_type, cached);
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
@@ -813,6 +816,34 @@ type InferenceResultStreamInner =
 
 pub type InferenceResultStream = Peekable<InferenceResultStreamInner>;
 
+/// Wraps a stream with a deadline. If the deadline is reached while waiting for
+/// the next item, the stream yields the error produced by `make_error` and terminates.
+///
+/// This is used to enforce `streaming.total_ms` timeouts on streams that have already
+/// started producing chunks (i.e. after TTFT).
+pub fn stream_with_deadline<T: Send + 'static>(
+    stream: impl Stream<Item = Result<T, Error>> + Send + 'static,
+    deadline: tokio::time::Instant,
+    make_error: impl FnOnce() -> Error + Send + 'static,
+) -> Pin<Box<dyn Stream<Item = Result<T, Error>> + Send>> {
+    let mut stream = Box::pin(stream);
+    let mut make_error = Some(make_error);
+    Box::pin(async_stream::stream! {
+        loop {
+            match tokio::time::timeout_at(deadline, stream.next()).await {
+                Ok(Some(item)) => yield item,
+                Ok(None) => break,
+                Err(_elapsed) => {
+                    if let Some(make_error) = make_error.take() {
+                        yield Err(make_error());
+                    }
+                    break;
+                }
+            }
+        }
+    })
+}
+
 /// Handles a textual content block (text or thought)
 /// It checks if there is already a block with the given id, and if so, appends the text to it.
 /// Otherwise, it creates a new block and inserts it into the map.
@@ -846,7 +877,7 @@ mod tests {
     use super::*;
     use crate::{
         config::SchemaData,
-        experimentation::ExperimentationConfig,
+        experimentation::ExperimentationConfigWithNamespaces,
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
             ContentBlockChatOutput, ContentBlockOutputType, InferenceResult, Text, Thought,
@@ -987,6 +1018,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1056,6 +1088,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1121,7 +1154,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let usage1 = Usage {
             input_tokens: Some(10),
@@ -1178,6 +1211,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1275,6 +1309,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1378,6 +1413,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1459,7 +1495,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let usage1 = Usage {
             input_tokens: Some(10),
@@ -1516,6 +1552,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1584,7 +1621,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         let usage1 = Usage {
             input_tokens: Some(10),
@@ -1650,6 +1687,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1842,6 +1880,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1984,6 +2023,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2076,6 +2116,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2159,6 +2200,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2246,6 +2288,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2316,6 +2359,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2440,6 +2484,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),

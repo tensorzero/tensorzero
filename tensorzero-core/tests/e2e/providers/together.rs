@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
+use crate::providers::common::{
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, ModelTestProvider,
+};
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -71,7 +73,7 @@ async fn get_providers() -> E2ETestProviders {
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together-tool".to_string(),
-        model_name: "llama3.1-405b-instruct-turbo-together".into(),
+        model_name: "llama4-maverick-instruct-together".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
@@ -117,6 +119,11 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
+    let embeddings_providers = vec![EmbeddingTestProvider {
+        model_name: "gte-modernbert-base-together".into(),
+        dimensions: 768,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -124,7 +131,7 @@ async fn get_providers() -> E2ETestProviders {
         reasoning_inference: reasoning_providers.clone(),
         reasoning_usage_inference: reasoning_providers.clone(),
         cache_input_tokens_inference: standard_providers.clone(),
-        embeddings: vec![],
+        embeddings: embeddings_providers,
         inference_params_inference: standard_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: provider_type_default_credentials_providers,

@@ -1,6 +1,7 @@
+use super::FeedbackDatabaseQueries;
 use super::throttled_get_function_info;
-use crate::db::feedback::{FeedbackQueries, StaticEvaluationHumanFeedbackInsert};
-use crate::db::inferences::{FunctionInfo, InferenceQueries};
+use crate::db::feedback::StaticEvaluationHumanFeedbackInsert;
+use crate::db::inferences::FunctionInfo;
 use crate::{
     config::MetricConfigLevel,
     error::{Error, ErrorDetails},
@@ -20,10 +21,8 @@ use uuid::Uuid;
 /// Instead we read & write to the table here.
 /// This is only necessary if: the feedback contains tags "tensorzero::human_feedback",
 /// "tensorzero::evaluator_inference_id", and "tensorzero::datapoint_id": "uuid"
-#[expect(clippy::too_many_arguments)]
 pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
-    read_database: &(dyn InferenceQueries + Sync),
-    write_database: &(dyn FeedbackQueries + Sync),
+    database: &(dyn FeedbackDatabaseQueries + Sync),
     maybe_function_info: Option<FunctionInfo>,
     metric_name: &str,
     tags: &HashMap<String, String>,
@@ -37,11 +36,10 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
     let function_info = match maybe_function_info {
         Some(info) => info,
         None => {
-            throttled_get_function_info(read_database, &MetricConfigLevel::Inference, &target_id)
-                .await?
+            throttled_get_function_info(database, &MetricConfigLevel::Inference, &target_id).await?
         }
     };
-    let output = read_database
+    let output = database
         .get_inference_output(&function_info, target_id)
         .await?
         .ok_or_else(|| {
@@ -57,7 +55,7 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
         datapoint_id: info.datapoint_id,
         evaluator_inference_id: Some(info.evaluator_inference_id),
     };
-    write_database.insert_static_eval_feedback(&row).await?;
+    database.insert_static_eval_feedback(&row).await?;
     Ok(())
 }
 

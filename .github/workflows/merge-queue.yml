@@ -17,6 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  CARGO_INCREMENTAL: 0
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
@@ -181,6 +182,7 @@ jobs:
           docker load < gateway-e2e-container.tar
           docker load < live-tests-container.tar
           docker load < fixtures-container.tar
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
       - name: Restore provider-proxy cache
         if: github.event_name != 'schedule'
@@ -350,6 +352,7 @@ jobs:
           docker load < fixtures-container.tar
           docker load < gateway-e2e-container.tar
           docker load < provider-proxy-container.tar
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
       - name: Install Rust (from rust-toolchain.toml)
         run: |

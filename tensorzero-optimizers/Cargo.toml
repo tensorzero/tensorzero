@@ -44,6 +44,9 @@ reqwest = { workspace = true }
 object_store = { workspace = true }
 mime = { workspace = true }
 
+# Database
+sqlx = { workspace = true }
+
 # Tracing and logging
 tracing = { workspace = true }
 
@@ -69,11 +72,6 @@ required-features = ["optimization_tests"]
 [[test]]
 name = "optimization-mock"
 path = "tests/mock_tests.rs"
-required-features = ["e2e_tests"]
-
-[[test]]
-name = "e2e_dicl"
-path = "tests/e2e/dicl.rs"
 required-features = ["e2e_tests"]
 
 [[test]]

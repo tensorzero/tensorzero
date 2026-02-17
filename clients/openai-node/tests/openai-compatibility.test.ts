@@ -712,7 +712,7 @@ describe("OpenAI Compatibility", () => {
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
     expect(result.usage?.completion_tokens).toBe(1);
   });
@@ -758,7 +758,7 @@ describe("OpenAI Compatibility", () => {
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
     expect(result.usage?.completion_tokens).toBe(1);
   });
@@ -833,7 +833,7 @@ describe("OpenAI Compatibility", () => {
     expect(result.choices[0].message.content).toBe(
       "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
     );
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
     expect(result.usage?.completion_tokens).toBe(1);
   });
@@ -859,6 +859,10 @@ describe("OpenAI Compatibility", () => {
       messages,
       model: "tensorzero::function_name::basic_test",
       temperature: 0.4,
+      // @ts-expect-error - custom TensorZero property
+      "tensorzero::cache_options": {
+        enabled: "write_only",
+      },
     });
 
     expect(result.choices[0].message.content).toBe(
@@ -911,7 +915,8 @@ describe("OpenAI Compatibility", () => {
       { role: "user", content: "Hello" },
     ];
 
-    // First streaming request
+    // First streaming request (write_only to populate cache)
+    // @ts-expect-error - custom TensorZero property
     const stream = await client.chat.completions.create({
       messages,
       model: "tensorzero::function_name::basic_test",
@@ -920,6 +925,9 @@ describe("OpenAI Compatibility", () => {
         include_usage: true,
       },
       seed: 69,
+      "tensorzero::cache_options": {
+        enabled: "write_only",
+      },
     });
 
     const chunks = [];
@@ -1150,7 +1158,7 @@ describe("OpenAI Compatibility", () => {
 
     const jsonContent = JSON.parse(result.choices[0].message.content!);
     expect(jsonContent.response.toLowerCase()).toContain("tokyo");
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
 
     expect(result.usage?.prompt_tokens).toBeGreaterThan(50);
     expect(result.usage?.completion_tokens).toBeGreaterThan(0);

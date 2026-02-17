@@ -373,11 +373,13 @@ test.describe("should be able to add demonstration feedback via Try with X flows
     test(buttonText, async ({ page }) => {
       await page.goto(`/observability/inferences/${inference}`);
 
-      // Wait for the page to load
+      // Wait for the page to load and the action bar to resolve
       await page.waitForLoadState("networkidle");
+      const tryButton = page.getByText(buttonText);
+      await expect(tryButton).toBeEnabled();
 
       // Click on "Try with variant" button
-      await page.getByText(buttonText).click();
+      await tryButton.click();
 
       // Wait for the dropdown menu to appear and select a variant
       // Look for variant options and click on one that's not the current variant
@@ -448,11 +450,13 @@ test.describe("should navigate to inference from Try with X modal and verify tag
     test(buttonText, async ({ page }) => {
       await page.goto(`/observability/inferences/${inference}`);
 
-      // Wait for the page to load
+      // Wait for the page to load and the action bar to resolve
       await page.waitForLoadState("networkidle");
+      const tryButton = page.getByText(buttonText);
+      await expect(tryButton).toBeEnabled();
 
       // Click on "Try with variant/model" button
-      await page.getByText(buttonText).click();
+      await tryButton.click();
 
       // Wait for the dropdown menu to appear and select a variant
       // ButtonSelect uses cmdk CommandItem which has role="option"
@@ -632,3 +636,63 @@ test("should handle model inference with null input and output tokens", async ({
   // Verify the crab description output is visible in the sheet
   await expect(sheet.getByText("cartoon-style crab").first()).toBeVisible();
 });
+
+// TODO(#5691): Run all UI e2e tests against Postgres-backed gateway too.
+// These are commented out because these tests are only supported on Postgres
+// because we don't TTL inference data in ClickHouse.
+//
+// ===== METADATA-ONLY INFERENCE TESTS =====
+// These inferences have metadata (in chat_inferences / json_inferences) but no data
+// (no rows in chat_inference_data / json_inference_data), simulating data retention expiry.
+
+// test("should display chat inference with no data gracefully", async ({
+//   page,
+// }) => {
+//   await page.goto(
+//     "/observability/inferences/019c592a-111d-7190-bcfa-380a6143e5ee",
+//   );
+//   await page.waitForLoadState("networkidle");
+
+//   // Verify the page loaded (inference ID is visible)
+//   await expect(
+//     page.getByText("019c592a-111d-7190-bcfa-380a6143e5ee").first(),
+//   ).toBeVisible();
+
+//   // Verify metadata is present
+//   await expect(page.getByText("write_haiku").first()).toBeVisible();
+//   await expect(
+//     page.getByText("initial_prompt_gpt4o_mini").first(),
+//   ).toBeVisible();
+
+//   // Verify output section shows "No output"
+//   await expect(page.getByText("No output")).toBeVisible();
+
+//   // Verify inference params shows "Parameters missing"
+//   await expect(page.getByText("Parameters missing")).toBeVisible();
+// });
+
+// test("should display json inference with no data gracefully", async ({
+//   page,
+// }) => {
+//   await page.goto(
+//     "/observability/inferences/019c592a-2fd7-78cc-8703-7e3f8fba7d44",
+//   );
+//   await page.waitForLoadState("networkidle");
+
+//   // Verify the page loaded (inference ID is visible)
+//   await expect(
+//     page.getByText("019c592a-2fd7-78cc-8703-7e3f8fba7d44").first(),
+//   ).toBeVisible();
+
+//   // Verify metadata is present
+//   await expect(page.getByText("extract_entities").first()).toBeVisible();
+//   await expect(
+//     page.getByText("gpt4o_mini_initial_prompt").first(),
+//   ).toBeVisible();
+
+//   // Verify output section shows "No output"
+//   await expect(page.getByText("No output")).toBeVisible();
+
+//   // Verify inference params shows "Parameters missing"
+//   await expect(page.getByText("Parameters missing")).toBeVisible();
+// });

@@ -1,5 +1,5 @@
 //! Shared definitions for config path patterns used by tensorzero-core (config loading)
-//! and config-writer (config serialization).
+//! and config-applier (config serialization).
 
 /// A component in a path pattern for matching config keys.
 #[derive(Debug, Copy, Clone)]

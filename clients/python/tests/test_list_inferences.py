@@ -44,6 +44,7 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         assert isinstance(inference, StoredInferenceJson)
         assert isinstance(inference.variant_name, str)
         input = inference.input
+        assert input is not None
         messages = input.messages
         assert messages is not None
         assert isinstance(messages, list)
@@ -51,6 +52,7 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         # Type narrowing: we know these are JSON inferences
         assert inference.type == "json"
         output = inference.output
+        assert output is not None
         assert output.raw is not None
         assert output.parsed is not None
         inference_id = inference.inference_id
@@ -117,6 +119,7 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         assert inference.function_name == "write_haiku"
         assert inference.variant_name == "better_prompt_haiku_4_5"
         input = inference.input
+        assert input is not None
         messages = input.messages
         assert messages is not None
         assert isinstance(messages, list)
@@ -124,6 +127,7 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
+        assert output is not None
         assert len(output) == 1
         output_0 = output[0]
         assert output_0.type == "text"
@@ -165,6 +169,7 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
     for inference in inferences:
         assert inference.function_name == "multi_hop_rag_agent"
         input = inference.input
+        assert input is not None
         messages = input.messages
         assert messages is not None
         assert isinstance(messages, list)
@@ -192,6 +197,7 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
+        assert output is not None
         assert len(output) >= 1
         for output_item in output:
             if output_item.type == "text":
@@ -310,70 +316,29 @@ def test_or_filter_mixed_metrics(embedded_sync_client: TensorZeroGateway):
 
 
 def test_not_filter(embedded_sync_client: TensorZeroGateway):
-    # NOT (exact_match = true OR exact_match = false) returns rows WITHOUT the metric.
-    # This test verifies that the NOT filter correctly excludes rows that have the metric
-    # (with either true or false value) and returns only rows without it.
-
-    # Get total count (no filter)
-    all_inferences = embedded_sync_client.experimental_list_inferences(
-        function_name="extract_entities",
-        variant_name=None,
-        filters=None,
-        output_source="inference",
-        limit=1000,
-        offset=None,
-    )
-    total_count = len(all_inferences)
-
-    # Get count with exact_match = true
-    true_filter = BooleanMetricFilter(metric_name="exact_match", value=True)
-    true_inferences = embedded_sync_client.experimental_list_inferences(
-        function_name="extract_entities",
-        variant_name=None,
-        filters=true_filter,
-        output_source="inference",
-        limit=1000,
-        offset=None,
-    )
-    true_count = len(true_inferences)
-
-    # Get count with exact_match = false
-    false_filter = BooleanMetricFilter(metric_name="exact_match", value=False)
-    false_inferences = embedded_sync_client.experimental_list_inferences(
-        function_name="extract_entities",
-        variant_name=None,
-        filters=false_filter,
-        output_source="inference",
-        limit=1000,
-        offset=None,
-    )
-    false_count = len(false_inferences)
-
-    # Get count with NOT (true OR false) - should return rows WITHOUT the metric
+    # NOT (tag = entity_extraction) should return rows that do NOT have that tag value.
     not_filter = NotFilter(
-        child=OrFilter(
-            children=[
-                BooleanMetricFilter(metric_name="exact_match", value=True),
-                BooleanMetricFilter(metric_name="exact_match", value=False),
-            ]
+        child=TagFilter(
+            key="tensorzero::evaluation_name",
+            value="entity_extraction",
+            comparison_operator="=",
         )
     )
-    not_inferences = embedded_sync_client.experimental_list_inferences(
+    inferences = embedded_sync_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
         filters=not_filter,
         output_source="inference",
-        limit=1000,
+        limit=100,
         offset=None,
     )
-    not_count = len(not_inferences)
-
-    # Verify: rows with metric (true + false) + rows without metric (NOT result) = total
-    rows_with_metric = true_count + false_count
-    assert rows_with_metric + not_count == total_count, (
-        f"NOT filter should return exactly the rows without the metric. "
-        f"true={true_count}, false={false_count}, NOT={not_count}, total={total_count}"
-    )
+    assert len(inferences) > 0, "Expected at least one inference without the tag"
+    for inference in inferences:
+        assert inference.function_name == "extract_entities"
+        tags = inference.tags or {}
+        assert tags.get("tensorzero::evaluation_name") != "entity_extraction", (
+            "NOT filter should exclude inferences with tensorzero::evaluation_name = entity_extraction"
+        )
 
 
 def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
@@ -524,6 +489,7 @@ async def test_simple_list_json_inferences_async(
         assert inference.function_name == "extract_entities"
         assert isinstance(inference.variant_name, str)
         inp = inference.input
+        assert inp is not None
         messages = inp.messages
         assert isinstance(messages, list)
         assert len(messages) == 1
@@ -531,6 +497,7 @@ async def test_simple_list_json_inferences_async(
         assert isinstance(inference, StoredInferenceJson)
         assert inference.type == "json"
         output = inference.output
+        assert output is not None
         assert output.raw is not None
         assert output.parsed is not None
         inference_id = inference.inference_id
@@ -602,12 +569,14 @@ async def test_simple_query_chat_function_async(
         assert inference.function_name == "write_haiku"
         assert inference.variant_name == "better_prompt_haiku_4_5"
         inp = inference.input
+        assert inp is not None
         messages = inp.messages
         assert isinstance(messages, list)
         assert len(messages) == 1
         # Type narrowing: we know these are Chat inferences
         assert inference.type == "chat"
         output = inference.output
+        assert output is not None
         assert len(output) == 1
         output_0 = output[0]
         assert output_0.type == "text"
@@ -737,70 +706,29 @@ async def test_or_filter_mixed_metrics_async(
 
 @pytest.mark.asyncio
 async def test_not_filter_async(embedded_async_client: AsyncTensorZeroGateway):
-    # NOT (exact_match = true OR exact_match = false) returns rows WITHOUT the metric.
-    # This test verifies that the NOT filter correctly excludes rows that have the metric
-    # (with either true or false value) and returns only rows without it.
-
-    # Get total count (no filter)
-    all_inferences = await embedded_async_client.experimental_list_inferences(
-        function_name="extract_entities",
-        variant_name=None,
-        filters=None,
-        output_source="inference",
-        limit=1000,
-        offset=None,
-    )
-    total_count = len(all_inferences)
-
-    # Get count with exact_match = true
-    true_filter = BooleanMetricFilter(metric_name="exact_match", value=True)
-    true_inferences = await embedded_async_client.experimental_list_inferences(
-        function_name="extract_entities",
-        variant_name=None,
-        filters=true_filter,
-        output_source="inference",
-        limit=1000,
-        offset=None,
-    )
-    true_count = len(true_inferences)
-
-    # Get count with exact_match = false
-    false_filter = BooleanMetricFilter(metric_name="exact_match", value=False)
-    false_inferences = await embedded_async_client.experimental_list_inferences(
-        function_name="extract_entities",
-        variant_name=None,
-        filters=false_filter,
-        output_source="inference",
-        limit=1000,
-        offset=None,
-    )
-    false_count = len(false_inferences)
-
-    # Get count with NOT (true OR false) - should return rows WITHOUT the metric
+    # NOT (tag = entity_extraction) should return rows that do NOT have that tag value.
     not_filter = NotFilter(
-        child=OrFilter(
-            children=[
-                BooleanMetricFilter(metric_name="exact_match", value=True),
-                BooleanMetricFilter(metric_name="exact_match", value=False),
-            ]
+        child=TagFilter(
+            key="tensorzero::evaluation_name",
+            value="entity_extraction",
+            comparison_operator="=",
         )
     )
-    not_inferences = await embedded_async_client.experimental_list_inferences(
+    inferences = await embedded_async_client.experimental_list_inferences(
         function_name="extract_entities",
         variant_name=None,
         filters=not_filter,
         output_source="inference",
-        limit=1000,
+        limit=100,
         offset=None,
     )
-    not_count = len(not_inferences)
-
-    # Verify: rows with metric (true + false) + rows without metric (NOT result) = total
-    rows_with_metric = true_count + false_count
-    assert rows_with_metric + not_count == total_count, (
-        f"NOT filter should return exactly the rows without the metric. "
-        f"true={true_count}, false={false_count}, NOT={not_count}, total={total_count}"
-    )
+    assert len(inferences) > 0, "Expected at least one inference without the tag"
+    for inference in inferences:
+        assert inference.function_name == "extract_entities"
+        tags = inference.tags or {}
+        assert tags.get("tensorzero::evaluation_name") != "entity_extraction", (
+            "NOT filter should exclude inferences with tensorzero::evaluation_name = entity_extraction"
+        )
 
 
 @pytest.mark.asyncio

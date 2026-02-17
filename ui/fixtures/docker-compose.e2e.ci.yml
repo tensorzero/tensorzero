@@ -29,6 +29,8 @@ services:
       context: ../..
       dockerfile: gateway/Dockerfile
       target: gateway
+      args:
+        PROFILE: dev
     volumes:
       - ./config:/app/config:ro
       # Mount GCP JWT key file (optional - only needed for GCP providers)
@@ -144,8 +146,6 @@ services:
         PNPM_VERSION: ${PNPM_VERSION:-9}
     environment:
       # Test environment variables
-      BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
-      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TENSORZERO_CI: ${TENSORZERO_CI:-1}
       # Playwright specific
       TENSORZERO_PLAYWRIGHT_BASE_URL: http://ui:4000

@@ -17,6 +17,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 # ========== builder ==========
 
 FROM chef AS builder
+ENV CARGO_INCREMENTAL=0
 
 # Cook dependencies (cached layer)
 COPY --from=planner /app/recipe.json recipe.json

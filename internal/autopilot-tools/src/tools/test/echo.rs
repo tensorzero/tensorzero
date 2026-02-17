@@ -3,12 +3,14 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for the echo tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct EchoParams {
     /// The message to echo back.
     pub message: String,
@@ -28,7 +30,7 @@ pub struct EchoOutput {
 pub struct EchoTool;
 
 impl ToolMetadata for EchoTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
@@ -43,6 +45,7 @@ impl ToolMetadata for EchoTool {
 
 #[async_trait]
 impl TaskTool for EchoTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,

@@ -93,6 +93,7 @@ impl ToolMetadata for EchoTaskTool {
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
@@ -126,6 +127,7 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
 
 #[async_trait]
 impl TaskTool for DefaultTimeoutTaskTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
@@ -529,7 +531,7 @@ mod builder_tests {
 
     #[test]
     fn builder_default_queue_name_is_tools() {
-        let builder = ToolExecutorBuilder::new();
+        let builder = ToolExecutorBuilder::new(());
         // We can't directly inspect the builder, but we can verify behavior
         // by checking the default is used when not overridden.
         // For now, just verify the builder can be created.
@@ -538,7 +540,7 @@ mod builder_tests {
 
     #[test]
     fn builder_methods_return_self_for_chaining() {
-        let builder = ToolExecutorBuilder::new()
+        let builder = ToolExecutorBuilder::new(())
             .queue_name("custom_queue")
             .default_max_attempts(10);
 
@@ -548,7 +550,7 @@ mod builder_tests {
 
     #[test]
     fn builder_accepts_database_url() {
-        let builder = ToolExecutorBuilder::new().database_url("postgres://localhost/test".into());
+        let builder = ToolExecutorBuilder::new(()).database_url("postgres://localhost/test".into());
 
         let _ = builder;
     }
@@ -644,12 +646,29 @@ mod error_tests {
     #[test]
     fn task_error_from_tool_error_serialization() {
         let json_err = serde_json::from_str::<String>("not valid json").unwrap_err();
-        let tool_err = ToolError::Serialization(json_err);
+        let tool_err = ToolError::NonControl(NonControlToolError::Serialization {
+            message: json_err.to_string(),
+        });
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::Serialization(_) => {}
-            _ => panic!("Expected Serialization"),
+            TaskError::User {
+                message,
+                error_data,
+            } => {
+                assert_eq!(
+                    message,
+                    "Serialization error: expected ident at line 1 column 2"
+                );
+                assert_eq!(
+                    error_data,
+                    serde_json::json!({
+                        "kind": "serialization",
+                        "message": "expected ident at line 1 column 2",
+                    })
+                );
+            }
+            _ => panic!("Expected User"),
         }
     }
 }

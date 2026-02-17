@@ -33,10 +33,12 @@ pub struct ModelInference {
     pub inference_id: Uuid,
 
     /// Raw request sent to the model.
-    pub raw_request: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_request: Option<String>,
 
     /// Raw response received from the model.
-    pub raw_response: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<String>,
 
     /// Name of the model used for the inference.
     pub model_name: String,
@@ -71,10 +73,12 @@ pub struct ModelInference {
 
     // TODO(shuyangli): Figure out if this should be a different message type, since we should not send Stored* types in API.
     /// Input messages sent to the model.
-    pub input_messages: Vec<StoredRequestMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_messages: Option<Vec<StoredRequestMessage>>,
 
     /// Output content blocks from the model.
-    pub output: Vec<ContentBlockOutput>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<Vec<ContentBlockOutput>>,
 
     /// Whether the inference was cached.
     pub cached: bool,
@@ -99,13 +103,11 @@ pub async fn get_model_inferences_handler(
 
 /// Core business logic for getting model inferences
 async fn get_model_inferences(
-    AppStateData {
-        clickhouse_connection_info,
-        ..
-    }: AppStateData,
+    app_state_data: AppStateData,
     inference_id: Uuid,
 ) -> Result<Vec<ModelInference>, Error> {
-    let rows = clickhouse_connection_info
+    let db = app_state_data.get_delegating_database();
+    let rows = db
         .get_model_inferences_by_inference_id(inference_id)
         .await?;
 

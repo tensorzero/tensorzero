@@ -7,7 +7,7 @@ use tensorzero_core::{
     cache::CacheEnabledMode,
     client::Client,
     config::{Config, UninitializedVariantConfig, UninitializedVariantInfo},
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::datasets::v1::{
         create_datapoints,
         types::{CreateDatapointRequest, CreateDatapointsRequest, CreateDatapointsResponse},
@@ -51,7 +51,7 @@ pub type VariantScores = HashMap<DatapointId, DatapointScores>;
 /// # Arguments
 /// * `config` - The TensorZero configuration
 /// * `http_client` - The HTTP client for fetching resources
-/// * `clickhouse_connection_info` - The ClickHouse connection info
+/// * `db` - The database connection for dataset storage
 /// * `samples` - The rendered samples to convert into datapoints
 /// * `dataset_name` - The name of the dataset to create
 ///
@@ -60,7 +60,7 @@ pub type VariantScores = HashMap<DatapointId, DatapointScores>;
 pub async fn create_evaluation_dataset(
     config: &Config,
     http_client: &TensorzeroHttpClient,
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    db: &(dyn DelegatingDatabaseQueries + Sync),
     samples: Vec<RenderedSample>,
     dataset_name: &str,
 ) -> Result<CreateDatapointsResponse, Error> {
@@ -75,14 +75,7 @@ pub async fn create_evaluation_dataset(
     };
 
     // Call the datasets v1 create_datapoints function
-    let response = create_datapoints(
-        config,
-        http_client,
-        clickhouse_connection_info,
-        dataset_name,
-        request,
-    )
-    .await?;
+    let response = create_datapoints(config, http_client, db, dataset_name, request).await?;
 
     Ok(response)
 }
@@ -149,7 +142,7 @@ impl EvaluationResults {
 /// Parameters for evaluating a single variant
 pub struct EvaluateVariantParams {
     pub gateway_client: Client,
-    pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    pub db: Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
     pub functions: HashMap<String, Arc<FunctionConfig>>,
     pub evaluation_config: Arc<EvaluationConfig>,
     pub evaluation_name: String,
@@ -194,7 +187,7 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
     // Create EvaluationCoreArgs
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client: params.clickhouse_connection_info.clone(),
+        db: params.db,
         evaluation_config: params.evaluation_config.clone(),
         function_configs,
         evaluation_name: params.evaluation_name,

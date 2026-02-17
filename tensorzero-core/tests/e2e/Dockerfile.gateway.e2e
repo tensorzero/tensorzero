@@ -3,6 +3,7 @@
 FROM rust:1.93.0-slim AS builder
 
 WORKDIR /src
+ENV CARGO_INCREMENTAL=0
 
 RUN apt-get update && apt-get install -y clang libc++-dev git && rm -rf /var/lib/apt/lists/*
 

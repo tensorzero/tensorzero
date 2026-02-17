@@ -44,6 +44,7 @@ TEST_CONFIG_FILE = os.path.join(
 )
 
 CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
+POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests"
 
 
 class ClientType(Enum):
@@ -58,6 +59,30 @@ def embedded_sync_client():
         clickhouse_url=CLICKHOUSE_URL,
     ) as client:
         yield client
+
+
+@pytest.fixture
+def embedded_sync_client_using_postgres():
+    original_enable_postgres_read_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ", None)
+    original_enable_postgres_write_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE", None)
+
+    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ"] = "1"
+    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE"] = "1"
+
+    with TensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url=CLICKHOUSE_URL,
+        postgres_url=POSTGRES_URL,
+    ) as client:
+        yield client
+
+    # Reset flags
+    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ", None)
+    if original_enable_postgres_read_flag:
+        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ"] = original_enable_postgres_read_flag
+    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE", None)
+    if original_enable_postgres_write_flag:
+        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE"] = original_enable_postgres_write_flag
 
 
 @pytest_asyncio.fixture

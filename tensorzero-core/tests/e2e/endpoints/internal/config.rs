@@ -4,15 +4,16 @@ use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
-use tensorzero::{Client as TensorZeroClient, ClientExt, WriteConfigRequest};
 use tensorzero_core::config::UninitializedConfig;
+use tensorzero_core::endpoints::internal::config::{
+    GetConfigResponse, WriteConfigRequest, WriteConfigResponse,
+};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_live_config() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/config");
 
@@ -48,7 +49,6 @@ async fn test_get_live_config() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_config_by_hash() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // First get the live config to obtain the current hash
@@ -85,7 +85,6 @@ async fn test_get_config_by_hash() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_config_by_nonexistent_hash() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use a hash that definitely doesn't exist
@@ -101,16 +100,11 @@ async fn test_get_config_by_nonexistent_hash() {
     );
 }
 
-// ============================================================================
-// Tests using Rust client (both embedded and HTTP gateway modes)
-// ============================================================================
-
-/// Test writing a config via the Rust client
-async fn test_write_config_impl(client: TensorZeroClient) {
-    skip_for_postgres!();
+#[tokio::test(flavor = "multi_thread")]
+async fn test_write_config_endpoint() {
+    let http_client = Client::new();
     let id = Uuid::now_v7();
 
-    // Create a minimal config with a unique metric
     let config_toml = format!(
         r#"
 [metrics.client_test_metric_{id}]
@@ -135,49 +129,61 @@ optimize = "max"
         tags: tags.clone(),
     };
 
-    // Write the config
-    let response = client.write_config(request).await;
+    let url = get_gateway_endpoint("/internal/config");
+    let response = http_client.post(url).json(&request).send().await.unwrap();
     assert!(
-        response.is_ok(),
-        "write_config should succeed: {:?}",
-        response.err()
+        response.status().is_success(),
+        "POST /internal/config should succeed for a valid config snapshot: status={}",
+        response.status()
+    );
+    let write_response: WriteConfigResponse = response
+        .json()
+        .await
+        .expect("Response should parse as WriteConfigResponse correctly");
+    assert!(
+        !write_response.hash.is_empty(),
+        "write_config endpoint should return a non-empty hash"
     );
 
-    let write_response = response.unwrap();
-    assert!(!write_response.hash.is_empty(), "Hash should not be empty");
-
-    // Wait for ClickHouse to commit
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Verify we can retrieve the config by hash
-    let get_response = client.get_config_snapshot(Some(&write_response.hash)).await;
+    let get_url = get_gateway_endpoint(&format!("/internal/config/{}", write_response.hash));
+    let get_response = http_client.get(get_url).send().await.unwrap();
     assert!(
-        get_response.is_ok(),
-        "get_config_snapshot should succeed: {:?}",
-        get_response.err()
+        get_response.status().is_success(),
+        "GET /internal/config/{{hash}} should succeed for a freshly written hash: status={}",
+        get_response.status()
     );
-
-    let config_snapshot = get_response.unwrap();
-    assert_eq!(config_snapshot.hash, write_response.hash);
+    let config_snapshot: GetConfigResponse = get_response
+        .json()
+        .await
+        .expect("Response should parse as GetConfigResponse correctly");
+    assert_eq!(
+        config_snapshot.hash, write_response.hash,
+        "Fetched config hash should match the hash returned by POST /internal/config"
+    );
     assert_eq!(
         config_snapshot.extra_templates.get("test_template"),
-        Some(&"Hello {{name}}!".to_string())
+        Some(&"Hello {{name}}!".to_string()),
+        "Fetched config snapshot should preserve submitted extra templates"
     );
-    assert_eq!(config_snapshot.tags.get("env"), Some(&"test".to_string()));
+    assert_eq!(
+        config_snapshot.tags.get("env"),
+        Some(&"test".to_string()),
+        "Fetched config snapshot should preserve submitted `env` tag"
+    );
     assert_eq!(
         config_snapshot.tags.get("version"),
-        Some(&"1.0".to_string())
+        Some(&"1.0".to_string()),
+        "Fetched config snapshot should preserve submitted `version` tag"
     );
 }
 
-tensorzero::make_gateway_test_functions!(test_write_config_impl);
-
-/// Test tag merging when writing the same config twice via the Rust client
-async fn test_write_config_tag_merging_impl(client: TensorZeroClient) {
-    skip_for_postgres!();
+#[tokio::test(flavor = "multi_thread")]
+async fn test_write_config_tag_merging_endpoint() {
+    let http_client = Client::new();
     let id = Uuid::now_v7();
 
-    // Create a config
     let config_toml = format!(
         r#"
 [metrics.client_tag_merge_metric_{id}]
@@ -189,7 +195,6 @@ optimize = "max"
 
     let stored_config: UninitializedConfig = toml::from_str(&config_toml).unwrap();
 
-    // First write with initial tags
     let mut tags1 = HashMap::new();
     tags1.insert("key1".to_string(), "value1".to_string());
     tags1.insert("key2".to_string(), "original".to_string());
@@ -200,16 +205,29 @@ optimize = "max"
         tags: tags1,
     };
 
-    let response1 = client.write_config(request1).await.unwrap();
-    let hash = response1.hash.clone();
+    let write_url = get_gateway_endpoint("/internal/config");
+    let response1 = http_client
+        .post(write_url.clone())
+        .json(&request1)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response1.status().is_success(),
+        "First POST /internal/config should succeed: status={}",
+        response1.status()
+    );
+    let write_response1: WriteConfigResponse = response1
+        .json()
+        .await
+        .expect("Response should parse as WriteConfigResponse correctly");
+    let hash = write_response1.hash.clone();
 
-    // Wait for ClickHouse to commit
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Second write with different tags (should merge)
     let mut tags2 = HashMap::new();
-    tags2.insert("key2".to_string(), "updated".to_string()); // Update existing
-    tags2.insert("key3".to_string(), "new".to_string()); // Add new
+    tags2.insert("key2".to_string(), "updated".to_string());
+    tags2.insert("key3".to_string(), "new".to_string());
 
     let request2 = WriteConfigRequest {
         config: stored_config,
@@ -217,30 +235,55 @@ optimize = "max"
         tags: tags2,
     };
 
-    let response2 = client.write_config(request2).await.unwrap();
-    assert_eq!(response2.hash, hash, "Same config should produce same hash");
+    let response2 = http_client
+        .post(write_url)
+        .json(&request2)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response2.status().is_success(),
+        "Second POST /internal/config should succeed for duplicate config content: status={}",
+        response2.status()
+    );
+    let write_response2: WriteConfigResponse = response2
+        .json()
+        .await
+        .expect("Response should parse as WriteConfigResponse correctly");
 
-    // Wait for ClickHouse to commit
+    assert_eq!(
+        write_response2.hash, hash,
+        "Writing identical config content should return the same hash"
+    );
+
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Verify tags were merged
-    let config_snapshot = client.get_config_snapshot(Some(&hash)).await.unwrap();
+    let get_url = get_gateway_endpoint(&format!("/internal/config/{hash}"));
+    let get_response = http_client.get(get_url).send().await.unwrap();
+    assert!(
+        get_response.status().is_success(),
+        "GET /internal/config/{{hash}} should succeed after tag merging writes: status={}",
+        get_response.status()
+    );
+
+    let config_snapshot: GetConfigResponse = get_response
+        .json()
+        .await
+        .expect("Response should parse as GetConfigResponse correctly");
 
     assert_eq!(
         config_snapshot.tags.get("key1"),
         Some(&"value1".to_string()),
-        "key1 should be preserved from first write"
+        "Tag merge should preserve keys from the first write that were not overwritten"
     );
     assert_eq!(
         config_snapshot.tags.get("key2"),
         Some(&"updated".to_string()),
-        "key2 should be updated from second write"
+        "Tag merge should overwrite key2 with the value from the second write"
     );
     assert_eq!(
         config_snapshot.tags.get("key3"),
         Some(&"new".to_string()),
-        "key3 should be added from second write"
+        "Tag merge should add brand new keys from the second write"
     );
 }
-
-tensorzero::make_gateway_test_functions!(test_write_config_tag_merging_impl);

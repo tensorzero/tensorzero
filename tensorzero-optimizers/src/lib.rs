@@ -12,7 +12,7 @@ use std::future::Future;
 use std::sync::Arc;
 use tensorzero_core::{
     config::{Config, provider_types::ProviderTypesConfig},
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::inference::InferenceCredentials,
     error::Error,
     http::TensorzeroHttpClient,
@@ -29,6 +29,7 @@ pub mod gepa;
 pub mod openai;
 pub mod openai_rft;
 pub mod openai_sft;
+pub mod postgres;
 pub mod together_sft;
 
 // Re-export core types for convenience
@@ -101,7 +102,7 @@ pub trait Optimizer {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo,
+        db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> impl Future<Output = Result<Self::Handle, Error>> + Send;
 }
@@ -115,7 +116,7 @@ impl Optimizer for OptimizerInfo {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo,
+        db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         match &self.inner {
@@ -125,7 +126,7 @@ impl Optimizer for OptimizerInfo {
                     train_examples,
                     val_examples,
                     credentials,
-                    clickhouse_connection_info,
+                    db,
                     config.clone(),
                 )
                 .await
@@ -136,7 +137,7 @@ impl Optimizer for OptimizerInfo {
                     train_examples,
                     val_examples,
                     credentials,
-                    clickhouse_connection_info,
+                    db,
                     config.clone(),
                 )
                 .await
@@ -147,7 +148,7 @@ impl Optimizer for OptimizerInfo {
                     train_examples,
                     val_examples,
                     credentials,
-                    clickhouse_connection_info,
+                    db,
                     config.clone(),
                 )
                 .await
@@ -158,7 +159,7 @@ impl Optimizer for OptimizerInfo {
                     train_examples,
                     val_examples,
                     credentials,
-                    clickhouse_connection_info,
+                    db,
                     config.clone(),
                 )
                 .await
@@ -169,7 +170,7 @@ impl Optimizer for OptimizerInfo {
                     train_examples,
                     val_examples,
                     credentials,
-                    clickhouse_connection_info,
+                    db,
                     config.clone(),
                 )
                 .await
@@ -180,7 +181,7 @@ impl Optimizer for OptimizerInfo {
                     train_examples,
                     val_examples,
                     credentials,
-                    clickhouse_connection_info,
+                    db,
                     config.clone(),
                 )
                 .await
@@ -191,7 +192,7 @@ impl Optimizer for OptimizerInfo {
                     train_examples,
                     val_examples,
                     credentials,
-                    clickhouse_connection_info,
+                    db,
                     config.clone(),
                 )
                 .await

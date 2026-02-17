@@ -1,7 +1,6 @@
 export default {
   test: {
-    // Send results to Test Engine
-    reporters: ["default", "buildkite-test-collector/vitest/reporter"],
+    reporters: ["default"],
     // Enable column + line capture for Test Engine
     includeTaskLocation: true,
   },

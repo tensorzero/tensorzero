@@ -132,3 +132,20 @@ curl -X POST http://localhost:3000/inference \
     }
   }'
 ```
+
+### Other Features
+
+#### Generate Embeddings
+
+You can generate embeddings from Together AI using the [OpenAI-compatible provider](/integrations/model-providers/openai-compatible). For example:
+
+```toml title="tensorzero.toml" {5-7}
+[embedding_models.gte-modernbert-base]
+routing = ["together"]
+
+[embedding_models.gte-modernbert-base.providers.together]
+type = "openai"
+api_base = "https://api.together.xyz/v1"
+api_key_location = "env::TOGETHER_API_KEY"
+model_name = "Alibaba-NLP/gte-modernbert-base"
+```
