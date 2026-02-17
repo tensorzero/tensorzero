@@ -47,6 +47,16 @@ COPY --from=pg_parquet_builder /usr/share/postgresql/14/extension/pg_parquet* /u
 # whose path varies between source-compiled and package-installed PostgreSQL.
 COPY <<'EOF' /docker-entrypoint-initdb.d/01-shared-preload-libraries.sh
 #!/bin/bash
-echo "shared_preload_libraries = 'pg_cron,pg_parquet'" >> "$PGDATA/postgresql.conf"
+cat >> "$PGDATA/postgresql.conf" <<CONF
+shared_preload_libraries = 'pg_cron,pg_parquet'
+
+# Tuning for bulk loading (dev/test only)
+shared_buffers = '512MB'
+maintenance_work_mem = '512MB'
+work_mem = '64MB'
+max_wal_size = '4GB'
+checkpoint_completion_target = 0.9
+wal_buffers = '16MB'
+CONF
 EOF
 RUN chmod +x /docker-entrypoint-initdb.d/01-shared-preload-libraries.sh

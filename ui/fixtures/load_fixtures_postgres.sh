@@ -26,6 +26,9 @@ set -euo pipefail
 #   TENSORZERO_POSTGRES_URL - Postgres connection URL (default: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures)
 #   TENSORZERO_SKIP_TRUNCATE - Set to 1 to skip truncating tables before loading
 #   TENSORZERO_FIXTURES_DIR - Path to fixtures directory as seen by postgres server (default: /fixtures for docker, or $SCRIPT_DIR for local)
+#   TENSORZERO_DROP_PARTITIONED_PKS - Set to 1 to drop/recreate PKs on partitioned bulk tables during large fixture load
+#   TENSORZERO_SKIP_INFERENCE_TAG_GIN_INDEXES - Set to 1 to skip recreating idx_chat_inferences_tags and idx_json_inferences_tags
+#   TENSORZERO_INDEX_BUILD_MAINTENANCE_WORK_MEM - Optional maintenance_work_mem value for index rebuild statements (example: 4GB)
 
 POSTGRES_URL="${TENSORZERO_POSTGRES_URL:-postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -521,22 +524,6 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (episode_id) DO NOTHING;
 "
 
-BACKFILL_START=$SECONDS
-echo "Backfilling model provider statistics and latency histograms..."
-psql -q "$POSTGRES_URL" <<EOF
-SELECT tensorzero.refresh_model_provider_statistics_incremental(
-    full_refresh => TRUE
-);
-SELECT tensorzero.refresh_model_latency_histogram_minute_incremental(
-    full_refresh => TRUE
-);
-SELECT tensorzero.refresh_model_latency_histogram_hour_incremental(
-    full_refresh => TRUE
-);
-EOF
-echo "  Done ($(( SECONDS - BACKFILL_START ))s)"
-
-
 # =====================================================================
 # Large Fixtures (optional)
 # =====================================================================
@@ -569,13 +556,68 @@ else
 
     # Tables we're bulk loading into
     BULK_TABLES="'boolean_metric_feedback','float_metric_feedback','comment_feedback','demonstration_feedback','chat_inferences','chat_inference_data','json_inferences','json_inference_data','model_inferences','model_inference_data'"
+    DROP_PARTITIONED_PKS="${TENSORZERO_DROP_PARTITIONED_PKS:-0}"
+
+    # Optional: drop/recreate PKs on partitioned bulk tables for faster COPY.
+    # This is disabled by default because PK removal also removes uniqueness checks
+    # during load.
+    PARTITIONED_PK_DEFS=""
+    PARTITIONED_PK_COUNT=0
+    if [ "$DROP_PARTITIONED_PKS" = "1" ]; then
+        echo "Capturing PK definitions for partitioned bulk tables..."
+        PARTITIONED_PK_DEFS=$(psql -qtAX "$POSTGRES_URL" -c "
+            SELECT format(
+                'ALTER TABLE tensorzero.%I ADD CONSTRAINT %I %s;',
+                c.relname,
+                con.conname,
+                pg_get_constraintdef(con.oid)
+            )
+            FROM pg_constraint con
+            JOIN pg_class c ON c.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_partitioned_table pt ON pt.partrelid = c.oid
+            WHERE n.nspname = 'tensorzero'
+              AND c.relname IN ($BULK_TABLES)
+              AND con.contype = 'p'
+            ORDER BY c.relname;
+        ")
+        PARTITIONED_PK_COUNT=$(echo "$PARTITIONED_PK_DEFS" | grep -c 'ADD CONSTRAINT' || true)
+        if [ "$PARTITIONED_PK_COUNT" -gt 0 ]; then
+            PK_DROP_START=$SECONDS
+            echo "Dropping $PARTITIONED_PK_COUNT PK constraints on partitioned bulk tables..."
+            psql -qtAX "$POSTGRES_URL" -c "
+                SELECT format(
+                    'ALTER TABLE tensorzero.%I DROP CONSTRAINT %I;',
+                    c.relname,
+                    con.conname
+                )
+                FROM pg_constraint con
+                JOIN pg_class c ON c.oid = con.conrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_partitioned_table pt ON pt.partrelid = c.oid
+                WHERE n.nspname = 'tensorzero'
+                  AND c.relname IN ($BULK_TABLES)
+                  AND con.contype = 'p'
+                ORDER BY c.relname;
+            " | psql -q -v ON_ERROR_STOP=1 "$POSTGRES_URL"
+            echo "  Dropped partitioned PK constraints ($(( SECONDS - PK_DROP_START ))s)"
+        else
+            echo "  No partitioned PK constraints found"
+        fi
+    fi
 
     # Drop non-PK indexes on bulk-loaded tables (index maintenance is the main bottleneck).
     # Save index definitions so we can recreate them after loading.
+    #
+    # For partitioned tables, pg_indexes returns "CREATE INDEX ... ON ONLY <table>" which
+    # only creates parent index metadata without per-partition indexes. We rewrite
+    # "ON ONLY" to "ON" so per-partition indexes are auto-created during rebuild.
+    # (Targeting only _default partition indexes isn't feasible because PostgreSQL doesn't
+    # allow dropping child indexes that are attached to a parent partitioned index.)
     echo "Dropping non-PK indexes for bulk loading..."
     INDEX_DROP_START=$SECONDS
     INDEX_DEFS=$(psql -qtAX "$POSTGRES_URL" -c "
-        SELECT indexdef || ';'
+        SELECT regexp_replace(indexdef, '[[:space:]]+ON[[:space:]]+ONLY[[:space:]]+', ' ON ', 'gi') || ';'
         FROM pg_indexes i
         WHERE i.schemaname = 'tensorzero'
           AND i.tablename IN ($BULK_TABLES)
@@ -586,10 +628,23 @@ else
           )
         ORDER BY i.indexname;
     ")
+    # Safety check: partitioned-table index DDL must not contain ON ONLY.
+    if echo "$INDEX_DEFS" | grep -E -q 'ON ONLY tensorzero\\.(chat_inferences|json_inferences|model_inferences|chat_inference_data|json_inference_data|model_inference_data)([[:space:]]|$)'; then
+        echo "Error: index recreation SQL still contains ON ONLY for partitioned bulk tables"
+        exit 1
+    fi
+    # Optional: skip heavyweight GIN indexes on inference metadata tag columns.
+    # These can take a long time to build on large fixture datasets.
+    if [ "${TENSORZERO_SKIP_INFERENCE_TAG_GIN_INDEXES:-0}" = "1" ]; then
+        echo "Skipping idx_chat_inferences_tags and idx_json_inferences_tags rebuild"
+        INDEX_DEFS=$(echo "$INDEX_DEFS" | grep -vE '^CREATE INDEX( IF NOT EXISTS)? (idx_chat_inferences_tags|idx_json_inferences_tags) ' || true)
+    fi
     INDEX_COUNT=$(echo "$INDEX_DEFS" | grep -c 'CREATE INDEX' || true)
     if [ "$INDEX_COUNT" -gt 0 ]; then
-        INDEX_NAMES=$(psql -qtAX "$POSTGRES_URL" -c "
-            SELECT i.indexname
+        # Generate DROP statements with proper SQL identifier quoting via format(%I)
+        # and execute in a single psql call.
+        psql -qtAX "$POSTGRES_URL" -c "
+            SELECT format('DROP INDEX IF EXISTS tensorzero.%I;', i.indexname)
             FROM pg_indexes i
             WHERE i.schemaname = 'tensorzero'
               AND i.tablename IN ($BULK_TABLES)
@@ -599,10 +654,7 @@ else
                   WHERE c.relname = i.indexname AND pi.indisprimary
               )
             ORDER BY i.indexname;
-        ")
-        for idx in $INDEX_NAMES; do
-            psql -q "$POSTGRES_URL" -c "DROP INDEX IF EXISTS tensorzero.\"${idx}\""
-        done
+        " | psql -q -v ON_ERROR_STOP=1 "$POSTGRES_URL"
         echo "  Dropped $INDEX_COUNT indexes ($(( SECONDS - INDEX_DROP_START ))s)"
     else
         echo "  No non-PK indexes found"
@@ -648,14 +700,58 @@ else
     wait
     echo "  Bulk load done ($(( SECONDS - BULK_LOAD_START ))s)"
 
-    # Recreate indexes (single-pass build is much faster than per-row maintenance)
+    # Recreate partitioned-table PKs if dropped
+    if [ "$DROP_PARTITIONED_PKS" = "1" ] && [ "$PARTITIONED_PK_COUNT" -gt 0 ]; then
+        PK_REBUILD_START=$SECONDS
+        echo "Recreating $PARTITIONED_PK_COUNT partitioned PK constraints..."
+        echo "$PARTITIONED_PK_DEFS" | psql -q -v ON_ERROR_STOP=1 "$POSTGRES_URL"
+        echo "  Done ($(( SECONDS - PK_REBUILD_START ))s)"
+    fi
+
+    # Recreate indexes and print per-index timing for diagnostics.
     if [ "$INDEX_COUNT" -gt 0 ]; then
         INDEX_REBUILD_START=$SECONDS
+        INDEX_MAINTENANCE_WORK_MEM="${TENSORZERO_INDEX_BUILD_MAINTENANCE_WORK_MEM:-}"
         echo "Recreating $INDEX_COUNT indexes..."
-        echo "$INDEX_DEFS" | psql -q "$POSTGRES_URL"
+        if [ -n "$INDEX_MAINTENANCE_WORK_MEM" ]; then
+            echo "  Using maintenance_work_mem=${INDEX_MAINTENANCE_WORK_MEM} for each index build"
+        fi
+        while IFS= read -r idx_sql; do
+            if [ -z "$idx_sql" ]; then
+                continue
+            fi
+            INDEX_ONE_START=$SECONDS
+            echo "  Running ${idx_sql}..."
+            if [ -n "$INDEX_MAINTENANCE_WORK_MEM" ]; then
+                psql -q -v ON_ERROR_STOP=1 "$POSTGRES_URL" -c "SET maintenance_work_mem = '${INDEX_MAINTENANCE_WORK_MEM}'; ${idx_sql}"
+            else
+                psql -q -v ON_ERROR_STOP=1 "$POSTGRES_URL" -c "$idx_sql"
+            fi
+            echo "    Done ($(( SECONDS - INDEX_ONE_START ))s)"
+        done <<< "$INDEX_DEFS"
         echo "  Done ($(( SECONDS - INDEX_REBUILD_START ))s)"
     fi
 fi
+
+# =====================================================================
+# Refresh incremental rollups
+# =====================================================================
+#
+
+BACKFILL_START=$SECONDS
+echo "Backfilling model provider statistics and latency histograms..."
+psql -q "$POSTGRES_URL" <<EOF
+SELECT tensorzero.refresh_model_provider_statistics_incremental(
+    full_refresh => TRUE
+);
+SELECT tensorzero.refresh_model_latency_histogram_minute_incremental(
+    full_refresh => TRUE
+);
+SELECT tensorzero.refresh_model_latency_histogram_hour_incremental(
+    full_refresh => TRUE
+);
+EOF
+echo "  Done ($(( SECONDS - BACKFILL_START ))s)"
 
 echo ""
 echo "All fixtures loaded successfully! ($(( SECONDS - TOTAL_START ))s total)"
