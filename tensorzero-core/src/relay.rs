@@ -543,6 +543,7 @@ impl TensorzeroRelay {
             include_original_response: false,
             include_raw_response: clients.include_raw_response,
             include_raw_usage: clients.include_raw_usage,
+            include_aggregated_response: clients.include_aggregated_response,
             api_key,
         };
         Ok(res)

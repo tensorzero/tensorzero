@@ -355,6 +355,7 @@ impl JobHandle for TogetherSFTJobHandle {
                         providers: HashMap::from([(model_name.into(), model_provider)]),
                         timeouts: TimeoutsConfig::default(),
                         skip_relay: None,
+                        namespace: None,
                     }),
                 })
             }

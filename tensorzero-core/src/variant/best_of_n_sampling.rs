@@ -6,7 +6,7 @@ use std::sync::Arc;
 use futures::future::{join_all, try_join_all};
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
-use rand::Rng;
+use rand::RngExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -1439,6 +1439,7 @@ mod tests {
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
@@ -1469,6 +1470,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1561,6 +1563,7 @@ mod tests {
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1638,6 +1641,7 @@ mod tests {
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1735,6 +1739,7 @@ mod tests {
                 )]),
                 timeouts: Default::default(),
                 skip_relay: false,
+                namespace: None,
             },
         );
         let provider_types = ProviderTypesConfig::default();

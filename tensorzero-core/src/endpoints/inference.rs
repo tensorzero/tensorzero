@@ -73,6 +73,9 @@ use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
+use crate::endpoints::namespace::{
+    validate_model_namespace, validate_variant_namespace_at_inference,
+};
 use crate::endpoints::validate_tags;
 use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
@@ -147,6 +150,9 @@ pub struct Params {
     /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
     #[serde(default)]
     pub include_raw_usage: bool,
+    /// If `true`, include an `aggregated_response` field in the final chunk in the stream
+    #[serde(default)]
+    pub include_aggregated_response: bool,
     #[serde(default)]
     pub extra_body: UnfilteredInferenceExtraBody,
     #[serde(default)]
@@ -184,6 +190,7 @@ struct InferenceMetadata {
     pub include_original_response: bool,
     pub include_raw_response: bool,
     pub include_raw_usage: bool,
+    pub include_aggregated_response: bool,
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts during model-level fallback.
     pub failed_raw_response: Vec<RawResponseEntry>,
@@ -386,14 +393,12 @@ pub async fn inference(
     }
 
     // Store namespace as a tag (validation happens during deserialization)
-    let namespace = if let Some(ref ns) = params.namespace {
+    let namespace = params.namespace.as_ref();
+    if let Some(ns) = namespace {
         params
             .tags
             .insert("tensorzero::namespace".to_string(), ns.to_string());
-        Some(ns.as_str())
-    } else {
-        None
-    };
+    }
 
     let (function, function_name) = find_function(&params, &config).await?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
@@ -437,11 +442,15 @@ pub async fn inference(
     let needs_sampling = prepare_candidate_variants(
         &mut candidate_variants,
         &mut params.tags,
-        params.variant_name.as_deref(),
-        params.internal_dynamic_variant_config,
         &mut templates,
-        &function,
-        function_name.clone(),
+        PrepareCandidateVariantsArgs {
+            pinned_variant_name: params.variant_name.as_deref(),
+            dynamic_variant_config: params.internal_dynamic_variant_config,
+            function: &function,
+            function_name: function_name.clone(),
+            models: &config.models,
+            request_namespace: namespace,
+        },
     )?;
     let templates = &templates;
 
@@ -460,6 +469,14 @@ pub async fn inference(
 
     // Should we stream the inference?
     let stream = params.stream.unwrap_or(false);
+
+    if params.include_aggregated_response && !stream {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "`include_aggregated_response` is only supported in streaming mode"
+                .to_string(),
+        }
+        .into());
+    }
 
     // Keep track of which variants failed
     let mut variant_errors: IndexMap<String, Error> = IndexMap::new();
@@ -484,6 +501,7 @@ pub async fn inference(
         relay: config.gateway.relay.clone(),
         include_raw_usage: params.include_raw_usage,
         include_raw_response: params.include_raw_response,
+        include_aggregated_response: params.include_aggregated_response,
     };
 
     let inference_models = InferenceModels {
@@ -534,6 +552,7 @@ pub async fn inference(
             include_original_response: params.include_original_response,
             include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
+            include_aggregated_response: params.include_aggregated_response,
         }))
         .await?;
         return Ok(InferenceOutputData {
@@ -594,6 +613,7 @@ pub async fn inference(
             include_original_response: params.include_original_response,
             include_raw_response: params.include_raw_response,
             include_raw_usage: params.include_raw_usage,
+            include_aggregated_response: params.include_aggregated_response,
         }))
         .await;
 
@@ -699,6 +719,7 @@ fn inject_failed_variant_raw_response(
                             finish_reason: None,
                             original_chunk: None,
                             raw_chunk: None,
+                            aggregated_response: None,
                         })
                     }
                     FunctionConfigType::Json => {
@@ -713,6 +734,7 @@ fn inject_failed_variant_raw_response(
                             finish_reason: None,
                             original_chunk: None,
                             raw_chunk: None,
+                            aggregated_response: None,
                         })
                     }
                 };
@@ -753,6 +775,7 @@ struct InferVariantArgs<'a> {
     include_original_response: bool,
     include_raw_response: bool,
     include_raw_usage: bool,
+    include_aggregated_response: bool,
 }
 
 async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Error> {
@@ -782,6 +805,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         include_original_response,
         include_raw_response,
         include_raw_usage,
+        include_aggregated_response,
     } = args;
 
     // Will be edited by the variant as part of making the request so we must clone here
@@ -857,6 +881,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 .gateway
                 .fetch_and_encode_input_files_before_inference,
             model_inference_id: model_used_info.model_inference_id,
+            include_aggregated_response,
             failed_raw_response: model_used_info.failed_raw_response,
         };
 
@@ -985,6 +1010,9 @@ async fn find_function(
                 }
                 .into());
             }
+
+            // Validate namespace compatibility for the model
+            validate_model_namespace(model_name, &config.models, params.namespace.as_ref())?;
 
             // Validate extra_body and extra_headers filters
             validate_inference_filters(
@@ -1266,7 +1294,44 @@ fn create_stream(
             metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).chain(std::iter::once(model_inference_usage))
         );
 
-        let chunk = match *function {
+
+
+        // Build the collect_chunks args before moving buffer and metadata fields
+        let templates = Arc::clone(&config.templates);
+        let collect_chunks_args = CollectChunksArgs {
+            value: buffer,
+            inference_id: metadata.inference_id,
+            episode_id: metadata.episode_id,
+            system: metadata.system.clone(),
+            input_messages: metadata.input_messages.clone(),
+            function: Arc::clone(&function),
+            model_name: metadata.model_name.clone(),
+            model_provider_name: metadata.model_provider_name.clone(),
+            provider_type: metadata.provider_type.clone(),
+            raw_request: metadata.raw_request.clone(),
+            raw_response: metadata.raw_response.clone(),
+            inference_params: metadata.inference_params.clone(),
+            function_name: Arc::from(metadata.function_name.as_str()),
+            variant_name: Arc::from(metadata.variant_name.as_str()),
+            dynamic_output_schema: metadata.dynamic_output_schema.clone().map(Arc::new),
+            templates,
+            tool_config: metadata.tool_config.as_ref().map(|tc| Arc::new(tc.clone())),
+            cached: metadata.cached,
+            extra_body: metadata.extra_body.clone(),
+            extra_headers: metadata.extra_headers.clone(),
+            fetch_and_encode_input_files_before_inference: metadata.fetch_and_encode_input_files_before_inference,
+            model_inference_id: metadata.model_inference_id,
+            // Use only the current model's usage, not the aggregated total
+            // (previous model inferences are added separately below)
+            model_inference_usage,
+            finish_reason,
+        };
+
+        let collect_chunks_future = async move {
+            collect_chunks(collect_chunks_args).await
+        }.shared();
+
+        let mut chunk = match *function {
             FunctionConfig::Chat(_) => InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 finish_reason,
                 usage: Some(inference_usage),
@@ -1279,7 +1344,23 @@ fn create_stream(
             }),
         };
 
-        buffer.push(chunk.clone());
+        if metadata.include_aggregated_response {
+            let aggregated_response = collect_chunks_future.clone().await?;
+            match (&mut chunk, aggregated_response) {
+                (InferenceResultChunk::Chat(c), InferenceResult::Chat(chat_result)) => {
+                    c.aggregated_response = Some(chat_result.content);
+                }
+                (InferenceResultChunk::Json(c), InferenceResult::Json(json_result)) => {
+                    c.aggregated_response = Some(JsonInferenceOutput {
+                        raw: json_result.output.raw,
+                        parsed: json_result.output.parsed,
+                    });
+                }
+                _ => {
+                    tracing::error!("Function type and result type should always match. {IMPOSSIBLE_ERROR_MESSAGE}");
+                }
+            }
+        }
 
         yield Ok(prepare_response_chunk(&metadata, chunk));
 
@@ -1299,64 +1380,36 @@ fn create_stream(
                 input,
                 dryrun: _,
                 start_time,
-                inference_params,
-                model_name,
-                model_provider_name,
-                provider_type,
-                raw_request,
-                raw_response,
-                system,
-                input_messages,
+                inference_params: _,
+                model_name: _,
+                model_provider_name: _,
+                provider_type: _,
+                raw_request: _,
+                raw_response: _,
+                system: _,
+                input_messages: _,
                 previous_model_inference_results,
                 tags,
                 tool_config,
-                dynamic_output_schema,
-                cached,
+                dynamic_output_schema: _,
+                cached: _,
                 extra_body,
                 json_mode: _,
                 extra_headers,
-                fetch_and_encode_input_files_before_inference,
+                fetch_and_encode_input_files_before_inference: _,
                 include_original_response: _,
                 include_raw_response: _,
                 include_raw_usage: _,
-                model_inference_id,
+                include_aggregated_response: _,
+                model_inference_id: _,
                 failed_raw_response: _,
             } = metadata;
 
             let config = config.clone();
             let async_writes = config.gateway.observability.async_writes;
             let write_future = async move {
-                let templates = Arc::clone(&config.templates);
-                let collect_chunks_args = CollectChunksArgs {
-                    value: buffer,
-                    inference_id,
-                    episode_id,
-                    system,
-                    input_messages,
-                    function,
-                    model_name,
-                    model_provider_name,
-                    provider_type,
-                    raw_request,
-                    raw_response,
-                    inference_params,
-                    function_name: Arc::from(function_name.as_str()),
-                    variant_name: Arc::from(variant_name.as_str()),
-                    dynamic_output_schema: dynamic_output_schema.map(Arc::new),
-                    templates,
-                    tool_config: tool_config.as_ref().map(|tc| Arc::new(tc.clone())),
-                    cached,
-                    extra_body: extra_body.clone(),
-                    extra_headers: extra_headers.clone(),
-                    fetch_and_encode_input_files_before_inference,
-                    model_inference_id,
-                    // Use only the current model's usage, not the aggregated total
-                    // (previous model inferences are added separately below)
-                    model_inference_usage,
-                    finish_reason,
-                };
                 let inference_response: Result<InferenceResult, Error> =
-                    collect_chunks(collect_chunks_args).await;
+                    collect_chunks_future.await;
 
                 let inference_response = inference_response.ok();
 
@@ -1437,6 +1490,7 @@ fn should_stream_chunk_in_create_stream(
                 raw_chunk,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
+                aggregated_response: _,
             } = c;
 
             // We want to stream the chunk if `raw_chunk` is relevant (non-empty and requested)
@@ -1473,6 +1527,7 @@ fn should_stream_chunk_in_create_stream(
                 thought_chunks: _,
                 // We don't care about streaming the following fields in isolation
                 provider_latency: _,
+                aggregated_response: _,
             } = c;
 
             // We want to stream the chunk if `raw_chunk` is relevant (non-empty and requested)
@@ -1511,6 +1566,7 @@ fn prepare_response_chunk(
         metadata.include_raw_response,
         metadata.json_mode,
         metadata.include_raw_usage,
+        metadata.include_aggregated_response,
     )
 }
 
@@ -1869,6 +1925,8 @@ pub struct ChatInferenceResponseChunk {
     pub original_chunk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_chunk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aggregated_response: Option<Vec<ContentBlockChatOutput>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1892,6 +1950,8 @@ pub struct JsonInferenceResponseChunk {
     pub original_chunk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_chunk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aggregated_response: Option<JsonInferenceOutput>,
 }
 
 impl InferenceResponseChunk {
@@ -1906,6 +1966,7 @@ impl InferenceResponseChunk {
         include_raw_response: bool,
         json_mode: Option<JsonMode>,
         include_raw_usage: bool,
+        include_aggregated_response: bool,
     ) -> Self {
         // Compute the usage
         let usage = if cached {
@@ -1964,6 +2025,12 @@ impl InferenceResponseChunk {
                     include_raw_response,
                 );
 
+                let aggregated_response = if include_aggregated_response {
+                    result.aggregated_response
+                } else {
+                    None
+                };
+
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
                     inference_id,
                     episode_id,
@@ -1977,6 +2044,7 @@ impl InferenceResponseChunk {
                     finish_reason: result.finish_reason,
                     original_chunk,
                     raw_chunk,
+                    aggregated_response,
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -1986,6 +2054,12 @@ impl InferenceResponseChunk {
                     include_original_response,
                     include_raw_response,
                 );
+
+                let aggregated_response = if include_aggregated_response {
+                    result.aggregated_response
+                } else {
+                    None
+                };
 
                 InferenceResponseChunk::Json(JsonInferenceResponseChunk {
                     inference_id,
@@ -2000,6 +2074,7 @@ impl InferenceResponseChunk {
                     finish_reason: result.finish_reason,
                     original_chunk,
                     raw_chunk,
+                    aggregated_response,
                 })
             }
         }
@@ -2066,6 +2141,7 @@ pub struct InferenceClients {
     pub relay: Option<TensorzeroRelay>,
     pub include_raw_usage: bool,
     pub include_raw_response: bool,
+    pub include_aggregated_response: bool,
 }
 
 // Carryall struct for models used in inference
@@ -2185,15 +2261,29 @@ impl ChatCompletionInferenceParams {
 ///
 /// Returns `Ok(true)` if experimentation/sampling is needed (multiple candidate variants)
 /// Returns `Ok(false)` if direct inference is needed (single predetermined variant - no sampling)
+struct PrepareCandidateVariantsArgs<'a> {
+    pinned_variant_name: Option<&'a str>,
+    dynamic_variant_config: Option<UninitializedVariantInfo>,
+    function: &'a FunctionConfig,
+    function_name: String,
+    models: &'a ModelTable,
+    request_namespace: Option<&'a Namespace>,
+}
+
 fn prepare_candidate_variants(
     candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
-    pinned_variant_name: Option<&str>,
-    dynamic_variant_config: Option<UninitializedVariantInfo>,
     template_config: &mut Arc<TemplateConfig<'static>>,
-    function: &FunctionConfig,
-    function_name: String,
+    args: PrepareCandidateVariantsArgs<'_>,
 ) -> Result<bool, Error> {
+    let PrepareCandidateVariantsArgs {
+        pinned_variant_name,
+        dynamic_variant_config,
+        function,
+        function_name,
+        models,
+        request_namespace,
+    } = args;
     let needs_sampling = match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
         (Some(variant_name), None) => {
@@ -2206,6 +2296,18 @@ fn prepare_candidate_variants(
                 }
                 .into());
             }
+
+            // Validate namespace compatibility for the pinned variant
+            if let Some(variant_info) = candidate_variants.get(variant_name) {
+                validate_variant_namespace_at_inference(
+                    variant_name,
+                    &variant_info.inner,
+                    models,
+                    request_namespace,
+                    function,
+                )?;
+            }
+
             tags.insert(
                 "tensorzero::variant_pinned".to_string(),
                 variant_name.to_string(),
@@ -2235,6 +2337,16 @@ fn prepare_candidate_variants(
                     .add_template(template_name, path_with_contents.contents.clone())?;
             }
             *template_config = Arc::new(dynamic_template_config);
+
+            // Validate namespace compatibility for the dynamic variant
+            validate_variant_namespace_at_inference(
+                "tensorzero::dynamic_variant",
+                &candidate_variant_info.inner,
+                models,
+                request_namespace,
+                function,
+            )?;
+
             candidate_variants.clear();
             candidate_variants.insert(
                 "tensorzero::dynamic_variant".to_string(),
@@ -2288,6 +2400,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
+            aggregated_response: None,
         });
         let raw_request = "raw request".to_string();
         let inference_metadata = InferenceMetadata {
@@ -2322,6 +2435,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
+            include_aggregated_response: false,
             failed_raw_response: vec![],
         };
 
@@ -2358,6 +2472,7 @@ mod tests {
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
+            aggregated_response: None,
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
@@ -2391,6 +2506,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: false,
             model_inference_id: Uuid::now_v7(),
+            include_aggregated_response: false,
             failed_raw_response: vec![],
         };
 
@@ -2787,6 +2903,7 @@ mod tests {
             include_raw_response: false,
             include_raw_usage: true,
             model_inference_id: Uuid::now_v7(),
+            include_aggregated_response: false,
             failed_raw_response: vec![],
         }
     }
@@ -2819,6 +2936,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2871,6 +2989,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2907,6 +3026,7 @@ mod tests {
             finish_reason: None,
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(50)),
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2940,6 +3060,7 @@ mod tests {
             finish_reason: Some(FinishReason::Stop),
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -2987,6 +3108,7 @@ mod tests {
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(100)),
             finish_reason: Some(FinishReason::Stop),
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
@@ -3022,6 +3144,7 @@ mod tests {
             finish_reason: None,
             raw_chunk: String::new(),
             provider_latency: Some(Duration::from_millis(50)),
+            aggregated_response: None,
         });
 
         let result = prepare_response_chunk(&metadata, chunk);
