@@ -72,6 +72,15 @@ TENSORZERO_VALKEY_URL="redis://[hostname]:[port]"
 TENSORZERO_VALKEY_URL="redis://localhost:6379"
 ```
 
+The following URL schemes are supported:
+
+| Scheme       | Description                           |
+| :----------- | :------------------------------------ |
+| `valkey://`  | Standard Valkey/Redis connection      |
+| `valkeys://` | TLS-encrypted Valkey/Redis connection |
+| `redis://`   | Alias for `valkey://`                 |
+| `rediss://`  | Alias for `valkeys://`                |
+
 TensorZero automatically loads the required Lua functions into Valkey on startup.
 No manual setup is required.
 
