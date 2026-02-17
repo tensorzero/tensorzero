@@ -699,6 +699,25 @@ When the same header key is present in both static and dynamic headers, the dyna
 
 See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces#send-custom-http-headers) for more details and examples.
 
+#### `otlp_traces_extra_attributes`
+
+- **Type:** object (a map from string to string)
+- **Required:** no (default: `{}`)
+
+Custom span attributes to attach to OTLP trace exports for this specific inference request.
+Values must be valid JSON strings or booleans.
+
+See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces#send-custom-opentelemetry-attributes) for more details and examples.
+
+#### `otlp_traces_extra_resources`
+
+- **Type:** object (a map from string to string)
+- **Required:** no (default: `{}`)
+
+Custom resource attributes to attach to OTLP trace exports for this specific inference request.
+
+See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces#send-custom-opentelemetry-resources) for more details and examples.
+
 #### `parallel_tool_calls`
 
 - **Type:** boolean
