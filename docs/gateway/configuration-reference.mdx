@@ -438,6 +438,23 @@ routing = ["openai", "azure"]
 # ...
 ```
 
+### `discard_unknown_chunks`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+When set to `true`, the gateway will silently discard streaming chunks with unknown or unsupported types instead of producing an error in the stream.
+A warning is emitted for each discarded chunk.
+
+This is useful when a model provider introduces new chunk types that TensorZero doesn't yet support, and you'd prefer to ignore them rather than fail the stream.
+
+```toml title="tensorzero.toml"
+[models.my-model.providers.my-provider]
+# ...
+discard_unknown_chunks = true
+# ...
+```
+
 ### `extra_body`
 
 - **Type:** array of objects (see below)
