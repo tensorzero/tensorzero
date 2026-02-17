@@ -110,6 +110,7 @@ async fn test_from_components_basic() {
         clickhouse_connection_info,
         postgres_connection_info,
         valkey_connection_info: ValkeyConnectionInfo::Disabled,
+        valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
         http_client,
         timeout: Some(Duration::from_secs(60)),
     })

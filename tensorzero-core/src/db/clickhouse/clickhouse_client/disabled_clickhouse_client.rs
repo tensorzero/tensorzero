@@ -3,7 +3,7 @@ use secrecy::SecretString;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 
-use crate::db::clickhouse::batching::BatchWriterHandle;
+use crate::db::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,

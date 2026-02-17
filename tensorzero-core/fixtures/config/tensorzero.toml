@@ -221,7 +221,7 @@ json_mode = "strict"
 
 [evaluations.evaluation1.evaluators.llm_judge_bool.variants.llama_promptA]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
 json_mode = "strict"
 

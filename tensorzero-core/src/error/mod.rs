@@ -172,7 +172,7 @@ impl Error {
 
     /// Extracts raw response entries from inference errors in the error tree.
     ///
-    /// Walks `AllVariantsFailed` → `ModelProvidersExhausted` → individual provider errors
+    /// Walks `AllVariantsFailed` → `AllModelProvidersFailed` → individual provider errors
     /// and collects `RawResponseEntry` values from errors that have `raw_response` data.
     ///
     /// Returns `None` if no entries were collected.
@@ -295,12 +295,39 @@ impl From<ErrorDetails> for Error {
     }
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
+#[serde(rename_all = "snake_case")]
+pub enum TimeoutKind {
+    NonStreamingTotal,
+    StreamingTtft,
+    StreamingTotal,
+}
+
+impl TimeoutKind {
+    /// Returns the config field name this timeout corresponds to.
+    pub fn config_name(&self) -> &'static str {
+        match self {
+            TimeoutKind::NonStreamingTotal => "non_streaming.total_ms",
+            TimeoutKind::StreamingTtft => "streaming.ttft_ms",
+            TimeoutKind::StreamingTotal => "streaming.total_ms",
+        }
+    }
+}
+
 #[derive(Debug, Error, Serialize)]
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 pub enum ErrorDetails {
+    AllRetriesFailed {
+        errors: Vec<Error>,
+    },
     AllVariantsFailed {
         // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
         errors: IndexMap<String, Error>,
+    },
+    /// Error when all candidates for best/mixture-of-N fails; this corresponds to a single variant failure
+    AllCandidatesFailed {
+        candidate_errors: IndexMap<String, Error>,
     },
     TensorZeroAuth {
         message: String,
@@ -467,17 +494,17 @@ pub enum ErrorDetails {
     VariantTimeout {
         variant_name: String,
         timeout: Duration,
-        streaming: bool,
+        kind: TimeoutKind,
     },
     ModelTimeout {
         model_name: String,
         timeout: Duration,
-        streaming: bool,
+        kind: TimeoutKind,
     },
     ModelProviderTimeout {
         provider_name: String,
         timeout: Duration,
-        streaming: bool,
+        kind: TimeoutKind,
     },
     InputValidation {
         source: Box<Error>,
@@ -584,7 +611,7 @@ pub enum ErrorDetails {
     ModelNotFound {
         model_name: String,
     },
-    ModelProvidersExhausted {
+    AllModelProvidersFailed {
         // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
         provider_errors: IndexMap<String, Error>,
     },
@@ -729,7 +756,9 @@ impl ErrorDetails {
     /// Defines the error level for logging this error
     fn level(&self) -> tracing::Level {
         match self {
+            ErrorDetails::AllRetriesFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::AllCandidatesFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::TensorZeroAuth { .. } => tracing::Level::WARN,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
@@ -814,7 +843,7 @@ impl ErrorDetails {
             ErrorDetails::MissingFunctionInVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
-            ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
+            ErrorDetails::AllModelProvidersFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
@@ -868,12 +897,19 @@ impl ErrorDetails {
     /// Returns `None` if the error doesn't have a concept of a 'last' status code.
     fn underlying_status_code(&self) -> Option<StatusCode> {
         match self {
+            ErrorDetails::AllRetriesFailed { errors } => errors
+                .last()
+                .and_then(|error| error.underlying_status_code()),
             ErrorDetails::AllVariantsFailed { errors } => errors
                 .values()
                 .last()
                 .and_then(|error| error.underlying_status_code()),
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => candidate_errors
+                .values()
+                .last()
+                .and_then(|error| error.underlying_status_code()),
             ErrorDetails::InferenceClient { status_code, .. } => *status_code,
-            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
                 .values()
                 .last()
                 .and_then(|error| error.underlying_status_code()),
@@ -884,7 +920,12 @@ impl ErrorDetails {
     /// Defines the HTTP status code for responses involving this error
     fn status_code(&self) -> StatusCode {
         match self {
+            ErrorDetails::AllRetriesFailed { errors } => errors
+                .last()
+                .map(|e| e.status_code())
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
+            ErrorDetails::AllCandidatesFailed { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::TensorZeroAuth { .. } => StatusCode::UNAUTHORIZED,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -972,7 +1013,7 @@ impl ErrorDetails {
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::AllModelProvidersFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
             ErrorDetails::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
@@ -1045,9 +1086,10 @@ impl ErrorDetails {
 
     pub fn is_retryable(&self) -> bool {
         match &self {
+            ErrorDetails::AllRetriesFailed { .. } => false,
             ErrorDetails::RateLimitExceeded { .. } => false,
-            // For ModelProvidersExhausted we will retry if any provider error is retryable
-            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+            // For AllModelProvidersFailed we will retry if any provider error is retryable
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
                 .iter()
                 .any(|(_, error)| error.is_retryable()),
             _ => true,
@@ -1057,12 +1099,22 @@ impl ErrorDetails {
     /// Recursively collects `RawResponseEntry` values from inference errors in the error tree.
     fn collect_raw_response_entries(&self, entries: &mut Vec<RawResponseEntry>) {
         match self {
+            ErrorDetails::AllRetriesFailed { errors } => {
+                for error in errors {
+                    error.0.collect_raw_response_entries(entries);
+                }
+            }
             ErrorDetails::AllVariantsFailed { errors } => {
                 for error in errors.values() {
                     error.0.collect_raw_response_entries(entries);
                 }
             }
-            ErrorDetails::ModelProvidersExhausted { provider_errors } => {
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => {
+                for error in candidate_errors.values() {
+                    error.0.collect_raw_response_entries(entries);
+                }
+            }
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => {
                 for error in provider_errors.values() {
                     error.0.collect_raw_response_entries(entries);
                 }
@@ -1122,6 +1174,17 @@ impl ErrorDetails {
 impl std::fmt::Display for ErrorDetails {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ErrorDetails::AllRetriesFailed { errors } => {
+                write!(
+                    f,
+                    "All retries failed with errors: {}",
+                    errors
+                        .iter()
+                        .map(|error| format!("{error}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
             ErrorDetails::AllVariantsFailed { errors } => {
                 write!(
                     f,
@@ -1133,60 +1196,52 @@ impl std::fmt::Display for ErrorDetails {
                         .join("\n")
                 )
             }
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => {
+                write!(
+                    f,
+                    "All candidates failed with errors: {}",
+                    candidate_errors
+                        .iter()
+                        .map(|(candidate_name, error)| format!("{candidate_name}: {error}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
+            }
             ErrorDetails::TensorZeroAuth { message } => {
                 write!(f, "TensorZero authentication error: {message}")
             }
             ErrorDetails::ModelProviderTimeout {
                 provider_name,
                 timeout,
-                streaming,
+                kind,
             } => {
-                if *streaming {
-                    write!(
-                        f,
-                        "Model provider {provider_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
-                    )
-                } else {
-                    write!(
-                        f,
-                        "Model provider {provider_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
-                    )
-                }
+                let config_name = kind.config_name();
+                write!(
+                    f,
+                    "Model provider {provider_name} timed out due to configured `{config_name}` timeout ({timeout:?})"
+                )
             }
             ErrorDetails::ModelTimeout {
                 model_name,
                 timeout,
-                streaming,
+                kind,
             } => {
-                if *streaming {
-                    write!(
-                        f,
-                        "Model {model_name} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
-                    )
-                } else {
-                    write!(
-                        f,
-                        "Model {model_name} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
-                    )
-                }
+                let config_name = kind.config_name();
+                write!(
+                    f,
+                    "Model {model_name} timed out due to configured `{config_name}` timeout ({timeout:?})"
+                )
             }
             ErrorDetails::VariantTimeout {
                 variant_name,
                 timeout,
-                streaming,
+                kind,
             } => {
-                let variant_description = format!("Variant `{variant_name}`");
-                if *streaming {
-                    write!(
-                        f,
-                        "{variant_description} timed out due to configured `streaming.ttft_ms` timeout ({timeout:?})"
-                    )
-                } else {
-                    write!(
-                        f,
-                        "{variant_description} timed out due to configured `non_streaming.total_ms` timeout ({timeout:?})"
-                    )
-                }
+                let config_name = kind.config_name();
+                write!(
+                    f,
+                    "Variant `{variant_name}` timed out due to configured `{config_name}` timeout ({timeout:?})"
+                )
             }
             ErrorDetails::ObjectStoreWrite { message, path } => {
                 write!(
@@ -1631,7 +1686,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::ModelNotFound { model_name } => {
                 write!(f, "Model not found: {model_name}")
             }
-            ErrorDetails::ModelProvidersExhausted { provider_errors } => {
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => {
                 write!(
                     f,
                     "All model providers failed to infer with errors: {}",
@@ -2022,7 +2077,7 @@ mod tests {
                 raw_response: None, // No raw_response
             }),
         );
-        let error = Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors });
+        let error = Error::new(ErrorDetails::AllModelProvidersFailed { provider_errors });
         let entries = error.extract_raw_response_entries();
         assert!(
             entries.is_some(),
@@ -2065,7 +2120,7 @@ mod tests {
         let mut variant_errors = IndexMap::new();
         variant_errors.insert(
             "variant_a".to_string(),
-            Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors }),
+            Error::new(ErrorDetails::AllModelProvidersFailed { provider_errors }),
         );
         let error = Error::new(ErrorDetails::AllVariantsFailed {
             errors: variant_errors,
@@ -2073,7 +2128,7 @@ mod tests {
         let entries = error.extract_raw_response_entries();
         assert!(
             entries.is_some(),
-            "should extract entries from nested AllVariantsFailed -> ModelProvidersExhausted"
+            "should extract entries from nested AllVariantsFailed -> AllModelProvidersFailed"
         );
         let entries = entries.unwrap();
         assert_eq!(entries.len(), 2, "should have two entries");

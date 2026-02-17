@@ -103,13 +103,11 @@ pub async fn get_model_inferences_handler(
 
 /// Core business logic for getting model inferences
 async fn get_model_inferences(
-    AppStateData {
-        clickhouse_connection_info,
-        ..
-    }: AppStateData,
+    app_state_data: AppStateData,
     inference_id: Uuid,
 ) -> Result<Vec<ModelInference>, Error> {
-    let rows = clickhouse_connection_info
+    let db = app_state_data.get_delegating_database();
+    let rows = db
         .get_model_inferences_by_inference_id(inference_id)
         .await?;
 

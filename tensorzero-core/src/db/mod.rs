@@ -1,6 +1,10 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use feedback::FeedbackQueries;
+use futures::future::Shared;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -11,6 +15,8 @@ use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
+
+pub type BatchWriterHandle = Shared<Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
 
 pub mod batch_inference;
 pub mod batching;
@@ -40,6 +46,7 @@ pub trait ClickHouseConnection:
 {
 }
 
+#[cfg_attr(test, automock)]
 #[async_trait]
 pub trait HealthCheckable {
     async fn health(&self) -> Result<(), Error>;

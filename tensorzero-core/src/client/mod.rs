@@ -470,6 +470,8 @@ pub enum ClientBuilderMode {
         postgres_connection_info: PostgresConnectionInfo,
         /// Already-initialized Valkey connection
         valkey_connection_info: ValkeyConnectionInfo,
+        /// Already-initialized Valkey connection for caching (may be same as `valkey_connection_info`)
+        valkey_cache_connection_info: ValkeyConnectionInfo,
         /// Pre-configured HTTP client for model inference
         http_client: TensorzeroHttpClient,
         /// A timeout for all TensorZero gateway processing.
@@ -597,7 +599,7 @@ impl ClientBuilder {
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = match postgres_config {
                     Some(PostgresConfig::Url(url)) => {
-                        setup_postgres(&config, Some(url.clone())).await.map_err(|e| {
+                        setup_postgres(&config, Some(url)).await.map_err(|e| {
                             ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
                         })?
                     }
@@ -607,12 +609,15 @@ impl ClientBuilder {
                     })?
                 };
 
-                // Set up Valkey connection from explicit URL
+                // Set up Valkey connection from explicit URL.
+                // Embedded gateways use the same Valkey instance for both rate limiting and caching.
+                // TODO: support a dedicated cache Valkey URL for embedded gateways.
                 let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
                     ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
                         source: e.into(),
                     })
                 })?;
+                let valkey_cache_connection_info = valkey_connection_info.clone();
 
                 let http_client = if self.http_client.is_some() {
                     return Err(ClientBuilderError::HTTPClientBuild(
@@ -634,6 +639,7 @@ impl ClientBuilder {
                                 clickhouse_connection_info,
                                 postgres_connection_info,
                                 valkey_connection_info,
+                                valkey_cache_connection_info,
                                 http_client,
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
@@ -655,6 +661,7 @@ impl ClientBuilder {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info,
+                valkey_cache_connection_info,
                 http_client,
                 timeout,
             } => {
@@ -680,6 +687,7 @@ impl ClientBuilder {
                                 })?,
                                 postgres_connection_info.clone(),
                                 valkey_connection_info.clone(),
+                                valkey_cache_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
@@ -776,15 +784,18 @@ impl ClientBuilder {
         Self::validate_embedded_gateway_config(&config, false)?;
 
         // Setup Postgres with runtime URL
-        let postgres_connection_info =
-            setup_postgres(&config, postgres_url).await.map_err(|e| {
+        let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref())
+            .await
+            .map_err(|e| {
                 ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
             })?;
 
-        // Setup Valkey with runtime URL
+        // Setup Valkey with runtime URL.
+        // Config snapshot clients use the same Valkey instance for both rate limiting and caching.
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
             ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other { source: e.into() })
         })?;
+        let valkey_cache_connection_info = valkey_connection_info.clone();
 
         // Use HTTP client from config (now overlaid from live_config)
         let http_client = config.http_client.clone();
@@ -795,6 +806,7 @@ impl ClientBuilder {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            valkey_cache_connection_info,
             http_client,
             timeout,
         });
@@ -1358,6 +1370,7 @@ mod tests {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             http_client,
             timeout: None,
         })
@@ -1410,6 +1423,7 @@ mod tests {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             http_client,
             timeout: None,
         })

@@ -59,6 +59,7 @@ impl ToolMetadata for FlakyTool {
 
 #[async_trait]
 impl TaskTool for FlakyTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,

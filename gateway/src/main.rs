@@ -332,7 +332,7 @@ async fn run() -> Result<(), ExitCode> {
     // Bind to the socket address specified in the CLI, config, or default to 0.0.0.0:3000
     if args.bind_address.is_some() && config.gateway.bind_address.is_some() {
         tracing::error!(
-            "You must not specify both `--bind-address` and `gateway.bind_address` in the config file."
+            "You must only specify one of `--bind-address` (CLI), `TENSORZERO_GATEWAY_BIND_ADDRESS` (environment variable), or `gateway.bind_address` (configuration)."
         );
         return Err(ExitCode::FAILURE);
     }
@@ -401,6 +401,11 @@ async fn run() -> Result<(), ExitCode> {
     let valkey_enabled_pretty =
         get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info);
     tracing::info!("├ Valkey: {valkey_enabled_pretty}");
+    if std::env::var("TENSORZERO_VALKEY_CACHE_URL").is_ok() {
+        let valkey_cache_enabled_pretty =
+            get_valkey_status_string(&gateway_handle.app_state.valkey_cache_connection_info);
+        tracing::info!("├ Valkey (cache): {valkey_cache_enabled_pretty}");
+    }
 
     if let Some(gateway_url) = config
         .gateway

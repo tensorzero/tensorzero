@@ -36,24 +36,30 @@ jobs:
         run: ./ci/check-version-consistency.sh
 
   # This checks for specific markers in the codebase that require multiple files to be edited together.
+  # Only runs on Pull Requests; merge queue jobs can't access the 'skip-if-edited-check' label so we
+  # always mark them as successful.
   check-if-edited-then-edit:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    # Should run on all PRs from forks as well, if the label is not present
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
 
       - name: Set up Python
+        if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
         uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
         with:
           python-version: "3.9"
 
       - name: Check coordinated edits
+        if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
         run: python3 ci/check_coordinated_edits.py
+
+      - name: Skip coordinated edits check
+        if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
+        run: echo "Skipping coordinated edits check."
 
   # Like `check-docker-compose-released`, but loads the freshly built `gateway` and `ui` container images first
   # This checks that all of our docker-compose files work with the changes in the PR
@@ -1472,7 +1478,6 @@ jobs:
       [
         check-version-consistency,
         check-production-deployment-docker-compose,
-        check-if-edited-then-edit,
         check-docker-compose-released,
         check-docker-compose-commit,
         check-python-client-build,

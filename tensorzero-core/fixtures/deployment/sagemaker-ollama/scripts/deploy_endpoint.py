@@ -11,8 +11,8 @@ SAGEMAKER_ROLE = "arn:aws:iam::637423354485:role/service-role/AmazonSageMaker-Ex
 SERVERLESS = False
 
 PROVISIONED_INSTANCE_TYPE = "ml.t2.medium"
-PROVISIONED_ENDPOINT_CONFIG_NAME = "gemma3-1b-provisioned-config"
-PROVISIONED_ENDPOINT_NAME = "gemma3-1b-provisioned-endpoint"
+PROVISIONED_ENDPOINT_CONFIG_NAME = "ollama-provisioned-config"
+PROVISIONED_ENDPOINT_NAME = "ollama-provisioned-endpoint"
 
 
 def main():
@@ -23,7 +23,7 @@ def main():
 
     print(f"Container env: {env}")
     print(f"Container image: {inference_image_uri}")
-    model_name = sagemaker.utils.name_from_base("gemma-ollama")
+    model_name = sagemaker.utils.name_from_base("ollama")
     print("Sagemaker model name: ", model_name)
 
     create_model_response = sm_client.create_model(

@@ -144,6 +144,9 @@ pub struct StreamingTimeouts {
     #[serde(default)]
     /// The time allowed for the first token to be produced.
     pub ttft_ms: Option<u64>,
+    #[serde(default)]
+    /// The total time allowed for the entire streaming request to complete.
+    pub total_ms: Option<u64>,
 }
 
 /// Configures the timeouts for both streaming and non-streaming requests.
@@ -163,7 +166,11 @@ impl TimeoutsConfig {
     pub fn validate(&self, global_outbound_http_timeout: &Duration) -> Result<(), Error> {
         let TimeoutsConfig {
             non_streaming: NonStreamingTimeouts { total_ms },
-            streaming: StreamingTimeouts { ttft_ms },
+            streaming:
+                StreamingTimeouts {
+                    ttft_ms,
+                    total_ms: streaming_total_ms,
+                },
         } = self;
 
         let global_ms = global_outbound_http_timeout.num_milliseconds();
@@ -185,6 +192,23 @@ impl TimeoutsConfig {
                     "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
                 ),
             }));
+        }
+        if let Some(streaming_total_ms) = streaming_total_ms
+            && Duration::milliseconds(*streaming_total_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeouts.streaming.total_ms` value `{streaming_total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
+        }
+        if let Some(ttft_ms) = ttft_ms
+            && let Some(streaming_total_ms) = streaming_total_ms
+            && streaming_total_ms < ttft_ms
+        {
+            tracing::warn!(
+                "The `timeouts.streaming.total_ms` value `{streaming_total_ms}` is less than `timeouts.streaming.ttft_ms` value `{ttft_ms}`. The `total_ms` timeout may fire before the `ttft_ms` timeout."
+            );
         }
 
         Ok(())
@@ -1959,6 +1983,7 @@ fn propagate_timeout_s_to_candidates(
             },
             streaming: StreamingTimeouts {
                 ttft_ms: Some(timeout_ms),
+                total_ms: None,
             },
         };
 
@@ -2285,7 +2310,8 @@ pub struct PostgresConfig {
     pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
-    /// Retention period in days for inference tables (chat_inferences, json_inferences).
+    /// Retention period in days for inference metadata tables
+    /// (chat_inferences, json_inferences, model_inferences — monthly partitions).
     /// If set, old partitions beyond this age will be dropped by pg_cron.
     /// If not set, partitions are retained indefinitely.
     ///
@@ -2294,7 +2320,12 @@ pub struct PostgresConfig {
     ///   partitions older than this value on its next daily run. This is irreversible.
     /// - Clients are responsible for managing their own data backups before enabling retention.
     /// - Recommend testing in non-production first and starting with a longer period.
-    pub inference_retention_days: Option<u32>,
+    pub inference_metadata_retention_days: Option<u32>,
+    /// Retention period in days for inference data tables
+    /// (chat_inference_data, json_inference_data, model_inference_data — daily partitions).
+    /// `inference_retention_days` is accepted as a deprecated alias.
+    #[serde(alias = "inference_retention_days")]
+    pub inference_data_retention_days: Option<u32>,
 }
 
 fn default_connection_pool_size() -> u32 {
@@ -2306,7 +2337,8 @@ impl Default for PostgresConfig {
         Self {
             enabled: None,
             connection_pool_size: 20,
-            inference_retention_days: None,
+            inference_metadata_retention_days: None,
+            inference_data_retention_days: None,
         }
     }
 }

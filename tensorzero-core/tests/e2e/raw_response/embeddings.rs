@@ -31,7 +31,7 @@ fn assert_raw_response_entry(entry: &Value) {
     let api_type = entry.get("api_type").unwrap().as_str().unwrap();
     assert_eq!(
         api_type, "embeddings",
-        "Embeddings endpoint should have api_type 'embeddings', got: {api_type}"
+        "Embeddings endpoint should have api_type `embeddings`, got: {api_type}"
     );
 
     // Verify data is a string (raw response from provider)
@@ -72,7 +72,7 @@ async fn test_embeddings_raw_response_requested() {
     assert_eq!(
         response_json["object"].as_str().unwrap(),
         "list",
-        "object should be 'list'"
+        "object should be `list`"
     );
     assert!(
         !response_json["data"].as_array().unwrap().is_empty(),
@@ -100,7 +100,7 @@ async fn test_embeddings_raw_response_requested() {
 
     // Provider type should be "openai" for text-embedding-3-small
     let provider_type = first_entry.get("provider_type").unwrap().as_str().unwrap();
-    assert_eq!(provider_type, "openai", "Provider type should be 'openai'");
+    assert_eq!(provider_type, "openai", "Provider type should be `openai`");
 
     // The data field should be a non-empty string
     let data = first_entry.get("data").unwrap().as_str().unwrap();
@@ -110,7 +110,7 @@ async fn test_embeddings_raw_response_requested() {
     let data_json: Value = serde_json::from_str(data).expect("data should be valid JSON");
     assert!(
         data_json.get("data").is_some(),
-        "raw response should contain 'data' field"
+        "raw response should contain `data` field"
     );
 }
 
@@ -359,7 +359,7 @@ async fn test_embeddings_raw_response_entry_structure() {
     let api_type = entry.get("api_type").unwrap().as_str().unwrap();
     assert_eq!(
         api_type, "embeddings",
-        "api_type should be 'embeddings' for embeddings endpoint"
+        "api_type should be `embeddings` for embeddings endpoint"
     );
 
     // Check data is a non-empty string containing valid JSON

@@ -79,6 +79,22 @@ model = "ministral_8b_2410"
 
 See the [list of models available on Mistral](https://docs.mistral.ai/getting-started/models).
 
+### Reasoning Models
+
+For Magistral reasoning models (`magistral-small-latest`, `magistral-medium-latest`), set `prompt_mode = "reasoning"` in your provider configuration:
+
+```toml title="config/tensorzero.toml"
+[models.magistral_small]
+routing = ["mistral"]
+
+[models.magistral_small.providers.mistral]
+type = "mistral"
+model_name = "magistral-small-latest"
+prompt_mode = "reasoning"
+```
+
+When `prompt_mode` is set, reasoning output from the model will be returned as thought blocks in the response.
+
 ### Credentials
 
 You must set the `MISTRAL_API_KEY` environment variable before running the gateway.
