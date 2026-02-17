@@ -115,13 +115,14 @@ function EpisodeHoverContent({
   return (
     <div className="flex flex-col gap-2">
       <TypeBadgeLink url={url}>Episode</TypeBadgeLink>
-      <LazyInfoItem
+      <InfoItem
         label="Inferences"
-        data={data}
-        isLoading={isLoading}
-        render={(d) =>
-          `${d.inference_count} inference${d.inference_count !== 1 ? "s" : ""}`
+        value={
+          data
+            ? `${data.inference_count} inference${data.inference_count !== 1 ? "s" : ""}`
+            : null
         }
+        isLoading={isLoading}
       />
     </div>
   );
@@ -220,46 +221,28 @@ function InfoItem({
   value,
   secondaryValue,
   mono,
+  isLoading,
 }: {
   label: string;
-  value: string;
+  value?: string | null;
   secondaryValue?: string | null;
   mono?: boolean;
+  isLoading?: boolean;
 }) {
   return (
     <Item label={label}>
-      <span
-        className={cn(
-          "text-foreground min-w-0 truncate text-xs",
-          mono && "font-mono",
-        )}
-        title={secondaryValue ? `${value} · ${secondaryValue}` : value}
-      >
-        {value}
-        {secondaryValue && (
-          <span className="text-muted-foreground"> · {secondaryValue}</span>
-        )}
-      </span>
-    </Item>
-  );
-}
-
-function LazyInfoItem<T>({
-  label,
-  data,
-  isLoading,
-  render,
-}: {
-  label: string;
-  data: T | null;
-  isLoading: boolean;
-  render: (data: T) => string;
-}) {
-  return (
-    <Item label={label}>
-      {data ? (
-        <span className="text-foreground min-w-0 truncate text-xs">
-          {render(data)}
+      {value ? (
+        <span
+          className={cn(
+            "text-foreground min-w-0 truncate text-xs",
+            mono && "font-mono",
+          )}
+          title={secondaryValue ? `${value} · ${secondaryValue}` : value}
+        >
+          {value}
+          {secondaryValue && (
+            <span className="text-muted-foreground"> · {secondaryValue}</span>
+          )}
         </span>
       ) : isLoading ? (
         <span className="bg-muted h-4 w-20 animate-pulse rounded" />
