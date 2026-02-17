@@ -8,17 +8,17 @@ import type {
   EventPayloadUserQuestions,
   UserQuestionAnswer,
 } from "~/types/tensorzero";
-import { formatAnswer } from "./formatAnswer";
+import { formatResponse } from "./formatResponse";
 
 export function CompletedQuestionCard({
   payload,
-  answers,
+  responses,
   eventId,
   timestamp,
   className,
 }: {
   payload: EventPayloadUserQuestions;
-  answers?: Record<string, UserQuestionAnswer>;
+  responses?: Record<string, UserQuestionAnswer>;
   eventId: string;
   timestamp: string;
   className?: string;
@@ -45,7 +45,7 @@ export function CompletedQuestionCard({
           <span className="inline-flex items-center gap-2 text-sm font-medium">
             Question
             <DotSeparator />
-            {answers ? "Answered" : "Skipped"}
+            {responses ? "Answered" : "Skipped"}
           </span>
           <span
             className={cn(
@@ -70,9 +70,9 @@ export function CompletedQuestionCard({
               <span className="text-fg-muted text-xs font-medium">
                 {q.header}
               </span>
-              {answers ? (
+              {responses ? (
                 <span className="text-fg-primary text-sm">
-                  {formatAnswer(answers[q.id], q)}
+                  {formatResponse(responses[q.id], q)}
                 </span>
               ) : (
                 <span className="text-fg-muted text-sm italic">
