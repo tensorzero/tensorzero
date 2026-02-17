@@ -473,8 +473,8 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml up --no-build -d
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml wait fixtures
 
       - name: Run UI E2E tests
         id: e2e_tests
@@ -496,19 +496,19 @@ jobs:
       - name: Print Docker Compose logs
         if: always()
         working-directory: ui
-        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs -t
+        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml logs -t
 
       - name: Print container health checks
         if: always()
         working-directory: ui
-        run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
+        run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml ps -q ui) | jq
 
       - name: Make sure the current commit short hash is in the Docker Compose gateway logs
         if: always()
         working-directory: ui
         run: |
           SHORT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
-          docker compose -f fixtures/docker-compose.e2e.yml logs gateway | grep "(commit: ${SHORT_HASH})" || {
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.proxy.yml logs gateway | grep "(commit: ${SHORT_HASH})" || {
             echo "ERROR: Commit hash ${SHORT_HASH} not found in gateway logs"
             exit 1
           }
