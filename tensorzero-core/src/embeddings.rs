@@ -194,7 +194,15 @@ impl EmbeddingModelConfig {
                     .await
                     .ok()
                     .flatten();
-                    if let Some(cache_lookup) = cache_lookup {
+                    if let Some(mut cache_lookup) = cache_lookup {
+                        // Collect raw response entries from failed providers before the cache hit
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                if let Some(entries) = error.extract_raw_response_entries() {
+                                    cache_lookup.failed_raw_response.extend(entries);
+                                }
+                            }
+                        }
                         return Ok(cache_lookup);
                     }
                 }
