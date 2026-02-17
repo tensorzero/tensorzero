@@ -12,8 +12,6 @@ import { cn } from "~/utils/common";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 
-// --- Data types ---
-
 interface InferencePreview {
   timestamp: string;
 }
@@ -22,63 +20,12 @@ interface EpisodePreview {
   inference_count: number;
 }
 
-// --- Prop types ---
-
 interface UuidHoverCardContentProps {
   uuid: string;
   obj: ResolvedObject;
   url: string;
   isOpen: boolean;
 }
-
-interface InferenceHoverContentProps {
-  uuid: string;
-  obj: Extract<ResolvedObject, { type: "inference" }>;
-  url: string;
-  isOpen: boolean;
-}
-
-interface EpisodeHoverContentProps {
-  uuid: string;
-  url: string;
-  isOpen: boolean;
-}
-
-interface DatapointHoverContentProps {
-  obj: Extract<ResolvedObject, { type: "chat_datapoint" | "json_datapoint" }>;
-  url: string;
-}
-
-interface TypeBadgeLinkProps {
-  children: React.ReactNode;
-  url: string;
-}
-
-interface ItemProps {
-  label: string;
-  align?: "baseline" | "center";
-  children: React.ReactNode;
-}
-
-interface FunctionItemProps {
-  functionName: string;
-  functionType: string;
-}
-
-interface InfoItemProps {
-  label: string;
-  value?: string | null;
-  secondaryValue?: string | null;
-  mono?: boolean;
-  isLoading?: boolean;
-}
-
-interface TimestampItemProps {
-  data: InferencePreview | null;
-  isLoading: boolean;
-}
-
-// --- Content components ---
 
 export function UuidHoverCardContent({
   uuid,
@@ -114,6 +61,13 @@ export function UuidHoverCardContent({
   }
 }
 
+interface InferenceHoverContentProps {
+  uuid: string;
+  obj: Extract<ResolvedObject, { type: "inference" }>;
+  url: string;
+  isOpen: boolean;
+}
+
 function InferenceHoverContent({
   uuid,
   obj,
@@ -146,6 +100,12 @@ function InferenceHoverContent({
   );
 }
 
+interface EpisodeHoverContentProps {
+  uuid: string;
+  url: string;
+  isOpen: boolean;
+}
+
 function EpisodeHoverContent({
   uuid,
   url,
@@ -172,6 +132,11 @@ function EpisodeHoverContent({
   );
 }
 
+interface DatapointHoverContentProps {
+  obj: Extract<ResolvedObject, { type: "chat_datapoint" | "json_datapoint" }>;
+  url: string;
+}
+
 function DatapointHoverContent({ obj, url }: DatapointHoverContentProps) {
   const typeLabel =
     obj.type === "chat_datapoint" ? "Chat Datapoint" : "JSON Datapoint";
@@ -185,7 +150,10 @@ function DatapointHoverContent({ obj, url }: DatapointHoverContentProps) {
   );
 }
 
-// --- Primitives ---
+interface TypeBadgeLinkProps {
+  children: React.ReactNode;
+  url: string;
+}
 
 function TypeBadgeLink({ children, url }: TypeBadgeLinkProps) {
   return (
@@ -197,6 +165,12 @@ function TypeBadgeLink({ children, url }: TypeBadgeLinkProps) {
       <ChevronRight className="ml-0.5 h-3 w-3" />
     </Link>
   );
+}
+
+interface ItemProps {
+  label: string;
+  align?: "baseline" | "center";
+  children: React.ReactNode;
 }
 
 function Item({ label, align = "baseline", children }: ItemProps) {
@@ -211,6 +185,11 @@ function Item({ label, align = "baseline", children }: ItemProps) {
       {children}
     </div>
   );
+}
+
+interface FunctionItemProps {
+  functionName: string;
+  functionType: string;
 }
 
 function FunctionItem({ functionName, functionType }: FunctionItemProps) {
@@ -234,6 +213,14 @@ function FunctionItem({ functionName, functionType }: FunctionItemProps) {
       </span>
     </Item>
   );
+}
+
+interface InfoItemProps {
+  label: string;
+  value?: string | null;
+  secondaryValue?: string | null;
+  mono?: boolean;
+  isLoading?: boolean;
 }
 
 function InfoItem({
@@ -263,6 +250,11 @@ function InfoItem({
       ) : null}
     </Item>
   );
+}
+
+interface TimestampItemProps {
+  data: InferencePreview | null;
+  isLoading: boolean;
 }
 
 function TimestampItem({ data, isLoading }: TimestampItemProps) {
