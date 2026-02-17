@@ -207,6 +207,24 @@ function EventStreamLoadError({ onError }: { onError: () => void }) {
   );
 }
 
+type EventStreamContentProps = {
+  sessionId: string;
+  eventsData: EventsData;
+  isNewSession: boolean;
+  optimisticMessages: OptimisticMessage[];
+  onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  onLoaded: () => void;
+  onStatusChange: (status: AutopilotStatus) => void;
+  onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
+  onPendingUserQuestionsChange: (pendingUserQuestions: GatewayEvent[]) => void;
+  onErrorChange: (error: string | null, isRetrying: boolean) => void;
+  onHasReachedStartChange: (hasReachedStart: boolean) => void;
+  configApplyEnabled: boolean;
+  pendingToolCallIds: Set<string>;
+  pendingUserQuestionIds: Set<string>;
+};
+
 // Main content component that renders the event stream with SSE
 function EventStreamContent({
   sessionId,
@@ -224,23 +242,7 @@ function EventStreamContent({
   configApplyEnabled,
   pendingToolCallIds,
   pendingUserQuestionIds,
-}: {
-  sessionId: string;
-  eventsData: EventsData;
-  isNewSession: boolean;
-  optimisticMessages: OptimisticMessage[];
-  onOptimisticMessagesChange: (messages: OptimisticMessage[]) => void;
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
-  onLoaded: () => void;
-  onStatusChange: (status: AutopilotStatus) => void;
-  onPendingToolCallsChange: (pendingToolCalls: GatewayEvent[]) => void;
-  onPendingUserQuestionsChange: (pendingUserQuestions: GatewayEvent[]) => void;
-  onErrorChange: (error: string | null, isRetrying: boolean) => void;
-  onHasReachedStartChange: (hasReachedStart: boolean) => void;
-  configApplyEnabled: boolean;
-  pendingToolCallIds: Set<string>;
-  pendingUserQuestionIds: Set<string>;
-}) {
+}: EventStreamContentProps) {
   const {
     events: initialEvents,
     hasMoreEvents: initialHasMore,
