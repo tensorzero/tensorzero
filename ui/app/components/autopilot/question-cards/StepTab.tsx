@@ -1,7 +1,7 @@
 import { Check } from "lucide-react";
 import { cn } from "~/utils/common";
 
-export type StepState = "completed" | "active" | "upcoming";
+type StepState = "completed" | "active" | "upcoming";
 
 export function StepTab({
   index,

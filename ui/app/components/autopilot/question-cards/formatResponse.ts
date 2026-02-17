@@ -3,7 +3,6 @@ import type {
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 
-/** Format a UserQuestionAnswer for display. */
 export function formatResponse(
   response: UserQuestionAnswer | undefined,
   question: EventPayloadUserQuestion,

@@ -12,9 +12,14 @@ export function MultipleChoiceStep({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-fg-primary text-sm font-medium">
-        {question.question}
-      </span>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-fg-primary text-sm font-medium">
+          {question.question}
+        </span>
+        <span className="text-fg-muted text-xs">
+          {question.multi_select ? "Select all that apply" : "Select one"}
+        </span>
+      </div>
 
       <div className="flex flex-col gap-2">
         {question.options.map((option) => {

@@ -93,7 +93,7 @@ export function useQuestionCardState(
     onSubmit(eventId, responses);
   };
 
-  const renderStepData = (idx: number) => {
+  const getStepData = (idx: number) => {
     const question = payload.questions[idx];
     return {
       question,
@@ -114,6 +114,6 @@ export function useQuestionCardState(
     isStepValid,
     allStepsValid,
     handleSubmit,
-    renderStepData,
+    getStepData,
   };
 }
