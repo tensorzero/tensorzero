@@ -9,6 +9,7 @@ interface UseAutopilotEventStreamOptions {
   sessionId: string;
   initialEvents: GatewayEvent[];
   initialPendingToolCalls: GatewayEvent[];
+  initialPendingUserQuestions: GatewayEvent[];
   initialStatus: AutopilotStatus;
   enabled?: boolean;
 }
@@ -16,6 +17,7 @@ interface UseAutopilotEventStreamOptions {
 interface UseAutopilotEventStreamResult {
   events: GatewayEvent[];
   pendingToolCalls: GatewayEvent[];
+  pendingUserQuestions: GatewayEvent[];
   status: AutopilotStatus;
   isConnected: boolean;
   error: string | null;
@@ -33,6 +35,7 @@ export function useAutopilotEventStream({
   sessionId,
   initialEvents,
   initialPendingToolCalls,
+  initialPendingUserQuestions,
   initialStatus,
   enabled = true,
 }: UseAutopilotEventStreamOptions): UseAutopilotEventStreamResult {
@@ -40,6 +43,9 @@ export function useAutopilotEventStream({
   const [pendingToolCalls, setPendingToolCalls] = useState<GatewayEvent[]>(
     initialPendingToolCalls,
   );
+  const [pendingUserQuestions, setPendingUserQuestions] = useState<
+    GatewayEvent[]
+  >(initialPendingUserQuestions);
   const [status, setStatus] = useState<AutopilotStatus>(initialStatus);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +174,26 @@ export function useAutopilotEventStream({
                     return prev;
                   });
 
+                  // Update pending user questions based on event type
+                  setPendingUserQuestions((prev) => {
+                    if (event.payload.type === "user_questions") {
+                      if (prev.some((e) => e.id === event.id)) {
+                        return prev;
+                      }
+                      return [...prev, event].sort(
+                        (a, b) =>
+                          new Date(a.created_at).getTime() -
+                          new Date(b.created_at).getTime(),
+                      );
+                    }
+                    if (event.payload.type === "user_questions_answers") {
+                      const questionEventId =
+                        event.payload.user_questions_event_id;
+                      return prev.filter((e) => e.id !== questionEventId);
+                    }
+                    return prev;
+                  });
+
                   // Update autopilot status
                   setStatus(streamUpdate.status);
                 } catch {
@@ -239,12 +265,18 @@ export function useAutopilotEventStream({
   useEffect(() => {
     setEvents(initialEvents);
     setPendingToolCalls(initialPendingToolCalls);
+    setPendingUserQuestions(initialPendingUserQuestions);
     setStatus(initialStatus);
     lastEventIdRef.current =
       initialEvents.length > 0
         ? initialEvents[initialEvents.length - 1].id
         : null;
-  }, [initialEvents, initialPendingToolCalls, initialStatus]);
+  }, [
+    initialEvents,
+    initialPendingToolCalls,
+    initialPendingUserQuestions,
+    initialStatus,
+  ]);
 
   // Allow prepending older events (for reverse infinite scroll)
   const prependEvents = useCallback((newEvents: GatewayEvent[]) => {
@@ -266,6 +298,7 @@ export function useAutopilotEventStream({
   return {
     events,
     pendingToolCalls,
+    pendingUserQuestions,
     status,
     isConnected,
     error,
