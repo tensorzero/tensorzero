@@ -42,10 +42,10 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Install Rust
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
