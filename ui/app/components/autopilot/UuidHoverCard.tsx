@@ -22,6 +22,28 @@ interface UuidHoverCardProps {
   children: React.ReactNode;
 }
 
+function getHoverCardWidth(type: ResolvedObject["type"]): string {
+  switch (type) {
+    case "inference":
+      return "w-80";
+    case "episode":
+      return "w-44";
+    case "chat_datapoint":
+    case "json_datapoint":
+      return "w-56";
+    case "model_inference":
+    case "boolean_feedback":
+    case "float_feedback":
+    case "comment_feedback":
+    case "demonstration_feedback":
+      return "w-56";
+    default: {
+      const _exhaustiveCheck: never = type;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
 export function UuidHoverCard({ uuid, obj, children }: UuidHoverCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const url = toResolvedObjectUrl(uuid, obj);
@@ -39,11 +61,7 @@ export function UuidHoverCard({ uuid, obj, children }: UuidHoverCardProps) {
           sideOffset={4}
           className={cn(
             "bg-popover text-popover-foreground z-50 rounded-md border p-3 shadow-md",
-            obj.type === "inference"
-              ? "w-80"
-              : obj.type === "episode"
-                ? "w-44"
-                : "w-56",
+            getHoverCardWidth(obj.type),
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -161,9 +179,19 @@ interface DatapointContentProps {
   obj: Extract<ResolvedObject, { type: "chat_datapoint" | "json_datapoint" }>;
 }
 
+function getDatapointTypeLabel(
+  type: "chat_datapoint" | "json_datapoint",
+): string {
+  switch (type) {
+    case "chat_datapoint":
+      return "Chat Datapoint";
+    case "json_datapoint":
+      return "JSON Datapoint";
+  }
+}
+
 function DatapointContent({ uuid, obj }: DatapointContentProps) {
-  const typeLabel =
-    obj.type === "chat_datapoint" ? "Chat Datapoint" : "JSON Datapoint";
+  const typeLabel = getDatapointTypeLabel(obj.type);
 
   return (
     <div className="flex flex-col gap-2">
