@@ -32,24 +32,6 @@ if [ -z "$AZURE_API_KEY" ]; then
     exit 1
 fi
 
-export AZURE_OPENAI_EASTUS2_API_KEY=$(buildkite-agent secret get AZURE_OPENAI_EASTUS2_API_KEY)
-if [ -z "$AZURE_OPENAI_EASTUS2_API_KEY" ]; then
-    echo "Error: AZURE_OPENAI_EASTUS2_API_KEY is not set"
-    exit 1
-fi
-
-export AZURE_AI_FOUNDRY_API_KEY=$(buildkite-agent secret get AZURE_AI_FOUNDRY_API_KEY)
-if [ -z "$AZURE_AI_FOUNDRY_API_KEY" ]; then
-    echo "Error: AZURE_AI_FOUNDRY_API_KEY is not set"
-    exit 1
-fi
-
-export AZURE_OPENAI_DEPLOYMENT_ID=$(buildkite-agent secret get AZURE_OPENAI_DEPLOYMENT_ID)
-if [ -z "$AZURE_OPENAI_DEPLOYMENT_ID" ]; then
-    echo "Error: AZURE_OPENAI_DEPLOYMENT_ID is not set"
-    exit 1
-fi
-
 export DEEPSEEK_API_KEY=$(buildkite-agent secret get DEEPSEEK_API_KEY)
 if [ -z "$DEEPSEEK_API_KEY" ]; then
     echo "Error: DEEPSEEK_API_KEY is not set"

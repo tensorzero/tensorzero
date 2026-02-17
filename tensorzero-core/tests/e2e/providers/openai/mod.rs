@@ -142,7 +142,7 @@ async fn get_providers() -> E2ETestProviders {
     let input_audio_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
         variant_name: "openai".to_string(),
-        model_name: "gpt-4o-audio-preview".into(),
+        model_name: "gpt-audio-mini".into(),
         model_provider_name: "openai".into(),
         credentials: HashMap::new(),
     }];

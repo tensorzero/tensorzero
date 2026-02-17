@@ -56,40 +56,39 @@ routing = ["openai"]
 type = "openai"
 model_name = "o1-2024-12-17"
 
-[models."gpt-4o-mini-azure"]
+[models."gpt-5-mini-azure"]
 routing = ["azure"]
 
-[models."gpt-4o-mini-azure".providers.azure]
+[models."gpt-5-mini-azure".providers.azure]
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"
+deployment_id = "gpt-5-mini"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
 
-[models."gpt-4o-mini-azure-dynamic"]
+[models."gpt-5-mini-azure-dynamic"]
 routing = ["azure"]
 
-[models."gpt-4o-mini-azure-dynamic".providers.azure]
+[models."gpt-5-mini-azure-dynamic".providers.azure]
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"
+deployment_id = "gpt-5-mini"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
 api_key_location = "dynamic::azure_api_key"
 
-[models."llama-3.3-70b-instruct-azure"]
+[models."kimi-k2.5-azure"]
 routing = ["azure"]
 
-[models."llama-3.3-70b-instruct-azure".providers.azure]
+[models."kimi-k2.5-azure".providers.azure]
 type = "azure"
-deployment_id = "Llama-3.3-70B-Instruct"
-api_key_location = "env::AZURE_AI_FOUNDRY_API_KEY"
-endpoint = "https://t0-gha-resource.services.ai.azure.com"
+deployment_id = "Kimi-K2.5"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
 
-[models."llama-3.3-70b-instruct-azure-dynamic"]
+[models."kimi-k2.5-azure-dynamic"]
 routing = ["azure"]
 
-[models."llama-3.3-70b-instruct-azure-dynamic".providers.azure]
+[models."kimi-k2.5-azure-dynamic".providers.azure]
 type = "azure"
-deployment_id = "Phi-4-mini-instruct"
-endpoint = "https://t0-gha-resource.services.ai.azure.com"
-api_key_location = "dynamic::azure_ai_foundry_api_key"
+deployment_id = "Kimi-K2.5"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
+api_key_location = "dynamic::azure_api_key"
 
 ## Groq
 
@@ -867,15 +866,6 @@ extra_body = [
     { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
 ]
 
-# Azure GPT-5-mini
-[models."gpt-5-mini-azure"]
-routing = ["azure"]
-
-[models."gpt-5-mini-azure".providers.azure]
-type = "azure"
-deployment_id = "gpt-5-mini"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"
-
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
@@ -888,7 +878,7 @@ routing = ["azure"]
 
 [embedding_models.azure-text-embedding-3-small.providers.azure]
 type = "azure"
-endpoint = "https://t0-azure-openai-east.openai.azure.com/"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
 deployment_id = "text-embedding-3-small"
 
 [embedding_models.voyage_3_5_lite_256]
