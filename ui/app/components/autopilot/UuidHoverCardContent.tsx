@@ -164,6 +164,28 @@ function TypeBadgeLink({
   );
 }
 
+function Row({
+  label,
+  align = "baseline",
+  children,
+}: {
+  label: string;
+  align?: "baseline" | "center";
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[4rem_1fr] gap-2",
+        align === "center" ? "items-center" : "items-baseline",
+      )}
+    >
+      <span className="text-muted-foreground text-xs">{label}</span>
+      {children}
+    </div>
+  );
+}
+
 function FunctionRow({
   functionName,
   functionType,
@@ -173,8 +195,7 @@ function FunctionRow({
 }) {
   const iconConfig = getFunctionTypeIcon(functionType);
   return (
-    <div className="grid grid-cols-[4rem_1fr] items-center gap-2">
-      <span className="text-muted-foreground text-xs">Function</span>
+    <Row label="Function" align="center">
       <span
         className="text-foreground inline-flex min-w-0 items-center gap-1 font-mono text-xs"
         title={`${functionName} · ${functionType}`}
@@ -190,7 +211,7 @@ function FunctionRow({
         <span className="truncate">{functionName}</span>
         <span className="text-muted-foreground shrink-0">· {functionType}</span>
       </span>
-    </div>
+    </Row>
   );
 }
 
@@ -206,8 +227,7 @@ function InfoRow({
   mono?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-[4rem_1fr] items-baseline gap-2">
-      <span className="text-muted-foreground text-xs">{label}</span>
+    <Row label={label}>
       <span
         className={cn(
           "text-foreground min-w-0 truncate text-xs",
@@ -220,7 +240,7 @@ function InfoRow({
           <span className="text-muted-foreground"> · {secondaryValue}</span>
         )}
       </span>
-    </div>
+    </Row>
   );
 }
 
@@ -236,8 +256,7 @@ function LazyInfoRow<T>({
   render: (data: T) => string;
 }) {
   return (
-    <div className="grid grid-cols-[4rem_1fr] items-baseline gap-2">
-      <span className="text-muted-foreground text-xs">{label}</span>
+    <Row label={label}>
       {data ? (
         <span className="text-foreground min-w-0 truncate text-xs">
           {render(data)}
@@ -245,7 +264,7 @@ function LazyInfoRow<T>({
       ) : isLoading ? (
         <span className="bg-muted h-4 w-20 animate-pulse rounded" />
       ) : null}
-    </div>
+    </Row>
   );
 }
 
