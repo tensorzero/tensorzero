@@ -37,6 +37,7 @@ lazy_static = { workspace = true }
 tokio = { workspace = true }
 tracing = "0.1.43"
 tracing-subscriber = "0.3.22"
+toml = { workspace = true }
 
 [features]
 # Forward this feature to 'tensorzero-core', so that our types will generate
