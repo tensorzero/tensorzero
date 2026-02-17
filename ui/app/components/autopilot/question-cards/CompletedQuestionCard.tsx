@@ -45,7 +45,10 @@ export function CompletedQuestionCard({
           <span className="inline-flex items-center gap-2 text-sm font-medium">
             Question
             <DotSeparator />
-            {responses ? "Answered" : "Skipped"}
+            {responses &&
+            Object.values(responses).some((r) => r.type !== "skipped")
+              ? "Answered"
+              : "Skipped"}
           </span>
           <span
             className={cn(
