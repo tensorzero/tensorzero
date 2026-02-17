@@ -1,6 +1,10 @@
-//! Contains the main logic for 'relay' mode
-//! When enabled, we redirect requests made to *any* model, and instead forward them to a downstream gateway
-//! The providers in the initial ('edge') gateway are ignored entirely
+//! Contains the main logic for 'relay' mode.
+//! When enabled, we redirect requests made to *any* model, and instead forward them to a downstream gateway.
+//! The providers in the initial ('edge') gateway are ignored entirely.
+//!
+//! Cost tracking: In relay mode, cost always comes from the downstream (central) gateway.
+//! Any cost config on the edge gateway's providers is ignored — the relay passes through
+//! whatever `usage.cost` the downstream gateway computed (or `None` if downstream has no cost config).
 use std::{collections::HashMap, time::Instant};
 
 use futures::StreamExt;
@@ -210,18 +214,11 @@ impl TensorzeroRelay {
         model_name: &str,
         request: &ModelInferenceRequest<'a>,
         clients: &InferenceClients,
-        force_include_raw_response: bool,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let start_time = Instant::now();
 
         let client_inference_params = self
-            .build_client_inference_params(
-                model_name,
-                request,
-                clients,
-                true,
-                force_include_raw_response,
-            )
+            .build_client_inference_params(model_name, request, clients, true)
             .await?;
         let res = self
             .client
@@ -282,18 +279,11 @@ impl TensorzeroRelay {
         model_name: &str,
         request: &ModelInferenceRequest<'a>,
         clients: &InferenceClients,
-        force_include_raw_response: bool,
     ) -> Result<ProviderInferenceResponse, Error> {
         let start_time = Instant::now();
 
         let client_inference_params = self
-            .build_client_inference_params(
-                model_name,
-                request,
-                clients,
-                false,
-                force_include_raw_response,
-            )
+            .build_client_inference_params(model_name, request, clients, false)
             .await?;
 
         let http_data = self
@@ -378,7 +368,6 @@ impl TensorzeroRelay {
         request: &ModelInferenceRequest<'_>,
         clients: &InferenceClients,
         stream: bool,
-        force_include_raw_response: bool,
     ) -> Result<ClientInferenceParams, Error> {
         let input = Input {
             messages: try_join_all(request.messages.clone().into_iter().map(async |m| {
@@ -552,7 +541,7 @@ impl TensorzeroRelay {
             otlp_traces_extra_attributes: HashMap::new(),
             otlp_traces_extra_resources: HashMap::new(),
             include_original_response: false,
-            include_raw_response: clients.include_raw_response || force_include_raw_response,
+            include_raw_response: clients.include_raw_response,
             include_raw_usage: clients.include_raw_usage,
             api_key,
         };

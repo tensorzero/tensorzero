@@ -46,7 +46,6 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::usage::RawResponseEntry;
 
 /// Whether the response was obtained via streaming or non-streaming inference.
 ///
@@ -411,35 +410,6 @@ pub fn compute_cost_from_json(
     }
 
     Some(total_cost)
-}
-
-/// Compute cost from relay raw response entries (non-streaming).
-///
-/// Used by the edge gateway to compute cost locally from the downstream gateway's
-/// raw provider responses. Returns `None` if `cost_config` is empty or no entries are present.
-/// Uses poison semantics: if any entry yields `None` cost, the total is `None`.
-pub fn compute_relay_non_streaming_cost(
-    relay_raw_response: &Option<Vec<RawResponseEntry>>,
-    cost_config: &[CostConfigEntry],
-) -> Option<Cost> {
-    if cost_config.is_empty() {
-        return None;
-    }
-    let entries = relay_raw_response.as_ref()?;
-    if entries.is_empty() {
-        return None;
-    }
-    let mut total = Decimal::ZERO;
-    for entry in entries {
-        let contribution =
-            compute_cost_from_response(&entry.data, cost_config, ResponseMode::NonStreaming)?;
-        total += contribution;
-    }
-    if total < Decimal::ZERO {
-        tracing::warn!("Computed relay cost is negative ({total}). Cost will be unavailable.");
-        return None;
-    }
-    Some(total)
 }
 
 /// Convert a JSON value to a Decimal, handling integer, float, and string representations.
@@ -1521,115 +1491,6 @@ required = true
             cost,
             Some(Decimal::new(42, 4)),
             "direct cost passthrough should be exactly $0.0042"
-        );
-    }
-
-    // ── compute_relay_non_streaming_cost tests ──────────────────────────
-
-    fn make_raw_response_entry(data: &str) -> RawResponseEntry {
-        RawResponseEntry {
-            model_inference_id: None,
-            provider_type: "dummy".to_string(),
-            api_type: crate::inference::types::ApiType::ChatCompletions,
-            data: data.to_string(),
-        }
-    }
-
-    #[test]
-    fn test_relay_cost_basic() {
-        let config = vec![
-            make_entry("/usage/prompt_tokens", Decimal::new(150, 2) / MILLION, true),
-            make_entry(
-                "/usage/completion_tokens",
-                Decimal::new(200, 2) / MILLION,
-                true,
-            ),
-        ];
-
-        let entries = Some(vec![make_raw_response_entry(
-            r#"{"usage":{"prompt_tokens":1000,"completion_tokens":500}}"#,
-        )]);
-
-        let cost = compute_relay_non_streaming_cost(&entries, &config);
-        // 1000 * 1.50 / 1M + 500 * 2.00 / 1M = 0.0015 + 0.001 = 0.0025
-        assert_eq!(
-            cost,
-            Some(Decimal::new(25, 4)),
-            "relay cost should be computed from raw response entries"
-        );
-    }
-
-    #[test]
-    fn test_relay_cost_empty_config() {
-        let entries = Some(vec![make_raw_response_entry(
-            r#"{"usage":{"prompt_tokens":100}}"#,
-        )]);
-        let cost = compute_relay_non_streaming_cost(&entries, &[]);
-        assert_eq!(cost, None, "relay cost should be None with empty config");
-    }
-
-    #[test]
-    fn test_relay_cost_none_entries() {
-        let config = vec![make_entry("/usage/tokens", Decimal::new(15, 7), true)];
-        let cost = compute_relay_non_streaming_cost(&None, &config);
-        assert_eq!(
-            cost, None,
-            "relay cost should be None when relay_raw_response is None"
-        );
-    }
-
-    #[test]
-    fn test_relay_cost_empty_entries() {
-        let config = vec![make_entry("/usage/tokens", Decimal::new(15, 7), true)];
-        let cost = compute_relay_non_streaming_cost(&Some(vec![]), &config);
-        assert_eq!(
-            cost, None,
-            "relay cost should be None when relay_raw_response is empty"
-        );
-    }
-
-    #[test]
-    fn test_relay_cost_multiple_entries_summed() {
-        let config = vec![make_entry(
-            "/usage/prompt_tokens",
-            Decimal::new(150, 2) / MILLION,
-            true,
-        )];
-
-        let entries = Some(vec![
-            make_raw_response_entry(r#"{"usage":{"prompt_tokens":1000}}"#),
-            make_raw_response_entry(r#"{"usage":{"prompt_tokens":2000}}"#),
-        ]);
-
-        let cost = compute_relay_non_streaming_cost(&entries, &config);
-        // entry 1: 1000 * 1.50 / 1M = 0.0015
-        // entry 2: 2000 * 1.50 / 1M = 0.003
-        // total: 0.0045
-        assert_eq!(
-            cost,
-            Some(Decimal::new(45, 4)),
-            "relay cost should sum across multiple raw response entries"
-        );
-    }
-
-    #[test]
-    fn test_relay_cost_poison_on_any_entry() {
-        let config = vec![make_entry(
-            "/usage/prompt_tokens",
-            Decimal::new(150, 2) / MILLION,
-            true,
-        )];
-
-        // First entry has the required field, second does not
-        let entries = Some(vec![
-            make_raw_response_entry(r#"{"usage":{"prompt_tokens":1000}}"#),
-            make_raw_response_entry(r#"{"usage":{}}"#),
-        ]);
-
-        let cost = compute_relay_non_streaming_cost(&entries, &config);
-        assert_eq!(
-            cost, None,
-            "relay cost should be None when any entry fails cost computation (poison semantics)"
         );
     }
 }

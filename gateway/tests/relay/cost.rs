@@ -1,9 +1,8 @@
 //! Tests for cost computation and propagation with relay passthrough.
 //!
 //! These tests validate that `usage.cost` is correctly handled in relay mode:
-//! - When the relay has no local cost config, cost from downstream is forwarded unchanged.
-//! - When the relay has a local cost config, it computes cost from the raw provider
-//!   response and overwrites any downstream cost.
+//! - Cost always comes from the downstream (central) gateway.
+//! - Any local cost config on the relay's providers is ignored.
 
 use crate::common::relay::start_relay_test_environment;
 use futures::StreamExt;
@@ -598,12 +597,11 @@ model_name = "good"
 }
 
 // ============================================================================
-// Local Cost Config Tests (relay computes cost from raw response)
+// Local Cost Config Tests (relay ignores local cost config)
 // ============================================================================
 
-/// Test that cost IS computed locally when cost config is on the relay but not on downstream.
-/// The relay forces `include_raw_response` on the downstream request and computes cost
-/// from the provider's raw response using its local cost config.
+/// Test that when relay has cost config but downstream doesn't, no cost is returned.
+/// The relay ignores its local cost config and trusts downstream, which has no cost.
 #[tokio::test]
 async fn test_relay_cost_config_on_relay_only_non_streaming() {
     // Downstream has NO cost config
@@ -616,7 +614,7 @@ type = "dummy"
 model_name = "good"
 "#;
 
-    // Relay HAS cost config — it computes cost locally from the raw provider response
+    // Relay HAS cost config — but it should be ignored in relay mode
     let relay_config = r#"
 [models.cost_model]
 routing = ["relay_dummy_with_cost"]
@@ -662,22 +660,14 @@ cost = [
         .get("usage")
         .unwrap_or_else(|| panic!("Response should have usage field. Body: {body}"));
 
-    // Cost should be present — relay computes it locally from the raw provider response
-    let cost = usage
-        .get("cost")
-        .unwrap_or_else(|| {
-            panic!("usage should have cost when relay has local cost config. Body: {body}")
-        })
-        .as_f64()
-        .expect("cost should be a number");
-
+    // Cost should be absent — downstream has no cost config, and relay's local config is ignored
     assert!(
-        (cost - 0.000035).abs() < 1e-10,
-        "Expected cost ~0.000035 from relay's local cost config, got {cost}"
+        usage.get("cost").is_none(),
+        "usage should not have cost when downstream has no cost config (relay's local config is ignored). Body: {body}"
     );
 }
 
-/// Same as above but streaming — relay computes cost locally from each chunk's raw response.
+/// Same as above but streaming — relay ignores local cost config, downstream has no cost.
 #[tokio::test]
 async fn test_relay_cost_config_on_relay_only_streaming() {
     let downstream_config = r#"
@@ -689,6 +679,7 @@ type = "dummy"
 model_name = "good"
 "#;
 
+    // Relay HAS cost config — but it should be ignored in relay mode
     let relay_config = r#"
 [models.cost_model]
 routing = ["relay_dummy_with_cost"]
@@ -724,8 +715,6 @@ cost = [
         .await
         .unwrap();
 
-    let mut found_cost = false;
-
     while let Some(event) = stream.next().await {
         let event = event.unwrap();
         let Event::Message(message) = event else {
@@ -737,30 +726,22 @@ cost = [
 
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
-        if let Some(usage) = chunk.get("usage")
-            && let Some(cost) = usage.get("cost")
-        {
-            found_cost = true;
-            let cost = cost.as_f64().expect("cost should be a number");
+        // Cost should not be present in any chunk — downstream has no cost config
+        if let Some(usage) = chunk.get("usage") {
             assert!(
-                cost > 0.0,
-                "Streaming cost from relay's local cost config should be positive, got {cost}"
+                usage.get("cost").is_none(),
+                "Streaming chunk should not have cost when downstream has no cost config (relay's local config is ignored). Chunk: {chunk}"
             );
         }
     }
-
-    assert!(
-        found_cost,
-        "Streaming relay response should include cost when relay has local cost config"
-    );
 }
 
 /// Test that when both relay and downstream have cost config with different rates,
-/// the relay's local cost overwrites the downstream's cost.
+/// the downstream's cost is used (relay's local cost config is ignored).
 #[tokio::test]
-async fn test_relay_cost_local_overwrites_downstream_non_streaming() {
+async fn test_relay_cost_downstream_used_over_local_non_streaming() {
     // Downstream has cost config with rates 1.50 / 2.00
-    // Downstream would compute: 10 * 1.50 / 1_000_000 + 10 * 2.00 / 1_000_000 = 0.000035
+    // Downstream computes: 10 * 1.50 / 1_000_000 + 10 * 2.00 / 1_000_000 = 0.000035
     let downstream_config = r#"
 [models.cost_model]
 routing = ["dummy_downstream"]
@@ -774,8 +755,7 @@ cost = [
 ]
 "#;
 
-    // Relay has DIFFERENT (much higher) cost config — relay overwrites downstream's cost
-    // Relay computes: 10 * 100 / 1M + 10 * 200 / 1M = 0.001 + 0.002 = 0.003
+    // Relay has DIFFERENT (much higher) cost config — but it should be ignored
     let relay_config = r#"
 [models.cost_model]
 routing = ["relay_dummy"]
@@ -821,16 +801,16 @@ cost = [
         .as_f64()
         .expect("cost should be present");
 
-    // Should match relay's rates (0.003), NOT downstream's rates (0.000035)
+    // Should match downstream's rates (0.000035), NOT relay's rates (0.003)
     assert!(
-        (cost - 0.003).abs() < 1e-10,
-        "Cost should reflect relay's local rates (0.003), not downstream's rates (0.000035). Got: {cost}"
+        (cost - 0.000035).abs() < 1e-10,
+        "Cost should reflect downstream's rates (0.000035), not relay's local rates (0.003). Got: {cost}"
     );
 }
 
-/// Same as above but streaming — relay's local cost should overwrite downstream's.
+/// Same as above but streaming — downstream's cost is used, relay's local config is ignored.
 #[tokio::test]
-async fn test_relay_cost_local_overwrites_downstream_streaming() {
+async fn test_relay_cost_downstream_used_over_local_streaming() {
     let downstream_config = r#"
 [models.cost_model]
 routing = ["dummy_downstream"]
@@ -844,7 +824,7 @@ cost = [
 ]
 "#;
 
-    // Relay has higher rates — these should be used instead of downstream's
+    // Relay has higher rates — but they should be ignored
     let relay_config = r#"
 [models.cost_model]
 routing = ["relay_dummy"]
@@ -898,18 +878,17 @@ cost = [
         {
             found_cost = true;
             let cost = cost.as_f64().expect("cost should be a number");
-            // Streaming cost is per-chunk, so we just verify it's positive
-            // (the relay is applying its local rates, not downstream's)
+            // Streaming cost comes from downstream — verify it's positive
             assert!(
                 cost > 0.0,
-                "Streaming cost from relay's local rates should be positive. Got: {cost}"
+                "Streaming cost from downstream should be positive. Got: {cost}"
             );
         }
     }
 
     assert!(
         found_cost,
-        "Streaming response should include cost from relay's local cost config"
+        "Streaming response should include cost from downstream's cost config"
     );
 }
 
