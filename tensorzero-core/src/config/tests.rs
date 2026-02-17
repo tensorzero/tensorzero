@@ -334,7 +334,7 @@ async fn test_config_from_toml_table_missing_models() {
             .await
             .unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "Model name 'gpt-4.1-mini' not found in model table".to_string()
+            message: "Model name 'gpt-5-mini' not found in model table".to_string()
         })
     );
 }
