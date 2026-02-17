@@ -380,6 +380,7 @@ dependencies = [
  "tensorzero-optimizers",
  "thiserror 2.0.18",
  "tokio",
+ "ts-rs",
  "uuid",
 ]
 
@@ -6328,6 +6329,7 @@ dependencies = [
  "tensorzero-optimizers",
  "tokio",
  "tokio-stream",
+ "toml 0.9.11+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
  "url",

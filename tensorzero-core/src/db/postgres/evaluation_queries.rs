@@ -556,6 +556,7 @@ fn build_get_evaluation_results_query(
     offset: u32,
 ) -> QueryBuilder<sqlx::Postgres> {
     let inference_table = function_type.postgres_table_name();
+    let inference_data_table = function_type.postgres_inference_data_table_name();
     let datapoint_table = function_type.postgres_datapoint_table_name();
     let run_id_strings: Vec<String> = evaluation_run_ids.iter().map(|id| id.to_string()).collect();
     let metric_names_owned: Vec<String> = metric_names.to_vec();
@@ -610,7 +611,12 @@ fn build_get_evaluation_results_query(
     qb.push(" WHERE id IN (SELECT inference_id FROM all_inference_ids) AND function_name = ");
     qb.push_bind(function_name.to_string());
 
-    // CTE 5: filtered_feedback - latest feedback per (target_id, metric_name) from both boolean and float
+    // CTE 5: filtered_inference_data - inference data (input/output) from the split data table
+    qb.push("), filtered_inference_data AS (SELECT * FROM ");
+    qb.push(inference_data_table);
+    qb.push(" WHERE id IN (SELECT inference_id FROM all_inference_ids)");
+
+    // CTE 6: filtered_feedback - latest feedback per (target_id, metric_name) from both boolean and float
     qb.push(
         r"),
         filtered_feedback AS (
@@ -653,7 +659,7 @@ fn build_get_evaluation_results_query(
             filtered_dp.id as datapoint_id,
             filtered_dp.name as name,
             filtered_dp.output::TEXT as reference_output,
-            filtered_inference.output::TEXT as generated_output,
+            filtered_inference_data.output::TEXT as generated_output,
             (filtered_inference.tags->>'tensorzero::evaluation_run_id')::UUID as evaluation_run_id,
             filtered_inference.tags->>'tensorzero::dataset_name' as dataset_name,
             filtered_feedback.evaluator_inference_id as evaluator_inference_id,
@@ -668,6 +674,9 @@ fn build_get_evaluation_results_query(
         FROM filtered_dp
         INNER JOIN filtered_inference
             ON (filtered_inference.tags->>'tensorzero::datapoint_id')::UUID = filtered_dp.id
+        LEFT JOIN filtered_inference_data
+            ON filtered_inference_data.id = filtered_inference.id
+            AND filtered_inference_data.created_at = filtered_inference.created_at
         LEFT JOIN filtered_feedback
             ON filtered_feedback.target_id = filtered_inference.id
         ORDER BY datapoint_id DESC, metric_name DESC

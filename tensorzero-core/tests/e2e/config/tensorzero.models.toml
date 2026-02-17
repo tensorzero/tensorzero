@@ -25,12 +25,12 @@ extra_body = [
     { pointer = "/frequency_penalty", value = 1.42 },
 ]
 
-[models."gpt-oss-20b-fireworks"]
+[models."kimi-k2p5-fireworks"]
 routing = ["fireworks"]
 
-[models."gpt-oss-20b-fireworks".providers.fireworks]
+[models."kimi-k2p5-fireworks".providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/gpt-oss-20b"
+model_name = "accounts/fireworks/models/kimi-k2p5"
 parse_think_blocks = false
 
 [models."gpt-oss-20b-vllm"]
@@ -376,12 +376,12 @@ region = "us-east-1"
 [models.qwen2p5-72b-instruct]
 routing = ["fireworks"]
 
-[models."deepseek-r1"]
+[models."kimi-k2p5-fireworks-reasoning"]
 routing = ["fireworks"]
 
-[models."deepseek-r1".providers.fireworks]
+[models."kimi-k2p5-fireworks-reasoning".providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/deepseek-r1-0528"
+model_name = "accounts/fireworks/models/kimi-k2p5"
 
 [models.qwen2p5-72b-instruct.providers.fireworks]
 type = "fireworks"
@@ -416,29 +416,29 @@ routing = ["together"]
 type = "together"
 model_name = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
 
-[models."Qwen/Qwen2.5-1.5B-Instruct"]
+[models."Qwen/Qwen3-1.7B"]
 routing = ["sglang"]
 
-[models."Qwen/Qwen2.5-1.5B-Instruct".providers.sglang]
+[models."Qwen/Qwen3-1.7B".providers.sglang]
 type = "sglang"
-model_name = "Qwen/Qwen2.5-1.5B-Instruct"
-api_base = "https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/v1/"
+model_name = "Qwen/Qwen3-1.7B"
+api_base = "https://tensorzero--sglang-qwen3-inference-sglang-inference.modal.run/v1/"
 
-[models."qwen2.5-0.5b-instruct-vllm"]
+[models."qwen3-1.7b-vllm"]
 routing = ["vllm"]
 
-[models."qwen2.5-0.5b-instruct-vllm".providers.vllm]
+[models."qwen3-1.7b-vllm".providers.vllm]
 type = "vllm"
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
+model_name = "Qwen/Qwen3-1.7B"
+api_base = "https://tensorzero--vllm-qwen3-inference-vllm-inference.modal.run/v1/"
 
-[models."qwen2.5-0.5b-instruct-vllm-dynamic"]
+[models."qwen3-1.7b-vllm-dynamic"]
 routing = ["vllm"]
 
-[models."qwen2.5-0.5b-instruct-vllm-dynamic".providers.vllm]
+[models."qwen3-1.7b-vllm-dynamic".providers.vllm]
 type = "vllm"
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-api_base = "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/"
+model_name = "Qwen/Qwen3-1.7B"
+api_base = "https://tensorzero--vllm-qwen3-inference-vllm-inference.modal.run/v1/"
 
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]
@@ -454,6 +454,14 @@ routing = ["mistral"]
 type = "mistral"
 model_name = "open-mistral-nemo-2407"
 api_key_location = "dynamic::mistral_api_key"
+
+[models."magistral-small-latest"]
+routing = ["mistral"]
+
+[models."magistral-small-latest".providers.mistral]
+type = "mistral"
+model_name = "magistral-small-latest"
+prompt_mode = "reasoning"
 
 [models.o4-mini]
 routing = ["openai"]

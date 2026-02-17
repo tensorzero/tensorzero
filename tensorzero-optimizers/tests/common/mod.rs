@@ -15,6 +15,7 @@ use tensorzero_core::{
     config::{Config, ConfigFileGlob, provider_types::ProviderTypesConfig},
     db::{
         clickhouse::{ClickHouseConnectionInfo, test_helpers::CLICKHOUSE_URL},
+        delegating_connection::DelegatingDatabaseQueries,
         postgres::PostgresConnectionInfo,
     },
     endpoints::inference::InferenceClients,
@@ -109,13 +110,14 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .unwrap()
         .into_config_without_writing_for_tests(),
     );
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
     let job_handle = optimizer_info
         .launch(
             &client,
             test_examples,
             val_examples,
             &credentials,
-            &clickhouse,
+            &db,
             config.clone(),
         )
         .await

@@ -310,7 +310,7 @@ async fn run() -> Result<(), ExitCode> {
     // Bind to the socket address specified in the CLI, config, or default to 0.0.0.0:3000
     if args.bind_address.is_some() && config.gateway.bind_address.is_some() {
         tracing::error!(
-            "You must not specify both `--bind-address` and `gateway.bind_address` in the config file."
+            "You must only specify one of `--bind-address` (CLI), `TENSORZERO_GATEWAY_BIND_ADDRESS` (environment variable), or `gateway.bind_address` (configuration)."
         );
         return Err(ExitCode::FAILURE);
     }

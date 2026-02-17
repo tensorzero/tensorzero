@@ -3083,7 +3083,7 @@ mod tests {
         // Create a simple function config
         let function = Arc::new(FunctionConfig::Chat(FunctionConfigChat::default()));
         let config = Arc::new(Config::default());
-        let clickhouse = ClickHouseConnectionInfo::new_fake();
+        let clickhouse = ClickHouseConnectionInfo::new_disabled();
         let deferred_tasks = TaskTracker::new();
 
         // Create a simple stream with one chunk
@@ -3182,7 +3182,7 @@ mod tests {
 
         let function = Arc::new(FunctionConfig::Chat(FunctionConfigChat::default()));
         let config = Arc::new(Config::default());
-        let clickhouse = ClickHouseConnectionInfo::new_fake();
+        let clickhouse = ClickHouseConnectionInfo::new_disabled();
         let deferred_tasks = TaskTracker::new();
 
         // Create a simple stream with one chunk
@@ -3264,7 +3264,7 @@ mod tests {
 
         let function = Arc::new(FunctionConfig::Chat(FunctionConfigChat::default()));
         let config = Arc::new(Config::default());
-        let clickhouse = ClickHouseConnectionInfo::new_fake();
+        let clickhouse = ClickHouseConnectionInfo::new_disabled();
         let deferred_tasks = TaskTracker::new();
 
         // Create a simple stream with one chunk

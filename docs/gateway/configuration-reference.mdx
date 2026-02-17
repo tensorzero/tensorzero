@@ -1518,6 +1518,23 @@ model_name = "open-mistral-nemo-2407"
 # ...
 ```
 
+##### `prompt_mode`
+
+- **Type:** string
+- **Required:** no
+
+Controls reasoning behavior for Mistral's Magistral reasoning models.
+Set to `"reasoning"` to enable reasoning output with models like `magistral-small-latest` and `magistral-medium-latest`.
+
+```toml title="tensorzero.toml"
+[models.magistral_small.providers.mistral]
+# ...
+type = "mistral"
+model_name = "magistral-small-latest"
+prompt_mode = "reasoning"
+# ...
+```
+
 </Accordion>
 
 <Accordion title='type: "openai"'>
