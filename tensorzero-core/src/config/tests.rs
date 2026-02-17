@@ -639,14 +639,14 @@ async fn test_config_from_toml_table_extra_variables_metrics() {
 #[tokio::test]
 async fn test_config_validate_model_empty_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec![]);
+    config["models"]["gpt-5-mini"]["routing"] = toml::Value::Array(vec![]);
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err();
     assert!(
         error
             .to_string()
-            .contains("`models.gpt-4.1-mini`: `routing` must not be empty")
+            .contains("`models.gpt-5-mini`: `routing` must not be empty")
     );
 }
 
@@ -654,20 +654,20 @@ async fn test_config_validate_model_empty_providers() {
 #[tokio::test]
 async fn test_config_validate_model_duplicate_routing_entry() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-4.1-mini"]["routing"] =
+    config["models"]["gpt-5-mini"]["routing"] =
         toml::Value::Array(vec!["openai".into(), "openai".into()]);
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err().to_string();
-    assert!(error.contains("`models.gpt-4.1-mini.routing`: duplicate entry `openai`"));
+    assert!(error.contains("`models.gpt-5-mini.routing`: duplicate entry `openai`"));
 }
 
 /// Ensure that the config validation fails when a routing entry does not exist in providers
 #[tokio::test]
 async fn test_config_validate_model_routing_entry_not_in_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
+    config["models"]["gpt-5-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-5-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
 }
 
 /// Ensure that the config loading fails when the system schema does not exist
@@ -1132,8 +1132,8 @@ async fn test_config_validate_model_name_tensorzero_prefix() {
     let old_model_entry = config["models"]
         .as_table_mut()
         .unwrap()
-        .remove("gpt-4.1-mini")
-        .expect("Did not find model `gpt-4.1-mini`");
+        .remove("gpt-5-mini")
+        .expect("Did not find model `gpt-5-mini`");
     config["models"]
         .as_table_mut()
         .unwrap()
@@ -1259,18 +1259,18 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
     let mut config = get_sample_valid_config();
 
     // Rename an existing provider to start with `tensorzero::`
-    let old_openai_provider = config["models"]["gpt-4.1-mini"]["providers"]
+    let old_openai_provider = config["models"]["gpt-5-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .remove("openai")
-        .expect("Did not find provider `openai` under `gpt-4.1-mini`");
-    config["models"]["gpt-4.1-mini"]["providers"]
+        .expect("Did not find provider `openai` under `gpt-5-mini`");
+    config["models"]["gpt-5-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .insert("tensorzero::openai".to_string(), old_openai_provider);
 
     // Update the routing entry to match the new provider name
-    let routing = config["models"]["gpt-4.1-mini"]["routing"]
+    let routing = config["models"]["gpt-5-mini"]["routing"]
         .as_array_mut()
         .expect("Expected routing to be an array");
     for entry in routing.iter_mut() {
@@ -1281,7 +1281,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
 
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-5-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
 }
 
 /// Ensure that get_templates returns the correct templates
@@ -1559,7 +1559,7 @@ async fn test_config_load_shorthand_models_only() {
         [functions.generate_draft.variants.openai_promptA]
         type = "chat_completion"
         weight = 0.9
-        model = "openai::gpt-4.1-mini"
+        model = "openai::gpt-5-mini"
         "#
             .as_bytes(),
         )
