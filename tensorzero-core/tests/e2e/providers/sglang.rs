@@ -9,7 +9,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "sglang".to_string(),
-        model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
+        model_name: "Qwen/Qwen3-1.7B".to_string(),
         model_provider_name: "sglang".to_string(),
         credentials: HashMap::new(),
     }];
@@ -17,7 +17,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "sglang-extra-body".to_string(),
-        model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
+        model_name: "Qwen/Qwen3-1.7B".to_string(),
         model_provider_name: "sglang".to_string(),
         credentials: HashMap::new(),
     }];
@@ -26,14 +26,14 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "sglang".to_string(),
-            model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
+            model_name: "Qwen/Qwen3-1.7B".to_string(),
             model_provider_name: "sglang".to_string(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "sglang-strict".to_string(),
-            model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
+            model_name: "Qwen/Qwen3-1.7B".to_string(),
             model_provider_name: "sglang".to_string(),
             credentials: HashMap::new(),
         },
@@ -42,7 +42,15 @@ async fn get_providers() -> E2ETestProviders {
     let tool_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "sglang".to_string(),
-        model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
+        model_name: "Qwen/Qwen3-1.7B".to_string(),
+        model_provider_name: "sglang".to_string(),
+        credentials: HashMap::new(),
+    }];
+
+    let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "sglang-reasoning".to_string(),
+        model_name: "Qwen/Qwen3-1.7B".to_string(),
         model_provider_name: "sglang".to_string(),
         credentials: HashMap::new(),
     }];
@@ -50,7 +58,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "sglang_json_mode_off".to_string(),
-        model_name: "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
+        model_name: "Qwen/Qwen3-1.7B".to_string(),
         model_provider_name: "sglang".to_string(),
         credentials: HashMap::new(),
     }];
@@ -58,13 +66,10 @@ async fn get_providers() -> E2ETestProviders {
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "sglang".to_string(),
         model_info: HashMap::from([
-            (
-                "model_name".to_string(),
-                "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
-            ),
+            ("model_name".to_string(), "Qwen/Qwen3-1.7B".to_string()),
             (
                 "api_base".to_string(),
-                "https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/v1/"
+                "https://tensorzero--sglang-qwen3-inference-sglang-inference.modal.run/v1/"
                     .to_string(),
             ),
         ]),
@@ -75,8 +80,8 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers: vec![],
-        reasoning_inference: vec![],
-        reasoning_usage_inference: vec![],
+        reasoning_inference: reasoning_providers.clone(),
+        reasoning_usage_inference: reasoning_providers,
         cache_input_tokens_inference: standard_providers.clone(),
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),

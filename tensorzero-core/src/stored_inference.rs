@@ -1614,4 +1614,266 @@ mod tests {
             CreateDatapointRequest::Json(_) => panic!("Expected Chat datapoint"),
         }
     }
+
+    // ── Serde roundtrip tests with None data fields ──────────────────────
+
+    #[test]
+    fn test_chat_inference_serde_roundtrip_with_none_data() {
+        let mut inference = create_test_chat_inference();
+        inference.input = None;
+        inference.output = None;
+        inference.extra_body = None;
+        inference.inference_params = None;
+
+        let json = serde_json::to_value(&inference).unwrap();
+
+        assert!(
+            !json.as_object().unwrap().contains_key("input"),
+            "None input should be omitted from serialized JSON"
+        );
+        assert!(
+            !json.as_object().unwrap().contains_key("output"),
+            "None output should be omitted from serialized JSON"
+        );
+
+        let deserialized: StoredChatInference =
+            serde_json::from_value(json).expect("should deserialize back");
+        assert_eq!(
+            deserialized.input, None,
+            "Deserialized input should be None"
+        );
+        assert_eq!(
+            deserialized.output, None,
+            "Deserialized output should be None"
+        );
+        assert_eq!(
+            deserialized.extra_body, None,
+            "Deserialized extra_body should be None"
+        );
+        assert_eq!(
+            deserialized.inference_params, None,
+            "Deserialized inference_params should be None"
+        );
+    }
+
+    #[test]
+    fn test_json_inference_serde_roundtrip_with_none_data() {
+        let mut inference = create_test_json_inference();
+        inference.input = None;
+        inference.output = None;
+        inference.output_schema = None;
+        inference.extra_body = None;
+        inference.inference_params = None;
+
+        let json = serde_json::to_value(&inference).unwrap();
+
+        assert!(
+            !json.as_object().unwrap().contains_key("input"),
+            "None input should be omitted from serialized JSON"
+        );
+        assert!(
+            !json.as_object().unwrap().contains_key("output"),
+            "None output should be omitted from serialized JSON"
+        );
+        assert!(
+            !json.as_object().unwrap().contains_key("output_schema"),
+            "None output_schema should be omitted from serialized JSON"
+        );
+
+        let deserialized: StoredJsonInference =
+            serde_json::from_value(json).expect("should deserialize back");
+        assert_eq!(
+            deserialized.input, None,
+            "Deserialized input should be None"
+        );
+        assert_eq!(
+            deserialized.output, None,
+            "Deserialized output should be None"
+        );
+        assert_eq!(
+            deserialized.output_schema, None,
+            "Deserialized output_schema should be None"
+        );
+        assert_eq!(
+            deserialized.extra_body, None,
+            "Deserialized extra_body should be None"
+        );
+        assert_eq!(
+            deserialized.inference_params, None,
+            "Deserialized inference_params should be None"
+        );
+    }
+
+    // ── into_datapoint_insert error tests for missing input ──────────────
+
+    #[test]
+    fn test_chat_inference_to_datapoint_errors_on_missing_input() {
+        let mut chat_inference = create_test_chat_inference();
+        chat_inference.input = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Chat(chat_inference);
+        let result =
+            inference.into_datapoint_insert("ds", &InferenceOutputSource::Inference, &config);
+        assert!(
+            result.is_err(),
+            "Should error when input is missing regardless of output_source"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("missing input"),
+            "Error should mention missing input, got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn test_json_inference_to_datapoint_errors_on_missing_input() {
+        let mut json_inference = create_test_json_inference();
+        json_inference.input = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Json(json_inference);
+        let result =
+            inference.into_datapoint_insert("ds", &InferenceOutputSource::Inference, &config);
+        assert!(
+            result.is_err(),
+            "Should error when input is missing regardless of output_source"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("missing input"),
+            "Error should mention missing input, got: {err_msg}"
+        );
+    }
+
+    // ── into_datapoint_insert error test for missing output_schema (JSON only) ──
+
+    #[test]
+    fn test_json_inference_to_datapoint_errors_on_missing_output_schema() {
+        let mut json_inference = create_test_json_inference();
+        json_inference.output_schema = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Json(json_inference);
+        let result =
+            inference.into_datapoint_insert("ds", &InferenceOutputSource::Inference, &config);
+        assert!(
+            result.is_err(),
+            "Should error when output_schema is missing"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("missing output_schema"),
+            "Error should mention missing output_schema, got: {err_msg}"
+        );
+    }
+
+    // ── into_datapoint_insert success with output_source=None and missing data ──
+
+    #[test]
+    fn test_chat_inference_to_datapoint_succeeds_with_none_output_source_and_none_data() {
+        let mut chat_inference = create_test_chat_inference();
+        chat_inference.output = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Chat(chat_inference);
+        let datapoint = inference
+            .into_datapoint_insert("ds", &InferenceOutputSource::None, &config)
+            .expect("Should succeed when output_source is None even with missing output");
+
+        match datapoint {
+            StoredDatapoint::Chat(dp) => {
+                assert_eq!(
+                    dp.output, None,
+                    "Output should be None when output_source is None"
+                );
+            }
+            StoredDatapoint::Json(_) => panic!("Expected Chat datapoint, got Json"),
+        }
+    }
+
+    #[test]
+    fn test_json_inference_to_datapoint_succeeds_with_none_output_source_and_none_data() {
+        let mut json_inference = create_test_json_inference();
+        json_inference.output = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Json(json_inference);
+        let datapoint = inference
+            .into_datapoint_insert("ds", &InferenceOutputSource::None, &config)
+            .expect("Should succeed when output_source is None even with missing output");
+
+        match datapoint {
+            StoredDatapoint::Json(dp) => {
+                assert_eq!(
+                    dp.output, None,
+                    "Output should be None when output_source is None"
+                );
+            }
+            StoredDatapoint::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+        }
+    }
+
+    // ── owned_simple_info propagates None correctly ──────────────────────
+
+    #[test]
+    fn test_owned_simple_info_chat_with_none_data() {
+        let chat_db = StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            input: None,
+            output: None,
+            dispreferred_outputs: vec![],
+            timestamp: Utc::now(),
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            tool_params: None,
+            tags: HashMap::new(),
+            extra_body: None,
+            inference_params: None,
+            processing_time_ms: None,
+            ttft_ms: None,
+        });
+
+        let info = chat_db.owned_simple_info();
+        assert_eq!(info.input, None, "input should be None");
+        assert_eq!(info.output, None, "output should be None");
+        assert_eq!(info.stored_output, None, "stored_output should be None");
+        assert_eq!(
+            info.function_type,
+            FunctionType::Chat,
+            "function_type should be Chat"
+        );
+    }
+
+    #[test]
+    fn test_owned_simple_info_json_with_none_data() {
+        let json_db = StoredInferenceDatabase::Json(StoredJsonInference {
+            function_name: "json_function".to_string(),
+            variant_name: "json_variant".to_string(),
+            input: None,
+            output: None,
+            dispreferred_outputs: vec![],
+            timestamp: Utc::now(),
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            output_schema: None,
+            tags: HashMap::new(),
+            extra_body: None,
+            inference_params: None,
+            processing_time_ms: None,
+            ttft_ms: None,
+        });
+
+        let info = json_db.owned_simple_info();
+        assert_eq!(info.input, None, "input should be None");
+        assert_eq!(info.output, None, "output should be None");
+        assert_eq!(info.stored_output, None, "stored_output should be None");
+        assert_eq!(info.output_schema, None, "output_schema should be None");
+        assert_eq!(
+            info.function_type,
+            FunctionType::Json,
+            "function_type should be Json"
+        );
+    }
 }

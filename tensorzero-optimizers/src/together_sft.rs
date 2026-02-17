@@ -15,7 +15,7 @@ use tensorzero_core::{
         Config, TimeoutsConfig,
         provider_types::{ProviderTypesConfig, TogetherSFTConfig as TogetherProviderSFTConfig},
     },
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
@@ -136,7 +136,7 @@ impl Optimizer for TogetherSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Get optional provider-level configuration
@@ -354,6 +354,7 @@ impl JobHandle for TogetherSFTJobHandle {
                         providers: HashMap::from([(model_name.into(), model_provider)]),
                         timeouts: TimeoutsConfig::default(),
                         skip_relay: None,
+                        namespace: None,
                     }),
                 })
             }

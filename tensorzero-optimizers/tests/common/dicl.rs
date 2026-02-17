@@ -18,6 +18,7 @@ use tensorzero_core::{
         CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
         select_json_inference_clickhouse, select_model_inferences_clickhouse,
     },
+    db::delegating_connection::DelegatingDatabaseQueries,
     http::TensorzeroHttpClient,
     inference::types::{
         Arguments, ContentBlockChatOutput, ContentBlockChunk, FunctionType, JsonInferenceOutput,
@@ -117,13 +118,14 @@ pub async fn test_dicl_optimization_chat() {
         .into_config_without_writing_for_tests(),
     );
 
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
     let job_handle = optimizer_info
         .launch(
             &client,
             test_examples,
             val_examples,
             &credentials,
-            &clickhouse,
+            &db,
             config.clone(),
         )
         .await
@@ -403,13 +405,14 @@ pub async fn test_dicl_optimization_json() {
         .into_config_without_writing_for_tests(),
     );
 
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
     let job_handle = optimizer_info
         .launch(
             &client,
             test_examples,
             val_examples,
             &credentials,
-            &clickhouse,
+            &db,
             config.clone(),
         )
         .await
@@ -664,6 +667,7 @@ fn create_inference_params(
         otlp_traces_extra_resources: Default::default(),
         api_key: None,
         include_raw_usage: false,
+        include_aggregated_response: false,
     }
 }
 

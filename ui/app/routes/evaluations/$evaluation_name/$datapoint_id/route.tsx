@@ -26,6 +26,7 @@ import {
 import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
 import { Suspense } from "react";
 import { InputElement } from "~/components/input_output/InputElement";
+import { EmptyMessage } from "~/components/input_output/ContentBlockElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
@@ -374,7 +375,11 @@ function MainContent({
     <SectionsGroup>
       <SectionLayout>
         <SectionHeader heading="Input" />
-        <InputElement input={consolidatedEvaluationResults[0].input} />
+        {consolidatedEvaluationResults[0].input ? (
+          <InputElement input={consolidatedEvaluationResults[0].input} />
+        ) : (
+          <EmptyMessage message="No input" />
+        )}
       </SectionLayout>
       <OutputsSection
         outputsToDisplay={outputsToDisplay}
@@ -669,7 +674,7 @@ type OutputsSectionProps = {
   outputsToDisplay: Array<{
     id: string;
     variant_name: string;
-    output: ContentBlockChatOutput[] | JsonInferenceOutput;
+    output?: ContentBlockChatOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
     inferenceId: string | null;
     episodeId: string | null;
@@ -739,7 +744,9 @@ function OutputsSection({
             </div>
 
             <section className="row-start-2">
-              {Array.isArray(result.output) ? (
+              {result.output === undefined ? (
+                <EmptyMessage message="No output" />
+              ) : Array.isArray(result.output) ? (
                 <ChatOutputElement output={result.output} />
               ) : (
                 <JsonOutputElement output={result.output} />

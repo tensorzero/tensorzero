@@ -3,13 +3,14 @@
 use crate::endpoints::inference::{InferenceIds, InferenceParams};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
+use crate::inference::types::ContentBlockChatOutput;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
     ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
-    Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, RawResponseEntry, RawUsageEntry, RequestMessage, Text, Thought,
-    ThoughtSummaryBlock, ToolCall, Unknown, Usage,
+    JsonInferenceOutput, Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, RawResponseEntry, RawUsageEntry,
+    RequestMessage, Text, Thought, ThoughtSummaryBlock, ToolCall, Unknown, Usage,
 };
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -104,6 +105,7 @@ pub struct ChatInferenceResultChunk {
     /// Empty for fake streams (non-streaming converted to streaming).
     pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
+    pub aggregated_response: Option<Vec<ContentBlockChatOutput>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -126,6 +128,7 @@ pub struct JsonInferenceResultChunk {
     /// Empty for fake streams (non-streaming converted to streaming).
     pub raw_chunk: String,
     pub finish_reason: Option<FinishReason>,
+    pub aggregated_response: Option<JsonInferenceOutput>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -209,6 +212,7 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
             provider_latency: Some(chunk.provider_latency),
             finish_reason: chunk.finish_reason,
             raw_chunk: chunk.raw_response,
+            aggregated_response: None,
         }
     }
 }
@@ -245,6 +249,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
             provider_latency: Some(chunk.provider_latency),
             raw_chunk: chunk.raw_response,
             finish_reason: chunk.finish_reason,
+            aggregated_response: None,
         }
     }
 }
@@ -256,6 +261,7 @@ pub struct CollectChunksArgs {
     pub function: Arc<FunctionConfig>,
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub raw_request: String,
     /// We may sometimes construct a fake stream from a non-streaming response
     /// (e.g. in `mixture_of_n` if we have a successful non-streaming candidate, but
@@ -291,6 +297,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         function,
         model_name,
         model_provider_name,
+        provider_type,
         raw_request,
         raw_response,
         inference_params,
@@ -737,7 +744,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         id: model_inference_id,
     });
     let model_inference_response =
-        ModelInferenceResponse::new(model_response, model_provider_name, cached);
+        ModelInferenceResponse::new(model_response, model_provider_name, provider_type, cached);
     let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
@@ -1016,6 +1023,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1059,6 +1067,7 @@ mod tests {
                 raw_chunk: "{\"message\": \"Hello}".to_string(),
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::Text(TextChunk {
@@ -1074,6 +1083,7 @@ mod tests {
                 raw_chunk: ", world!\"}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
+                aggregated_response: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1085,6 +1095,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1178,6 +1189,7 @@ mod tests {
                 raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(150)),
                 finish_reason: Some(FinishReason::ToolCall),
+                aggregated_response: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
@@ -1196,6 +1208,7 @@ mod tests {
                 raw_chunk: "\"John\",\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
+                aggregated_response: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1207,6 +1220,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1283,6 +1297,7 @@ mod tests {
                 raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(100)),
                 finish_reason: Some(FinishReason::ToolCall),
+                aggregated_response: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\"}".to_string()),
@@ -1293,6 +1308,7 @@ mod tests {
                 raw_chunk: "\"John\"}".to_string(),
                 provider_latency: Some(Duration::from_millis(200)),
                 finish_reason: None,
+                aggregated_response: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1304,6 +1320,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1368,6 +1385,7 @@ mod tests {
                 raw_chunk: "{\"name\":\"John\",".to_string(),
                 provider_latency: Some(Duration::from_millis(100)),
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some(String::new()),
@@ -1386,6 +1404,7 @@ mod tests {
                 raw_chunk: String::new(),
                 provider_latency: Some(Duration::from_millis(200)),
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"age\":30}".to_string()),
@@ -1396,6 +1415,7 @@ mod tests {
                 raw_chunk: "\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(300)),
                 finish_reason: Some(FinishReason::Stop),
+                aggregated_response: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1407,6 +1427,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1516,6 +1537,7 @@ mod tests {
                 raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(150)),
                 finish_reason: Some(FinishReason::ToolCall),
+                aggregated_response: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
@@ -1534,6 +1556,7 @@ mod tests {
                 raw_chunk: "\"John\",\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
+                aggregated_response: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1545,6 +1568,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1650,6 +1674,7 @@ mod tests {
                 finish_reason: Some(FinishReason::Stop),
                 raw_chunk: "{\"name\":".to_string(),
                 provider_latency: Some(Duration::from_millis(150)),
+                aggregated_response: None,
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 raw: Some("\"John\",\"age\":30}".to_string()),
@@ -1668,6 +1693,7 @@ mod tests {
                 finish_reason: Some(FinishReason::ToolCall),
                 raw_chunk: "\"John\",\"age\":30}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
+                aggregated_response: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1679,6 +1705,7 @@ mod tests {
             function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1764,6 +1791,7 @@ mod tests {
                 raw_chunk: "{\"message\": \"Hello}".to_string(),
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -1828,6 +1856,7 @@ mod tests {
                 raw_chunk: "my raw thought".to_string(),
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::Text(TextChunk {
@@ -1843,6 +1872,7 @@ mod tests {
                 raw_chunk: ", world!\"}".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::Stop),
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::Thought(ThoughtChunk {
@@ -1860,6 +1890,7 @@ mod tests {
                 raw_chunk: "my other raw thought".to_string(),
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
@@ -1871,6 +1902,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -1985,6 +2017,7 @@ mod tests {
                 raw_response: None,
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -2001,6 +2034,7 @@ mod tests {
                 raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
+                aggregated_response: None,
             }),
         ];
 
@@ -2013,6 +2047,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2070,6 +2105,7 @@ mod tests {
                 raw_response: None,
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -2093,6 +2129,7 @@ mod tests {
                 raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
+                aggregated_response: None,
             }),
         ];
 
@@ -2105,6 +2142,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2160,6 +2198,7 @@ mod tests {
                 raw_response: None,
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -2176,6 +2215,7 @@ mod tests {
                 raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
+                aggregated_response: None,
             }),
         ];
 
@@ -2188,6 +2228,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2241,6 +2282,7 @@ mod tests {
                 raw_response: None,
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -2263,6 +2305,7 @@ mod tests {
                 raw_response: None,
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
+                aggregated_response: None,
             }),
         ];
 
@@ -2275,6 +2318,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2334,6 +2378,7 @@ mod tests {
             raw_chunk: "chunk1".to_string(),
             provider_latency,
             finish_reason: Some(FinishReason::ToolCall),
+            aggregated_response: None,
         })];
 
         let collect_chunks_args = CollectChunksArgs {
@@ -2345,6 +2390,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
@@ -2404,6 +2450,7 @@ mod tests {
                 raw_response: None,
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -2429,6 +2476,7 @@ mod tests {
                 raw_response: None,
                 provider_latency,
                 finish_reason: None,
+                aggregated_response: None,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
                 content: vec![
@@ -2457,6 +2505,7 @@ mod tests {
                 raw_chunk: "chunk3".to_string(),
                 provider_latency: Some(Duration::from_millis(250)),
                 finish_reason: Some(FinishReason::ToolCall),
+                aggregated_response: None,
             }),
         ];
 
@@ -2469,6 +2518,7 @@ mod tests {
             function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
+            provider_type: Arc::from("dummy"),
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),

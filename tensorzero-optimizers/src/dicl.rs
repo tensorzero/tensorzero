@@ -8,9 +8,8 @@ use tensorzero_core::{
     cache::{CacheManager, CacheOptions},
     config::{Config, UninitializedVariantConfig, provider_types::ProviderTypesConfig},
     db::{
-        DICLQueries, StoredDICLExample,
-        clickhouse::{ClickHouseConnectionInfo, clickhouse_client::ClickHouseClientType},
-        postgres::PostgresConnectionInfo,
+        DICLQueries, StoredDICLExample, clickhouse::ClickHouseConnectionInfo,
+        delegating_connection::DelegatingDatabaseQueries, postgres::PostgresConnectionInfo,
     },
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceCredentials},
@@ -39,7 +38,7 @@ impl Optimizer for DiclOptimizationConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo,
+        db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Warn if using deprecated default model
@@ -60,14 +59,6 @@ impl Optimizer for DiclOptimizationConfig {
             tracing::warn!("val_examples provided for DICL optimization but will be ignored");
         }
 
-        // Check if ClickHouse is available (required for DICL)
-        if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
-            return Err(Error::new(ErrorDetails::AppState {
-                message: "DICL optimization requires ClickHouse to be enabled to store examples"
-                    .to_string(),
-            }));
-        }
-
         // 1. Check that the function exists in the config
         let function_config = config.functions.get(&self.function_name).ok_or_else(|| {
             Error::new(ErrorDetails::Config {
@@ -83,7 +74,7 @@ impl Optimizer for DiclOptimizationConfig {
 
         // 3. Check if DICL examples already exist in the database for this variant (unless appending is enabled)
         if !self.append_to_existing_variants
-            && clickhouse_connection_info
+            && db
                 .has_dicl_examples(&self.function_name, &self.variant_name)
                 .await?
         {
@@ -141,7 +132,7 @@ impl Optimizer for DiclOptimizationConfig {
         tracing::info!("Phase transition: Embedding → ClickHouse storage");
 
         insert_dicl_examples_with_batching(
-            clickhouse_connection_info,
+            db.as_ref(),
             examples_with_embeddings,
             &self.function_name,
             &self.variant_name,
@@ -373,6 +364,7 @@ async fn process_embedding_batch(
         relay: None,
         include_raw_usage: false,
         include_raw_response: false,
+        include_aggregated_response: false,
     };
 
     let response = embedding_model_config
@@ -484,7 +476,7 @@ async fn process_embeddings_with_batching(
 
 /// Inserts DICL examples into the database via the DICLQueries trait.
 pub async fn insert_dicl_examples_with_batching(
-    db: &impl DICLQueries,
+    db: &(dyn DICLQueries + Sync),
     examples: Vec<(RenderedSample, Vec<f64>)>,
     function_name: &str,
     variant_name: &str,

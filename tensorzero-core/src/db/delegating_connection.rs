@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, MetricConfigLevel};
+use crate::db::BatchWriterHandle;
 use crate::db::TimeWindow;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -98,9 +99,31 @@ pub trait DelegatingDatabaseQueries:
     + EpisodeQueries
     + DICLQueries
 {
+    fn batcher_join_handles(&self) -> Vec<BatchWriterHandle>;
 }
-impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
-impl DelegatingDatabaseQueries for PostgresConnectionInfo {}
+impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {
+    fn batcher_join_handles(&self) -> Vec<BatchWriterHandle> {
+        self.batcher_join_handle().into_iter().collect()
+    }
+}
+impl DelegatingDatabaseQueries for PostgresConnectionInfo {
+    fn batcher_join_handles(&self) -> Vec<BatchWriterHandle> {
+        self.batcher_join_handle().into_iter().collect()
+    }
+}
+
+impl DelegatingDatabaseQueries for DelegatingDatabaseConnection {
+    fn batcher_join_handles(&self) -> Vec<BatchWriterHandle> {
+        let mut handles = Vec::new();
+        if let Some(h) = self.clickhouse.batcher_join_handle() {
+            handles.push(h);
+        }
+        if let Some(h) = self.postgres.batcher_join_handle() {
+            handles.push(h);
+        }
+        handles
+    }
+}
 
 impl DelegatingDatabaseConnection {
     pub fn new(clickhouse: ClickHouseConnectionInfo, postgres: PostgresConnectionInfo) -> Self {

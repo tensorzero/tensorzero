@@ -17,11 +17,11 @@ export type JsonEvaluationResultRow = {
   /**
    * The input to the function
    */
-  input: Input;
+  input?: Input;
   /**
    * The generated output from the model
    */
-  generated_output: JsonInferenceOutput;
+  generated_output?: JsonInferenceOutput;
   /**
    * The reference output from the datapoint
    */

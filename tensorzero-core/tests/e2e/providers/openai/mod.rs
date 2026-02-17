@@ -142,7 +142,7 @@ async fn get_providers() -> E2ETestProviders {
     let input_audio_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
         variant_name: "openai".to_string(),
-        model_name: "gpt-4o-audio-preview".into(),
+        model_name: "gpt-audio-mini".into(),
         model_provider_name: "openai".into(),
         credentials: HashMap::new(),
     }];
@@ -1234,8 +1234,6 @@ async fn test_o3_mini_inference_with_reasoning_effort() {
 }
 
 #[tokio::test]
-// TODO(#6302): re-enable
-#[ignore]
 async fn test_embedding_request() {
     let clickhouse = get_clickhouse().await;
     let provider_config_serialized = r#"
@@ -1301,6 +1299,7 @@ async fn test_embedding_request() {
         relay: None,
         include_raw_usage: false,
         include_raw_response: false,
+        include_aggregated_response: false,
     };
     let response = model_config
         .embed(&request, &model_name, &clients)
@@ -1453,6 +1452,7 @@ async fn test_embedding_sanity_check() {
         relay: None,
         include_raw_usage: false,
         include_raw_response: false,
+        include_aggregated_response: false,
     };
 
     // Compute all 3 embeddings concurrently

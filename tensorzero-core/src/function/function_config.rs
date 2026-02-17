@@ -1,3 +1,4 @@
+use crate::config::Namespace;
 use crate::config::SchemaData;
 use crate::config::gateway::GatewayConfig;
 #[cfg(feature = "pyo3")]
@@ -118,6 +119,15 @@ impl FunctionConfigType {
             FunctionConfigType::Json => "tensorzero.json_datapoints",
         }
     }
+
+    /// Returns the Postgres inference data table name for the given function type.
+    /// This is the split table that stores input/output payloads separately from metadata.
+    pub fn postgres_inference_data_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "tensorzero.chat_inference_data",
+            FunctionConfigType::Json => "tensorzero.json_inference_data",
+        }
+    }
 }
 
 impl FunctionConfig {
@@ -149,7 +159,10 @@ impl FunctionConfig {
 
     /// Returns the experimentation config for a given namespace.
     /// If namespace is None or doesn't have a specific config, returns the base config.
-    pub fn experimentation_for_namespace(&self, namespace: Option<&str>) -> &ExperimentationConfig {
+    pub fn experimentation_for_namespace(
+        &self,
+        namespace: Option<&Namespace>,
+    ) -> &ExperimentationConfig {
         match self {
             FunctionConfig::Chat(config) => config.experimentation.get_for_namespace(namespace),
             FunctionConfig::Json(config) => config.experimentation.get_for_namespace(namespace),
@@ -1938,12 +1951,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -2006,12 +2021,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2060,12 +2077,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2114,6 +2133,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
@@ -2122,6 +2142,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2168,6 +2189,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ContentFilter),
             latency: Latency::NonStreaming {
@@ -2176,6 +2198,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2222,6 +2245,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency: Latency::NonStreaming {
@@ -2230,6 +2254,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2297,12 +2322,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2345,12 +2372,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: None,
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2398,6 +2427,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
@@ -2406,6 +2436,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2451,6 +2482,7 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: None,
             latency: Latency::NonStreaming {
@@ -2459,6 +2491,7 @@ mod tests {
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2513,12 +2546,14 @@ mod tests {
             raw_response: "content".to_string(),
             usage,
             model_provider_name: "model_provider_name".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "model_name".into(),
             finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -2721,7 +2756,8 @@ mod tests {
             base: ExperimentationConfig::default(),
             namespaces,
         });
-        let exp = config.experimentation_for_namespace(Some("mobile"));
+        let ns = Namespace::new("mobile").unwrap();
+        let exp = config.experimentation_for_namespace(Some(&ns));
         assert!(
             matches!(exp, ExperimentationConfig::StaticWeights(_)),
             "Known namespace should return the namespace-specific config"
@@ -2731,7 +2767,8 @@ mod tests {
     #[test]
     fn test_experimentation_for_namespace_unknown_returns_base() {
         let config = make_chat_function_config(ExperimentationConfigWithNamespaces::default());
-        let exp = config.experimentation_for_namespace(Some("nonexistent"));
+        let ns = Namespace::new("nonexistent").unwrap();
+        let exp = config.experimentation_for_namespace(Some(&ns));
         assert!(
             matches!(exp, ExperimentationConfig::Uniform(_)),
             "Unknown namespace should fall back to the base config"

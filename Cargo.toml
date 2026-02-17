@@ -59,7 +59,7 @@ pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.55", features = ["derive"] }
+clap = { version = "4.5.55", features = ["derive", "env"] }
 futures = "0.3.30"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
@@ -76,7 +76,7 @@ minijinja = { version = "2.15.1", features = [
 url = { version = "2.5.8", features = ["serde"] }
 google-cloud-auth = "1.4.0"
 object_store = { version = "0.13.1", features = ["serde", "aws", "gcp"] }
-rand = "0.9.1"
+rand = "0.10.0"
 ts-rs = { version = "12.0.1", features = [
     "serde-compat",
     "serde-json-impl",

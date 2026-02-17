@@ -226,6 +226,7 @@ pub fn convert_to_optimizer_status(
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
                     timeouts: TimeoutsConfig::default(),
                     skip_relay: None,
+                    namespace: None,
                 }),
             }
         }
