@@ -6,7 +6,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { Component, type RefObject, useState } from "react";
+import { Component, type RefObject, useMemo, useState } from "react";
 import {
   AnimatedEllipsis,
   EllipsisMode,
@@ -559,20 +559,11 @@ function UserQuestionsContent({
 
 function UserQuestionsAnswersContent({
   responses,
-  userQuestionsEventId,
-  events,
+  questions,
 }: {
   responses: Record<string, UserQuestionAnswer>;
-  userQuestionsEventId: string;
-  events: GatewayEvent[];
+  questions: EventPayloadUserQuestion[];
 }) {
-  // Look up the original questions event to resolve labels
-  const questionsEvent = events.find((e) => e.id === userQuestionsEventId);
-  const questions: EventPayloadUserQuestion[] =
-    questionsEvent?.payload.type === "user_questions"
-      ? questionsEvent.payload.questions
-      : [];
-
   return (
     <div className="flex flex-col gap-2">
       {Object.entries(responses).map(([questionId, response]) => {
@@ -603,14 +594,14 @@ const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
 function EventItem({
   event,
-  events,
+  questionsMap,
   isPending = false,
   isPendingQuestion = false,
   configApplyEnabled = false,
   sessionId,
 }: {
   event: GatewayEvent;
-  events: GatewayEvent[];
+  questionsMap?: Map<string, EventPayloadUserQuestion[]>;
   isPending?: boolean;
   isPendingQuestion?: boolean;
   configApplyEnabled?: boolean;
@@ -658,7 +649,7 @@ function EventItem({
             >
               <ChevronRight className="h-4 w-4" />
             </span>
-            {(isPending || isPendingQuestion) && !yoloMode && (
+            {((isPending && !yoloMode) || isPendingQuestion) && (
               <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                 Action Required
               </span>
@@ -721,8 +712,9 @@ function EventItem({
       {shouldShowDetails && event.payload.type === "user_questions_answers" && (
         <UserQuestionsAnswersContent
           responses={event.payload.responses}
-          userQuestionsEventId={event.payload.user_questions_event_id}
-          events={events}
+          questions={
+            questionsMap?.get(event.payload.user_questions_event_id) ?? []
+          }
         />
       )}
     </div>
@@ -845,6 +837,18 @@ export default function EventStream({
   configApplyEnabled = false,
   sessionId,
 }: EventStreamProps) {
+  // Map from user_questions event ID → questions array, used to resolve
+  // option labels when rendering user_questions_answers events.
+  const questionsMap = useMemo(() => {
+    const map = new Map<string, EventPayloadUserQuestion[]>();
+    for (const event of events) {
+      if (event.payload.type === "user_questions") {
+        map.set(event.id, event.payload.questions);
+      }
+    }
+    return map;
+  }, [events]);
+
   // Determine what to show at the top: sentinel, error, or session start
   // Only show session start when there's content to display (events or optimistic messages)
   const showSessionStart =
@@ -877,7 +881,7 @@ export default function EventStream({
         <EventErrorBoundary key={event.id} eventId={event.id}>
           <EventItem
             event={event}
-            events={events}
+            questionsMap={questionsMap}
             isPending={pendingToolCallIds?.has(event.id)}
             isPendingQuestion={pendingUserQuestionIds?.has(event.id)}
             configApplyEnabled={configApplyEnabled}

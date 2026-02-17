@@ -15,7 +15,7 @@ type AnswerQuestionsRequest = {
  *
  * Request body:
  * - user_questions_event_id: string - ID of the user_questions event to respond to
- * - responses: Record<string, UserQuestionAnswer> - Map from question ID to response
+ * - responses: Record<string, UserQuestionAnswer> - Map of question ID to response
  */
 export async function action({ params, request }: ActionFunctionArgs) {
   const sessionId = params.session_id;
