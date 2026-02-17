@@ -4,7 +4,6 @@ use std::borrow::Cow;
 
 use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
-use autopilot_tools::AutopilotToolError;
 use durable_tools::{
     CreateEventGatewayRequest, EventPayload, EventPayloadToolResult, NonControlToolError,
     SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient, ToolAppState, ToolContext,
@@ -84,10 +83,9 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
 #[async_trait]
 impl<T> TaskTool for ClientTaskToolWrapper<T>
 where
-    T: TaskTool,
-    T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+    T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
 {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,
@@ -96,13 +94,6 @@ where
     ) -> DurableToolResult<Self::Output> {
         let session_id = side_info.session_id;
         let tool_call_event_id = side_info.tool_call_event_id;
-        let side_info: T::SideInfo = side_info.try_into().map_err(
-            |e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
-                AutopilotToolError::validation(format!(
-                    "Failed to convert AutopilotSideInfo to tool SideInfo: {e}"
-                ))
-            },
-        )?;
         // Execute the underlying tool
         let result = self
             .inner
@@ -202,8 +193,7 @@ impl<T: SimpleTool + Default> Default for ClientSimpleToolWrapper<T> {
 
 impl<T: SimpleTool> ToolMetadata for ClientSimpleToolWrapper<T>
 where
-    T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
+    T: SimpleTool<SideInfo = AutopilotSideInfo>,
 {
     fn name(&self) -> Cow<'static, str> {
         self.inner.name()
@@ -230,11 +220,8 @@ struct SimpleToolStepParams<L, S> {
 }
 
 #[async_trait]
-impl<T: SimpleTool> TaskTool for ClientSimpleToolWrapper<T>
-where
-    T::SideInfo: TryFrom<AutopilotSideInfo> + Serialize,
-    <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error: std::fmt::Display,
-{
+impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolWrapper<T> {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,
@@ -244,14 +231,6 @@ where
         let tool_name = self.inner.name().to_string();
         let tool_call_event_id = side_info.tool_call_event_id;
         let session_id = side_info.session_id;
-        // Convert AutopilotSideInfo to the underlying tool's SideInfo
-        let converted_side_info: T::SideInfo = side_info.try_into().map_err(
-            |e: <T::SideInfo as TryFrom<AutopilotSideInfo>>::Error| {
-                AutopilotToolError::validation(format!(
-                    "Failed to convert AutopilotSideInfo to tool SideInfo for tool {tool_name}: {e}"
-                ))
-            },
-        )?;
 
         // Execute the underlying simple tool within a checkpointed step.
         // The step returns Ok(Result<output, error_json>) so tool errors are
@@ -261,7 +240,7 @@ where
                 "execute_simple_tool",
                 SimpleToolStepParams {
                     llm_params,
-                    side_info: converted_side_info,
+                    side_info,
                     tool_name: tool_name.clone(),
                     tool_call_event_id,
                 },
@@ -301,8 +280,8 @@ where
 /// success or failure. This ensures tool errors are checkpointed rather than
 /// causing step retries. The error is converted to structured JSON for
 /// programmatic parsing by the autopilot API.
-async fn execute_simple_tool_step<T: SimpleTool>(
-    params: SimpleToolStepParams<T::LlmParams, T::SideInfo>,
+async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo>>(
+    params: SimpleToolStepParams<T::LlmParams, AutopilotSideInfo>,
     state: ToolAppState,
 ) -> anyhow::Result<Result<T::Output, serde_json::Value>> {
     let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client());
@@ -366,17 +345,6 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
                 })
             })
         }
-        ToolError::Serialization(err) => {
-            let failure = ToolFailure::Serialization {
-                message: err.to_string(),
-            };
-            serde_json::to_value(failure).unwrap_or_else(|e| {
-                serde_json::json!({
-                    "kind": "serialization",
-                    "message": format!("Failed to serialize serialization error: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                })
-            })
-        }
     }
 }
 
@@ -386,7 +354,6 @@ fn tool_error_to_json(e: ToolError) -> serde_json::Value {
 #[serde(tag = "kind")]
 pub enum ToolFailure {
     Control { message: String },
-    Serialization { message: String },
     Tool { error: NonControlToolError },
     Database { message: String },
 }
@@ -568,12 +535,13 @@ mod tests {
         }
 
         type LlmParams = TestTaskToolParams;
-        type SideInfo = ();
+        type SideInfo = AutopilotSideInfo;
         type Output = TestTaskToolOutput;
     }
 
     #[async_trait]
     impl TaskTool for TestTaskTool {
+        type ExtraState = ();
         async fn execute(
             &self,
             llm_params: Self::LlmParams,
@@ -611,7 +579,7 @@ mod tests {
         }
 
         type LlmParams = TestSimpleToolParams;
-        type SideInfo = ();
+        type SideInfo = AutopilotSideInfo;
         type Output = TestSimpleToolOutput;
     }
 

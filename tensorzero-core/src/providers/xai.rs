@@ -37,7 +37,7 @@ use crate::providers::helpers::{
 };
 use crate::providers::openai::{
     OpenAIMessagesConfig, OpenAIResponseChoice, StreamOptions, get_chat_url, handle_openai_error,
-    prepare_file_message, stream_openai,
+    openai_response_tool_call_to_tensorzero_tool_call, prepare_file_message, stream_openai,
 };
 use uuid::Uuid;
 
@@ -197,6 +197,7 @@ impl InferenceProvider for XAIProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -216,6 +217,7 @@ impl InferenceProvider for XAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -228,6 +230,7 @@ impl InferenceProvider for XAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -255,6 +258,7 @@ impl InferenceProvider for XAIProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
             Err(handle_openai_error(
@@ -263,6 +267,7 @@ impl InferenceProvider for XAIProvider {
                 &response,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -302,6 +307,7 @@ impl InferenceProvider for XAIProvider {
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -788,6 +794,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -802,6 +809,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
@@ -820,7 +828,9 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
 

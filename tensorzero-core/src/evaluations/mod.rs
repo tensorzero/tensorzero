@@ -9,7 +9,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use crate::variant::chain_of_thought::ChainOfThoughtConfig;
 
 use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
-use crate::experimentation::ExperimentationConfig;
+use crate::experimentation::ExperimentationConfigWithNamespaces;
 use crate::utils::retries::RetryConfig;
 use crate::variant::Variant;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -308,6 +308,7 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedInferenceEvaluationConfig {
+    #[serde(default)]
     pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     pub function_name: String,
     #[serde(default)]
@@ -548,7 +549,8 @@ impl UninitializedEvaluatorConfig {
                     .values()
                     .flat_map(|v| v.get_all_explicit_template_names())
                     .collect();
-                let experimentation = ExperimentationConfig::legacy_from_variants_map(&variants);
+                let experimentation =
+                    ExperimentationConfigWithNamespaces::legacy_from_variants_map(&variants);
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: SchemaData::load(
@@ -1282,7 +1284,9 @@ mod tests {
             json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
+            experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
+                &HashMap::new(),
+            ),
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 
@@ -1766,7 +1770,7 @@ mod tests {
                     ),
                     description: None,
                     all_explicit_template_names: HashSet::new(),
-                    experimentation: ExperimentationConfig::legacy_from_variants_map(
+                    experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
                         &HashMap::new(),
                     ),
                 })),
@@ -2034,7 +2038,9 @@ mod tests {
             json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
+            experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
+                &HashMap::new(),
+            ),
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 

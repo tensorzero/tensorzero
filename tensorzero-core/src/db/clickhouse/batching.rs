@@ -1,22 +1,17 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::time::Duration;
 
 use crate::config::BatchWritesConfig;
+use crate::db::BatchWriterHandle;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use enum_map::EnumMap;
-use futures::future::Shared;
 use futures::{FutureExt, TryFutureExt};
 use tokio::runtime::{Handle, RuntimeFlavor};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
-use tokio::time::Instant;
-use tokio::time::error::Elapsed;
 
+use crate::db::batching::process_channel_with_capacity_and_timeout;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::error::{Error, ErrorDetails};
-
-pub type BatchWriterHandle = Shared<Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
 
 /// A `BatchSender` is used to submit entries to the batch writer, which aggregates
 /// and submits them to ClickHouse on a schedule defined by a `BatchWritesConfig`.
@@ -114,52 +109,29 @@ pub struct BatchWriter {
 impl BatchWriter {
     pub async fn process(self, clickhouse: ClickHouseConnectionInfo, config: BatchWritesConfig) {
         let mut join_set = JoinSet::new();
-        for (table_name, mut channel) in self.channels {
+        let batch_timeout = Duration::from_millis(config.flush_interval_ms);
+        for (table_name, channel) in self.channels {
             let clickhouse = clickhouse.clone();
-            let batch_timeout = Duration::from_millis(config.flush_interval_ms);
             join_set.spawn(async move {
-                let mut buffer = Vec::with_capacity(config.max_rows);
-                // The channel can be closed but still contain messages.
-                // We continue looping until the channel is closed and empty, at which point we're guaranteed
-                // to never see any new messages from `channel.recv/recv_many`.
-                while !channel.is_closed() || !channel.is_empty() {
-                    let deadline = Instant::now() + batch_timeout;
-                    // Repeatedly fetch entries from the channel until we have a full batch.
-                    // We exit early from the loop if our deadline is reached, and submit
-                    // however many rows we have.
-                    while buffer.len() < config.max_rows {
-                        let remaining = config.max_rows - buffer.len();
-                        // `recv_many` is explicitly documented to be cancellation-safe,
-                        // so we can safely wrap it in a timeout without losing messages
-                        match tokio::time::timeout_at(
-                            deadline,
-                            channel.recv_many(&mut buffer, remaining),
-                        )
-                        .await
-                        {
-                            // The channel has closed, so we're done with this batch
-                            Ok(0) => break,
-                            // We added some rows to the buffer, so keep receiving more rows
-                            Ok(_) => {}
-                            Err(e) => {
-                                // Compile-time assertion that this is actually an Elapsed error.
-                                // We hit our deadline, so we should submit our current batch
-                                let _: Elapsed = e;
-                                break;
+                process_channel_with_capacity_and_timeout(
+                    channel,
+                    config.max_rows,
+                    batch_timeout,
+                    move |buffer| {
+                        let clickhouse = clickhouse.clone();
+                        async move {
+                            if let Err(e) = clickhouse
+                                .write_non_batched::<()>(Rows::Serialized(&buffer), table_name)
+                                .await
+                            {
+                                // TODO: if this errors, should we retry?
+                                tracing::error!("Error writing to ClickHouse: {e}");
                             }
+                            buffer
                         }
-                    }
-                    if !buffer.is_empty() {
-                        if let Err(e) = clickhouse
-                            .write_non_batched::<()>(Rows::Serialized(&buffer), table_name)
-                            .await
-                        {
-                            // TODO - should we retry?
-                            tracing::error!("Error writing to ClickHouse: {e}");
-                        }
-                        buffer.clear();
-                    }
-                }
+                    },
+                )
+                .await;
             });
         }
         while let Some(result) = join_set.join_next().await {

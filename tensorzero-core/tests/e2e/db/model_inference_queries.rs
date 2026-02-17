@@ -31,12 +31,14 @@ async fn test_get_model_inferences_for_existing_inference(
 ) {
     let config = get_e2e_config().await;
 
-    // First, get an inference ID from the database
+    // First, get an inference ID from the database.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let inferences = conn
         .list_inferences(
             &config,
             &ListInferencesParams {
                 function_name: Some("write_haiku"),
+                variant_name: Some("better_prompt_haiku_4_5"),
                 output_source: InferenceOutputSource::Inference,
                 limit: 1,
                 ..Default::default()
@@ -74,31 +76,11 @@ async fn test_get_model_inferences_for_existing_inference(
 }
 make_db_test!(test_get_model_inferences_for_existing_inference);
 
-async fn test_get_model_inferences_for_json_inference(
-    conn: impl ModelInferenceQueries + InferenceQueries,
-) {
-    let config = get_e2e_config().await;
-
-    // Get a JSON inference ID
-    let inferences = conn
-        .list_inferences(
-            &config,
-            &ListInferencesParams {
-                function_name: Some("extract_entities"),
-                output_source: InferenceOutputSource::Inference,
-                limit: 1,
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-
-    assert!(
-        !inferences.is_empty(),
-        "Should have at least one JSON inference to test with"
-    );
-
-    let inference_id = inferences[0].id();
+async fn test_get_model_inferences_for_json_inference(conn: impl ModelInferenceQueries) {
+    // Use a hardcoded extract_entities inference ID known to have model inferences.
+    // We can't query dynamically because metadata-only inferences (which have no
+    // model inference rows) may be returned first.
+    let inference_id = Uuid::parse_str("0196374c-2c6d-7ce0-b508-e3b24ee4579c").expect("Valid UUID");
 
     let model_inferences = conn
         .get_model_inferences_by_inference_id(inference_id)
@@ -142,12 +124,14 @@ async fn test_model_inference_fields_populated(
 ) {
     let config = get_e2e_config().await;
 
-    // Get an inference with model inferences
+    // Get an inference with model inferences.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let inferences = conn
         .list_inferences(
             &config,
             &ListInferencesParams {
                 function_name: Some("write_haiku"),
+                variant_name: Some("better_prompt_haiku_4_5"),
                 output_source: InferenceOutputSource::Inference,
                 limit: 10,
                 ..Default::default()
@@ -166,11 +150,15 @@ async fn test_model_inference_fields_populated(
         for mi in &model_inferences {
             // These fields should always be populated
             assert!(
-                !mi.raw_request.is_empty(),
+                mi.raw_request
+                    .as_ref()
+                    .is_some_and(|raw_request| !raw_request.is_empty()),
                 "raw_request should not be empty"
             );
             assert!(
-                !mi.raw_response.is_empty(),
+                mi.raw_response
+                    .as_ref()
+                    .is_some_and(|raw_response| !raw_response.is_empty()),
                 "raw_response should not be empty"
             );
             assert!(!mi.model_name.is_empty(), "model_name should not be empty");
@@ -216,11 +204,13 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
     let model_inference = StoredModelInference {
         id: model_inference_id,
         inference_id,
-        raw_request: r#"{"model": "test-model", "messages": []}"#.to_string(),
-        raw_response: r#"{"choices": [{"message": {"content": "test response"}}]}"#.to_string(),
+        raw_request: Some(r#"{"model": "test-model", "messages": []}"#.to_string()),
+        raw_response: Some(
+            r#"{"choices": [{"message": {"content": "test response"}}]}"#.to_string(),
+        ),
         system: Some("You are a helpful assistant.".to_string()),
-        input_messages: vec![],
-        output: vec![],
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
         input_tokens: Some(100),
         output_tokens: Some(50),
         response_time_ms: Some(1234),
@@ -284,11 +274,11 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id,
-            raw_request: r#"{"model": "primary-model"}"#.to_string(),
-            raw_response: r#"{"error": "rate limited"}"#.to_string(),
+            raw_request: Some(r#"{"model": "primary-model"}"#.to_string()),
+            raw_response: Some(r#"{"error": "rate limited"}"#.to_string()),
             system: None,
-            input_messages: vec![],
-            output: vec![],
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
             input_tokens: Some(100),
             output_tokens: None,
             response_time_ms: Some(500),
@@ -303,11 +293,11 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id,
-            raw_request: r#"{"model": "fallback-model"}"#.to_string(),
-            raw_response: r#"{"choices": [{"message": {"content": "success"}}]}"#.to_string(),
+            raw_request: Some(r#"{"model": "fallback-model"}"#.to_string()),
+            raw_response: Some(r#"{"choices": [{"message": {"content": "success"}}]}"#.to_string()),
             system: None,
-            input_messages: vec![],
-            output: vec![],
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
             input_tokens: Some(100),
             output_tokens: Some(25),
             response_time_ms: Some(800),
@@ -366,11 +356,11 @@ async fn test_insert_model_inference_with_all_finish_reasons(conn: impl ModelInf
         let model_inference = StoredModelInference {
             id: Uuid::now_v7(),
             inference_id,
-            raw_request: "{}".to_string(),
-            raw_response: "{}".to_string(),
+            raw_request: Some("{}".to_string()),
+            raw_response: Some("{}".to_string()),
             system: None,
-            input_messages: vec![],
-            output: vec![],
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
             input_tokens: None,
             output_tokens: None,
             response_time_ms: None,
@@ -407,11 +397,11 @@ async fn test_insert_model_inference_with_null_finish_reason(conn: impl ModelInf
     let model_inference = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id,
-        raw_request: "{}".to_string(),
-        raw_response: "{}".to_string(),
+        raw_request: Some("{}".to_string()),
+        raw_response: Some("{}".to_string()),
         system: None,
-        input_messages: vec![],
-        output: vec![],
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
         input_tokens: None,
         output_tokens: None,
         response_time_ms: None,
@@ -447,11 +437,11 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
     let model_inference_cached = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: inference_id_cached,
-        raw_request: "{}".to_string(),
-        raw_response: "{}".to_string(),
+        raw_request: Some("{}".to_string()),
+        raw_response: Some("{}".to_string()),
         system: None,
-        input_messages: vec![],
-        output: vec![],
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
         input_tokens: None,
         output_tokens: None,
         response_time_ms: None,
@@ -481,11 +471,11 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
     let model_inference_not_cached = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: inference_id_not_cached,
-        raw_request: "{}".to_string(),
-        raw_response: "{}".to_string(),
+        raw_request: Some("{}".to_string()),
+        raw_response: Some("{}".to_string()),
         system: None,
-        input_messages: vec![],
-        output: vec![],
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
         input_tokens: None,
         output_tokens: None,
         response_time_ms: None,

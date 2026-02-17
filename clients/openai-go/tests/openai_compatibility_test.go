@@ -399,12 +399,17 @@ func TestBasicInference(t *testing.T) {
 			openai.UserMessage("Hello"),
 		}
 
-		// First request (non-cached)
+		// First request (write_only to populate cache)
 		req := &openai.ChatCompletionNewParams{
 			Model:       "tensorzero::function_name::basic_test",
 			Messages:    messages,
 			Temperature: openai.Float(0.4),
 		}
+		req.SetExtraFields(map[string]any{
+			"tensorzero::cache_options": map[string]any{
+				"enabled": "write_only",
+			},
+		})
 
 		resp, err := client.Chat.Completions.New(ctx, *req)
 		require.NoError(t, err, "Unexpected error while getting completion")
@@ -924,7 +929,7 @@ func TestStreamingInference(t *testing.T) {
 			" pizza.",
 		}
 
-		// First request without cache to populate the cache
+		// First request with write_only cache to populate the cache
 		req := &openai.ChatCompletionNewParams{
 			Model:    "tensorzero::function_name::basic_test",
 			Messages: messages,
@@ -934,6 +939,11 @@ func TestStreamingInference(t *testing.T) {
 			},
 		}
 		addEpisodeIDToRequest(t, req, episodeID)
+		req.SetExtraFields(map[string]any{
+			"tensorzero::cache_options": map[string]any{
+				"enabled": "write_only",
+			},
+		})
 
 		stream := client.Chat.Completions.NewStreaming(ctx, *req)
 		require.NotNil(t, stream, "Streaming response should not be nil")

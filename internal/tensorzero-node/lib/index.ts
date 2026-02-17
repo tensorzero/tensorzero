@@ -1,7 +1,7 @@
 import { createRequire } from "module";
 import type { EditPayload, KeyInfo } from "./bindings";
 import type {
-  ConfigWriter as NativeConfigWriterType,
+  ConfigApplier as NativeConfigApplierType,
   PostgresClient as NativePostgresClientType,
 } from "../index";
 
@@ -12,7 +12,7 @@ export type * from "./bindings";
 const require = createRequire(import.meta.url);
 
 const {
-  ConfigWriter: NativeConfigWriter,
+  ConfigApplier: NativeConfigApplier,
   PostgresClient: NativePostgresClient,
 } = require("../index.cjs") as typeof import("../index");
 
@@ -58,20 +58,20 @@ export class PostgresClient {
 
 /**
  * Wrapper class for type safety and convenience
- * around the native ConfigWriter
+ * around the native ConfigApplier
  */
-export class ConfigWriter {
-  private nativeConfigWriter: NativeConfigWriterType;
+export class ConfigApplier {
+  private nativeConfigApplier: NativeConfigApplierType;
 
-  private constructor(writer: NativeConfigWriterType) {
-    this.nativeConfigWriter = writer;
+  private constructor(applier: NativeConfigApplierType) {
+    this.nativeConfigApplier = applier;
   }
 
-  static async new(globPattern: string): Promise<ConfigWriter> {
-    return new ConfigWriter(await NativeConfigWriter.new(globPattern));
+  static async new(globPattern: string): Promise<ConfigApplier> {
+    return new ConfigApplier(await NativeConfigApplier.new(globPattern));
   }
 
   async applyEdit(edit: EditPayload): Promise<string[]> {
-    return this.nativeConfigWriter.applyEdit(JSON.stringify(edit));
+    return this.nativeConfigApplier.applyEdit(JSON.stringify(edit));
   }
 }

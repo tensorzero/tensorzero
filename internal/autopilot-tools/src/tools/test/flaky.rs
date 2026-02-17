@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
 use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
@@ -37,7 +38,7 @@ pub struct FlakyToolOutput {
 pub struct FlakyTool;
 
 impl ToolMetadata for FlakyTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = FlakyToolOutput;
     type LlmParams = FlakyToolParams;
 
@@ -58,6 +59,7 @@ impl ToolMetadata for FlakyTool {
 
 #[async_trait]
 impl TaskTool for FlakyTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: Self::LlmParams,

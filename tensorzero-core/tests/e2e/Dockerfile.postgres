@@ -1,4 +1,4 @@
-FROM postgres:14-trixie
+FROM pgvector/pgvector:pg14-trixie
 
 # Install pg_cron from Debian packages
 RUN apt-get update \

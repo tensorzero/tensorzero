@@ -36,24 +36,30 @@ jobs:
         run: ./ci/check-version-consistency.sh
 
   # This checks for specific markers in the codebase that require multiple files to be edited together.
+  # Only runs on Pull Requests; merge queue jobs can't access the 'skip-if-edited-check' label so we
+  # always mark them as successful.
   check-if-edited-then-edit:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    # Should run on all PRs from forks as well, if the label is not present
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
 
       - name: Set up Python
+        if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
         uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
         with:
           python-version: "3.9"
 
       - name: Check coordinated edits
+        if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
         run: python3 ci/check_coordinated_edits.py
+
+      - name: Skip coordinated edits check
+        if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
+        run: echo "Skipping coordinated edits check."
 
   # Like `check-docker-compose-released`, but loads the freshly built `gateway` and `ui` container images first
   # This checks that all of our docker-compose files work with the changes in the PR
@@ -776,6 +782,7 @@ jobs:
           docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
           docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download ClickHouse fixtures
@@ -977,6 +984,7 @@ jobs:
           docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
           docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Set container image tags
@@ -1122,8 +1130,11 @@ jobs:
       contents: read
       # Permission for rust-cache
       actions: read
+      # Permission to fetch GitHub OIDC token authentication for Namespace login
+      id-token: write
+    needs: [build-gateway-container]
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero' && !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]')
     env:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
@@ -1173,9 +1184,21 @@ jobs:
       - name: Cleanup disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+
+      - name: Login to Namespace registry
+        run: nsc docker login
+
+      - name: Download container images
+        run: |
+          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
+          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Make sure dependency services are up
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
@@ -1266,6 +1289,7 @@ jobs:
 
   build-fixtures-container:
     uses: ./.github/workflows/build-fixtures-container.yml
+    if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -1296,6 +1320,7 @@ jobs:
     needs:
       [
         build-gateway-container,
+        build-gateway-e2e-container,
         build-ui-container,
         build-mock-provider-api-container,
       ]
@@ -1417,7 +1442,7 @@ jobs:
       actions: read
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     uses: ./.github/workflows/mocked-batch-test.yml
-    needs: [build-mock-provider-api-container]
+    needs: [build-gateway-container, build-mock-provider-api-container]
     secrets: inherit
 
   autopilot-e2e:
@@ -1453,7 +1478,6 @@ jobs:
       [
         check-version-consistency,
         check-production-deployment-docker-compose,
-        check-if-edited-then-edit,
         check-docker-compose-released,
         check-docker-compose-commit,
         check-python-client-build,

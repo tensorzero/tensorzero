@@ -195,6 +195,7 @@ async def test_async_text_content_roundtrip_complete_flow(
     follow_up_inference = follow_up_stored.inferences[0]
 
     # Verify input contains our text and raw_text
+    assert follow_up_inference.input is not None, "Follow-up inference input must not be None"
     input_messages = follow_up_inference.input.messages
     assert input_messages is not None, "Input messages must not be None"
     assert len(input_messages) >= 3, "Should have user, assistant, and follow-up user messages"
@@ -446,6 +447,7 @@ def test_sync_text_content_roundtrip_complete_flow(sync_client: TensorZeroGatewa
     follow_up_inference = follow_up_stored.inferences[0]
 
     # Verify StoredInputMessageContentText
+    assert follow_up_inference.input is not None, "Follow-up inference input must not be None"
     input_messages_sync = follow_up_inference.input.messages
     assert input_messages_sync is not None, "Input messages must not be None"
 

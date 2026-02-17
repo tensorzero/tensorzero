@@ -43,6 +43,7 @@ import {
 import { useToast } from "~/hooks/use-toast";
 import { logger } from "~/utils/logger";
 import { ActionBar } from "~/components/layout/ActionBar";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DatasetSelect } from "~/components/dataset/DatasetSelect";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
@@ -499,6 +500,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                 : "Add selected inferences to dataset"
             }
           />
+          <AskAutopilotButton message={`Evaluation: ${evaluation_name}\n\n`} />
         </ActionBar>
       </PageHeader>
 

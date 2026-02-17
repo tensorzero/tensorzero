@@ -88,20 +88,36 @@ jobs:
           name: build-mock-provider-api-container
           path: .
 
+      - name: Download gateway-container
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-gateway-container
+          path: .
+
       - name: Load mock-provider-api-container
         id: load-mock-provider-api
         continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
         run: |
           docker load < mock-provider-api-container.tar
 
+      - name: Load gateway-container
+        run: |
+          docker load < gateway-container.tar
+
       - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG
         if: steps.load-mock-provider-api.outcome == 'success' # Only run if artifact was successfully loaded
         run: |
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
+      # This is for postgres migrations to run the correct gateway
+      - name: Set container image tags
+        run: |
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
       - name: Start Docker services (mock-provider-api + dependencies)
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-provider-api
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-provider-api
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
         run: |
@@ -119,6 +135,11 @@ jobs:
       - name: Run mocked batch tests
         run: |
           cargo test-mock-batch --no-fail-fast
+
+      - name: Print docker compose logs
+        if: always()
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print batch logs
         if: always()

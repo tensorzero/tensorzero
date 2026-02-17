@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use futures::future::{join_all, try_join_all};
+use indexmap::IndexMap;
 use rand::RngExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -161,7 +162,7 @@ impl Variant for MixtureOfNConfig {
         _inference_params: InferenceParams,
     ) -> impl Future<Output = Result<InferenceResult, Error>> + Send {
         async move {
-            let candidate_inference_results = self
+            let (candidate_inference_results, candidate_errors) = self
                 .infer_candidates(
                     &input,
                     &models,
@@ -176,8 +177,10 @@ impl Variant for MixtureOfNConfig {
                 &function,
                 &models.models,
                 Arc::clone(&inference_config),
-                clients,
+                clients.clone(),
                 candidate_inference_results,
+                candidate_errors,
+                clients.include_raw_response,
                 false,
             )
             .await?
@@ -202,7 +205,7 @@ impl Variant for MixtureOfNConfig {
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         // We infer the candidates in non-streaming mode, since we need to pass the full candidate results to the fuser
-        let candidate_inference_results = self
+        let (candidate_inference_results, candidate_errors) = self
             .infer_candidates(
                 &input,
                 &models,
@@ -218,8 +221,10 @@ impl Variant for MixtureOfNConfig {
                 &function,
                 &models.models,
                 Arc::clone(&inference_config),
-                clients,
+                clients.clone(),
                 candidate_inference_results,
+                candidate_errors,
+                clients.include_raw_response,
                 true,
             )
             .await?
@@ -355,6 +360,7 @@ pub fn stream_inference_from_non_stream(
     let model_used_info = ModelUsedInfo {
         model_name: model_inference_result.model_name.clone(),
         model_provider_name: model_inference_result.model_provider_name.clone(),
+        provider_type: model_inference_result.provider_type.clone(),
         raw_request: model_inference_result.raw_request.clone(),
         inference_params: inference_params.clone(),
         // Preserve the raw response from the candidate we chose (rather than attempting
@@ -375,6 +381,7 @@ pub fn stream_inference_from_non_stream(
         },
         cached: model_inference_result.cached,
         model_inference_id: model_inference_result.id,
+        failed_raw_response: model_inference_result.failed_raw_response.clone(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage), raw_usage_entries)?;
     Ok((stream, model_used_info))
@@ -483,7 +490,7 @@ impl MixtureOfNConfig {
         function: &Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
         clients: InferenceClients,
-    ) -> Result<Vec<InferenceResult>, Error> {
+    ) -> Result<(Vec<InferenceResult>, IndexMap<String, Error>), Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
             .candidates
@@ -550,15 +557,21 @@ impl MixtureOfNConfig {
         )
         .await;
 
-        // Collect the successful results
+        // Collect the successful results and errors.
+        // Use an enumerated key to avoid overwriting errors when the same
+        // candidate variant appears more than once in the candidates list.
         let mut successful_results = Vec::new();
-        for (_candidate_name, result) in inference_results {
-            if let Ok(res) = result {
-                successful_results.push(res);
+        let mut candidate_errors = IndexMap::new();
+        for (i, (candidate_name, result)) in inference_results.into_iter().enumerate() {
+            match result {
+                Ok(res) => successful_results.push(res),
+                Err(e) => {
+                    candidate_errors.insert(format!("candidates[{i}] ({candidate_name})"), e);
+                }
             }
         }
 
-        Ok(successful_results)
+        Ok((successful_results, candidate_errors))
     }
 
     /// Fuses the candidates using the fuser config.
@@ -573,21 +586,36 @@ impl MixtureOfNConfig {
         inference_config: Arc<InferenceConfig>,
         clients: InferenceClients,
         mut candidates: Vec<InferenceResult>,
+        candidate_errors: IndexMap<String, Error>,
+        include_raw_response: bool,
         stream: bool,
     ) -> Result<InferenceOrStreamResult, Error> {
         if candidates.is_empty() {
-            return Err(ErrorDetails::Inference {
-                message: "No candidates to fuse in the mixture of n".to_string(),
-            }
-            .into());
+            return Err(ErrorDetails::AllCandidatesFailed { candidate_errors }.into());
         }
         if candidates.len() == 1 {
-            return Ok(InferenceOrStreamResult::NonStream(candidates.pop().ok_or_else(|| Error::new(ErrorDetails::Inference {
+            let mut selected = candidates.pop().ok_or_else(|| Error::new(ErrorDetails::Inference {
                 message: "Expected one candidate but found none. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-            }))?));
+            }))?;
+            // Inject failed candidate raw_responses before returning
+            if include_raw_response {
+                let failed_entries: Vec<_> = candidate_errors
+                    .values()
+                    .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                    .collect();
+                if !failed_entries.is_empty()
+                    && let Some(first) = selected.mut_model_inference_results().first_mut()
+                {
+                    let mut new_failed = failed_entries;
+                    new_failed.append(&mut first.failed_raw_response);
+                    first.failed_raw_response = new_failed;
+                }
+            }
+            return Ok(InferenceOrStreamResult::NonStream(selected));
         }
         let mut candidates = candidates;
 
+        let mut fuser_error: Option<Error> = None;
         let inference_result = if stream {
             inner_fuse_candidates_stream(
                 &self.fuser,
@@ -618,14 +646,15 @@ impl MixtureOfNConfig {
         // As long as the fuser returns an inference result, we want to include it in the observability
         let mut inference_result = match inference_result {
             Ok(inf_result) => inf_result,
-            Err(_) => {
+            Err(fuser_err) => {
+                fuser_error = Some(fuser_err);
                 let random_index = rand::rng().random_range(0..candidates.len());
                 if random_index >= candidates.len() {
                     return Err(Error::new(ErrorDetails::Inference {
                         message: "Failed to get random candidate (should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                     }));
                 }
-                // If the fuser fails, don't provide any 'original_response' to the user
+                // If the fuser fails, don't provide any `original_response` to the user
                 let mut candidate = candidates.swap_remove(random_index);
                 candidate.set_original_response(None);
                 InferenceOrStreamResult::NonStream(candidate)
@@ -634,10 +663,33 @@ impl MixtureOfNConfig {
 
         match &mut inference_result {
             InferenceOrStreamResult::NonStream(inference_result) => {
+                // Inject failed candidate raw_responses
+                if include_raw_response {
+                    let failed_entries: Vec<_> = candidate_errors
+                        .values()
+                        .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                        .collect();
+                    if !failed_entries.is_empty()
+                        && let Some(first) =
+                            inference_result.mut_model_inference_results().first_mut()
+                    {
+                        let mut new_failed = failed_entries;
+                        new_failed.append(&mut first.failed_raw_response);
+                        first.failed_raw_response = new_failed;
+                    }
+                }
                 for candidate in candidates {
                     inference_result
                         .mut_model_inference_results()
                         .extend(candidate.owned_model_inference_results());
+                }
+                // Inject fuser failure raw_responses
+                if include_raw_response
+                    && let Some(fuser_err) = &fuser_error
+                    && let Some(entries) = fuser_err.extract_raw_response_entries()
+                    && let Some(first) = inference_result.mut_model_inference_results().first_mut()
+                {
+                    first.failed_raw_response.extend(entries);
                 }
             }
             InferenceOrStreamResult::Stream(_stream, model_used_info) => {
@@ -646,6 +698,25 @@ impl MixtureOfNConfig {
                         .previous_model_inference_results
                         .extend(candidate.owned_model_inference_results());
                 }
+                // Inject failed candidate raw_responses into the first previous_model_inference_result.
+                // This must happen after candidate results are appended above, so that
+                // `first_mut()` has an entry to attach the failed entries to.
+                if include_raw_response {
+                    let failed_entries: Vec<_> = candidate_errors
+                        .values()
+                        .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                        .collect();
+                    if !failed_entries.is_empty()
+                        && let Some(first) =
+                            model_used_info.previous_model_inference_results.first_mut()
+                    {
+                        let mut new_failed = failed_entries;
+                        new_failed.append(&mut first.failed_raw_response);
+                        first.failed_raw_response = new_failed;
+                    }
+                }
+                // Note: fuser error is not possible in the Stream branch,
+                // because fuser failure always falls back to NonStream
             }
         }
 
@@ -954,11 +1025,11 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
+        cache::{CacheEnabledMode, CacheManager, CacheOptions},
         config::{SchemaData, UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
-        experimentation::ExperimentationConfig,
+        experimentation::ExperimentationConfigWithNamespaces,
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
@@ -1180,11 +1251,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1215,11 +1288,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1269,11 +1344,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1307,11 +1384,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1368,7 +1447,7 @@ mod tests {
             json_mode_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1386,11 +1465,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1421,11 +1502,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider1".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1481,6 +1564,7 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
             rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
@@ -1521,6 +1605,8 @@ mod tests {
                 Arc::new(inference_config.clone()),
                 inference_clients.clone(),
                 candidates.clone(),
+                IndexMap::new(),
+                false,
                 false,
             )
             .await
@@ -1609,6 +1695,8 @@ mod tests {
                 Arc::new(inference_config.clone()),
                 inference_clients.clone(),
                 candidates.clone(),
+                IndexMap::new(),
+                false,
                 false,
             )
             .await
@@ -1689,7 +1777,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         }));
 
         let models_arc = Arc::new(models);
@@ -1701,6 +1789,8 @@ mod tests {
                 Arc::new(inference_config.clone()),
                 inference_clients.clone(),
                 candidates.clone(),
+                IndexMap::new(),
+                false,
                 false,
             )
             .await
@@ -1730,16 +1820,19 @@ mod tests {
                 Arc::new(inference_config.clone()),
                 inference_clients.clone(),
                 empty_candidates.clone(),
+                IndexMap::new(),
+                false,
                 false,
             )
             .await;
         let err = result.unwrap_err();
         assert_eq!(
             err,
-            ErrorDetails::Inference {
-                message: "No candidates to fuse in the mixture of n".to_string()
+            ErrorDetails::AllCandidatesFailed {
+                candidate_errors: IndexMap::new(),
             }
-            .into()
+            .into(),
+            "Empty candidates should return AllCandidatesFailed error"
         );
     }
 

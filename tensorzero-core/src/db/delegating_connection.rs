@@ -12,13 +12,17 @@ use uuid::Uuid;
 
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, MetricConfigLevel};
-use crate::db::ConfigQueries;
+use crate::db::BatchWriterHandle;
 use crate::db::TimeWindow;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::datasets::{
     DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams,
+};
+use crate::db::evaluation_queries::{
+    EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
+    EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
 };
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CumulativeFeedbackTimeSeriesPoint,
@@ -35,6 +39,7 @@ use crate::db::inferences::{
 };
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::resolve_uuid::{ResolveUuidQueries, ResolvedObject};
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::workflow_evaluation_queries::{
     GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow, WorkflowEvaluationProjectRow,
@@ -43,12 +48,13 @@ use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationRunWithEpisodeCountRow,
 };
 use crate::db::{
-    EpisodeByIdRow, EpisodeQueries, ModelLatencyDatapoint, ModelUsageTimePoint,
-    TableBoundsWithCount,
+    ConfigQueries, DICLExampleWithDistance, DICLQueries, DeploymentIdQueries, EpisodeByIdRow,
+    EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries, HowdyTokenUsage,
+    ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
 };
 use crate::error::Error;
 use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
-use crate::function::FunctionConfig;
+use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert, StoredModelInference,
@@ -80,17 +86,44 @@ pub struct DelegatingDatabaseConnection {
 /// via &(dyn DelegatingDatabaseQueries).
 pub trait DelegatingDatabaseQueries:
     ConfigQueries
+    + DeploymentIdQueries
+    + HowdyQueries
     + FeedbackQueries
     + InferenceQueries
     + DatasetQueries
     + BatchInferenceQueries
     + ModelInferenceQueries
     + WorkflowEvaluationQueries
+    + EvaluationQueries
+    + ResolveUuidQueries
     + EpisodeQueries
+    + DICLQueries
 {
+    fn batcher_join_handles(&self) -> Vec<BatchWriterHandle>;
 }
-impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {}
-impl DelegatingDatabaseQueries for PostgresConnectionInfo {}
+impl DelegatingDatabaseQueries for ClickHouseConnectionInfo {
+    fn batcher_join_handles(&self) -> Vec<BatchWriterHandle> {
+        self.batcher_join_handle().into_iter().collect()
+    }
+}
+impl DelegatingDatabaseQueries for PostgresConnectionInfo {
+    fn batcher_join_handles(&self) -> Vec<BatchWriterHandle> {
+        self.batcher_join_handle().into_iter().collect()
+    }
+}
+
+impl DelegatingDatabaseQueries for DelegatingDatabaseConnection {
+    fn batcher_join_handles(&self) -> Vec<BatchWriterHandle> {
+        let mut handles = Vec::new();
+        if let Some(h) = self.clickhouse.batcher_join_handle() {
+            handles.push(h);
+        }
+        if let Some(h) = self.postgres.batcher_join_handle() {
+            handles.push(h);
+        }
+        handles
+    }
+}
 
 impl DelegatingDatabaseConnection {
     pub fn new(clickhouse: ClickHouseConnectionInfo, postgres: PostgresConnectionInfo) -> Self {
@@ -106,15 +139,6 @@ impl DelegatingDatabaseConnection {
         } else {
             &self.clickhouse
         }
-    }
-
-    /// Gets the deployment ID, trying ClickHouse first, then falling back to Postgres.
-    /// If ClickHouse has a deployment ID and Postgres is enabled, syncs it to Postgres
-    /// to keep both databases consistent.
-    pub async fn get_deployment_id(&self) -> Result<String, ()> {
-        // TODO(#5691): Support reading deployment ID from Postgres, and syncing the deployment ID
-        // from ClickHouse into Postgres if Clickhouse already exists.
-        self.clickhouse.get_deployment_id().await
     }
 }
 
@@ -139,6 +163,28 @@ impl ConfigQueries for DelegatingDatabaseConnection {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl DeploymentIdQueries for DelegatingDatabaseConnection {
+    async fn get_deployment_id(&self) -> Result<String, Error> {
+        self.get_read_database().get_deployment_id().await
+    }
+}
+
+#[async_trait]
+impl HowdyQueries for DelegatingDatabaseConnection {
+    async fn count_inferences_for_howdy(&self) -> Result<HowdyInferenceCounts, Error> {
+        self.get_read_database().count_inferences_for_howdy().await
+    }
+
+    async fn count_feedbacks_for_howdy(&self) -> Result<HowdyFeedbackCounts, Error> {
+        self.get_read_database().count_feedbacks_for_howdy().await
+    }
+
+    async fn get_token_totals_for_howdy(&self) -> Result<HowdyTokenUsage, Error> {
+        self.get_read_database().get_token_totals_for_howdy().await
     }
 }
 
@@ -903,6 +949,125 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
 }
 
 #[async_trait]
+impl EvaluationQueries for DelegatingDatabaseConnection {
+    async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
+        self.get_read_database().count_total_evaluation_runs().await
+    }
+
+    async fn list_evaluation_runs(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationRunInfoRow>, Error> {
+        self.get_read_database()
+            .list_evaluation_runs(limit, offset)
+            .await
+    }
+
+    async fn count_datapoints_for_evaluation(
+        &self,
+        function_name: &str,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<u64, Error> {
+        self.get_read_database()
+            .count_datapoints_for_evaluation(function_name, evaluation_run_ids)
+            .await
+    }
+
+    async fn search_evaluation_runs(
+        &self,
+        evaluation_name: &str,
+        function_name: &str,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationRunSearchResult>, Error> {
+        self.get_read_database()
+            .search_evaluation_runs(evaluation_name, function_name, query, limit, offset)
+            .await
+    }
+
+    async fn get_evaluation_run_infos(
+        &self,
+        evaluation_run_ids: &[Uuid],
+        function_name: &str,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
+        self.get_read_database()
+            .get_evaluation_run_infos(evaluation_run_ids, function_name)
+            .await
+    }
+
+    async fn get_evaluation_run_infos_for_datapoint(
+        &self,
+        datapoint_id: &Uuid,
+        function_name: &str,
+        function_type: FunctionConfigType,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
+        self.get_read_database()
+            .get_evaluation_run_infos_for_datapoint(datapoint_id, function_name, function_type)
+            .await
+    }
+
+    async fn get_evaluation_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        metric_names: &[String],
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<EvaluationStatisticsRow>, Error> {
+        self.get_read_database()
+            .get_evaluation_statistics(
+                function_name,
+                function_type,
+                metric_names,
+                evaluation_run_ids,
+            )
+            .await
+    }
+
+    async fn get_evaluation_results(
+        &self,
+        function_name: &str,
+        evaluation_run_ids: &[Uuid],
+        function_type: FunctionConfigType,
+        metric_names: &[String],
+        datapoint_id: Option<&Uuid>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationResultRow>, Error> {
+        self.get_read_database()
+            .get_evaluation_results(
+                function_name,
+                evaluation_run_ids,
+                function_type,
+                metric_names,
+                datapoint_id,
+                limit,
+                offset,
+            )
+            .await
+    }
+
+    async fn get_inference_evaluation_human_feedback(
+        &self,
+        metric_name: &str,
+        datapoint_id: &Uuid,
+        output: &str,
+    ) -> Result<Option<InferenceEvaluationHumanFeedbackRow>, Error> {
+        self.get_read_database()
+            .get_inference_evaluation_human_feedback(metric_name, datapoint_id, output)
+            .await
+    }
+}
+
+#[async_trait]
+impl ResolveUuidQueries for DelegatingDatabaseConnection {
+    async fn resolve_uuid(&self, id: &Uuid) -> Result<Vec<ResolvedObject>, Error> {
+        self.get_read_database().resolve_uuid(id).await
+    }
+}
+
+#[async_trait]
 impl EpisodeQueries for DelegatingDatabaseConnection {
     async fn query_episode_table(
         &self,
@@ -917,6 +1082,78 @@ impl EpisodeQueries for DelegatingDatabaseConnection {
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
         self.get_read_database().query_episode_table_bounds().await
+    }
+}
+
+#[async_trait]
+impl DICLQueries for DelegatingDatabaseConnection {
+    async fn insert_dicl_example(&self, example: &StoredDICLExample) -> Result<(), Error> {
+        self.clickhouse.insert_dicl_example(example).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_dicl_example(example).await
+        {
+            tracing::error!("Error writing DICL example to Postgres: {e}");
+        }
+
+        Ok(())
+    }
+
+    async fn insert_dicl_examples(&self, examples: &[StoredDICLExample]) -> Result<u64, Error> {
+        let count = self.clickhouse.insert_dicl_examples(examples).await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self.postgres.insert_dicl_examples(examples).await
+        {
+            tracing::error!("Error writing DICL examples to Postgres: {e}");
+        }
+
+        Ok(count)
+    }
+
+    async fn get_similar_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        embedding: &[f32],
+        limit: u32,
+    ) -> Result<Vec<DICLExampleWithDistance>, Error> {
+        self.get_read_database()
+            .get_similar_dicl_examples(function_name, variant_name, embedding, limit)
+            .await
+    }
+
+    async fn has_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+    ) -> Result<bool, Error> {
+        self.get_read_database()
+            .has_dicl_examples(function_name, variant_name)
+            .await
+    }
+
+    async fn delete_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        namespace: Option<&str>,
+    ) -> Result<u64, Error> {
+        let count = self
+            .clickhouse
+            .delete_dicl_examples(function_name, variant_name, namespace)
+            .await?;
+
+        if ENABLE_POSTGRES_WRITE.get()
+            && let Err(e) = self
+                .postgres
+                .delete_dicl_examples(function_name, variant_name, namespace)
+                .await
+        {
+            tracing::error!("Error deleting DICL examples from Postgres: {e}");
+        }
+
+        Ok(count)
     }
 }
 

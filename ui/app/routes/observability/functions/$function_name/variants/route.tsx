@@ -23,6 +23,8 @@ import type { TimeWindow } from "~/types/tensorzero";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import type { Route } from "./+types/route";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
+import { useAutopilotAvailable } from "~/context/autopilot-available";
 import {
   PageHeader,
   PageLayout,
@@ -329,6 +331,41 @@ function InferencesTableContent({ data }: { data: InferencesTableData }) {
   );
 }
 
+function VariantDetailPageHeader({
+  functionName,
+  variantName,
+}: {
+  functionName: string;
+  variantName: string;
+}) {
+  const autopilotAvailable = useAutopilotAvailable();
+
+  return (
+    <PageHeader
+      eyebrow={
+        <Breadcrumbs
+          segments={[
+            { label: "Functions", href: "/observability/functions" },
+            {
+              label: functionName,
+              href: toFunctionUrl(functionName),
+              isIdentifier: true,
+            },
+            { label: "Variants" },
+          ]}
+        />
+      }
+      name={variantName}
+    >
+      {autopilotAvailable && (
+        <AskAutopilotButton
+          message={`Variant: ${variantName}\nFunction: ${functionName}\n\n`}
+        />
+      )}
+    </PageHeader>
+  );
+}
+
 // Section components with Suspense boundaries
 function MetricsSection({
   metricsWithFeedbackData,
@@ -457,7 +494,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
         },
         timeouts: {
           non_streaming: { total_ms: null },
-          streaming: { ttft_ms: null },
+          streaming: { ttft_ms: null, total_ms: null },
         },
       };
     } else {
@@ -475,21 +512,9 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Functions", href: "/observability/functions" },
-              {
-                label: function_name,
-                href: toFunctionUrl(function_name),
-                isIdentifier: true,
-              },
-              { label: "Variants" },
-            ]}
-          />
-        }
-        name={variant_name}
+      <VariantDetailPageHeader
+        functionName={function_name}
+        variantName={variant_name}
       />
 
       <SectionsGroup>

@@ -1,24 +1,33 @@
+use std::sync::Arc;
+use std::{collections::HashSet, time::Duration};
+
 use async_trait::async_trait;
 use durable;
 use futures::TryStreamExt;
 use sqlx::{PgPool, Row, migrate, postgres::PgPoolOptions};
-use std::{collections::HashSet, time::Duration};
 use tokio::time::timeout;
 
 use crate::error::{Error, ErrorDetails};
 
+use self::batching::PostgresBatchSender;
+use super::BatchWriterHandle;
 use super::HealthCheckable;
 
 pub mod batch_inference;
+pub mod batching;
 pub mod config_queries;
 pub mod dataset_queries;
 pub mod deployment_queries;
+pub mod dicl_queries;
+pub mod evaluation_queries;
 pub mod experimentation;
 pub mod feedback;
+mod howdy_queries;
 pub mod inference_queries;
 pub mod model_inferences;
 pub mod pgcron;
 pub mod rate_limiting;
+mod resolve_uuid;
 pub mod workflow_evaluation_queries;
 
 mod episode_queries;
@@ -33,6 +42,7 @@ const RUN_MIGRATIONS_COMMAND: &str = "You likely need to apply migrations to you
 pub enum PostgresConnectionInfo {
     Enabled {
         pool: PgPool,
+        batch_sender: Option<Arc<PostgresBatchSender>>,
     },
     #[cfg(test)]
     Mock {
@@ -43,7 +53,17 @@ pub enum PostgresConnectionInfo {
 
 impl PostgresConnectionInfo {
     pub fn new_with_pool(pool: PgPool) -> Self {
-        Self::Enabled { pool }
+        Self::Enabled {
+            pool,
+            batch_sender: None,
+        }
+    }
+
+    pub fn new_with_pool_and_batcher(pool: PgPool, batch_sender: Arc<PostgresBatchSender>) -> Self {
+        Self::Enabled {
+            pool,
+            batch_sender: Some(batch_sender),
+        }
     }
 
     #[cfg(test)]
@@ -57,7 +77,7 @@ impl PostgresConnectionInfo {
 
     pub fn get_pool(&self) -> Option<&PgPool> {
         match self {
-            Self::Enabled { pool } => Some(pool),
+            Self::Enabled { pool, .. } => Some(pool),
             #[cfg(test)]
             Self::Mock { .. } => None,
             Self::Disabled => None,
@@ -66,7 +86,7 @@ impl PostgresConnectionInfo {
 
     pub fn get_pool_result(&self) -> Result<&PgPool, Error> {
         match self {
-            Self::Enabled { pool } => Ok(pool),
+            Self::Enabled { pool, .. } => Ok(pool),
             #[cfg(test)]
             Self::Mock { .. } => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: "Mock database is not supported".to_string(),
@@ -74,6 +94,26 @@ impl PostgresConnectionInfo {
             Self::Disabled => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: "Database is disabled".to_string(),
             })),
+        }
+    }
+
+    pub fn batch_sender(&self) -> Option<&Arc<PostgresBatchSender>> {
+        match self {
+            Self::Enabled { batch_sender, .. } => batch_sender.as_ref(),
+            #[cfg(test)]
+            Self::Mock { .. } => None,
+            Self::Disabled => None,
+        }
+    }
+
+    pub fn batcher_join_handle(&self) -> Option<BatchWriterHandle> {
+        match self {
+            Self::Enabled { batch_sender, .. } => {
+                batch_sender.as_ref().map(|s| s.writer_handle.clone())
+            }
+            #[cfg(test)]
+            Self::Mock { .. } => None,
+            Self::Disabled => None,
         }
     }
 
@@ -149,51 +189,85 @@ impl PostgresConnectionInfo {
     /// This is called on gateway startup to sync config from tensorzero.toml to Postgres.
     pub async fn write_retention_config(
         &self,
-        inference_retention_days: Option<u32>,
+        inference_metadata_retention_days: Option<u32>,
+        inference_data_retention_days: Option<u32>,
     ) -> Result<(), Error> {
         let Some(pool) = self.get_pool() else {
             return Ok(());
         };
 
-        match inference_retention_days {
+        // Clean up the legacy key (replaced by the two keys below)
+        sqlx::query!(
+            "DELETE FROM tensorzero.retention_config WHERE key = 'inference_retention_days'"
+        )
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresQuery {
+                message: format!("Failed to delete legacy `inference_retention_days` config: {e}"),
+            })
+        })?;
+
+        Self::upsert_retention_key(
+            pool,
+            "inference_metadata_retention_days",
+            inference_metadata_retention_days,
+        )
+        .await?;
+        Self::upsert_retention_key(
+            pool,
+            "inference_data_retention_days",
+            inference_data_retention_days,
+        )
+        .await?;
+
+        tracing::info!(
+            inference_metadata_retention_days,
+            inference_data_retention_days,
+            "Configured inference retention policy"
+        );
+
+        Ok(())
+    }
+
+    async fn upsert_retention_key(
+        pool: &sqlx::PgPool,
+        key: &str,
+        value: Option<u32>,
+    ) -> Result<(), Error> {
+        match value {
             Some(days) => {
-                sqlx::query(
+                sqlx::query!(
                     r"
                     INSERT INTO tensorzero.retention_config (key, value, updated_at)
-                    VALUES ('inference_retention_days', $1, NOW())
-                    ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+                    VALUES ($1, $2, NOW())
+                    ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
                     ",
+                    key,
+                    days.to_string(),
                 )
-                .bind(days.to_string())
                 .execute(pool)
                 .await
                 .map_err(|e| {
                     Error::new(ErrorDetails::PostgresQuery {
-                        message: format!("Failed to write inference_retention_days config: {e}"),
+                        message: format!("Failed to write `{key}` config: {e}"),
                     })
                 })?;
-                tracing::info!(
-                    inference_retention_days = days,
-                    "Configured inference retention policy"
-                );
             }
             None => {
-                sqlx::query(
-                    "DELETE FROM tensorzero.retention_config WHERE key = 'inference_retention_days'",
+                sqlx::query!(
+                    "DELETE FROM tensorzero.retention_config WHERE key = $1",
+                    key
                 )
                 .execute(pool)
                 .await
                 .map_err(|e| {
                     Error::new(ErrorDetails::PostgresQuery {
-                        message: format!("Failed to clear inference_retention_days config: {e}"),
+                        message: format!("Failed to clear `{key}` config: {e}"),
                     })
                 })?;
-                tracing::debug!(
-                    "Inference retention policy not configured (partitions retained indefinitely)"
-                );
             }
         }
-
         Ok(())
     }
 }
@@ -213,7 +287,7 @@ impl HealthCheckable for PostgresConnectionInfo {
                     }))
                 }
             }
-            Self::Enabled { pool } => {
+            Self::Enabled { pool, .. } => {
                 let check = async {
                     let _result = sqlx::query("SELECT 1").fetch_one(pool).await.map_err(|e| {
                         Error::new(ErrorDetails::PostgresConnection {

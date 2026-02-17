@@ -9,6 +9,13 @@ use crate::db::datasets::{
     DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams, MockDatasetQueries,
 };
+use crate::db::feedback::{
+    BooleanMetricFeedbackInsert, CommentFeedbackInsert, CumulativeFeedbackTimeSeriesPoint,
+    DemonstrationFeedbackInsert, DemonstrationFeedbackRow, FeedbackBounds, FeedbackByVariant,
+    FeedbackQueries, FeedbackRow, FloatMetricFeedbackInsert, GetVariantPerformanceParams,
+    LatestFeedbackRow, MetricWithFeedback, MockFeedbackQueries,
+    StaticEvaluationHumanFeedbackInsert, VariantPerformanceRow,
+};
 use crate::db::inferences::{
     CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
     CountInferencesWithFeedbackParams, FunctionInferenceCount, FunctionInfo,
@@ -16,11 +23,13 @@ use crate::db::inferences::{
     ListInferenceMetadataParams, ListInferencesParams, MockInferenceQueries, VariantThroughput,
 };
 use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueries};
+use crate::db::resolve_uuid::{ResolveUuidQueries, ResolvedObject};
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::{
     ConfigQueries, MockConfigQueries, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow,
 };
 use crate::error::Error;
+use crate::function::FunctionConfig;
 use crate::inference::types::StoredModelInference;
 use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
 use crate::stored_inference::StoredInferenceDatabase;
@@ -42,6 +51,7 @@ pub(crate) struct MockClickHouseConnectionInfo {
     pub(crate) dataset_queries: MockDatasetQueries,
     pub(crate) config_queries: MockConfigQueries,
     pub(crate) model_inference_queries: MockModelInferenceQueries,
+    pub(crate) feedback_queries: MockFeedbackQueries,
 }
 
 impl MockClickHouseConnectionInfo {
@@ -51,6 +61,7 @@ impl MockClickHouseConnectionInfo {
             dataset_queries: MockDatasetQueries::new(),
             config_queries: MockConfigQueries::new(),
             model_inference_queries: MockModelInferenceQueries::new(),
+            feedback_queries: MockFeedbackQueries::new(),
         }
     }
 }
@@ -289,5 +300,142 @@ impl ModelInferenceQueries for MockClickHouseConnectionInfo {
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         self.model_inference_queries
             .get_model_latency_quantile_function_inputs()
+    }
+}
+
+#[async_trait]
+impl FeedbackQueries for MockClickHouseConnectionInfo {
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: &str,
+        function_name: &str,
+        variant_names: Option<&Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, Error> {
+        self.feedback_queries
+            .get_feedback_by_variant(metric_name, function_name, variant_names)
+            .await
+    }
+
+    async fn get_cumulative_feedback_timeseries(
+        &self,
+        function_name: String,
+        metric_name: String,
+        variant_names: Option<Vec<String>>,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error> {
+        self.feedback_queries
+            .get_cumulative_feedback_timeseries(
+                function_name,
+                metric_name,
+                variant_names,
+                time_window,
+                max_periods,
+            )
+            .await
+    }
+
+    async fn query_feedback_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        limit: Option<u32>,
+    ) -> Result<Vec<FeedbackRow>, Error> {
+        self.feedback_queries
+            .query_feedback_by_target_id(target_id, before, after, limit)
+            .await
+    }
+
+    async fn query_feedback_bounds_by_target_id(
+        &self,
+        target_id: Uuid,
+    ) -> Result<FeedbackBounds, Error> {
+        self.feedback_queries
+            .query_feedback_bounds_by_target_id(target_id)
+            .await
+    }
+
+    async fn count_feedback_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
+        self.feedback_queries
+            .count_feedback_by_target_id(target_id)
+            .await
+    }
+
+    async fn query_demonstration_feedback_by_inference_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        limit: Option<u32>,
+    ) -> Result<Vec<DemonstrationFeedbackRow>, Error> {
+        self.feedback_queries
+            .query_demonstration_feedback_by_inference_id(target_id, before, after, limit)
+            .await
+    }
+
+    async fn query_metrics_with_feedback(
+        &self,
+        function_name: &str,
+        function_config: &FunctionConfig,
+        variant_name: Option<&str>,
+    ) -> Result<Vec<MetricWithFeedback>, Error> {
+        self.feedback_queries
+            .query_metrics_with_feedback(function_name, function_config, variant_name)
+            .await
+    }
+
+    async fn query_latest_feedback_id_by_metric(
+        &self,
+        target_id: Uuid,
+    ) -> Result<Vec<LatestFeedbackRow>, Error> {
+        self.feedback_queries
+            .query_latest_feedback_id_by_metric(target_id)
+            .await
+    }
+
+    async fn get_variant_performances(
+        &self,
+        params: GetVariantPerformanceParams<'_>,
+    ) -> Result<Vec<VariantPerformanceRow>, Error> {
+        self.feedback_queries.get_variant_performances(params).await
+    }
+
+    async fn insert_boolean_feedback(
+        &self,
+        row: &BooleanMetricFeedbackInsert,
+    ) -> Result<(), Error> {
+        self.feedback_queries.insert_boolean_feedback(row).await
+    }
+
+    async fn insert_float_feedback(&self, row: &FloatMetricFeedbackInsert) -> Result<(), Error> {
+        self.feedback_queries.insert_float_feedback(row).await
+    }
+
+    async fn insert_comment_feedback(&self, row: &CommentFeedbackInsert) -> Result<(), Error> {
+        self.feedback_queries.insert_comment_feedback(row).await
+    }
+
+    async fn insert_demonstration_feedback(
+        &self,
+        row: &DemonstrationFeedbackInsert,
+    ) -> Result<(), Error> {
+        self.feedback_queries
+            .insert_demonstration_feedback(row)
+            .await
+    }
+
+    async fn insert_static_eval_feedback(
+        &self,
+        row: &StaticEvaluationHumanFeedbackInsert,
+    ) -> Result<(), Error> {
+        self.feedback_queries.insert_static_eval_feedback(row).await
+    }
+}
+
+#[async_trait]
+impl ResolveUuidQueries for MockClickHouseConnectionInfo {
+    async fn resolve_uuid(&self, _id: &Uuid) -> Result<Vec<ResolvedObject>, Error> {
+        Ok(vec![])
     }
 }

@@ -1,8 +1,11 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use feedback::FeedbackQueries;
+use futures::future::Shared;
 use serde::{Deserialize, Serialize};
-use std::future::Future;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -13,7 +16,10 @@ use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
+pub type BatchWriterHandle = Shared<Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
+
 pub mod batch_inference;
+pub mod batching;
 pub mod cache;
 pub mod clickhouse;
 pub mod datasets;
@@ -25,6 +31,7 @@ pub mod model_inferences;
 pub mod postgres;
 pub mod query_helpers;
 pub mod rate_limiting;
+pub mod resolve_uuid;
 pub mod stored_datapoint;
 pub mod test_helpers;
 pub mod valkey;
@@ -39,6 +46,7 @@ pub trait ClickHouseConnection:
 {
 }
 
+#[cfg_attr(test, automock)]
 #[async_trait]
 pub trait HealthCheckable {
     async fn health(&self) -> Result<(), Error>;
@@ -182,6 +190,38 @@ pub trait ConfigQueries: Send + Sync {
     async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error>;
 }
 
+#[async_trait]
+pub trait DeploymentIdQueries: Send + Sync {
+    async fn get_deployment_id(&self) -> Result<String, Error>;
+}
+
+#[derive(Debug)]
+pub struct HowdyInferenceCounts {
+    pub chat_inference_count: u64,
+    pub json_inference_count: u64,
+}
+
+#[derive(Debug)]
+pub struct HowdyFeedbackCounts {
+    pub boolean_metric_feedback_count: u64,
+    pub float_metric_feedback_count: u64,
+    pub comment_feedback_count: u64,
+    pub demonstration_feedback_count: u64,
+}
+
+#[derive(Debug)]
+pub struct HowdyTokenUsage {
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+}
+
+#[async_trait]
+pub trait HowdyQueries: Send + Sync {
+    async fn count_inferences_for_howdy(&self) -> Result<HowdyInferenceCounts, Error>;
+    async fn count_feedbacks_for_howdy(&self) -> Result<HowdyFeedbackCounts, Error>;
+    async fn get_token_totals_for_howdy(&self) -> Result<HowdyTokenUsage, Error>;
+}
+
 /// A stored DICL (Dynamic In-Context Learning) example.
 #[derive(Debug, Clone)]
 pub struct StoredDICLExample {
@@ -208,44 +248,39 @@ pub struct DICLExampleWithDistance {
 /// DICL stores examples with embeddings for similarity search during inference.
 /// The variant retrieves similar examples based on the input embedding to provide
 /// in-context learning examples to the model.
-pub trait DICLQueries {
+#[async_trait]
+pub trait DICLQueries: Send + Sync {
     /// Insert a DICL example into the database.
-    fn insert_dicl_example(
-        &self,
-        example: &StoredDICLExample,
-    ) -> impl Future<Output = Result<(), Error>> + Send;
+    async fn insert_dicl_example(&self, example: &StoredDICLExample) -> Result<(), Error>;
 
     /// Insert multiple DICL examples in a batch.
-    fn insert_dicl_examples(
-        &self,
-        examples: &[StoredDICLExample],
-    ) -> impl Future<Output = Result<u64, Error>> + Send;
+    async fn insert_dicl_examples(&self, examples: &[StoredDICLExample]) -> Result<u64, Error>;
 
     /// Get similar DICL examples using cosine distance.
     ///
     /// Returns examples sorted by cosine distance (ascending).
-    fn get_similar_dicl_examples(
+    async fn get_similar_dicl_examples(
         &self,
         function_name: &str,
         variant_name: &str,
         embedding: &[f32],
         limit: u32,
-    ) -> impl Future<Output = Result<Vec<DICLExampleWithDistance>, Error>> + Send;
+    ) -> Result<Vec<DICLExampleWithDistance>, Error>;
 
     /// Check if DICL examples exist for a given function and variant.
-    fn has_dicl_examples(
+    async fn has_dicl_examples(
         &self,
         function_name: &str,
         variant_name: &str,
-    ) -> impl Future<Output = Result<bool, Error>> + Send;
+    ) -> Result<bool, Error>;
 
     /// Delete DICL examples for a given function and variant.
     ///
     /// If namespace is provided, only deletes examples in that namespace.
-    fn delete_dicl_examples(
+    async fn delete_dicl_examples(
         &self,
         function_name: &str,
         variant_name: &str,
         namespace: Option<&str>,
-    ) -> impl Future<Output = Result<u64, Error>> + Send;
+    ) -> Result<u64, Error>;
 }

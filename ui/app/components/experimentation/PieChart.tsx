@@ -11,7 +11,6 @@ import {
 import {
   ChartContainer,
   ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
 } from "~/components/ui/chart";
 
@@ -77,7 +76,7 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-80 w-full">
+        <ChartContainer config={chartConfig}>
           <PieChart>
             <Pie
               data={data}
@@ -97,11 +96,12 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
               ))}
             </Pie>
             <ChartTooltip content={<CustomTooltipContent />} />
-            <ChartLegend
-              content={<ChartLegendContent className="font-mono text-xs" />}
-            />
           </PieChart>
         </ChartContainer>
+        <ChartLegend
+          items={data.map((d) => d.variant_name)}
+          colors={data.map((d) => chartConfig[d.variant_name]?.color ?? "")}
+        />
       </CardContent>
     </Card>
   );
