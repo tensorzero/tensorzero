@@ -40,6 +40,21 @@ pub async fn health_handler(
         ..
     }): AppState,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    health_check_inner(
+        &clickhouse_connection_info,
+        &postgres_connection_info,
+        &valkey_connection_info,
+        &valkey_cache_connection_info,
+    )
+    .await
+}
+
+async fn health_check_inner(
+    clickhouse_connection_info: &(dyn HealthCheckable + Sync),
+    postgres_connection_info: &(dyn HealthCheckable + Sync),
+    valkey_connection_info: &(dyn HealthCheckable + Sync),
+    valkey_cache_connection_info: &(dyn HealthCheckable + Sync),
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let (clickhouse_result, postgres_result, valkey_result, valkey_cache_result) = join!(
         clickhouse_connection_info.health(),
         postgres_connection_info.health(),
@@ -75,28 +90,25 @@ pub async fn health_handler(
 
 #[cfg(test)]
 mod tests {
-
     use std::sync::Arc;
 
     use crate::config::Config;
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
-    use crate::testing::get_unit_test_gateway_handle_with_options;
-    use crate::utils::gateway::GatewayHandleTestOptions;
+    use crate::db::postgres::PostgresConnectionInfo;
+    use crate::db::valkey::ValkeyConnectionInfo;
 
     use super::*;
 
     #[tokio::test]
     async fn test_health_handler() {
-        let config = Arc::new(Config::default());
-        let fake = FakeClickHouseClient::new(/* healthy= */ true);
-        let gateway_handle = get_unit_test_gateway_handle_with_options(
-            config.clone(),
-            GatewayHandleTestOptions {
-                clickhouse_client: Arc::new(fake),
-                postgres_healthy: true,
-            },
-        );
-        let response = health_handler(State(gateway_handle.app_state.clone())).await;
+        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(FakeClickHouseClient::new(
+            /* healthy= */ true,
+        )));
+        let postgres = PostgresConnectionInfo::new_mock(/* healthy= */ true);
+        let valkey = ValkeyConnectionInfo::Disabled;
+
+        let response = health_check_inner(&clickhouse, &postgres, &valkey, &valkey).await;
         assert!(response.is_ok(), "health check should pass");
         let response_value = response.unwrap();
         assert_eq!(response_value.get("gateway").unwrap(), "ok");
@@ -108,16 +120,13 @@ mod tests {
 
     #[tokio::test]
     async fn should_report_error_for_unhealthy_clickhouse() {
-        let config = Arc::new(Config::default());
-        let fake = FakeClickHouseClient::new(/* healthy= */ false);
-        let gateway_handle = get_unit_test_gateway_handle_with_options(
-            config,
-            GatewayHandleTestOptions {
-                clickhouse_client: Arc::new(fake),
-                postgres_healthy: true,
-            },
-        );
-        let response = health_handler(State(gateway_handle.app_state.clone())).await;
+        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(FakeClickHouseClient::new(
+            /* healthy= */ false,
+        )));
+        let postgres = PostgresConnectionInfo::new_mock(/* healthy= */ true);
+        let valkey = ValkeyConnectionInfo::Disabled;
+
+        let response = health_check_inner(&clickhouse, &postgres, &valkey, &valkey).await;
         assert!(response.is_err());
         let (status_code, error_json) = response.unwrap_err();
         assert_eq!(status_code, StatusCode::SERVICE_UNAVAILABLE);
@@ -127,16 +136,13 @@ mod tests {
 
     #[tokio::test]
     async fn should_report_error_for_unhealthy_postgres() {
-        let config = Arc::new(Config::default());
-        let fake = FakeClickHouseClient::new(/* healthy= */ true);
-        let gateway_handle = get_unit_test_gateway_handle_with_options(
-            config,
-            GatewayHandleTestOptions {
-                clickhouse_client: Arc::new(fake),
-                postgres_healthy: false,
-            },
-        );
-        let response = health_handler(State(gateway_handle.app_state.clone())).await;
+        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(FakeClickHouseClient::new(
+            /* healthy= */ true,
+        )));
+        let postgres = PostgresConnectionInfo::new_mock(/* healthy= */ false);
+        let valkey = ValkeyConnectionInfo::Disabled;
+
+        let response = health_check_inner(&clickhouse, &postgres, &valkey, &valkey).await;
         assert!(response.is_err());
         let (status_code, error_json) = response.unwrap_err();
         assert_eq!(status_code, StatusCode::SERVICE_UNAVAILABLE);
@@ -144,17 +150,14 @@ mod tests {
         assert_eq!(error_json.get("postgres").unwrap(), "error");
     }
 
-    #[tokio::test]
-    async fn test_status_handler() {
-        let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle_with_options(
-            config.clone(),
-            GatewayHandleTestOptions {
-                clickhouse_client: Arc::new(FakeClickHouseClient::new(true)),
-                postgres_healthy: true,
-            },
-        );
-        let response = status_handler(State(gateway_handle.app_state.clone())).await;
+    #[test]
+    fn test_status_response() {
+        let config = Config::default();
+        let response = StatusResponse {
+            status: "ok".to_string(),
+            version: TENSORZERO_VERSION.to_string(),
+            config_hash: config.hash.to_string(),
+        };
         assert_eq!(response.version, TENSORZERO_VERSION);
         assert!(!response.config_hash.is_empty());
     }

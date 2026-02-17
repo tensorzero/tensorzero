@@ -372,28 +372,21 @@ mod tests {
     use crate::config::{Config, ConfigFileGlob};
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
     use crate::db::postgres::PostgresConnectionInfo;
-    use crate::testing::get_unit_test_gateway_handle;
     use std::io::Write;
-    use std::sync::Arc;
     use tempfile::NamedTempFile;
 
     #[tokio::test]
     async fn test_get_inference_count_function_not_found() {
-        let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle(config);
+        let config = Config::default();
+        let mock_clickhouse = MockClickHouseConnectionInfo::new();
 
         let params = InferenceCountQueryParams {
             variant_name: None,
             group_by: None,
         };
 
-        let result = get_inference_count(
-            &gateway_handle.app_state.config,
-            &gateway_handle.app_state.clickhouse_connection_info,
-            "nonexistent_function",
-            params,
-        )
-        .await;
+        let result =
+            get_inference_count(&config, &mock_clickhouse, "nonexistent_function", params).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -423,20 +416,14 @@ mod tests {
         .unwrap()
         .into_config_without_writing_for_tests();
 
-        let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
+        let mock_clickhouse = MockClickHouseConnectionInfo::new();
 
         let params = InferenceCountQueryParams {
             variant_name: Some("nonexistent_variant".to_string()),
             group_by: None,
         };
 
-        let result = get_inference_count(
-            &gateway_handle.app_state.config,
-            &gateway_handle.app_state.clickhouse_connection_info,
-            "test_function",
-            params,
-        )
-        .await;
+        let result = get_inference_count(&config, &mock_clickhouse, "test_function", params).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -445,14 +432,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_inference_with_feedback_count_unknown_function() {
-        let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle(config);
+        let config = Config::default();
+        let mock_clickhouse = MockClickHouseConnectionInfo::new();
 
         let params = InferenceWithFeedbackCountQueryParams { threshold: 0.0 };
 
         let result = get_inference_with_feedback_count(
-            &gateway_handle.app_state.config,
-            &gateway_handle.app_state.clickhouse_connection_info,
+            &config,
+            &mock_clickhouse,
             "nonexistent_function".to_string(),
             "some_metric".to_string(),
             params,
@@ -487,13 +474,13 @@ mod tests {
         .unwrap()
         .into_config_without_writing_for_tests();
 
-        let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
+        let mock_clickhouse = MockClickHouseConnectionInfo::new();
 
         let params = InferenceWithFeedbackCountQueryParams { threshold: 0.0 };
 
         let result = get_inference_with_feedback_count(
-            &gateway_handle.app_state.config,
-            &gateway_handle.app_state.clickhouse_connection_info,
+            &config,
+            &mock_clickhouse,
             "test_function".to_string(),
             "nonexistent_metric".to_string(),
             params,

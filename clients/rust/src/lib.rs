@@ -1570,7 +1570,8 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     let response = tensorzero_core::endpoints::variant_probabilities::get_variant_sampling_probabilities(
-                        gateway.handle.app_state.clone(),
+                        &gateway.handle.app_state.config,
+                        &gateway.handle.app_state.postgres_connection_info,
                         GetVariantSamplingProbabilitiesParams {
                             function_name: function_name.to_string(),
                         },
