@@ -19,6 +19,7 @@ JSONL_FILES=(
     "jaro_winkler_similarity_feedback.jsonl"
     "comment_feedback_examples.jsonl"
     "dynamic_evaluation_run_examples.jsonl"
+    "metadata_only_inference_examples.jsonl"
 )
 
 # Upload each file

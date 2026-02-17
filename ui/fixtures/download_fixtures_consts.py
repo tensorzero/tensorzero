@@ -22,6 +22,7 @@ SMALL_FIXTURES = {
     "jaro_winkler_similarity_feedback.jsonl": "jaro_winkler_similarity_feedback.jsonl",
     "comment_feedback_examples.jsonl": "comment_feedback_examples.jsonl",
     "dynamic_evaluation_run_examples.jsonl": "dynamic_evaluation_run_examples.jsonl",
+    "metadata_only_inference_examples.jsonl": "metadata_only_inference_examples.jsonl",
 }
 
 LARGE_FIXTURES = [

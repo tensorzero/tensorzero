@@ -1416,6 +1416,24 @@ model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 # ...
 ```
 
+##### `reasoning_format`
+
+- **Type:** string
+- **Required:** no (default: none)
+
+When set to `"parsed"`, Groq will return structured reasoning content (thinking) separately from the main response.
+This should only be set for reasoning models that support the `reasoning_format` parameter (e.g. `qwen/qwen3-32b`).
+Non-reasoning models will reject requests with this parameter.
+
+```toml title="tensorzero.toml"
+[models.qwen3_32b.providers.groq]
+# ...
+type = "groq"
+model_name = "qwen/qwen3-32b"
+reasoning_format = "parsed"
+# ...
+```
+
 </Accordion>
 
 <Accordion title='type: "hyperbolic"'>
@@ -1497,6 +1515,23 @@ See [Mistral's documentation](https://docs.mistral.ai/getting-started/models/) f
 # ...
 type = "mistral"
 model_name = "open-mistral-nemo-2407"
+# ...
+```
+
+##### `prompt_mode`
+
+- **Type:** string
+- **Required:** no
+
+Controls reasoning behavior for Mistral's Magistral reasoning models.
+Set to `"reasoning"` to enable reasoning output with models like `magistral-small-latest` and `magistral-medium-latest`.
+
+```toml title="tensorzero.toml"
+[models.magistral_small.providers.mistral]
+# ...
+type = "mistral"
+model_name = "magistral-small-latest"
+prompt_mode = "reasoning"
 # ...
 ```
 

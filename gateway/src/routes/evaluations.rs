@@ -19,7 +19,7 @@ use evaluations::{
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::UninitializedVariantInfo;
-use tensorzero_core::db::clickhouse::BatchWriterHandle;
+use tensorzero_core::db::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -169,7 +169,7 @@ struct EvaluationStreamParams {
     dataset_name: Option<String>,
     variant_name: Option<String>,
     receiver: mpsc::Receiver<EvaluationUpdate>,
-    batcher_join_handle: Option<BatchWriterHandle>,
+    batcher_join_handles: Vec<BatchWriterHandle>,
 }
 
 fn create_evaluation_stream(
@@ -182,7 +182,7 @@ fn create_evaluation_stream(
         dataset_name,
         variant_name,
         mut receiver,
-        batcher_join_handle,
+        batcher_join_handles,
     } = params;
 
     async_stream::stream! {
@@ -241,18 +241,18 @@ fn create_evaluation_stream(
             }
         }
 
-        // Wait for ClickHouse batch writer to finish
-        if let Some(handle) = batcher_join_handle
-            && let Err(e) = handle.await
-        {
-            let error_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
-                evaluation_run_id: Some(evaluation_run_id),
-                message: format!("Error waiting for ClickHouse batch writer: {e}"),
-            });
-            if let Ok(data) = serde_json::to_string(&error_event) {
-                yield Ok(Event::default().event("event").data(data));
+        // Wait for batch writers to finish
+        for handle in batcher_join_handles {
+            if let Err(e) = handle.await {
+                let error_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
+                    evaluation_run_id: Some(evaluation_run_id),
+                    message: format!("Error waiting for batch writer: {e}"),
+                });
+                if let Ok(data) = serde_json::to_string(&error_event) {
+                    yield Ok(Event::default().event("event").data(data));
+                }
+                return;
             }
-            return;
         }
 
         // Send complete event
@@ -382,7 +382,7 @@ pub async fn run_evaluation_handler(
         dataset_name: dataset_name_for_event,
         variant_name: variant_name_for_event,
         receiver: result.receiver,
-        batcher_join_handle: result.batcher_join_handle,
+        batcher_join_handles: result.batcher_join_handles,
     });
 
     Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))

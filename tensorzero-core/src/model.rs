@@ -570,7 +570,7 @@ impl ModelConfig {
                     }
                 }
             }
-            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            Err(Error::new(ErrorDetails::AllModelProvidersFailed {
                 provider_errors,
             }))
         };
@@ -721,7 +721,7 @@ impl ModelConfig {
                     }
                 }
             }
-            Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            Err(Error::new(ErrorDetails::AllModelProvidersFailed {
                 provider_errors,
             }))
         };
@@ -814,7 +814,7 @@ impl ModelConfig {
                 }
             }
         }
-        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+        Err(Error::new(ErrorDetails::AllModelProvidersFailed {
             provider_errors,
         }))
     }
@@ -1337,6 +1337,7 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        reasoning_format: Option<String>,
     },
     Hyperbolic {
         model_name: String,
@@ -1356,6 +1357,7 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        prompt_mode: Option<String>,
     },
     OpenAI {
         model_name: String,
@@ -1618,6 +1620,7 @@ impl UninitializedProviderConfig {
             UninitializedProviderConfig::Groq {
                 model_name,
                 api_key_location,
+                reasoning_format,
             } => ProviderConfig::Groq(GroqProvider::new(
                 model_name,
                 GroqKind
@@ -1626,6 +1629,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                reasoning_format,
             )),
             UninitializedProviderConfig::Hyperbolic {
                 model_name,
@@ -1642,6 +1646,7 @@ impl UninitializedProviderConfig {
             UninitializedProviderConfig::Mistral {
                 model_name,
                 api_key_location,
+                prompt_mode,
             } => ProviderConfig::Mistral(MistralProvider::new(
                 model_name,
                 MistralKind
@@ -1650,6 +1655,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                prompt_mode,
             )),
             UninitializedProviderConfig::OpenAI {
                 model_name,
@@ -2741,6 +2747,7 @@ impl ShorthandModelConfig for ModelConfig {
                 GroqKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                None,
             )),
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
                 model_name,
@@ -2753,6 +2760,7 @@ impl ShorthandModelConfig for ModelConfig {
                 MistralKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                None,
             )),
             "openai" => {
                 if let Some(stripped_model_name) = model_name.strip_prefix("responses::") {
@@ -3027,7 +3035,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
@@ -3419,7 +3427,7 @@ mod tests {
         };
         assert_eq!(
             error,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
@@ -3649,7 +3657,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
@@ -3694,7 +3702,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::InferenceClient {
@@ -3782,7 +3790,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            ErrorDetails::ModelProvidersExhausted {
+            ErrorDetails::AllModelProvidersFailed {
                 provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {

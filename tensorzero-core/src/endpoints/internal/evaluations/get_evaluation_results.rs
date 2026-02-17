@@ -249,8 +249,8 @@ mod tests {
                         datapoint_id,
                         evaluation_run_id,
                         evaluator_inference_id: None,
-                        input: Input::default(),
-                        generated_output: vec![],
+                        input: Some(Input::default()),
+                        generated_output: Some(vec![]),
                         reference_output: Some(vec![]),
                         dataset_name: "test_dataset".to_string(),
                         metric_name: Some(
@@ -498,8 +498,8 @@ mod tests {
                         datapoint_id,
                         evaluation_run_id,
                         evaluator_inference_id: None,
-                        input: Input::default(),
-                        generated_output: vec![],
+                        input: Some(Input::default()),
+                        generated_output: Some(vec![]),
                         reference_output: Some(vec![]),
                         dataset_name: "test_dataset".to_string(),
                         metric_name: Some(

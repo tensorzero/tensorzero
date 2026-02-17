@@ -70,19 +70,15 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use axum::extract::State;
-
     use crate::config::{
         Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
     };
     use crate::function::{FunctionConfig, FunctionConfigChat};
-    use crate::testing::get_unit_test_gateway_handle;
 
     use super::*;
 
-    #[tokio::test]
-    async fn test_ui_config_handler_returns_ui_config_with_functions_and_metrics() {
-        // Create a function config
+    #[test]
+    fn test_ui_config_with_functions_and_metrics() {
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: Default::default(),
@@ -94,7 +90,6 @@ mod tests {
             all_explicit_templates_names: Default::default(),
         });
 
-        // Create a metric config
         let metric_config = MetricConfig {
             r#type: MetricConfigType::Boolean,
             optimize: MetricConfigOptimize::Max,
@@ -102,7 +97,6 @@ mod tests {
             description: None,
         };
 
-        // Build config with the function and metric
         let mut config = Config::default();
         config
             .functions
@@ -111,13 +105,8 @@ mod tests {
             .metrics
             .insert("test_metric".to_string(), metric_config);
 
-        let config = Arc::new(config);
-        let gateway_handle = get_unit_test_gateway_handle(config.clone());
+        let ui_config = UiConfig::from_config(&config);
 
-        let response = ui_config_handler(State(gateway_handle.app_state.clone())).await;
-
-        // Verify the returned UiConfig contains our function
-        let ui_config = response.0;
         assert_eq!(ui_config.functions.len(), 1);
         assert!(ui_config.functions.contains_key("test_function"));
         let returned_function = ui_config.functions.get("test_function").unwrap();
@@ -128,7 +117,6 @@ mod tests {
             panic!("Expected Chat function config");
         }
 
-        // Verify the returned UiConfig contains our metric
         assert_eq!(ui_config.metrics.len(), 1);
         assert!(ui_config.metrics.contains_key("test_metric"));
         let returned_metric = ui_config.metrics.get("test_metric").unwrap();
@@ -136,14 +124,9 @@ mod tests {
         assert_eq!(returned_metric.optimize, MetricConfigOptimize::Max);
         assert_eq!(returned_metric.level, MetricConfigLevel::Inference);
 
-        // Verify model_names is empty (default config has no models)
         assert!(ui_config.model_names.is_empty());
-
-        // Verify tools and evaluations are empty
         assert!(ui_config.tools.is_empty());
         assert!(ui_config.evaluations.is_empty());
-
-        // Verify config_hash is present
         assert!(!ui_config.config_hash.is_empty());
     }
 

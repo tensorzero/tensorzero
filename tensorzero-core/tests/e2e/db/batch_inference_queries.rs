@@ -31,8 +31,8 @@ fn create_batch_request_row(
         status: BatchStatus::Completed,
         function_name: Cow::Owned(function_name.to_string()),
         variant_name: Cow::Owned(variant_name.to_string()),
-        raw_request: Cow::Borrowed("{}"),
-        raw_response: Cow::Borrowed("{}"),
+        raw_request: Some(Cow::Borrowed("{}")),
+        raw_response: Some(Cow::Borrowed("{}")),
         errors: vec![],
         snapshot_hash: None,
     }
