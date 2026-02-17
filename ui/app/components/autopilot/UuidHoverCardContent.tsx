@@ -12,6 +12,8 @@ import { cn } from "~/utils/common";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 
+// --- Data types ---
+
 interface InferencePreview {
   timestamp: string;
 }
@@ -20,12 +22,63 @@ interface EpisodePreview {
   inference_count: number;
 }
 
+// --- Prop types ---
+
 interface UuidHoverCardContentProps {
   uuid: string;
   obj: ResolvedObject;
   url: string;
   isOpen: boolean;
 }
+
+interface InferenceHoverContentProps {
+  uuid: string;
+  obj: Extract<ResolvedObject, { type: "inference" }>;
+  url: string;
+  isOpen: boolean;
+}
+
+interface EpisodeHoverContentProps {
+  uuid: string;
+  url: string;
+  isOpen: boolean;
+}
+
+interface DatapointHoverContentProps {
+  obj: Extract<ResolvedObject, { type: "chat_datapoint" | "json_datapoint" }>;
+  url: string;
+}
+
+interface TypeBadgeLinkProps {
+  children: React.ReactNode;
+  url: string;
+}
+
+interface ItemProps {
+  label: string;
+  align?: "baseline" | "center";
+  children: React.ReactNode;
+}
+
+interface FunctionItemProps {
+  functionName: string;
+  functionType: string;
+}
+
+interface InfoItemProps {
+  label: string;
+  value?: string | null;
+  secondaryValue?: string | null;
+  mono?: boolean;
+  isLoading?: boolean;
+}
+
+interface TimestampItemProps {
+  data: InferencePreview | null;
+  isLoading: boolean;
+}
+
+// --- Content components ---
 
 export function UuidHoverCardContent({
   uuid,
@@ -66,12 +119,7 @@ function InferenceHoverContent({
   obj,
   url,
   isOpen,
-}: {
-  uuid: string;
-  obj: Extract<ResolvedObject, { type: "inference" }>;
-  url: string;
-  isOpen: boolean;
-}) {
+}: InferenceHoverContentProps) {
   const { data, isLoading } = useEntityPreview<InferencePreview>(
     `/api/tensorzero/inference_preview/${encodeURIComponent(uuid)}`,
     isOpen,
@@ -93,7 +141,7 @@ function InferenceHoverContent({
         secondaryValue={variantType}
         mono
       />
-      <LazyTimestamp data={data} isLoading={isLoading} />
+      <TimestampItem data={data} isLoading={isLoading} />
     </div>
   );
 }
@@ -102,39 +150,29 @@ function EpisodeHoverContent({
   uuid,
   url,
   isOpen,
-}: {
-  uuid: string;
-  url: string;
-  isOpen: boolean;
-}) {
+}: EpisodeHoverContentProps) {
   const { data, isLoading } = useEntityPreview<EpisodePreview>(
     `/api/tensorzero/episode_preview/${encodeURIComponent(uuid)}`,
     isOpen,
   );
+
+  const inferenceCountText = data
+    ? `${data.inference_count} inference${data.inference_count !== 1 ? "s" : ""}`
+    : null;
 
   return (
     <div className="flex flex-col gap-2">
       <TypeBadgeLink url={url}>Episode</TypeBadgeLink>
       <InfoItem
         label="Inferences"
-        value={
-          data
-            ? `${data.inference_count} inference${data.inference_count !== 1 ? "s" : ""}`
-            : null
-        }
+        value={inferenceCountText}
         isLoading={isLoading}
       />
     </div>
   );
 }
 
-function DatapointHoverContent({
-  obj,
-  url,
-}: {
-  obj: Extract<ResolvedObject, { type: "chat_datapoint" | "json_datapoint" }>;
-  url: string;
-}) {
+function DatapointHoverContent({ obj, url }: DatapointHoverContentProps) {
   const typeLabel =
     obj.type === "chat_datapoint" ? "Chat Datapoint" : "JSON Datapoint";
 
@@ -147,13 +185,9 @@ function DatapointHoverContent({
   );
 }
 
-function TypeBadgeLink({
-  children,
-  url,
-}: {
-  children: React.ReactNode;
-  url: string;
-}) {
+// --- Primitives ---
+
+function TypeBadgeLink({ children, url }: TypeBadgeLinkProps) {
   return (
     <Link
       to={url}
@@ -165,15 +199,7 @@ function TypeBadgeLink({
   );
 }
 
-function Item({
-  label,
-  align = "baseline",
-  children,
-}: {
-  label: string;
-  align?: "baseline" | "center";
-  children: React.ReactNode;
-}) {
+function Item({ label, align = "baseline", children }: ItemProps) {
   return (
     <div
       className={cn(
@@ -187,13 +213,7 @@ function Item({
   );
 }
 
-function FunctionItem({
-  functionName,
-  functionType,
-}: {
-  functionName: string;
-  functionType: string;
-}) {
+function FunctionItem({ functionName, functionType }: FunctionItemProps) {
   const iconConfig = getFunctionTypeIcon(functionType);
   return (
     <Item label="Function" align="center">
@@ -222,13 +242,7 @@ function InfoItem({
   secondaryValue,
   mono,
   isLoading,
-}: {
-  label: string;
-  value?: string | null;
-  secondaryValue?: string | null;
-  mono?: boolean;
-  isLoading?: boolean;
-}) {
+}: InfoItemProps) {
   return (
     <Item label={label}>
       {value ? (
@@ -251,13 +265,7 @@ function InfoItem({
   );
 }
 
-function LazyTimestamp({
-  data,
-  isLoading,
-}: {
-  data: InferencePreview | null;
-  isLoading: boolean;
-}) {
+function TimestampItem({ data, isLoading }: TimestampItemProps) {
   if (data) {
     const date = new Date(data.timestamp);
     const { formattedDate, formattedTime } = getTimestampTooltipData(
