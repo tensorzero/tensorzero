@@ -574,13 +574,7 @@ function UserQuestionsAnswersContent({
               {question?.header ?? questionId}
             </span>
             <span className="text-fg-primary text-sm">
-              {question
-                ? formatResponse(response, question)
-                : response.type === "free_response"
-                  ? response.text
-                  : response.type === "multiple_choice"
-                    ? response.selected.join(", ")
-                    : "Skipped"}
+              {formatResponse(response, question)}
             </span>
           </div>
         );

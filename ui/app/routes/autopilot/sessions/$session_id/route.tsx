@@ -494,8 +494,9 @@ function AutopilotSessionEventsPageContent({
 
   const oldestPendingUserQuestion = pendingUserQuestions[0] ?? null;
 
-  // Loading state for question submission
+  // Loading state and deduplication for question submission
   const [isQuestionSubmitting, setIsQuestionSubmitting] = useState(false);
+  const questionSubmittedRef = useRef<string | null>(null);
 
   // Derived values for queue-based approval UI
   const oldestPendingToolCall = pendingToolCalls[0] ?? null;
@@ -667,6 +668,8 @@ function AutopilotSessionEventsPageContent({
 
   const handleAnswerQuestions = useCallback(
     async (eventId: string, responses: Record<string, UserQuestionAnswer>) => {
+      if (questionSubmittedRef.current === eventId) return;
+      questionSubmittedRef.current = eventId;
       setIsQuestionSubmitting(true);
       try {
         const res = await fetch(
@@ -684,6 +687,7 @@ function AutopilotSessionEventsPageContent({
           throw new Error(await res.text());
         }
       } catch {
+        questionSubmittedRef.current = null;
         toast.error({
           title: "Failed to submit answers",
           description: "Could not submit question responses. Please try again.",

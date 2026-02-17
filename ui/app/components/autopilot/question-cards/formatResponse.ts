@@ -5,14 +5,14 @@ import type {
 
 export function formatResponse(
   response: UserQuestionAnswer | undefined,
-  question: EventPayloadUserQuestion,
+  question?: EventPayloadUserQuestion,
 ): string {
   if (!response) return "\u2014";
   switch (response.type) {
     case "multiple_choice":
       return response.selected
         .map((optId) => {
-          if (question.type !== "multiple_choice") return optId;
+          if (!question || question.type !== "multiple_choice") return optId;
           return question.options.find((o) => o.id === optId)?.label ?? optId;
         })
         .join(", ");
