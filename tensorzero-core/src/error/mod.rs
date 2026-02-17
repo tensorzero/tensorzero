@@ -1087,7 +1087,6 @@ impl ErrorDetails {
     pub fn is_retryable(&self) -> bool {
         match &self {
             ErrorDetails::AllRetriesFailed { .. } => false,
-            ErrorDetails::AllCandidatesFailed { .. } => false,
             ErrorDetails::RateLimitExceeded { .. } => false,
             // For AllModelProvidersFailed we will retry if any provider error is retryable
             ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
