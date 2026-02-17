@@ -17,7 +17,7 @@ type PendingQuestionCardProps = {
   isLoading: boolean;
   onSubmit: (
     eventId: string,
-    responses: Record<string, UserQuestionAnswer>,
+    answers: Record<string, UserQuestionAnswer>,
   ) => void;
   onSkip?: () => void;
   className?: string;
