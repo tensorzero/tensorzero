@@ -14,6 +14,8 @@ pub use stats::{
     PerEvaluatorStats,
 };
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::postgres::batching::PostgresBatchSender;
 pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
 pub use tensorzero_core::statistics_util::{mean, std_deviation};
 use tensorzero_core::utils::gateway::AppStateData;
@@ -339,13 +341,29 @@ pub async fn run_evaluation_with_app_state(
     app_state: AppStateData,
     params: RunEvaluationWithAppStateParams,
 ) -> Result<EvaluationStreamResult> {
-    // Create a fresh ClickHouse client for the evaluation (with independent batch writer)
+    // Create fresh ClickHouse and Postgres clients for the evaluation (with independent batch writers)
+    // so that evaluation writes don't interfere with the gateway's batch writers.
     let clickhouse_client = app_state
         .clickhouse_connection_info
         .recreate()
         .await
         .map_err(|e| anyhow!("Failed to create ClickHouse client for evaluation: {e}"))?;
-    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse_client);
+    let batch_writes_config = &app_state.config.gateway.observability.batch_writes;
+    let postgres_client = match app_state.postgres_connection_info.get_pool() {
+        Some(pool) if batch_writes_config.enabled => {
+            let batch_sender = Arc::new(
+                PostgresBatchSender::new(pool.clone(), batch_writes_config.clone()).map_err(
+                    |e| anyhow!("Failed to create Postgres batch sender for evaluation: {e}"),
+                )?,
+            );
+            PostgresConnectionInfo::new_with_pool_and_batcher(pool.clone(), batch_sender)
+        }
+        Some(pool) => PostgresConnectionInfo::new_with_pool(pool.clone()),
+        None => PostgresConnectionInfo::new_disabled(),
+    };
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(
+        DelegatingDatabaseConnection::new(clickhouse_client, postgres_client),
+    );
 
     // Create AppStateInferenceExecutor to call handlers directly without HTTP overhead
     let inference_executor = Arc::new(AppStateInferenceExecutor::new(app_state));
