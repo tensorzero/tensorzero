@@ -107,7 +107,6 @@ export function useQuestionCardState(
   return {
     activeStep,
     setActiveStep,
-    questionCount,
     isSingleQuestion,
     isFirstStep,
     isLastStep,
