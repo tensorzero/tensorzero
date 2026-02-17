@@ -298,8 +298,8 @@ test.describe("User questions", () => {
     // Click the dismiss/skip button
     await page.getByRole("button", { name: "Dismiss questions" }).click();
 
-    // Verify answered event appears (skip submits as type: "skipped")
-    await expect(page.getByText("Answered")).toBeVisible({ timeout: 10000 });
+    // Verify skipped event appears (skip submits as type: "skipped")
+    await expect(page.getByText("Skipped")).toBeVisible({ timeout: 10000 });
 
     // Verify the skipped response in the database
     const answers = queryEventPayloads(sessionId, "user_questions_answers");
