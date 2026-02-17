@@ -283,7 +283,7 @@ function Timestamp({ data, isLoading }: TimestampProps) {
             {getRelativeTimeString(date)}
           </span>
         </TooltipTrigger>
-        <TooltipContent className="border-border bg-bg-secondary text-fg-primary border shadow-lg">
+        <TooltipContent className="bg-popover text-popover-foreground border shadow-md">
           <div className="flex flex-col gap-1">
             <div>{formattedDate}</div>
             <div>{formattedTime}</div>
