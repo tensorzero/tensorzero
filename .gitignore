@@ -9,6 +9,7 @@ target-rust-analyzer/
 
 *.pdb
 .envrc
+.envrc.local
 *.env
 
 # VScode settings
