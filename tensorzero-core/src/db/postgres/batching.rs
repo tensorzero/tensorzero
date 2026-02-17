@@ -1,8 +1,5 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::time::Duration;
 
-use futures::future::Shared;
 use futures::{FutureExt, TryFutureExt};
 use sqlx::PgPool;
 use tokio::runtime::{Handle, RuntimeFlavor};
@@ -10,6 +7,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 
 use crate::config::BatchWritesConfig;
+use crate::db::BatchWriterHandle;
 use crate::db::batching::process_channel_with_capacity_and_timeout;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::{
@@ -21,9 +19,6 @@ use super::inference_queries::{
 };
 use super::model_inferences::build_insert_model_inferences_query;
 
-pub type PostgresBatchWriterHandle =
-    Shared<Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
-
 /// A `PostgresBatchSender` is used to submit entries to the batch writer, which aggregates
 /// and submits them to Postgres on a schedule defined by a `BatchWritesConfig`.
 /// When a `PostgresBatchSender` is dropped, the batch writer will finish
@@ -31,7 +26,7 @@ pub type PostgresBatchWriterHandle =
 #[derive(Debug)]
 pub struct PostgresBatchSender {
     channels: Option<PostgresBatchChannels>,
-    pub writer_handle: PostgresBatchWriterHandle,
+    pub writer_handle: BatchWriterHandle,
 }
 
 #[derive(Debug)]
