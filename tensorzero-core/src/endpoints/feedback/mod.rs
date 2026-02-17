@@ -24,13 +24,6 @@ use crate::db::feedback::{
 };
 use crate::db::inferences::{FunctionInfo, InferenceQueries};
 use crate::error::{Error, ErrorDetails};
-
-/// A supertrait combining `InferenceQueries` and `FeedbackQueries`, used by feedback
-/// business logic to query inference data and write feedback. Automatically implemented
-/// for any type that satisfies both bounds (e.g. `DelegatingDatabaseConnection`,
-/// `MockClickHouseConnectionInfo`).
-pub(crate) trait FeedbackDatabaseQueries: InferenceQueries + FeedbackQueries {}
-impl<T: InferenceQueries + FeedbackQueries> FeedbackDatabaseQueries for T {}
 use crate::function::FunctionConfig;
 use crate::inference::types::{
     ContentBlockChatOutput, ContentBlockOutput, Text, parse_chat_output,
@@ -61,6 +54,13 @@ const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_millis(6000);
 const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1000);
 /// We also poll in the intermediate time so that we can return as soon as we find a target entry.
 const FEEDBACK_TARGET_POLL_INTERVAL: Duration = Duration::from_millis(2000);
+
+/// A supertrait combining `InferenceQueries` and `FeedbackQueries`, used by feedback
+/// business logic to query inference data and write feedback. Automatically implemented
+/// for any type that satisfies both bounds (e.g. `DelegatingDatabaseConnection`,
+/// `MockClickHouseConnectionInfo`).
+pub(crate) trait FeedbackDatabaseQueries: InferenceQueries + FeedbackQueries {}
+impl<T: InferenceQueries + FeedbackQueries> FeedbackDatabaseQueries for T {}
 
 // TODO(shuyangli): rename this to CreateFeedbackRequest and export
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
