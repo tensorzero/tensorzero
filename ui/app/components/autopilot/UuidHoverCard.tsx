@@ -13,6 +13,7 @@ import {
 import { cn } from "~/utils/common";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
+import { toResolvedObjectUrl } from "~/utils/urls";
 
 interface InferencePreview {
   timestamp: string;
@@ -25,17 +26,16 @@ interface EpisodePreview {
 interface UuidHoverCardProps {
   uuid: string;
   obj: ResolvedObject;
-  url: string;
   children: React.ReactNode;
 }
 
-export function UuidHoverCard({
-  uuid,
-  obj,
-  url,
-  children,
-}: UuidHoverCardProps) {
+export function UuidHoverCard({ uuid, obj, children }: UuidHoverCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const url = toResolvedObjectUrl(uuid, obj);
+
+  if (!url) {
+    return <>{children}</>;
+  }
 
   return (
     <HoverCard.Root openDelay={300} closeDelay={200} onOpenChange={setIsOpen}>
