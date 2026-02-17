@@ -239,7 +239,9 @@ function LazyInfoRow<T>({
     <div className="grid grid-cols-[4rem_1fr] items-baseline gap-2">
       <span className="text-muted-foreground text-xs">{label}</span>
       {data ? (
-        <span className="text-foreground text-xs">{render(data)}</span>
+        <span className="text-foreground min-w-0 truncate text-xs">
+          {render(data)}
+        </span>
       ) : isLoading ? (
         <span className="bg-muted h-4 w-20 animate-pulse rounded" />
       ) : null}
