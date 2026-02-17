@@ -9,6 +9,7 @@ use tensorzero::{
 };
 use tensorzero_core::inference::types::StoredInput;
 
+mod test_configs;
 mod test_datasets;
 mod test_stored_inferences;
 
