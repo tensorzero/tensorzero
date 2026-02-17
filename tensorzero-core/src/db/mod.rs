@@ -46,6 +46,7 @@ pub trait ClickHouseConnection:
 {
 }
 
+#[cfg_attr(test, automock)]
 #[async_trait]
 pub trait HealthCheckable {
     async fn health(&self) -> Result<(), Error>;

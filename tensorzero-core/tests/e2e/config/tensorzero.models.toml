@@ -203,9 +203,9 @@ routing = ["aws_sagemaker"]
 
 [models.gemma-3-1b-aws-sagemaker-openai.providers.aws_sagemaker]
 type = "aws_sagemaker"
-endpoint_name = "gemma3-1b-provisioned-endpoint"
+endpoint_name = "ollama-provisioned-endpoint"
 region = "us-east-2"
-model_name = "gemma3:1b"
+model_name = "smollm2:135m"
 # We actually host an ollama container, but we don't have an ollama provider yet
 hosted_provider = "openai"
 
@@ -216,7 +216,7 @@ routing = ["aws_sagemaker"]
 type = "aws_sagemaker"
 endpoint_name = "text-generation-inference-2025-05-21-17-14-43-396"
 region = "us-east-2"
-model_name = "gemma3:1b"
+model_name = "smollm2:135m"
 hosted_provider = "tgi"
 
 [models.claude-haiku-4-5-gcp-vertex]
@@ -420,13 +420,13 @@ routing = ["together"]
 type = "together"
 model_name = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
 
-[models."Qwen/Qwen2.5-1.5B-Instruct"]
+[models."Qwen/Qwen3-1.7B"]
 routing = ["sglang"]
 
-[models."Qwen/Qwen2.5-1.5B-Instruct".providers.sglang]
+[models."Qwen/Qwen3-1.7B".providers.sglang]
 type = "sglang"
-model_name = "Qwen/Qwen2.5-1.5B-Instruct"
-api_base = "https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/v1/"
+model_name = "Qwen/Qwen3-1.7B"
+api_base = "https://tensorzero--sglang-qwen3-inference-sglang-inference.modal.run/v1/"
 
 [models."qwen3-1.7b-vllm"]
 routing = ["vllm"]

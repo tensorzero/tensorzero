@@ -1011,3 +1011,179 @@ type = "chat_completion"
 model = "err_in_stream_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+# Best-of-N raw_response tests: partial failure (1 error candidate + 1 good candidate)
+# With only 1 surviving candidate, the single-candidate fast path returns without running the evaluator.
+
+[functions.best_of_n_raw_response_partial_fail]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.best_of_n_raw_response_partial_fail.variants.error_candidate]
+type = "chat_completion"
+weight = 0
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.best_of_n_raw_response_partial_fail.variants.good_candidate]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.best_of_n_raw_response_partial_fail.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["error_candidate", "good_candidate"]
+
+[functions.best_of_n_raw_response_partial_fail.variants.best_of_n.evaluator]
+model = "dummy::best_of_n_0"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+# Best-of-N raw_response tests: all candidates fail
+
+[functions.best_of_n_raw_response_all_fail]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.best_of_n_raw_response_all_fail.variants.error_candidate_1]
+type = "chat_completion"
+weight = 0
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.best_of_n_raw_response_all_fail.variants.error_candidate_2]
+type = "chat_completion"
+weight = 0
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.best_of_n_raw_response_all_fail.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["error_candidate_1", "error_candidate_2"]
+
+[functions.best_of_n_raw_response_all_fail.variants.best_of_n.evaluator]
+model = "dummy::best_of_n_0"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+# Best-of-N raw_response tests: evaluator failure (2 good candidates + error evaluator)
+
+[functions.best_of_n_raw_response_evaluator_fail]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.best_of_n_raw_response_evaluator_fail.variants.good_candidate_1]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.best_of_n_raw_response_evaluator_fail.variants.good_candidate_2]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.best_of_n_raw_response_evaluator_fail.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["good_candidate_1", "good_candidate_2"]
+
+[functions.best_of_n_raw_response_evaluator_fail.variants.best_of_n.evaluator]
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+# Mixture-of-N raw_response tests: partial failure (1 error candidate + 1 good candidate)
+# With only 1 surviving candidate, the single-candidate fast path returns without running the fuser.
+
+[functions.mixture_of_n_raw_response_partial_fail]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n_raw_response_partial_fail.variants.error_candidate]
+type = "chat_completion"
+weight = 0
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.mixture_of_n_raw_response_partial_fail.variants.good_candidate]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.mixture_of_n_raw_response_partial_fail.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["error_candidate", "good_candidate"]
+
+[functions.mixture_of_n_raw_response_partial_fail.variants.mixture_of_n.fuser]
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+# Mixture-of-N raw_response tests: all candidates fail
+
+[functions.mixture_of_n_raw_response_all_fail]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n_raw_response_all_fail.variants.error_candidate_1]
+type = "chat_completion"
+weight = 0
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.mixture_of_n_raw_response_all_fail.variants.error_candidate_2]
+type = "chat_completion"
+weight = 0
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.mixture_of_n_raw_response_all_fail.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["error_candidate_1", "error_candidate_2"]
+
+[functions.mixture_of_n_raw_response_all_fail.variants.mixture_of_n.fuser]
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+# Mixture-of-N raw_response tests: fuser failure (2 good candidates + error fuser)
+
+[functions.mixture_of_n_raw_response_fuser_fail]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n_raw_response_fuser_fail.variants.good_candidate_1]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.mixture_of_n_raw_response_fuser_fail.variants.good_candidate_2]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.mixture_of_n_raw_response_fuser_fail.variants.mixture_of_n]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["good_candidate_1", "good_candidate_2"]
+
+[functions.mixture_of_n_raw_response_fuser_fail.variants.mixture_of_n.fuser]
+model = "error_with_raw_response"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"

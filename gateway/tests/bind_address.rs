@@ -53,7 +53,7 @@ async fn test_bind_address_cli_and_config_errors() {
 
     // Verify the error message
     let error_logged = output.iter().any(|line| {
-        line.contains("must not specify both `--bind-address` and `gateway.bind_address`")
+        line.contains("must only specify one of `--bind-address` (CLI), `TENSORZERO_GATEWAY_BIND_ADDRESS` (environment variable), or `gateway.bind_address` (configuration)")
     });
     assert!(
         error_logged,

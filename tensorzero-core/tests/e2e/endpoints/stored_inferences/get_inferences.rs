@@ -41,9 +41,11 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
 pub async fn test_output_source_defaults_to_inference() {
     let http_client = Client::new();
 
-    // Test list_inferences without output_source - should succeed and default to "inference"
+    // Test list_inferences without output_source - should succeed and default to "inference".
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "limit": 1
     });
 
@@ -574,9 +576,11 @@ async fn test_list_combined_time_and_tag_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_json_only() {
-    // First, list some JSON inference IDs
+    // First, list some JSON inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "extract_entities",
+        "variant_name": "baseline",
         "output_source": "inference",
         "limit": 3
     });
@@ -609,9 +613,11 @@ pub async fn test_get_by_ids_json_only() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_chat_only() {
-    // First, list some Chat inference IDs
+    // First, list some Chat inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "output_source": "inference",
         "limit": 2
     });
@@ -655,17 +661,21 @@ pub async fn test_get_by_ids_unknown_id_returns_empty() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_mixed_types() {
-    // Get some JSON inference IDs
+    // Get some JSON inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let json_request = json!({
         "function_name": "extract_entities",
+        "variant_name": "baseline",
         "output_source": "inference",
         "limit": 2
     });
     let json_res = list_inferences(json_request).await.unwrap();
 
-    // Get some Chat inference IDs
+    // Get some Chat inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let chat_request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "output_source": "inference",
         "limit": 2
     });
@@ -723,9 +733,11 @@ pub async fn test_get_by_ids_empty_list() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_duplicate_ids() {
-    // First, get one inference ID
+    // First, get one inference ID.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "extract_entities",
+        "variant_name": "baseline",
         "output_source": "inference",
         "limit": 1
     });

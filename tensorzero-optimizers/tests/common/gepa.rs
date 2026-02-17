@@ -6,6 +6,7 @@ use tensorzero::{RenderedSample, Role, System};
 use tensorzero_core::{
     config::{Config, ConfigFileGlob},
     db::clickhouse::test_helpers::get_clickhouse,
+    db::delegating_connection::DelegatingDatabaseQueries,
     http::TensorzeroHttpClient,
     inference::types::{
         Arguments, ContentBlockChatOutput, FunctionType, JsonInferenceOutput, ModelInput,
@@ -69,13 +70,14 @@ pub async fn test_gepa_optimization_chat() {
     );
 
     // Launch GEPA optimization
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
     let job_handle = gepa_config
         .launch(
             &client,
             train_examples,
             val_examples,
             &credentials,
-            &clickhouse,
+            &db,
             config.clone(),
         )
         .await
@@ -205,13 +207,14 @@ pub async fn test_gepa_optimization_json() {
     );
 
     // Launch GEPA optimization
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
     let job_handle = gepa_config
         .launch(
             &client,
             train_examples,
             val_examples,
             &credentials,
-            &clickhouse,
+            &db,
             config.clone(),
         )
         .await

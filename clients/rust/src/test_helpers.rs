@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use crate::{Client, ClientBuilder, ClientBuilderMode, PostgresConfig};
 use tempfile::NamedTempFile;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
+use tensorzero_core::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use url::Url;
 use uuid::Uuid;
 
@@ -21,11 +22,19 @@ pub async fn make_http_gateway() -> Client {
 }
 
 pub async fn make_embedded_gateway() -> Client {
+    let postgres_config = if ENABLE_POSTGRES_READ.get() || ENABLE_POSTGRES_WRITE.get() {
+        let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+            .expect("TENSORZERO_POSTGRES_URL must be set when Postgres flags are enabled");
+        Some(PostgresConfig::Url(postgres_url))
+    } else {
+        None
+    };
+
     let config_path = get_e2e_config_path();
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_config: None,
+        postgres_config,
         valkey_url: None,
         timeout: None,
         verify_credentials: true,

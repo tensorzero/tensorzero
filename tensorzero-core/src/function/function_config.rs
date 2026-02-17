@@ -118,6 +118,15 @@ impl FunctionConfigType {
             FunctionConfigType::Json => "tensorzero.json_datapoints",
         }
     }
+
+    /// Returns the Postgres inference data table name for the given function type.
+    /// This is the split table that stores input/output payloads separately from metadata.
+    pub fn postgres_inference_data_table_name(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "tensorzero.chat_inference_data",
+            FunctionConfigType::Json => "tensorzero.json_inference_data",
+        }
+    }
 }
 
 impl FunctionConfig {

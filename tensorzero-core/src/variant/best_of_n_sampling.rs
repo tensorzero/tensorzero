@@ -4,6 +4,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use futures::future::{join_all, try_join_all};
+use indexmap::IndexMap;
 use lazy_static::lazy_static;
 use rand::Rng;
 use schemars::JsonSchema;
@@ -184,7 +185,7 @@ impl Variant for BestOfNSamplingConfig {
         _inference_params: InferenceParams,
     ) -> impl Future<Output = Result<InferenceResult, Error>> + Send {
         async move {
-            let candidate_inference_results = self
+            let (successful_results, candidate_errors) = self
                 .infer_candidates(
                     &input,
                     &models,
@@ -198,7 +199,8 @@ impl Variant for BestOfNSamplingConfig {
                 &models.models,
                 &inference_config,
                 &clients,
-                candidate_inference_results,
+                successful_results,
+                candidate_errors,
             )
             .await
         }
@@ -213,7 +215,7 @@ impl Variant for BestOfNSamplingConfig {
         clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        let candidate_inference_results = self
+        let (successful_results, candidate_errors) = self
             .infer_candidates(
                 &input,
                 &models,
@@ -228,7 +230,8 @@ impl Variant for BestOfNSamplingConfig {
                 &models.models,
                 &inference_config,
                 &clients,
-                candidate_inference_results,
+                successful_results,
+                candidate_errors,
             )
             .await?;
 
@@ -326,7 +329,7 @@ impl BestOfNSamplingConfig {
         function: &Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
         clients: &InferenceClients,
-    ) -> Result<Vec<InferenceResult>, Error> {
+    ) -> Result<(Vec<InferenceResult>, IndexMap<String, Error>), Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
             .candidates
@@ -393,15 +396,21 @@ impl BestOfNSamplingConfig {
         )
         .await;
 
-        // Collect the successful results
+        // Collect the successful results and errors.
+        // Use an enumerated key to avoid overwriting errors when the same
+        // candidate variant appears more than once in the candidates list.
         let mut successful_results = Vec::new();
-        for (_candidate_name, result) in inference_results {
-            if let Ok(res) = result {
-                successful_results.push(res);
+        let mut candidate_errors = IndexMap::new();
+        for (i, (candidate_name, result)) in inference_results.into_iter().enumerate() {
+            match result {
+                Ok(res) => successful_results.push(res),
+                Err(e) => {
+                    candidate_errors.insert(format!("candidates[{i}] ({candidate_name})"), e);
+                }
             }
         }
 
-        Ok(successful_results)
+        Ok((successful_results, candidate_errors))
     }
 
     /// Gets the best candidate using the evaluator config.
@@ -414,23 +423,37 @@ impl BestOfNSamplingConfig {
         inference_config: &InferenceConfig,
         clients: &InferenceClients,
         candidates: Vec<InferenceResult>,
+        candidate_errors: IndexMap<String, Error>,
     ) -> Result<InferenceResult, Error> {
         if candidates.is_empty() {
-            return Err(ErrorDetails::Inference {
-                message: "No candidates to select from in best of n".to_string(),
-            }
-            .into());
+            return Err(ErrorDetails::AllCandidatesFailed { candidate_errors }.into());
         }
         if candidates.len() == 1 {
             let mut candidates = candidates;
-            return candidates.pop().ok_or_else(|| {
+            let mut selected = candidates.pop().ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
                     message: "Expected one candidate but found none".to_string(),
                 })
-            });
+            })?;
+            // Inject failed candidate raw_responses before returning
+            if clients.include_raw_response {
+                let failed_entries: Vec<_> = candidate_errors
+                    .values()
+                    .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                    .collect();
+                if !failed_entries.is_empty()
+                    && let Some(first) = selected.mut_model_inference_results().first_mut()
+                {
+                    let mut new_failed = failed_entries;
+                    new_failed.append(&mut first.failed_raw_response);
+                    first.failed_raw_response = new_failed;
+                }
+            }
+            return Ok(selected);
         }
         // If the evaluator fails, we randomly select one of the candidates
         // As long as the evaluator returns an inference result, we want to include it in the observability
+        let mut evaluator_error: Option<Error> = None;
         let (selection_idx, inference_result) = match inner_select_best_candidate(
             &self.evaluator,
             input,
@@ -445,7 +468,10 @@ impl BestOfNSamplingConfig {
                 idx_opt.unwrap_or_else(|| rand::rng().random_range(0..candidates.len())),
                 inf_result,
             ),
-            Err(_) => (rand::rng().random_range(0..candidates.len()), None),
+            Err(eval_err) => {
+                evaluator_error = Some(eval_err);
+                (rand::rng().random_range(0..candidates.len()), None)
+            }
         };
 
         // Safely remove the selected candidate without panicking
@@ -460,11 +486,25 @@ impl BestOfNSamplingConfig {
             .into());
         };
         if let Some(inference_result) = &inference_result {
-            // Pass the evaluator response back to the user as 'original_response'
+            // Pass the evaluator response back to the user as `original_response`
             selected_candidate.set_original_response(Some(inference_result.raw_response.clone()));
         } else {
-            // If the evaluator failed, don't provide an 'original_response' to the uesr
+            // If the evaluator failed, don't provide an `original_response` to the user
             selected_candidate.set_original_response(None);
+        }
+        // Inject failed candidate raw_responses
+        if clients.include_raw_response {
+            let failed_entries: Vec<_> = candidate_errors
+                .values()
+                .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                .collect();
+            if !failed_entries.is_empty()
+                && let Some(first) = selected_candidate.mut_model_inference_results().first_mut()
+            {
+                let mut new_failed = failed_entries;
+                new_failed.append(&mut first.failed_raw_response);
+                first.failed_raw_response = new_failed;
+            }
         }
         for candidate in candidates {
             selected_candidate
@@ -475,6 +515,14 @@ impl BestOfNSamplingConfig {
             selected_candidate
                 .mut_model_inference_results()
                 .push(inference_result);
+        }
+        // Inject evaluator failure raw_responses
+        if clients.include_raw_response
+            && let Some(eval_err) = &evaluator_error
+            && let Some(entries) = eval_err.extract_raw_response_entries()
+            && let Some(first) = selected_candidate.mut_model_inference_results().first_mut()
+        {
+            first.failed_raw_response.extend(entries);
         }
 
         Ok(selected_candidate)
@@ -1449,6 +1497,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                IndexMap::new(),
             )
             .await
             .expect("Failed to select best candidate");
@@ -1534,6 +1583,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                IndexMap::new(),
             )
             .await;
 
@@ -1611,6 +1661,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                IndexMap::new(),
             )
             .await;
 
@@ -1634,15 +1685,17 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 empty_candidates.clone(),
+                IndexMap::new(),
             )
             .await;
         let err = result.unwrap_err();
         assert_eq!(
             err,
-            ErrorDetails::Inference {
-                message: "No candidates to select from in best of n".to_string()
+            ErrorDetails::AllCandidatesFailed {
+                candidate_errors: IndexMap::new()
             }
-            .into()
+            .into(),
+            "Empty candidates should return AllCandidatesFailed error"
         );
 
         // Test case: Index returned too large (should return an error)
@@ -1699,6 +1752,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                IndexMap::new(),
             )
             .await;
         // we gracefully handle the error and return a random candidate

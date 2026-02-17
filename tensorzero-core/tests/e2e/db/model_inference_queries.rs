@@ -32,12 +32,14 @@ async fn test_get_model_inferences_for_existing_inference(
 ) {
     let config = get_e2e_config().await;
 
-    // First, get an inference ID from the database
+    // First, get an inference ID from the database.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let inferences = conn
         .list_inferences(
             &config,
             &ListInferencesParams {
                 function_name: Some("write_haiku"),
+                variant_name: Some("better_prompt_haiku_4_5"),
                 output_source: InferenceOutputSource::Inference,
                 limit: 1,
                 ..Default::default()
@@ -75,31 +77,11 @@ async fn test_get_model_inferences_for_existing_inference(
 }
 make_db_test!(test_get_model_inferences_for_existing_inference);
 
-async fn test_get_model_inferences_for_json_inference(
-    conn: impl ModelInferenceQueries + InferenceQueries,
-) {
-    let config = get_e2e_config().await;
-
-    // Get a JSON inference ID
-    let inferences = conn
-        .list_inferences(
-            &config,
-            &ListInferencesParams {
-                function_name: Some("extract_entities"),
-                output_source: InferenceOutputSource::Inference,
-                limit: 1,
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-
-    assert!(
-        !inferences.is_empty(),
-        "Should have at least one JSON inference to test with"
-    );
-
-    let inference_id = inferences[0].id();
+async fn test_get_model_inferences_for_json_inference(conn: impl ModelInferenceQueries) {
+    // Use a hardcoded extract_entities inference ID known to have model inferences.
+    // We can't query dynamically because metadata-only inferences (which have no
+    // model inference rows) may be returned first.
+    let inference_id = Uuid::parse_str("0196374c-2c6d-7ce0-b508-e3b24ee4579c").expect("Valid UUID");
 
     let model_inferences = conn
         .get_model_inferences_by_inference_id(inference_id)
@@ -143,12 +125,14 @@ async fn test_model_inference_fields_populated(
 ) {
     let config = get_e2e_config().await;
 
-    // Get an inference with model inferences
+    // Get an inference with model inferences.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let inferences = conn
         .list_inferences(
             &config,
             &ListInferencesParams {
                 function_name: Some("write_haiku"),
+                variant_name: Some("better_prompt_haiku_4_5"),
                 output_source: InferenceOutputSource::Inference,
                 limit: 10,
                 ..Default::default()
