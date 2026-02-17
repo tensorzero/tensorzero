@@ -16,9 +16,6 @@ export function useQuestionCardState(
   const [selections, setSelections] = useState<Map<number, Set<string>>>(
     () => new Map(),
   );
-  const [otherTexts, setOtherTexts] = useState<Map<number, string>>(
-    () => new Map(),
-  );
   const [freeTexts, setFreeTexts] = useState<Map<number, string>>(
     () => new Map(),
   );
@@ -26,7 +23,7 @@ export function useQuestionCardState(
   const questionCount = payload.questions.length;
   const isSingleQuestion = questionCount === 1;
   const isFirstStep = activeStep === 0;
-  const isReviewStep = !isSingleQuestion && activeStep === questionCount;
+  const isLastStep = activeStep === questionCount - 1;
 
   const handleMcToggle = (questionIndex: number, value: string) => {
     setSelections((prev) => {
@@ -50,14 +47,6 @@ export function useQuestionCardState(
     });
   };
 
-  const handleOtherTextChange = (questionIndex: number, text: string) => {
-    setOtherTexts((prev) => {
-      const next = new Map(prev);
-      next.set(questionIndex, text);
-      return next;
-    });
-  };
-
   const handleFreeTextChange = (questionIndex: number, text: string) => {
     setFreeTexts((prev) => {
       const next = new Map(prev);
@@ -71,11 +60,7 @@ export function useQuestionCardState(
     switch (question.type) {
       case "multiple_choice": {
         const selected = selections.get(idx);
-        if (!selected || selected.size === 0) return false;
-        if (selected.has("__other__")) {
-          return (otherTexts.get(idx) ?? "").trim().length > 0;
-        }
-        return true;
+        return Boolean(selected && selected.size > 0);
       }
       case "free_response":
         return (freeTexts.get(idx) ?? "").trim().length > 0;
@@ -91,17 +76,10 @@ export function useQuestionCardState(
         case "multiple_choice": {
           const selected = selections.get(idx);
           if (!selected || selected.size === 0) return;
-          if (selected.has("__other__")) {
-            responses[question.id] = {
-              type: "free_response",
-              text: otherTexts.get(idx) ?? "",
-            };
-          } else {
-            responses[question.id] = {
-              type: "multiple_choice",
-              selected: Array.from(selected),
-            };
-          }
+          responses[question.id] = {
+            type: "multiple_choice",
+            selected: Array.from(selected),
+          };
           break;
         }
         case "free_response":
@@ -115,34 +93,13 @@ export function useQuestionCardState(
     onSubmit(eventId, responses);
   };
 
-  const getAnswerText = (idx: number): string => {
-    const question = payload.questions[idx];
-    switch (question.type) {
-      case "multiple_choice": {
-        const selected = selections.get(idx);
-        if (!selected || selected.size === 0) return "";
-        if (selected.has("__other__")) return otherTexts.get(idx) ?? "";
-        return Array.from(selected)
-          .map(
-            (optId) =>
-              question.options.find((o) => o.id === optId)?.label ?? optId,
-          )
-          .join(", ");
-      }
-      case "free_response":
-        return freeTexts.get(idx) ?? "";
-    }
-  };
-
   const renderStepData = (idx: number) => {
     const question = payload.questions[idx];
     return {
       question,
       selectedValues: selections.get(idx) ?? new Set<string>(),
-      otherText: otherTexts.get(idx) ?? "",
       freeText: freeTexts.get(idx) ?? "",
       onToggle: (value: string) => handleMcToggle(idx, value),
-      onOtherTextChange: (text: string) => handleOtherTextChange(idx, text),
       onFreeTextChange: (text: string) => handleFreeTextChange(idx, text),
     };
   };
@@ -153,11 +110,10 @@ export function useQuestionCardState(
     questionCount,
     isSingleQuestion,
     isFirstStep,
-    isReviewStep,
+    isLastStep,
     isStepValid,
     allStepsValid,
     handleSubmit,
-    getAnswerText,
     renderStepData,
   };
 }
