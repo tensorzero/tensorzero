@@ -83,11 +83,11 @@ function InferenceHoverContent({
   return (
     <div className="flex flex-col gap-2">
       <TypeBadgeLink url={url}>Inference</TypeBadgeLink>
-      <FunctionRow
+      <FunctionItem
         functionName={obj.function_name}
         functionType={obj.function_type}
       />
-      <InfoRow
+      <InfoItem
         label="Variant"
         value={obj.variant_name}
         secondaryValue={variantType}
@@ -115,7 +115,7 @@ function EpisodeHoverContent({
   return (
     <div className="flex flex-col gap-2">
       <TypeBadgeLink url={url}>Episode</TypeBadgeLink>
-      <LazyInfoRow
+      <LazyInfoItem
         label="Inferences"
         data={data}
         isLoading={isLoading}
@@ -140,8 +140,8 @@ function DatapointHoverContent({
   return (
     <div className="flex flex-col gap-2">
       <TypeBadgeLink url={url}>{typeLabel}</TypeBadgeLink>
-      <InfoRow label="Dataset" value={obj.dataset_name} mono />
-      <InfoRow label="Function" value={obj.function_name} mono />
+      <InfoItem label="Dataset" value={obj.dataset_name} mono />
+      <InfoItem label="Function" value={obj.function_name} mono />
     </div>
   );
 }
@@ -164,7 +164,7 @@ function TypeBadgeLink({
   );
 }
 
-function Row({
+function Item({
   label,
   align = "baseline",
   children,
@@ -186,7 +186,7 @@ function Row({
   );
 }
 
-function FunctionRow({
+function FunctionItem({
   functionName,
   functionType,
 }: {
@@ -195,7 +195,7 @@ function FunctionRow({
 }) {
   const iconConfig = getFunctionTypeIcon(functionType);
   return (
-    <Row label="Function" align="center">
+    <Item label="Function" align="center">
       <span
         className="text-foreground inline-flex min-w-0 items-center gap-1 font-mono text-xs"
         title={`${functionName} · ${functionType}`}
@@ -211,11 +211,11 @@ function FunctionRow({
         <span className="truncate">{functionName}</span>
         <span className="text-muted-foreground shrink-0">· {functionType}</span>
       </span>
-    </Row>
+    </Item>
   );
 }
 
-function InfoRow({
+function InfoItem({
   label,
   value,
   secondaryValue,
@@ -227,7 +227,7 @@ function InfoRow({
   mono?: boolean;
 }) {
   return (
-    <Row label={label}>
+    <Item label={label}>
       <span
         className={cn(
           "text-foreground min-w-0 truncate text-xs",
@@ -240,11 +240,11 @@ function InfoRow({
           <span className="text-muted-foreground"> · {secondaryValue}</span>
         )}
       </span>
-    </Row>
+    </Item>
   );
 }
 
-function LazyInfoRow<T>({
+function LazyInfoItem<T>({
   label,
   data,
   isLoading,
@@ -256,7 +256,7 @@ function LazyInfoRow<T>({
   render: (data: T) => string;
 }) {
   return (
-    <Row label={label}>
+    <Item label={label}>
       {data ? (
         <span className="text-foreground min-w-0 truncate text-xs">
           {render(data)}
@@ -264,7 +264,7 @@ function LazyInfoRow<T>({
       ) : isLoading ? (
         <span className="bg-muted h-4 w-20 animate-pulse rounded" />
       ) : null}
-    </Row>
+    </Item>
   );
 }
 
