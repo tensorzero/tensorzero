@@ -11,12 +11,14 @@ export function useEntityPreview<T>(
     if (enabled && fetcher.state === "idle" && !fetcher.data) {
       fetcher.load(url);
     }
+    // Intentionally omits fetcher from deps to avoid infinite loops.
+    // Re-runs when url or enabled changes, which covers the hovercard
+    // open/close lifecycle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, enabled]);
 
   return {
     data: (fetcher.data as T) ?? null,
-    isLoading:
-      fetcher.state !== "idle" || (enabled && fetcher.data === undefined),
+    isLoading: fetcher.state !== "idle",
   };
 }
