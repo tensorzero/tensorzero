@@ -556,6 +556,7 @@ function AutopilotSessionEventsPageContent({
     setAuthLoadingStates(new Map());
     setSseError({ error: null, isRetrying: false });
     prevQueueTopRef.current = null;
+    questionSubmittedRef.current = null;
     resetManualAuthorization();
     // Note: useAutoApproval handles its own cleanup on session change via internal effect
   }, [sessionId, isNewSession, resetManualAuthorization]);
