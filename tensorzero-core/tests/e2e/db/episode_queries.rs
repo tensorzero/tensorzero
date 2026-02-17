@@ -215,7 +215,9 @@ async fn test_query_episode_table_with_function_name_and_filter(conn: impl Episo
 
     // Verify that counts reflect full episode stats (not just filtered inferences)
     // by comparing with unfiltered results for the same function.
-    // Paginate through all unfiltered episodes to build a complete map.
+    // Paginate through unfiltered episodes until we've found all filtered episode IDs.
+    let filtered_ids: std::collections::HashSet<_> =
+        episodes.iter().map(|e| e.episode_id).collect();
     let mut unfiltered_map = std::collections::HashMap::new();
     let mut before_cursor = None;
     loop {
@@ -236,6 +238,12 @@ async fn test_query_episode_table_with_function_name_and_filter(conn: impl Episo
         before_cursor = Some(page.last().unwrap().episode_id);
         for ep in page {
             unfiltered_map.insert(ep.episode_id, ep);
+        }
+        if filtered_ids
+            .iter()
+            .all(|id| unfiltered_map.contains_key(id))
+        {
+            break;
         }
     }
 
