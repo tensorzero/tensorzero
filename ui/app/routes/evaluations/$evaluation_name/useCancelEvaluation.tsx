@@ -49,6 +49,7 @@ export function useCancelEvaluation({
       });
     }
     setIsCancelling(false);
+    return;
   }, [fetcher.state, fetcher.data, toast]);
 
   const handleCancelEvaluation = useCallback(() => {
