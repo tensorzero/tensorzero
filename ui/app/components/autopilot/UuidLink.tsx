@@ -3,7 +3,11 @@ import { useResolveUuid } from "~/hooks/useResolveUuid";
 import { toResolvedObjectUrl } from "~/utils/urls";
 import { UuidHoverCard } from "./UuidHoverCard";
 
-export function UuidLink({ uuid }: { uuid: string }) {
+interface UuidLinkProps {
+  uuid: string;
+}
+
+export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;

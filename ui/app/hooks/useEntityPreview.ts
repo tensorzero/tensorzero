@@ -16,15 +16,22 @@ function getPreviewUrl(type: EntityPreviewType, id: string): string {
   }
 }
 
+interface EntityPreviewParams {
+  type: EntityPreviewType;
+  id: string;
+  enabled: boolean;
+}
+
+interface EntityPreviewResult<T> {
+  data: T | null;
+  isLoading: boolean;
+}
+
 export function useEntityPreview<T>({
   type,
   id,
   enabled,
-}: {
-  type: EntityPreviewType;
-  id: string;
-  enabled: boolean;
-}): { data: T | null; isLoading: boolean } {
+}: EntityPreviewParams): EntityPreviewResult<T> {
   const url = getPreviewUrl(type, id);
   const fetcher = useFetcher<T>({ key: url });
 
