@@ -38,7 +38,11 @@ export function UuidHoverCard({ uuid, obj, children }: UuidHoverCardProps) {
           sideOffset={4}
           className={cn(
             "bg-popover text-popover-foreground z-50 rounded-md border p-3 shadow-md",
-            obj.type === "inference" ? "w-80" : "w-56",
+            obj.type === "inference"
+              ? "w-80"
+              : obj.type === "episode"
+                ? "w-44"
+                : "w-56",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -241,12 +245,7 @@ interface InfoItemProps {
   isLoading?: boolean;
 }
 
-function InfoItem({
-  label,
-  value,
-  secondaryValue,
-  isLoading,
-}: InfoItemProps) {
+function InfoItem({ label, value, secondaryValue, isLoading }: InfoItemProps) {
   return (
     <Item label={label}>
       {value ? (
