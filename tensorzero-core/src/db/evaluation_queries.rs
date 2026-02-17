@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput, StoredInput};
-use crate::serde_util::deserialize_json_string;
+use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 
 /// Database struct for deserializing evaluation run info.
 #[derive(Debug, Deserialize, sqlx::FromRow)]
@@ -77,10 +77,10 @@ pub(crate) struct RawEvaluationResultRow {
     pub datapoint_id: Uuid,
     pub evaluation_run_id: Uuid,
     pub evaluator_inference_id: Option<Uuid>,
-    #[serde(deserialize_with = "deserialize_json_string")]
+    #[serde(default, deserialize_with = "deserialize_optional_json_string")]
     #[sqlx(json)]
-    pub input: StoredInput,
-    pub generated_output: String,
+    pub input: Option<StoredInput>,
+    pub generated_output: Option<String>,
     pub reference_output: Option<String>,
     pub dataset_name: String,
     pub metric_name: Option<String>,
@@ -105,9 +105,11 @@ pub struct ChatEvaluationResultRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluator_inference_id: Option<Uuid>,
     /// The input to the function
-    pub input: Input,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<Input>,
     /// The generated output from the model
-    pub generated_output: Vec<ContentBlockChatOutput>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_output: Option<Vec<ContentBlockChatOutput>>,
     /// The reference output from the datapoint
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reference_output: Option<Vec<ContentBlockChatOutput>>,
@@ -146,9 +148,11 @@ pub struct JsonEvaluationResultRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluator_inference_id: Option<Uuid>,
     /// The input to the function
-    pub input: Input,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<Input>,
     /// The generated output from the model
-    pub generated_output: JsonInferenceOutput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_output: Option<JsonInferenceOutput>,
     /// The reference output from the datapoint
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reference_output: Option<JsonInferenceOutput>,
@@ -204,8 +208,11 @@ impl EvaluationResultRow {
 impl RawEvaluationResultRow {
     /// Convert a raw result row to a typed Chat result row.
     pub fn into_chat(self) -> Result<ChatEvaluationResultRow, Error> {
-        let generated_output: Vec<ContentBlockChatOutput> =
-            serde_json::from_str(&self.generated_output).map_err(|e| {
+        let generated_output = self
+            .generated_output
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| {
                 Error::new(crate::error::ErrorDetails::Serialization {
                     message: format!("Failed to deserialize generated_output: {e}"),
                 })
@@ -225,7 +232,7 @@ impl RawEvaluationResultRow {
             datapoint_id: self.datapoint_id,
             evaluation_run_id: self.evaluation_run_id,
             evaluator_inference_id: self.evaluator_inference_id,
-            input: self.input.into_input(),
+            input: self.input.map(|i| i.into_input()),
             generated_output,
             reference_output,
             dataset_name: self.dataset_name,
@@ -241,7 +248,10 @@ impl RawEvaluationResultRow {
 
     /// Convert a raw result row to a typed Json result row.
     pub fn into_json(self) -> Result<JsonEvaluationResultRow, Error> {
-        let generated_output: JsonInferenceOutput = serde_json::from_str(&self.generated_output)
+        let generated_output = self
+            .generated_output
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
             .map_err(|e| {
                 Error::new(crate::error::ErrorDetails::Serialization {
                     message: format!("Failed to deserialize generated_output: {e}"),
@@ -262,7 +272,7 @@ impl RawEvaluationResultRow {
             datapoint_id: self.datapoint_id,
             evaluation_run_id: self.evaluation_run_id,
             evaluator_inference_id: self.evaluator_inference_id,
-            input: self.input.into_input(),
+            input: self.input.map(|i| i.into_input()),
             generated_output,
             reference_output,
             dataset_name: self.dataset_name,

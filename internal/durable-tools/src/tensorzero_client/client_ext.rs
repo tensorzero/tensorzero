@@ -7,6 +7,7 @@
 use async_trait::async_trait;
 use autopilot_client::AutopilotError;
 use autopilot_client::GatewayListEventsResponse;
+use std::sync::Arc;
 use tensorzero::{
     Client, ClientExt, ClientInferenceParams, ClientMode, CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
@@ -17,6 +18,7 @@ use tensorzero::{
     WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::feedback::internal::{
@@ -469,16 +471,20 @@ impl TensorZeroClient for Client {
             ClientMode::EmbeddedGateway {
                 gateway,
                 timeout: _,
-            } => launch_optimization_workflow(
-                &gateway.handle.app_state.http_client,
-                gateway.handle.app_state.config.clone(),
-                &gateway.handle.app_state.clickhouse_connection_info,
-                params,
-            )
-            .await
-            .map_err(|e| {
-                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            }),
+            } => {
+                let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+                    Arc::new(gateway.handle.app_state.get_delegating_database());
+                launch_optimization_workflow(
+                    &gateway.handle.app_state.http_client,
+                    gateway.handle.app_state.config.clone(),
+                    &db,
+                    params,
+                )
+                .await
+                .map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })
+            }
         }
     }
 
