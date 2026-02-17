@@ -154,6 +154,45 @@ export const SingleMultipleChoice: Story = {
   },
 };
 
+const multiSelectPayload: EventPayloadUserQuestions = {
+  questions: [
+    {
+      id: "q1",
+      header: "Features",
+      question: "Which features do you want to enable?",
+      type: "multiple_choice",
+      options: [
+        {
+          id: "i18n",
+          label: "Internationalization",
+          description: "Support for multiple languages and locales.",
+        },
+        {
+          id: "tz",
+          label: "Timezone support",
+          description: "Handle dates across different timezones correctly.",
+        },
+        {
+          id: "relative",
+          label: "Relative time",
+          description: 'Display dates as "2 hours ago" or "in 3 days".',
+        },
+      ],
+      multi_select: true,
+    },
+  ],
+};
+
+export const SingleMultiSelect: Story = {
+  args: {
+    eventId: "evt-001b",
+    payload: multiSelectPayload,
+    isLoading: false,
+    onSubmit: () => {},
+    onSkip: () => {},
+  },
+};
+
 export const SingleFreeResponse: Story = {
   args: {
     eventId: "evt-002",

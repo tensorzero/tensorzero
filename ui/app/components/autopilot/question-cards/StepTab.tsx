@@ -19,7 +19,7 @@ export function StepTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all",
+        "flex shrink-0 items-center gap-1.5 rounded-full py-1 pr-2.5 pl-1 text-xs font-medium transition-all",
         state === "active" &&
           "bg-purple-200/70 text-purple-800 dark:bg-purple-800/50 dark:text-purple-200",
         state === "completed" &&
