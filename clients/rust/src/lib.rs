@@ -4,7 +4,9 @@ use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::config::snapshot::ConfigSnapshot;
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::HealthCheckable;
-use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
+use tensorzero_core::db::delegating_connection::{
+    DelegatingDatabaseConnection, DelegatingDatabaseQueries,
+};
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::stored_inferences::render_samples;
 use tensorzero_core::endpoints::validate_tags;
