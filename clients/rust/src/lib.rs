@@ -4,9 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::config::snapshot::ConfigSnapshot;
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::HealthCheckable;
-use tensorzero_core::db::delegating_connection::{
-    DelegatingDatabaseConnection, DelegatingDatabaseQueries,
-};
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::stored_inferences::render_samples;
 use tensorzero_core::endpoints::validate_tags;
@@ -1149,12 +1147,8 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
-                    let database = DelegatingDatabaseConnection::new(
-                        gateway.handle.app_state.clickhouse_connection_info.clone(),
-                        gateway.handle.app_state.postgres_connection_info.clone(),
-                    );
                     let episodes = tensorzero_core::endpoints::episodes::internal::list_episodes(
-                        &database,
+                        &gateway.handle.app_state.get_delegating_database(),
                         &gateway.handle.app_state.config,
                         limit,
                         before,
