@@ -12,7 +12,7 @@ import {
 } from "~/components/inference/InferenceDetailContent";
 import { toInferenceUrl } from "~/utils/urls";
 import { useToast } from "~/hooks/use-toast";
-import { ExternalLink } from "lucide-react";
+
 
 interface InferencePreviewSheetProps {
   inferenceId: string | null;
@@ -101,10 +101,9 @@ export function InferencePreviewSheet({
         {showFullPageLink && inferenceData && (
           <Link
             to={toInferenceUrl(inferenceData.inference.inference_id)}
-            className="text-fg-secondary hover:text-foreground absolute top-4 right-10 flex items-center gap-1 text-xs transition-colors"
+            className="text-fg-secondary hover:text-foreground absolute top-4 right-10 text-xs transition-colors"
           >
             Open full page
-            <ExternalLink className="h-3 w-3" />
           </Link>
         )}
         <SheetHeader className="space-y-1">
