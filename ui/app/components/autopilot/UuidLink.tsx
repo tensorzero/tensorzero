@@ -100,7 +100,7 @@ export function UuidLink({ uuid }: UuidLinkProps) {
         <UuidHoverCard uuid={uuid} obj={obj}>
           <Link
             to={url}
-            className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
+            className="text-inherit underline decoration-dotted underline-offset-2 after:absolute after:inset-0 hover:decoration-solid"
           >
             <IconWithTooltip label={getEntityLabel(obj.type)}>
               <EntityIcon type={obj.type} />

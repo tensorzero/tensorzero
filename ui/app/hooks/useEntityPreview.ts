@@ -47,6 +47,10 @@ export function useEntityPreview<T>({
 
   return {
     data: (fetcher.data as T) ?? null,
-    isLoading: fetcher.state !== "idle",
+    // Treat "not yet fetched" as loading when enabled, so callers
+    // show a skeleton instead of nothing on the first render before
+    // the effect fires.
+    isLoading:
+      fetcher.state !== "idle" || (enabled && fetcher.data === undefined),
   };
 }

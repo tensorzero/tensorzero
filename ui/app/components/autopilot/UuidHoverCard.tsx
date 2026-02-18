@@ -14,7 +14,7 @@ import { cn } from "~/utils/common";
 import { Skeleton } from "~/components/ui/skeleton";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
-import { toResolvedObjectUrl } from "~/utils/urls";
+import { toFunctionUrl, toResolvedObjectUrl, toVariantUrl } from "~/utils/urls";
 
 interface UuidHoverCardProps {
   uuid: string;
@@ -133,10 +133,10 @@ function InferenceContent({ uuid, obj, isOpen }: InferenceContentProps) {
         functionName={obj.function_name}
         functionType={obj.function_type}
       />
-      <InfoItem
-        label="Variant"
-        value={obj.variant_name}
-        secondaryValue={variantType}
+      <VariantItem
+        functionName={obj.function_name}
+        variantName={obj.variant_name}
+        variantType={variantType}
       />
       <Timestamp data={data} isLoading={isLoading} />
     </div>
@@ -247,9 +247,11 @@ interface FunctionItemProps {
 function FunctionItem({ functionName, functionType }: FunctionItemProps) {
   const iconConfig = getFunctionTypeIcon(functionType);
   return (
-    <Item label="Function">
-      <span
-        className="text-foreground inline-flex min-w-0 items-center gap-1 font-mono text-xs"
+    <div className="flex flex-col gap-0.5">
+      <span className="text-muted-foreground text-xs">Function</span>
+      <Link
+        to={toFunctionUrl(functionName)}
+        className="text-foreground hover:text-foreground/80 inline-flex min-w-0 items-center gap-1 font-mono text-xs transition-colors"
         title={`${functionName} · ${functionType}`}
       >
         <span
@@ -262,8 +264,36 @@ function FunctionItem({ functionName, functionType }: FunctionItemProps) {
         </span>
         <span className="truncate">{functionName}</span>
         <span className="text-muted-foreground shrink-0">· {functionType}</span>
-      </span>
-    </Item>
+      </Link>
+    </div>
+  );
+}
+
+interface VariantItemProps {
+  functionName: string;
+  variantName: string;
+  variantType: string | null;
+}
+
+function VariantItem({
+  functionName,
+  variantName,
+  variantType,
+}: VariantItemProps) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-muted-foreground text-xs">Variant</span>
+      <Link
+        to={toVariantUrl(functionName, variantName)}
+        className="text-foreground hover:text-foreground/80 min-w-0 truncate font-mono text-xs transition-colors"
+        title={variantType ? `${variantName} · ${variantType}` : variantName}
+      >
+        {variantName}
+        {variantType && (
+          <span className="text-muted-foreground"> · {variantType}</span>
+        )}
+      </Link>
+    </div>
   );
 }
 
