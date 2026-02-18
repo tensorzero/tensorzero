@@ -1097,40 +1097,6 @@ impl TensorZeroGateway {
         )
     }
 
-    /// Get a single datapoint by its ID.
-    ///
-    /// :param dataset_name: The name of the dataset to get the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `Datapoint` object (`DatapointChat` or `DatapointJson`).
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    fn get_datapoint(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'_, PyAny>,
-    ) -> PyResult<Py<PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        let fut = client.get_datapoints(Some(dataset_name), vec![datapoint_id]);
-        let response =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        let py_response = convert_response_to_python_dataclass(
-            this.py(),
-            &response,
-            "tensorzero",
-            "GetDatapointsResponse",
-        )?;
-        let mut datapoints = py_response
-            .getattr(this.py(), "datapoints")?
-            .extract::<Vec<Py<PyAny>>>(this.py())?;
-        if datapoints.len() != 1 {
-            return Err(PyErr::new::<PyValueError, _>(format!(
-                "Expected exactly one datapoint, got {}",
-                datapoints.len()
-            )));
-        }
-        Ok(datapoints.swap_remove(0))
-    }
-
     /// Update metadata for one or more datapoints.
     ///
     /// :param dataset_name: The name of the dataset containing the datapoints.
@@ -2225,47 +2191,6 @@ impl AsyncTensorZeroGateway {
                     "tensorzero",
                     "GetDatapointsResponse",
                 ),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Get a single datapoint by its ID.
-    ///
-    /// :param dataset_name: The name of the dataset to get the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `Datapoint` object (`DatapointChat` or `DatapointJson`).
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    fn get_datapoint<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'a, PyAny>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client
-                .get_datapoints(Some(dataset_name), vec![datapoint_id])
-                .await;
-            Python::attach(|py| match res {
-                Ok(response) => {
-                    let py_response = convert_response_to_python_dataclass(
-                        py,
-                        &response,
-                        "tensorzero",
-                        "GetDatapointsResponse",
-                    )?;
-                    let mut datapoints = py_response
-                        .getattr(py, "datapoints")?
-                        .extract::<Vec<Py<PyAny>>>(py)?;
-                    if datapoints.len() != 1 {
-                        return Err(PyErr::new::<PyValueError, _>(format!(
-                            "Expected exactly one datapoint, got {}",
-                            datapoints.len()
-                        )));
-                    }
-                    Ok(datapoints.swap_remove(0))
-                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })

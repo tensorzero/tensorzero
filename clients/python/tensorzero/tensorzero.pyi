@@ -679,20 +679,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetDatapointsResponse` containing the datapoints.
         """
 
-    def get_datapoint(
-        self,
-        *,
-        dataset_name: str,
-        datapoint_id: UUID,
-    ) -> Datapoint:
-        """
-        Get a single datapoint by its ID.
-
-        :param dataset_name: The name of the dataset to get the datapoint from.
-        :param datapoint_id: The ID of the datapoint to get.
-        :return: A `Datapoint` object (`DatapointChat` or `DatapointJson`).
-        """
-
     def create_datapoints(
         self,
         *,
@@ -1175,20 +1161,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to list the datapoints from.
         :param request: The request to list the datapoints.
         :return: A `GetDatapointsResponse` containing the datapoints.
-        """
-
-    async def get_datapoint(
-        self,
-        *,
-        dataset_name: str,
-        datapoint_id: UUID,
-    ) -> Datapoint:
-        """
-        Get a single datapoint by its ID.
-
-        :param dataset_name: The name of the dataset to get the datapoint from.
-        :param datapoint_id: The ID of the datapoint to get.
-        :return: A `Datapoint` object (`DatapointChat` or `DatapointJson`).
         """
 
     async def create_datapoints(
