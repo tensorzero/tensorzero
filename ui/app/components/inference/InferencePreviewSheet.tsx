@@ -105,7 +105,7 @@ export function InferencePreviewSheet({
             Open full page
           </Link>
         )}
-        <SheetHeader className="space-y-1">
+        <SheetHeader className="gap-3">
           <span className="text-fg-secondary text-sm font-normal">
             Inference
           </span>
@@ -114,7 +114,7 @@ export function InferencePreviewSheet({
           </SheetTitle>
         </SheetHeader>
 
-        <div className="mt-8 space-y-6">
+        <div className="mt-8 flex flex-col gap-8">
           {isLoading && !inferenceData && (
             <div className="flex items-center justify-center py-12">
               <div className="text-fg-muted text-sm">
