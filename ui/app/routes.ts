@@ -51,10 +51,6 @@ export default [
         "episode_preview/:episode_id",
         "routes/api/tensorzero/episode_preview.route.ts",
       ),
-      route(
-        "inference_sheet/:inference_id",
-        "routes/api/tensorzero/inference_sheet.route.ts",
-      ),
     ]),
 
     route(
