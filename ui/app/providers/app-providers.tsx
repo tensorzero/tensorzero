@@ -11,6 +11,7 @@ import {
   DEFAULT_FEATURE_FLAGS,
   type FeatureFlags,
 } from "~/context/feature-flags";
+import { EntitySheetProvider } from "~/components/entity-sheet/EntitySheetContext";
 import type { UiConfig } from "~/types/tensorzero";
 
 export interface AppProvidersLoaderData {
@@ -42,9 +43,11 @@ export function AppProviders({ children, loaderData }: AppProvidersProps) {
             >
               <ConfigProvider value={loaderData?.config ?? EMPTY_CONFIG}>
                 <SidebarProvider>
-                  <TooltipProvider delayDuration={250}>
-                    {children}
-                  </TooltipProvider>
+                  <EntitySheetProvider>
+                    <TooltipProvider delayDuration={250}>
+                      {children}
+                    </TooltipProvider>
+                  </EntitySheetProvider>
                 </SidebarProvider>
               </ConfigProvider>
             </FeatureFlagsProvider>

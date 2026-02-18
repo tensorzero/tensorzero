@@ -1,8 +1,8 @@
-import { useEntitySideSheet } from "./EntitySideSheetContext";
+import { useEntitySheet } from "./EntitySheetContext";
 import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSheet";
 
-export function EntitySideSheet() {
-  const { sheetState, closeSheet } = useEntitySideSheet();
+export function EntitySheet() {
+  const { sheetState, closeSheet } = useEntitySheet();
 
   switch (sheetState?.type ?? null) {
     case "inference":

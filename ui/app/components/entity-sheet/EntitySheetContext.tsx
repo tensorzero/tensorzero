@@ -10,16 +10,15 @@ import { useLocation } from "react-router";
 
 type EntitySheetState = { type: "inference"; id: string } | null;
 
-interface EntitySideSheetContextValue {
+interface EntitySheetContextValue {
   sheetState: EntitySheetState;
   openInferenceSheet: (id: string) => void;
   closeSheet: () => void;
 }
 
-const EntitySideSheetContext =
-  createContext<EntitySideSheetContextValue | null>(null);
+const EntitySheetContext = createContext<EntitySheetContextValue | null>(null);
 
-export function EntitySideSheetProvider({ children }: { children: ReactNode }) {
+export function EntitySheetProvider({ children }: { children: ReactNode }) {
   const [sheetState, setSheetState] = useState<EntitySheetState>(null);
   const location = useLocation();
 
@@ -37,20 +36,18 @@ export function EntitySideSheetProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <EntitySideSheetContext.Provider
+    <EntitySheetContext.Provider
       value={{ sheetState, openInferenceSheet, closeSheet }}
     >
       {children}
-    </EntitySideSheetContext.Provider>
+    </EntitySheetContext.Provider>
   );
 }
 
-export function useEntitySideSheet() {
-  const context = useContext(EntitySideSheetContext);
+export function useEntitySheet() {
+  const context = useContext(EntitySheetContext);
   if (!context) {
-    throw new Error(
-      "useEntitySideSheet must be used within EntitySideSheetProvider",
-    );
+    throw new Error("useEntitySheet must be used within EntitySheetProvider");
   }
   return context;
 }

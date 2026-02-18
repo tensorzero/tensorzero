@@ -13,7 +13,7 @@ import type { ResolvedObject } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 import { toResolvedObjectUrl } from "~/utils/urls";
 import { UuidHoverCard } from "./UuidHoverCard";
-import { useEntitySideSheet } from "./EntitySideSheetContext";
+import { useEntitySheet } from "./EntitySheetContext";
 
 const ICON_SIZE = 12;
 const ICON_CLASS = "mr-1 inline align-middle -translate-y-px";
@@ -86,7 +86,7 @@ function IconWithTooltip({
 
 export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
-  const { openInferenceSheet } = useEntitySideSheet();
+  const { openInferenceSheet } = useEntitySheet();
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
   const url = obj ? toResolvedObjectUrl(uuid, obj) : null;

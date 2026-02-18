@@ -15,7 +15,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 import { toFunctionUrl, toResolvedObjectUrl, toVariantUrl } from "~/utils/urls";
-import { useEntitySideSheet } from "./EntitySideSheetContext";
+import { useEntitySheet } from "./EntitySheetContext";
 
 interface UuidHoverCardProps {
   uuid: string;
@@ -213,7 +213,7 @@ interface TypeBadgeLinkProps {
 
 function TypeBadgeLink({ uuid, obj, children }: TypeBadgeLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
-  const { openInferenceSheet } = useEntitySideSheet();
+  const { openInferenceSheet } = useEntitySheet();
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
