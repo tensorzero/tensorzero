@@ -60,19 +60,23 @@ impl RawEvaluationStatisticsRow {
 impl EvaluationQueries for PostgresConnectionInfo {
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
         let pool = self.get_pool_result()?;
+        // Count distinct evaluation_run_ids per table and sum.
+        // Evaluation runs target a single function type, so the sets are disjoint.
         let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(DISTINCT evaluation_run_id)::BIGINT
-            FROM (
-                SELECT tags->>'tensorzero::evaluation_run_id' as evaluation_run_id
-                FROM tensorzero.chat_inferences
-                WHERE tags ? 'tensorzero::evaluation_run_id'
-                AND NOT function_name LIKE 'tensorzero::%'
-                UNION ALL
-                SELECT tags->>'tensorzero::evaluation_run_id' as evaluation_run_id
-                FROM tensorzero.json_inferences
-                WHERE tags ? 'tensorzero::evaluation_run_id'
-                AND NOT function_name LIKE 'tensorzero::%'
-            ) sub",
+            "SELECT (
+                COALESCE((
+                    SELECT COUNT(DISTINCT tags->>'tensorzero::evaluation_run_id')
+                    FROM tensorzero.chat_inferences
+                    WHERE tags ? 'tensorzero::evaluation_run_id'
+                    AND NOT function_name LIKE 'tensorzero::%'
+                ), 0) +
+                COALESCE((
+                    SELECT COUNT(DISTINCT tags->>'tensorzero::evaluation_run_id')
+                    FROM tensorzero.json_inferences
+                    WHERE tags ? 'tensorzero::evaluation_run_id'
+                    AND NOT function_name LIKE 'tensorzero::%'
+                ), 0)
+            )::BIGINT",
         )
         .fetch_one(pool)
         .await?;

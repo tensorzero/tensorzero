@@ -30,7 +30,7 @@ use crate::db::query_helpers::json_double_escape_string_without_quotes;
 use crate::db::query_helpers::uuid_to_datetime;
 use crate::endpoints::inference::InferenceParams;
 use crate::endpoints::stored_inferences::v1::types::{
-    FloatComparisonOperator, TagComparisonOperator, TimeComparisonOperator,
+    FloatComparisonOperator, TimeComparisonOperator,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
@@ -73,15 +73,6 @@ impl TimeComparisonOperator {
             TimeComparisonOperator::GreaterThan => ">",
             TimeComparisonOperator::GreaterThanOrEqual => ">=",
             TimeComparisonOperator::NotEqual => "!=",
-        }
-    }
-}
-
-impl TagComparisonOperator {
-    pub(super) fn to_postgres_operator(self) -> &'static str {
-        match self {
-            TagComparisonOperator::Equal => "=",
-            TagComparisonOperator::NotEqual => "!=",
         }
     }
 }
@@ -512,17 +503,16 @@ impl InferenceQueries for PostgresConnectionInfo {
     ) -> Result<Vec<FunctionInferenceCount>, Error> {
         let pool = self.get_pool_result()?;
 
+        // Query the pre-aggregated rollup table instead of scanning chat_inferences/json_inferences.
+        // MAX(minute) gives minute-level precision (vs. exact timestamp), acceptable for dashboard listing.
+        // The rollup table is refreshed every 5 minutes by pg_cron; data may lag up to ~15 minutes.
         let rows = sqlx::query(
             r"
             SELECT
                 function_name,
-                MAX(created_at) AS last_inference_timestamp,
-                COUNT(*)::INT AS inference_count
-            FROM (
-                SELECT function_name, created_at FROM tensorzero.chat_inferences
-                UNION ALL
-                SELECT function_name, created_at FROM tensorzero.json_inferences
-            ) AS combined
+                MAX(minute) AS last_inference_timestamp,
+                SUM(inference_count)::INT AS inference_count
+            FROM tensorzero.inference_by_function_statistics
             GROUP BY function_name
             ORDER BY last_inference_timestamp DESC
             ",
@@ -1834,25 +1824,29 @@ fn apply_count_filters(
 
 // ===== Inference count helper functions (merged from inference_count module) =====
 
-/// Builds and executes a count-by-variant query for inferences.
+/// Builds and executes a count-by-variant query using the rollup table.
 async fn count_by_variant_impl(
     pool: &PgPool,
     function_type: FunctionConfigType,
     function_name: &str,
     variant_name: Option<&str>,
 ) -> Result<Vec<CountByVariant>, sqlx::Error> {
-    let table = function_type.postgres_table_name();
+    let function_type_str = match function_type {
+        FunctionConfigType::Chat => "chat",
+        FunctionConfigType::Json => "json",
+    };
 
     let mut qb = QueryBuilder::new(
         r#"SELECT
             variant_name,
-            COUNT(*) AS inference_count,
-            to_char(MAX(created_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS last_used_at
-        FROM "#,
+            SUM(inference_count)::BIGINT AS inference_count,
+            to_char(MAX(minute), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS last_used_at
+        FROM tensorzero.inference_by_function_statistics
+        WHERE function_name = "#,
     );
-    qb.push(table);
-    qb.push(" WHERE function_name = ");
     qb.push_bind(function_name);
+    qb.push(" AND function_type = ");
+    qb.push_bind(function_type_str);
 
     if let Some(variant) = variant_name {
         qb.push(" AND variant_name = ");
@@ -1878,7 +1872,7 @@ async fn count_by_variant_impl(
         .collect())
 }
 
-/// Builds and executes a throughput-by-variant query.
+/// Builds and executes a throughput-by-variant query using the rollup table.
 async fn throughput_by_variant_impl(
     pool: &PgPool,
     function_name: &str,
@@ -1891,50 +1885,45 @@ async fn throughput_by_variant_impl(
             r"SELECT
                 '1970-01-01T00:00:00.000Z'::text AS period_start,
                 variant_name,
-                COUNT(*)::INT AS count
-            FROM (
-                SELECT variant_name FROM tensorzero.chat_inferences WHERE function_name = ",
+                SUM(inference_count)::INT AS count
+            FROM tensorzero.inference_by_function_statistics
+            WHERE function_name = ",
         );
         qb.push_bind(function_name);
-        qb.push(
-            " UNION ALL SELECT variant_name FROM tensorzero.json_inferences WHERE function_name = ",
-        );
-        qb.push_bind(function_name);
-        qb.push(") AS combined GROUP BY variant_name ORDER BY variant_name DESC");
+        qb.push(" GROUP BY variant_name ORDER BY variant_name DESC");
 
         qb.build().fetch_all(pool).await?
     } else {
         let unit = time_window.to_postgres_time_unit();
 
         let mut qb = QueryBuilder::new(
-            "WITH combined AS (
-                SELECT variant_name, created_at FROM tensorzero.chat_inferences WHERE function_name = ",
+            "WITH max_time AS (
+                SELECT MAX(minute) AS max_ts
+                FROM tensorzero.inference_by_function_statistics
+                WHERE function_name = ",
         );
         qb.push_bind(function_name);
-        qb.push(" UNION ALL SELECT variant_name, created_at FROM tensorzero.json_inferences WHERE function_name = ");
-        qb.push_bind(function_name);
         qb.push(
-            "),
-            max_time AS (
-                SELECT MAX(created_at) AS max_ts FROM combined
-            )
+            ")
             SELECT
                 to_char(date_trunc('",
         );
         qb.push(unit);
         qb.push(
-            r#"', c.created_at), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS period_start,
-                c.variant_name,
-                COUNT(*)::INT AS count
-            FROM combined c, max_time m
-            WHERE c.created_at >= m.max_ts - INTERVAL '1 "#,
+            r#"', s.minute), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS period_start,
+                s.variant_name,
+                SUM(s.inference_count)::INT AS count
+            FROM tensorzero.inference_by_function_statistics s, max_time m
+            WHERE s.function_name = "#,
         );
+        qb.push_bind(function_name);
+        qb.push(" AND s.minute >= m.max_ts - INTERVAL '1 ");
         qb.push(unit);
         qb.push("' * (");
         qb.push_bind(max_periods as i32);
         qb.push(" + 1) GROUP BY date_trunc('");
         qb.push(unit);
-        qb.push("', c.created_at), c.variant_name ORDER BY period_start DESC, variant_name DESC");
+        qb.push("', s.minute), s.variant_name ORDER BY period_start DESC, variant_name DESC");
 
         qb.build().fetch_all(pool).await?
     };

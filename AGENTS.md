@@ -39,6 +39,7 @@
   - For aggregates that should be non-null, use the same pattern: `SELECT COUNT(*)::BIGINT as "total!"`.
 - After adding or modifying `sqlx::query!` / `sqlx::query_as!` / `sqlx::query_scalar!` macros, run `cargo sqlx prepare --workspace -- --all-features --all-targets` to regenerate the query cache. This requires a running Postgres database with up-to-date migrations. The generated `.sqlx` directory must be committed to version control.
 - Prefer "Postgres" instead of "PostgreSQL" in comments, error messages, docs, etc.
+- **Do not run `COUNT(*)` or other aggregations over full inference tables** (`chat_inferences`, `json_inferences`). These tables can be very large and full scans are expensive. Use pre-aggregated rollup tables (e.g. `inference_by_function_statistics`) or filtered partial indexes instead.
 
 # Python Dependencies
 
