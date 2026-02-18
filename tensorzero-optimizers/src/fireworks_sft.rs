@@ -306,6 +306,7 @@ impl JobHandle for FireworksSFTJobHandle {
                             extra_body: None,
                             timeouts: TimeoutsConfig::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: TimeoutsConfig::default(),

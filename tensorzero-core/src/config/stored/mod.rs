@@ -27,6 +27,7 @@ use crate::model::UninitializedModelConfig;
 use crate::model::UninitializedProviderConfig;
 use crate::optimization::UninitializedOptimizerInfo;
 use crate::rate_limiting::UninitializedRateLimitingConfig;
+use tensorzero_types::UninitializedCostConfig;
 
 // ============================================================================
 // Embedding Model Stored Types
@@ -86,6 +87,9 @@ pub struct StoredEmbeddingProviderConfig {
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub extra_headers: Option<ExtraHeadersConfig>,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<UninitializedCostConfig>,
 }
 
 impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfig {
@@ -97,6 +101,7 @@ impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfi
             timeouts,
             extra_body,
             extra_headers,
+            cost,
         } = stored;
 
         Self {
@@ -105,6 +110,7 @@ impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfi
             timeout_ms: timeout_ms.or(timeouts.non_streaming.total_ms),
             extra_body,
             extra_headers,
+            cost,
         }
     }
 }
@@ -117,6 +123,7 @@ impl From<UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConfi
             timeout_ms,
             extra_body,
             extra_headers,
+            cost,
         } = uninitialized;
 
         Self {
@@ -125,6 +132,7 @@ impl From<UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConfi
             timeouts: TimeoutsConfig::default(),
             extra_body,
             extra_headers,
+            cost,
         }
     }
 }
