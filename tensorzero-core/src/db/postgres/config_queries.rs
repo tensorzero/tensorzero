@@ -22,7 +22,7 @@ impl ConfigQueries for PostgresConnectionInfo {
                WHERE hash = $1
                LIMIT 1",
         )
-        .bind(snapshot_hash.as_bytes())
+        .bind(&snapshot_hash)
         .fetch_optional(pool)
         .await?;
 

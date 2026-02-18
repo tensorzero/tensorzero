@@ -571,9 +571,6 @@ pub(super) fn build_insert_chat_inferences_query(
     );
 
     query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
-        let snapshot_hash_bytes: Option<Vec<u8>> =
-            row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
-
         b.push_bind(row.id)
             .push_bind(&row.function_name)
             .push_bind(&row.variant_name)
@@ -581,7 +578,7 @@ pub(super) fn build_insert_chat_inferences_query(
             .push_bind(row.processing_time_ms.map(|v| v as i32))
             .push_bind(row.ttft_ms.map(|v| v as i32))
             .push_bind(Json::from(&row.tags))
-            .push_bind(snapshot_hash_bytes)
+            .push_bind(row.snapshot_hash.as_ref())
             .push_bind(created_at);
     });
 
@@ -654,9 +651,6 @@ pub(super) fn build_insert_json_inferences_query(
     );
 
     query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
-        let snapshot_hash_bytes: Option<Vec<u8>> =
-            row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
-
         b.push_bind(row.id)
             .push_bind(&row.function_name)
             .push_bind(&row.variant_name)
@@ -664,7 +658,7 @@ pub(super) fn build_insert_json_inferences_query(
             .push_bind(row.processing_time_ms.map(|v| v as i32))
             .push_bind(row.ttft_ms.map(|v| v as i32))
             .push_bind(Json::from(&row.tags))
-            .push_bind(snapshot_hash_bytes)
+            .push_bind(row.snapshot_hash.as_ref())
             .push_bind(created_at);
     });
 
@@ -1550,15 +1544,9 @@ fn apply_union_filters(
 
 /// Manual implementation of FromRow for InferenceMetadata to handle UNION ALL queries.
 /// Converts `snapshot_hash` bytes to string via SnapshotHash.
-///
-/// TODO(shuyangli): come up with a nice way to do the snapshot_hash conversion so we don't
-/// need to manually impl sqlx::FromRow. Because the origin type is Vec<u8> and the destination
-/// type is String, we can't/shouldn't directly impl TryFrom<Vec<u8>> for String.
 impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for InferenceMetadata {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
-        let snapshot_hash_bytes: Option<Vec<u8>> = row.try_get("snapshot_hash")?;
-        let snapshot_hash =
-            snapshot_hash_bytes.map(|bytes| SnapshotHash::from_bytes(&bytes).to_string());
+        let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
 
         Ok(InferenceMetadata {
             id: row.try_get("id")?,
@@ -1566,7 +1554,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for InferenceMetadata {
             variant_name: row.try_get("variant_name")?,
             episode_id: row.try_get("episode_id")?,
             function_type: row.try_get("function_type")?,
-            snapshot_hash,
+            snapshot_hash: snapshot_hash.map(|h| h.to_string()),
         })
     }
 }
