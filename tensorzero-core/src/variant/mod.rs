@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::time::error::Elapsed;
 use tracing::instrument;
@@ -278,6 +278,59 @@ impl VariantConfig {
             VariantConfig::Dicl(params) => params.set_weight(weight),
             VariantConfig::MixtureOfN(params) => params.set_weight(weight),
             VariantConfig::ChainOfThought(params) => params.inner.set_weight(weight),
+        }
+    }
+
+    /// Returns the model names directly used by this variant.
+    /// For BestOfN/MixtureOfN, this returns the evaluator/fuser model (not the candidate variant models,
+    /// which are validated separately through experimentation).
+    pub fn direct_model_names(&self) -> Vec<&Arc<str>> {
+        match self {
+            VariantConfig::ChatCompletion(c) => vec![c.model()],
+            VariantConfig::Dicl(c) => vec![c.model()],
+            VariantConfig::ChainOfThought(c) => vec![c.inner.model()],
+            VariantConfig::BestOfNSampling(c) => vec![c.evaluator().inner.model()],
+            VariantConfig::MixtureOfN(c) => vec![c.fuser().inner.model()],
+        }
+    }
+
+    /// Returns the names of candidate variants referenced by this variant.
+    /// Only BestOfN and MixtureOfN have candidates; other variants return an empty slice.
+    pub fn candidate_variant_names(&self) -> &[String] {
+        match self {
+            VariantConfig::BestOfNSampling(c) => c.candidates(),
+            VariantConfig::MixtureOfN(c) => c.candidates(),
+            _ => &[],
+        }
+    }
+
+    /// Returns all model names used by this variant, recursively including models from
+    /// candidate variants (for BestOfN/MixtureOfN).
+    pub fn all_model_names<'a>(
+        &'a self,
+        all_variants: &'a HashMap<String, Arc<VariantInfo>>,
+    ) -> Vec<&'a Arc<str>> {
+        let mut models = Vec::new();
+        let mut visited = HashSet::new();
+        self.collect_model_names_recursive(all_variants, &mut models, &mut visited);
+        models
+    }
+
+    fn collect_model_names_recursive<'a>(
+        &'a self,
+        all_variants: &'a HashMap<String, Arc<VariantInfo>>,
+        models: &mut Vec<&'a Arc<str>>,
+        visited: &mut HashSet<String>,
+    ) {
+        models.extend(self.direct_model_names());
+        for candidate_name in self.candidate_variant_names() {
+            if visited.insert(candidate_name.clone())
+                && let Some(candidate_info) = all_variants.get(candidate_name)
+            {
+                candidate_info
+                    .inner
+                    .collect_model_names_recursive(all_variants, models, visited);
+            }
         }
     }
 }
@@ -1303,6 +1356,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1383,6 +1437,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1496,6 +1551,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
 
         // Create the arguments struct
@@ -1563,6 +1619,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
 
         // Create the arguments struct
@@ -1619,6 +1676,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
@@ -1717,6 +1775,7 @@ mod tests {
             ]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1794,6 +1853,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1836,6 +1896,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         }));
 
         // Prepare the model inference request
@@ -1957,6 +2018,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let inference_params = InferenceParams::default();
 
@@ -2039,6 +2101,7 @@ mod tests {
             ]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         }));
         let retry_config = RetryConfig::default();
 

@@ -145,55 +145,63 @@ max_tokens = 100
 
 [functions.basic_test.variants.azure]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
 [functions.basic_test.variants.azure-extra-body]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-extra_body = [{ pointer = "/temperature", value = 0.123 }]
+max_tokens = 1024
+reasoning_effort = "low"
+extra_body = [{ pointer = "/temperature", value = 1 }]
 
 [functions.basic_test.variants.azure-extra-headers]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 extra_headers = [{ name = "api-key", value = "invalid_azure_openai_auth" }]
 
 [functions.basic_test.variants.azure-dynamic]
 type = "chat_completion"
-model = "gpt-4o-mini-azure-dynamic"
+model = "gpt-5-mini-azure-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
-[functions.basic_test.variants.azure-ai-foundry]
+[functions.basic_test.variants.azure-kimi]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
-[functions.basic_test.variants.azure-ai-foundry-extra-body]
+[functions.basic_test.variants.azure-kimi-extra-body]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-extra_body = [{ pointer = "/temperature", value = 0.123 }]
+max_tokens = 1024
+reasoning_effort = "low"
+extra_body = [{ pointer = "/temperature", value = 1 }]
 
-[functions.basic_test.variants.azure-ai-foundry-extra-headers]
+[functions.basic_test.variants.azure-kimi-extra-headers]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 extra_headers = [{ name = "api-key", value = "invalid_azure_openai_auth" }]
 
-[functions.basic_test.variants.azure-ai-foundry-dynamic]
+[functions.basic_test.variants.azure-kimi-dynamic]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure-dynamic"
+model = "kimi-k2.5-azure-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
 [functions.basic_test.variants.fireworks]
 type = "chat_completion"
@@ -937,4 +945,28 @@ max_tokens = 100
 type = "chat_completion"
 model = "test_both_error_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+# DICL raw_response tests: embedding partial failure (first provider fails, second succeeds)
+[functions.basic_test.variants.dicl_embedding_partial_fail]
+type = "experimental_dynamic_in_context_learning"
+model = "test"
+embedding_model = "embedding_fallback_with_raw_response"
+k = 0
+max_tokens = 100
+
+# DICL raw_response tests: all embedding providers fail
+[functions.basic_test.variants.dicl_embedding_all_fail]
+type = "experimental_dynamic_in_context_learning"
+model = "test"
+embedding_model = "embedding_both_error_with_raw_response"
+k = 0
+max_tokens = 100
+
+# DICL raw_response tests: embedding succeeds, LLM fails
+[functions.basic_test.variants.dicl_llm_fail]
+type = "experimental_dynamic_in_context_learning"
+model = "error_with_raw_response"
+embedding_model = "dummy-embedding-model"
+k = 0
 max_tokens = 100

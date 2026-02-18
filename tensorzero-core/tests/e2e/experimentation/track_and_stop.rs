@@ -1,6 +1,6 @@
 use crate::clickhouse::{DeleteDbOnDrop, get_clean_clickhouse};
 use futures::future::join_all;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_distr::Distribution;
 use serde_json::json;
 use std::collections::HashMap;
@@ -291,7 +291,7 @@ impl BernoulliBandit {
         match &self.rng {
             Some(rng) => {
                 let mut rng = rng.lock().unwrap();
-                rand::Rng::random_bool(&mut *rng, *prob)
+                rand::RngExt::random_bool(&mut *rng, *prob)
             }
             None => rand::rng().random_bool(*prob),
         }
