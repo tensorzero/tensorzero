@@ -24,7 +24,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
-indicatif = "0.18.2"
+indicatif = "0.18.4"
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
