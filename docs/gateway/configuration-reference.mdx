@@ -443,10 +443,11 @@ routing = ["openai", "azure"]
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-When set to `true`, the gateway will silently discard streaming chunks with unknown or unsupported types instead of producing an error in the stream.
+When set to `true`, the gateway will silently discard streaming chunks with unknown or unsupported types instead of forwarding them.
 A warning is emitted for each discarded chunk.
 
-This is useful when a model provider introduces new chunk types that TensorZero doesn't yet support, and you'd prefer to ignore them rather than fail the stream.
+By default (`false`), unknown chunks are forwarded in the stream as-is.
+This is useful when a model provider introduces new chunk types that TensorZero doesn't yet support, and you'd prefer to drop them rather than receive unrecognized data.
 
 ```toml title="tensorzero.toml"
 [models.my-model.providers.my-provider]
