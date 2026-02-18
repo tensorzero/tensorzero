@@ -98,7 +98,7 @@ export function InferencePreviewSheet({
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-full md:w-5/6">
-        <SheetHeader className="flex flex-row items-start justify-between gap-4">
+        <SheetHeader className="flex flex-row items-start justify-between gap-4 pr-8">
           <SheetTitle className="min-w-0">
             {inferenceData ? (
               <>
