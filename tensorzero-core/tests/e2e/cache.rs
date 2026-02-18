@@ -1,7 +1,7 @@
 #![expect(clippy::print_stdout)]
 
 use futures::StreamExt;
-use rand::Rng;
+use rand::RngExt;
 use reqwest::Client;
 use reqwest_sse_stream::Event;
 use reqwest_sse_stream::RequestBuilderExt;

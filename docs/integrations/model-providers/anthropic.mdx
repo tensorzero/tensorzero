@@ -294,6 +294,21 @@ project_id = "YOUR-PROJECT-ID"  # TODO: set your GCP project ID
 
 Read more about the [GCP Vertex AI Anthropic model provider](/integrations/model-providers/gcp-vertex-ai-anthropic).
 
+## Extended Thinking
+
+TensorZero supports Anthropic's [Extended Thinking](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) feature.
+You can enable it by setting `thinking_budget_tokens` on your variant:
+
+```toml title="tensorzero.toml"
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+thinking_budget_tokens = 10000
+```
+
+The model's reasoning will be returned as `thought` content blocks in the response.
+For multi-turn reasoning conversations, pass the `signature` field from the response's `thought` blocks back in subsequent requests.
+
 ## Other Features
 
 See [Extend TensorZero](/operations/extend-tensorzero) for information about Anthropic Computer Use and other beta features.

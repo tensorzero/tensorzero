@@ -3,7 +3,6 @@ mod aws_bedrock;
 mod aws_sagemaker_openai;
 mod aws_sagemaker_tgi;
 mod azure;
-mod azure_ai_foundry;
 mod batch;
 pub mod common;
 pub mod commonv2;
