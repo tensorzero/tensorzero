@@ -3159,6 +3159,72 @@ mod tests {
         );
     }
 
+    /// Regression test: `update_probabilities` must pass the canonical function name
+    /// (e.g. "my_function") to `get_feedback_by_variant`, NOT a decorated name like
+    /// "my_function (namespace: prod)". The namespace is a separate parameter.
+    #[tokio::test]
+    async fn test_update_probabilities_uses_canonical_function_name() {
+        use crate::db::feedback::MockFeedbackQueries;
+
+        let canonical_name = "my_function";
+        let namespace = Some("prod");
+
+        let mut mock_db = MockFeedbackQueries::new();
+        mock_db
+            .expect_get_feedback_by_variant()
+            .withf(move |_metric, function_name, _variants, ns, _max| {
+                // The function_name must be canonical, not decorated
+                function_name == canonical_name
+                    && !function_name.contains("namespace")
+                    && ns == &namespace
+            })
+            .times(1)
+            .returning(|_, _, _, _, _| {
+                Box::pin(async move {
+                    Ok(vec![
+                        FeedbackByVariant {
+                            variant_name: "A".to_string(),
+                            count: 20,
+                            mean: 0.5,
+                            variance: Some(0.1),
+                        },
+                        FeedbackByVariant {
+                            variant_name: "B".to_string(),
+                            count: 20,
+                            mean: 0.6,
+                            variance: Some(0.2),
+                        },
+                    ])
+                })
+            });
+
+        let candidates = Arc::new(vec!["A".to_string(), "B".to_string()]);
+        let state = Arc::new(ArcSwap::new(Arc::new(
+            TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
+        )));
+
+        let result = update_probabilities(UpdateProbabilitiesArgs {
+            db: &mock_db,
+            candidate_variants: &candidates,
+            metric_name: "test_metric",
+            function_name: canonical_name,
+            sampling_probabilities: &state,
+            min_samples_per_variant: 10,
+            epsilon: 0.0,
+            delta: 0.05,
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            namespace,
+            max_samples_per_variant: Some(10_000),
+        })
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "update_probabilities should succeed with canonical function name"
+        );
+    }
+
     #[test]
     fn test_explicit_max_samples_per_variant_deserialization() {
         let toml_str = r#"

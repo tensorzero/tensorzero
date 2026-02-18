@@ -744,6 +744,10 @@ FORMAT JSONEachRow"
             )
         } else {
             // Non-namespace query: use pre-aggregated FeedbackByVariantStatistics table
+            // TODO: `max_samples_per_variant` is ignored here because we use pre-aggregated
+            // statistics. This diverges from Postgres, which applies the limit in both paths.
+            // To fix this, the non-namespace path would need to query raw feedback tables
+            // (like the namespace path) when `max_samples_per_variant` is set.
             format!(
                 r"
             SELECT

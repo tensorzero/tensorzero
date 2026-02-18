@@ -9,4 +9,5 @@ export type UninitializedTrackAndStopConfig = {
   epsilon: number;
   update_period_s: bigint;
   min_prob?: number;
+  max_samples_per_variant?: bigint;
 };

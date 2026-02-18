@@ -50,7 +50,7 @@ fn build_feedback_by_variant_query(
     let mut qb = QueryBuilder::new(
         r"
     WITH feedback AS (
-        SELECT target_id, value::INT::DOUBLE PRECISION as value
+        SELECT id, target_id, value::INT::DOUBLE PRECISION as value
         FROM tensorzero.boolean_metric_feedback
         WHERE metric_name = ",
     );
@@ -58,7 +58,7 @@ fn build_feedback_by_variant_query(
     qb.push(
         r"
         UNION ALL
-        SELECT target_id, value
+        SELECT id, target_id, value
         FROM tensorzero.float_metric_feedback
         WHERE metric_name = ",
     );
@@ -137,13 +137,15 @@ fn build_feedback_by_variant_query(
 
     if let Some(limit) = max_samples_per_variant {
         // Use ROW_NUMBER() to limit samples per variant before aggregating
+        // Order by f.id DESC (feedback record UUID, v7 = chronological) to match ClickHouse's
+        // ORDER BY id_uint DESC, ensuring both databases select the same most-recent feedback.
         qb.push(
             r",
     numbered AS (
         SELECT
             i.variant_name,
             f.value,
-            ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.target_id DESC) as rn
+            ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.id DESC) as rn
         FROM feedback f
         JOIN inferences i ON f.target_id = i.id
         WHERE 1=1",
@@ -1540,11 +1542,11 @@ mod tests {
             sql,
             r"
             WITH feedback AS (
-                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                SELECT id, target_id, value::INT::DOUBLE PRECISION as value
                 FROM tensorzero.boolean_metric_feedback
                 WHERE metric_name = $1
                 UNION ALL
-                SELECT target_id, value
+                SELECT id, target_id, value
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
@@ -1581,11 +1583,11 @@ mod tests {
             sql,
             r"
             WITH feedback AS (
-                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                SELECT id, target_id, value::INT::DOUBLE PRECISION as value
                 FROM tensorzero.boolean_metric_feedback
                 WHERE metric_name = $1
                 UNION ALL
-                SELECT target_id, value
+                SELECT id, target_id, value
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
@@ -1626,11 +1628,11 @@ mod tests {
             sql,
             r"
             WITH feedback AS (
-                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                SELECT id, target_id, value::INT::DOUBLE PRECISION as value
                 FROM tensorzero.boolean_metric_feedback
                 WHERE metric_name = $1
                 UNION ALL
-                SELECT target_id, value
+                SELECT id, target_id, value
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
@@ -1680,11 +1682,11 @@ mod tests {
             sql,
             r"
             WITH feedback AS (
-                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                SELECT id, target_id, value::INT::DOUBLE PRECISION as value
                 FROM tensorzero.boolean_metric_feedback
                 WHERE metric_name = $1
                 UNION ALL
-                SELECT target_id, value
+                SELECT id, target_id, value
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
@@ -1727,11 +1729,11 @@ mod tests {
             sql,
             r"
             WITH feedback AS (
-                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                SELECT id, target_id, value::INT::DOUBLE PRECISION as value
                 FROM tensorzero.boolean_metric_feedback
                 WHERE metric_name = $1
                 UNION ALL
-                SELECT target_id, value
+                SELECT id, target_id, value
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
@@ -1748,7 +1750,7 @@ mod tests {
                 SELECT
                     i.variant_name,
                     f.value,
-                    ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.target_id DESC) as rn
+                    ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.id DESC) as rn
                 FROM feedback f
                 JOIN inferences i ON f.target_id = i.id
                 WHERE 1=1
@@ -1781,11 +1783,11 @@ mod tests {
             sql,
             r"
             WITH feedback AS (
-                SELECT target_id, value::INT::DOUBLE PRECISION as value
+                SELECT id, target_id, value::INT::DOUBLE PRECISION as value
                 FROM tensorzero.boolean_metric_feedback
                 WHERE metric_name = $1
                 UNION ALL
-                SELECT target_id, value
+                SELECT id, target_id, value
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
@@ -1810,7 +1812,7 @@ mod tests {
                 SELECT
                     i.variant_name,
                     f.value,
-                    ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.target_id DESC) as rn
+                    ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.id DESC) as rn
                 FROM feedback f
                 JOIN inferences i ON f.target_id = i.id
                 WHERE 1=1 AND i.variant_name = ANY($11)
@@ -1823,6 +1825,25 @@ mod tests {
             FROM numbered
             WHERE rn <= $12 GROUP BY variant_name
             ",
+        );
+    }
+
+    /// Regression test: the ROW_NUMBER window must order by `f.id` (feedback record's own
+    /// UUIDv7, reflecting insertion order) to match ClickHouse's `ORDER BY id_uint DESC`.
+    /// Previously this ordered by `f.target_id` (the inference/episode UUID), which selects
+    /// different samples when feedback is backfilled for older inferences.
+    #[test]
+    fn test_max_samples_orders_by_feedback_id_not_target_id() {
+        let qb = build_feedback_by_variant_query("m", "f", &[], None, Some(100));
+        let sql_str = qb.sql();
+        let sql = sql_str.as_str();
+        assert!(
+            sql.contains("ORDER BY f.id DESC"),
+            "ROW_NUMBER should order by feedback record id (f.id), not target_id. Got: {sql}"
+        );
+        assert!(
+            !sql.contains("ORDER BY f.target_id"),
+            "ROW_NUMBER should NOT order by f.target_id. Got: {sql}"
         );
     }
 

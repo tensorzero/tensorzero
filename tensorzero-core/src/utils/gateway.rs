@@ -365,11 +365,11 @@ impl GatewayHandle {
                     cancel_token.clone(),
                 )
                 .await?;
-            for (namespace, namespace_config) in &experimentation.namespaces {
+            for namespace_config in experimentation.namespaces.values() {
                 namespace_config
                     .setup(
                         db.clone(),
-                        &format!("{function_name} (namespace: {namespace})"),
+                        function_name,
                         &postgres_connection_info,
                         cancel_token.clone(),
                     )
