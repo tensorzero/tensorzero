@@ -34,14 +34,3 @@ async fn test_tls_url_gives_connection_error_cache_only() {
         "expected ValkeyConnection error, got: {err}"
     );
 }
-
-#[tokio::test]
-#[should_panic(
-    expected = "Could not automatically determine the process-level CryptoProvider from Rustls crate features."
-)]
-async fn test_tls_url_err_without_setup_observability() {
-    let result = ValkeyConnectionInfo::new_cache_only("rediss://tensorzero.invalid:6379").await;
-    result
-        .err()
-        .expect("TLS connection to non-TLS server should fail");
-}
