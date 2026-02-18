@@ -15,11 +15,9 @@ from typing import (
 from uuid import UUID
 
 import uuid_utils
-from typing_extensions import deprecated
 
 # PyO3
 from tensorzero import (
-    ChatDatapointInsert,
     ChatInferenceOutput,
     ContentBlock,
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
@@ -30,7 +28,6 @@ from tensorzero import (
     InferenceChunk,
     InferenceInput,
     InferenceResponse,
-    JsonDatapointInsert,
     OptimizationConfig,
     WorkflowEvaluationRunEpisodeResponse,
     WorkflowEvaluationRunResponse,
@@ -55,7 +52,6 @@ from .generated_types import (
     GetDatapointsResponse,
     GetInferencesResponse,
     InferenceFilter,
-    Input,
     ListDatapointsRequest,
     ListInferencesRequest,
     StoredInference,
@@ -374,41 +370,6 @@ class TogetherSFTConfig:
     ) -> None: ...
 
 @final
-class LegacyDatapoint:
-    """
-    A legacy type representing a datapoint.
-    Deprecated; use `Datapoint` instead from v1 Datapoint APIs.
-    """
-
-    Chat: Type["LegacyDatapoint"]
-    Json: Type["LegacyDatapoint"]
-
-    @property
-    def id(self) -> UUID: ...
-    @property
-    def input(self) -> Input: ...
-    @property
-    def output(self) -> Any: ...
-    @property
-    def dataset_name(self) -> str: ...
-    @property
-    def function_name(self) -> str: ...
-    @property
-    def allowed_tools(self) -> Optional[List[str]]: ...
-    @property
-    def additional_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def parallel_tool_calls(self) -> Optional[bool]: ...
-    @property
-    def provider_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def output_schema(self) -> Optional[Any]: ...
-    @property
-    def name(self) -> Optional[str]: ...
-    @property
-    def is_custom(self) -> bool: ...
-
-@final
 class ChatCompletionConfig:
     @property
     def system_template(self) -> Optional[str]: ...
@@ -559,6 +520,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         include_original_response: Optional[bool] = None,
         include_raw_response: Optional[bool] = None,
         include_raw_usage: Optional[bool] = None,
+        include_aggregated_response: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
@@ -602,6 +564,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param include_original_response: DEPRECATED. Use `include_raw_response` instead.
         :param include_raw_response: If set, include raw provider-specific response data from all model inferences.
         :param include_raw_usage: If set, include raw provider-specific usage data in the response.
+        :param include_aggregated_response: If set, include the aggregated response in each streaming chunk. Only supported in streaming mode.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """
@@ -704,69 +667,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `WorkflowEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
-    @deprecated("Deprecated since version 2025.11.4; use `create_datapoints` instead.")
-    def create_datapoints_legacy(
-        self,
-        *,
-        dataset_name: str,
-        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
-    ) -> List[UUID]:
-        """
-        Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
-
-        :param dataset_name: The name of the dataset to insert the datapoints into.
-        :param datapoints: A list of datapoints to insert.
-        """
-
-    @deprecated("Deprecated since version 2025.11.4; use `create_datapoints` instead.")
-    def bulk_insert_datapoints(
-        self,
-        *,
-        dataset_name: str,
-        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
-    ) -> List[UUID]:
-        """
-        DEPRECATED: Use `create_datapoints` instead.
-
-        Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
-
-        :param dataset_name: The name of the dataset to insert the datapoints into.
-        :param datapoints: A list of datapoints to insert.
-        """
-
-    @deprecated("Deprecated since 2025.11.4; use `delete_datapoints` instead.")
-    def delete_datapoint(
-        self,
-        *,
-        dataset_name: str,
-        datapoint_id: UUID,
-    ) -> None:
-        """
-        Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-
-        :param dataset_name: The name of the dataset to delete the datapoint from.
-        :param datapoint_id: The ID of the datapoint to delete.
-        """
-
-    @deprecated("Deprecated since 2025.11.4; use `list_datapoints` instead.")
-    def list_datapoints_legacy(
-        self,
-        *,
-        dataset_name: str,
-        function_name: Optional[str] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[Datapoint]:
-        """
-        Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
-
-        :param dataset_name: The name of the dataset to list the datapoints from.
-        :param function_name: The name of the function to list the datapoints from.
-        :param limit: The maximum number of datapoints to return.
-        :param offset: The offset to start the list from.
-        :return: A list of `Datapoint` instances.
-        """
-
     def list_datapoints(
         self,
         *,
@@ -779,20 +679,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to list the datapoints from.
         :param request: The request to list the datapoints.
         :return: A `GetDatapointsResponse` containing the datapoints.
-        """
-
-    def get_datapoint(
-        self,
-        *,
-        dataset_name: str,
-        datapoint_id: UUID,
-    ) -> LegacyDatapoint:
-        """
-        Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-
-        :param dataset_name: The name of the dataset to get the datapoint from.
-        :param datapoint_id: The ID of the datapoint to get.
-        :return: A `Datapoint` instance.
         """
 
     def create_datapoints(
@@ -1119,6 +1005,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         include_original_response: Optional[bool] = None,
         include_raw_response: Optional[bool] = None,
         include_raw_usage: Optional[bool] = None,
+        include_aggregated_response: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
@@ -1162,6 +1049,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param include_original_response: DEPRECATED. Use `include_raw_response` instead.
         :param include_raw_response: If set, include raw provider-specific response data from all model inferences.
         :param include_raw_usage: If set, include raw provider-specific usage data in the response.
+        :param include_aggregated_response: If set, include the aggregated response in each streaming chunk. Only supported in streaming mode.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """
@@ -1265,71 +1153,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `WorkflowEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
-    @deprecated("Deprecated since version 2025.11.4; use `create_datapoints` instead.")
-    async def create_datapoints_legacy(
-        self,
-        *,
-        dataset_name: str,
-        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
-    ) -> List[UUID]:
-        """
-        DEPRECATED: Use `create_datapoints` instead.
-
-        Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
-
-        :param dataset_name: The name of the dataset to insert the datapoints into.
-        :param datapoints: A list of datapoints to insert.
-        """
-
-    @deprecated("Deprecated since version 2025.11.4; use `create_datapoints` instead.")
-    async def bulk_insert_datapoints(
-        self,
-        *,
-        dataset_name: str,
-        datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
-    ) -> List[UUID]:
-        """
-        DEPRECATED: Use `create_datapoints` instead.
-
-        Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
-
-        :param dataset_name: The name of the dataset to insert the datapoints into.
-        :param datapoints: A list of datapoints to insert.
-        """
-
-    @deprecated("Deprecated since 2025.11.4; use `delete_datapoints` instead.")
-    async def delete_datapoint(
-        self,
-        *,
-        dataset_name: str,
-        datapoint_id: UUID,
-    ) -> None:
-        """
-        Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-
-        :param dataset_name: The name of the dataset to delete the datapoint from.
-        :param datapoint_id: The ID of the datapoint to delete.
-        """
-
-    @deprecated("Deprecated since 2025.11.4; use `list_datapoints` instead.")
-    async def list_datapoints_legacy(
-        self,
-        *,
-        dataset_name: str,
-        function_name: Optional[str] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[Datapoint]:
-        """
-        Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
-
-        :param dataset_name: The name of the dataset to list the datapoints from.
-        :param function_name: The name of the function to list the datapoints from.
-        :param limit: The maximum number of datapoints to return.
-        :param offset: The offset to start the list from.
-        :return: A list of `Datapoint` instances.
-        """
-
     async def list_datapoints(
         self,
         *,
@@ -1342,20 +1165,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to list the datapoints from.
         :param request: The request to list the datapoints.
         :return: A `GetDatapointsResponse` containing the datapoints.
-        """
-
-    async def get_datapoint(
-        self,
-        *,
-        dataset_name: str,
-        datapoint_id: UUID,
-    ) -> LegacyDatapoint:
-        """
-        Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-
-        :param dataset_name: The name of the dataset to get the datapoint from.
-        :param datapoint_id: The ID of the datapoint to get.
-        :return: A `Datapoint` instance.
         """
 
     async def create_datapoints(
@@ -1632,7 +1441,6 @@ __all__ = [
     "ChainOfThoughtConfig",
     "ChatCompletionConfig",
     "Config",
-    "LegacyDatapoint",
     "DICLConfig",
     "DICLOptimizationConfig",
     "EvaluationJobHandler",

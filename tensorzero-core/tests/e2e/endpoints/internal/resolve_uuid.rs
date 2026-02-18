@@ -3,6 +3,15 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tensorzero_core::db::resolve_uuid::{ResolveUuidResponse, ResolvedObject};
+use tensorzero_core::endpoints::datasets::v1::types::{
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
+    CreateDatapointsResponse, CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
+};
+use tensorzero_core::inference::types::{
+    Arguments, ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Role, System,
+    Template, Text,
+};
+use tensorzero_core::tool::DynamicToolParams;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -234,21 +243,40 @@ async fn test_resolve_uuid_demonstration_feedback() {
 async fn test_resolve_uuid_chat_datapoint() {
     let client = Client::new();
     let dataset_name = format!("test-resolve-uuid-chat-{}", Uuid::now_v7());
-    let datapoint_id = Uuid::now_v7();
+
+    let mut system_args = serde_json::Map::new();
+    system_args.insert(
+        "assistant_name".to_string(),
+        Value::String("Dummy".to_string()),
+    );
+
+    let payload = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+            function_name: "basic_test".to_string(),
+            episode_id: None,
+            input: Input {
+                system: Some(System::Template(Arguments(system_args))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "test input".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "test output".to_string(),
+            })]),
+            dynamic_tool_params: DynamicToolParams::default(),
+            tags: None,
+            name: None,
+        })],
+    };
 
     let resp = client
-        .put(get_gateway_endpoint(&format!(
-            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        .post(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "function_name": "basic_test",
-            "input": {
-                "system": {"assistant_name": "Dummy"},
-                "messages": [{"role": "user", "content": [{"type": "text", "text": "test input"}]}]
-            },
-            "output": [{"type": "text", "text": "test output"}],
-            "is_custom": true,
-        }))
+        .json(&payload)
         .send()
         .await
         .unwrap();
@@ -258,6 +286,14 @@ async fn test_resolve_uuid_chat_datapoint() {
         "Datapoint creation should succeed: {:?}",
         resp.status()
     );
+
+    let result: CreateDatapointsResponse = resp.json().await.unwrap();
+    assert_eq!(
+        result.ids.len(),
+        1,
+        "Expected exactly one datapoint to be created"
+    );
+    let datapoint_id = result.ids[0];
 
     // Wait for trailing writes to ClickHouse
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -287,22 +323,44 @@ async fn test_resolve_uuid_chat_datapoint() {
 async fn test_resolve_uuid_json_datapoint() {
     let client = Client::new();
     let dataset_name = format!("test-resolve-uuid-json-{}", Uuid::now_v7());
-    let datapoint_id = Uuid::now_v7();
+
+    let mut system_args = serde_json::Map::new();
+    system_args.insert(
+        "assistant_name".to_string(),
+        Value::String("Dummy".to_string()),
+    );
+
+    let mut template_args = serde_json::Map::new();
+    template_args.insert("country".to_string(), Value::String("US".to_string()));
+
+    let payload = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Json(CreateJsonDatapointRequest {
+            function_name: "json_success".to_string(),
+            episode_id: None,
+            input: Input {
+                system: Some(System::Template(Arguments(system_args))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: Arguments(template_args),
+                    })],
+                }],
+            },
+            output: Some(JsonDatapointOutputUpdate {
+                raw: Some(r#"{"answer":"Tokyo"}"#.to_string()),
+            }),
+            output_schema: None,
+            tags: None,
+            name: None,
+        })],
+    };
 
     let resp = client
-        .put(get_gateway_endpoint(&format!(
-            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        .post(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "function_name": "json_success",
-            "input": {
-                "system": {"assistant_name": "Dummy"},
-                "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]
-            },
-            "output": {"answer": "Tokyo"},
-            "output_schema": {},
-            "is_custom": true,
-        }))
+        .json(&payload)
         .send()
         .await
         .unwrap();
@@ -312,6 +370,14 @@ async fn test_resolve_uuid_json_datapoint() {
         "Datapoint creation should succeed: {:?}",
         resp.status()
     );
+
+    let result: CreateDatapointsResponse = resp.json().await.unwrap();
+    assert_eq!(
+        result.ids.len(),
+        1,
+        "Expected exactly one datapoint to be created"
+    );
+    let datapoint_id = result.ids[0];
 
     // Wait for trailing writes to ClickHouse
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;

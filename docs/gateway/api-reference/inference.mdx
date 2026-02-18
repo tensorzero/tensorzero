@@ -475,9 +475,16 @@ If the content block has type `raw_text`, it must have the following additional 
 - `value`: The text for the content block.
   This content block will ignore any relevant templates and schemas for this function.
 
+<Note>
+
+`raw_text` only works for user and assistant messages. For system messages, `raw_text` is treated as plain text and will not bypass templates.
+
+</Note>
+
 If the content block has type `thought`, it must have the following additional fields:
 
-- `text`: The text for the content block.
+- `text` (string, optional): The text for the content block.
+- `signature` (string, optional): An opaque signature used for multi-turn reasoning conversations with Anthropic and OpenRouter. Pass through the `signature` from the model's response to continue a reasoning conversation.
 
 If the content block has type `unknown`, it must have the following additional fields:
 
@@ -915,7 +922,9 @@ If `type` is `tool_call`, the content block has the following fields:
 
 If `type` is `thought`, the content block has the following fields:
 
-- `text` (string): The text of the thought.
+- `text` (string, optional): The text of the thought. May be absent for encrypted reasoning.
+- `signature` (string, optional): An opaque signature for multi-turn reasoning conversations. Pass this back in subsequent requests to continue a reasoning conversation with Anthropic or OpenRouter.
+- `summary` (array, optional): A summary of the thought, provided by some providers when the full reasoning is encrypted.
 
 If the model provider responds with a content block of an unknown type, it will be included in the response as a content block of type `unknown` with the following additional fields:
 
@@ -1021,6 +1030,7 @@ If `type` is `thought`, the chunk has the following fields:
 
 - `id`: The ID of the content block.
 - `text`: The text delta for the thought.
+- `signature` (string, optional): An opaque signature for multi-turn reasoning conversations (see above).
 
 ##### `episode_id`
 

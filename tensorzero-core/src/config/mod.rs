@@ -1476,6 +1476,8 @@ impl Config {
             model.validate(model_name, &self.gateway.global_outbound_http_timeout)?;
         }
 
+        namespace::validate_namespaced_model_usage(&self.functions, &self.models)?;
+
         for embedding_model_name in self.embedding_models.table.keys() {
             if embedding_model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {

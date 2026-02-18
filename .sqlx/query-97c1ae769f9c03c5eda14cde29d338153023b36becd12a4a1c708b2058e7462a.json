@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT public_id, organization, workspace, description, created_at, disabled_at from tensorzero_auth_api_key WHERE public_id = $1 AND hash = $2",
+  "query": "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
   "describe": {
     "columns": [
       {
@@ -68,12 +68,24 @@
             "name": "disabled_at"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "expires_at"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Bpchar",
-        "Text"
+        "Text",
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
@@ -82,8 +94,9 @@
       false,
       true,
       false,
+      true,
       true
     ]
   },
-  "hash": "659d060b324bef8da0bbd4224540c90cb60ac01dbf9d5d4399665ac63c70c979"
+  "hash": "97c1ae769f9c03c5eda14cde29d338153023b36becd12a4a1c708b2058e7462a"
 }

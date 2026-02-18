@@ -111,51 +111,54 @@ json_mode = "strict"
 
 [functions.json_success.variants.azure]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
 [functions.json_success.variants.azure-strict]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
 json_mode = "strict"
+reasoning_effort = "low"
 
 [functions.json_success.variants.azure-implicit]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "tool"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
-[functions.json_success.variants.azure-ai-foundry]
+[functions.json_success.variants.azure-kimi]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 1024
 
-[functions.json_success.variants.azure-ai-foundry-strict]
+[functions.json_success.variants.azure-kimi-strict]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
 json_mode = "strict"
 
-[functions.json_success.variants.azure-ai-foundry-implicit]
+[functions.json_success.variants.azure-kimi-implicit]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "tool"
-max_tokens = 100
+max_tokens = 1024
 
 [functions.json_success.variants.fireworks]
 type = "chat_completion"
@@ -665,19 +668,20 @@ max_tokens = 100
 
 [functions.json_success.variants.azure_json_mode_off]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
-[functions.json_success.variants.azure-ai-foundry_json_mode_off]
+[functions.json_success.variants.azure-kimi_json_mode_off]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
-max_tokens = 100
+max_tokens = 1024
 
 [functions.json_success.variants.deepseek_chat_json_mode_off]
 type = "chat_completion"
