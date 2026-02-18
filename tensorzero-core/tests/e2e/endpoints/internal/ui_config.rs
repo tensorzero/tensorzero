@@ -20,7 +20,7 @@ async fn test_get_ui_config_by_hash() {
     let live_config: Value = live_resp.json().await.unwrap();
     let hash = live_config["config_hash"]
         .as_str()
-        .expect("Response should have 'config_hash' field");
+        .expect("Response should have `config_hash` field");
 
     // Now fetch the UI config by hash
     let url = get_gateway_endpoint(&format!("/internal/ui_config/{hash}"));

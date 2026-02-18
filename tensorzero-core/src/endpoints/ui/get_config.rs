@@ -77,7 +77,7 @@ impl UiConfig {
 
         let UninitializedConfig {
             models,
-            embedding_models,
+            embedding_models: _,
             functions,
             metrics,
             tools,
@@ -114,9 +114,8 @@ impl UiConfig {
             all_metrics.extend(eval_metrics);
         }
 
-        // Model names — just keys, no initialization
-        let mut model_names: Vec<String> = models.keys().map(|s| s.to_string()).collect();
-        model_names.extend(embedding_models.keys().map(|s| s.to_string()));
+        // Model names — just keys, no initialization (only inference models, matching from_config)
+        let model_names: Vec<String> = models.keys().map(|s| s.to_string()).collect();
 
         Ok(Self {
             functions: all_functions,
