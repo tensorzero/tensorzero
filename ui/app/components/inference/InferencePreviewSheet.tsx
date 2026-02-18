@@ -13,7 +13,6 @@ import {
 import { toInferenceUrl } from "~/utils/urls";
 import { useToast } from "~/hooks/use-toast";
 
-
 interface InferencePreviewSheetProps {
   inferenceId: string | null;
   isOpen: boolean;
@@ -97,11 +96,11 @@ export function InferencePreviewSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-full md:w-5/6">
+      <SheetContent className="w-full overflow-y-auto pb-20 sm:max-w-full md:w-5/6">
         {showFullPageLink && inferenceData && (
           <Link
             to={toInferenceUrl(inferenceData.inference.inference_id)}
-            className="text-fg-secondary hover:text-foreground absolute top-4 right-10 text-xs transition-colors"
+            className="text-fg-secondary hover:text-foreground absolute top-4 right-14 text-xs transition-colors"
           >
             Open full page
           </Link>
@@ -110,7 +109,7 @@ export function InferencePreviewSheet({
           <span className="text-fg-secondary text-sm font-normal">
             Inference
           </span>
-          <SheetTitle className="text-2xl font-medium font-mono">
+          <SheetTitle className="font-mono text-2xl font-medium">
             {inferenceId ?? "Loading..."}
           </SheetTitle>
         </SheetHeader>
