@@ -1,5 +1,12 @@
-import { createContext, useCallback, useContext, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
+import { useLocation } from "react-router";
 
 type EntitySheetState = { type: "inference"; id: string } | null;
 
@@ -14,6 +21,12 @@ const EntitySideSheetContext =
 
 export function EntitySideSheetProvider({ children }: { children: ReactNode }) {
   const [sheetState, setSheetState] = useState<EntitySheetState>(null);
+  const location = useLocation();
+
+  // Close sheet on navigation
+  useEffect(() => {
+    setSheetState(null);
+  }, [location.pathname]);
 
   const openInferenceSheet = useCallback((id: string) => {
     setSheetState({ type: "inference", id });
