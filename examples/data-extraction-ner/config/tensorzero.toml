@@ -52,3 +52,28 @@ optimize = "max"
 type = "boolean"
 level = "inference"
 optimize = "max"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                EVALUATIONS                                 │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[evaluations.extract_entities_llm_judge]
+type = "inference"
+function_name = "extract_entities"
+description = "LLM judge-based evaluation for entity extraction quality"
+
+[evaluations.extract_entities_llm_judge.evaluators.ner_quality_judge]
+type = "llm_judge"
+input_format = "serialized"
+output_type = "float"
+optimize = "max"
+cutoff = 0.7
+include = { reference_output = true}
+
+[evaluations.extract_entities_llm_judge.evaluators.ner_quality_judge.variants.default]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+temperature = 0.0
+json_mode = "strict"
+system_instructions = "evaluations/extract_entities_llm_judge/evaluators/ner_quality_judge/variants/default/system_instructions.txt"
+retries = { num_retries = 0, max_delay_s = 10.0 }
