@@ -2,7 +2,7 @@ use json_pointer::JsonPointer;
 use rust_decimal::Decimal;
 
 use crate::error::{Error, ErrorDetails};
-use tensorzero_types::{CostPointerConfig, UninitializedCostConfig, UninitializedCostConfigEntry};
+use tensorzero_types::{UninitializedCostConfig, UninitializedCostConfigEntry};
 
 /// Decimal type alias for cost values.
 pub type Cost = Decimal;
@@ -56,21 +56,32 @@ pub fn load_cost_config(config: UninitializedCostConfig) -> Result<CostConfig, E
 }
 
 fn load_cost_config_entry(entry: UninitializedCostConfigEntry) -> Result<CostConfigEntry, Error> {
-    let pointer = match entry.pointer {
-        CostPointerConfig::Unified { pointer } => {
+    let pointer = match (
+        entry.pointer.pointer,
+        entry.pointer.pointer_nonstreaming,
+        entry.pointer.pointer_streaming,
+    ) {
+        (Some(pointer), None, None) => {
             validate_pointer(&pointer)?;
             NormalizedCostPointerConfig::Unified { pointer }
         }
-        CostPointerConfig::Split {
-            pointer_nonstreaming,
-            pointer_streaming,
-        } => {
+        (None, Some(pointer_nonstreaming), Some(pointer_streaming)) => {
             validate_pointer(&pointer_nonstreaming)?;
             validate_pointer(&pointer_streaming)?;
             NormalizedCostPointerConfig::Split {
                 pointer_nonstreaming,
                 pointer_streaming,
             }
+        }
+        (None, None, None) => {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "must specify either `pointer` or both `pointer_nonstreaming` and `pointer_streaming`".to_string(),
+            }));
+        }
+        _ => {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "invalid pointer configuration: specify either `pointer` alone, or both `pointer_nonstreaming` and `pointer_streaming`".to_string(),
+            }));
         }
     };
 
@@ -99,9 +110,25 @@ fn load_cost_config_entry(entry: UninitializedCostConfigEntry) -> Result<CostCon
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;
-    use tensorzero_types::UninitializedCostRate;
+    use tensorzero_types::{CostPointerConfig, UninitializedCostRate};
 
     use super::*;
+
+    fn unified(pointer: &str) -> CostPointerConfig {
+        CostPointerConfig {
+            pointer: Some(pointer.to_string()),
+            pointer_nonstreaming: None,
+            pointer_streaming: None,
+        }
+    }
+
+    fn split(nonstreaming: &str, streaming: &str) -> CostPointerConfig {
+        CostPointerConfig {
+            pointer: None,
+            pointer_nonstreaming: Some(nonstreaming.to_string()),
+            pointer_streaming: Some(streaming.to_string()),
+        }
+    }
 
     fn per_million(value: Decimal) -> UninitializedCostRate {
         UninitializedCostRate {
@@ -129,9 +156,7 @@ mod tests {
     #[test]
     fn test_per_million_to_per_unit_normalization() {
         let config = vec![UninitializedCostConfigEntry {
-            pointer: CostPointerConfig::Unified {
-                pointer: "/usage/input_tokens".to_string(),
-            },
+            pointer: unified("/usage/input_tokens"),
             rate: per_million(Decimal::from(3)),
             required: false,
         }];
@@ -147,9 +172,7 @@ mod tests {
     #[test]
     fn test_per_unit_passthrough() {
         let config = vec![UninitializedCostConfigEntry {
-            pointer: CostPointerConfig::Unified {
-                pointer: "/usage/total_cost".to_string(),
-            },
+            pointer: unified("/usage/total_cost"),
             rate: per_unit(Decimal::new(5, 2)), // 0.05
             required: true,
         }];
@@ -179,8 +202,8 @@ cost_per_million = 3.0
             toml::from_str(toml_str).expect("should deserialize");
         assert_eq!(wrapper.cost.len(), 1, "should have one cost entry");
         assert!(
-            matches!(wrapper.cost[0].pointer, CostPointerConfig::Unified { .. }),
-            "should be a unified pointer"
+            wrapper.cost[0].pointer.pointer.is_some(),
+            "should have a unified pointer"
         );
         assert!(
             wrapper.cost[0].rate.cost_per_million.is_some(),
@@ -224,17 +247,23 @@ cost_per_million = 1.5
         let wrapper: UninitializedCostConfigWrapper =
             toml::from_str(toml_str).expect("should deserialize");
         assert!(
-            matches!(wrapper.cost[0].pointer, CostPointerConfig::Split { .. }),
-            "should be split pointers"
+            wrapper.cost[0].pointer.pointer_nonstreaming.is_some(),
+            "should have nonstreaming pointer"
+        );
+        assert!(
+            wrapper.cost[0].pointer.pointer_streaming.is_some(),
+            "should have streaming pointer"
+        );
+        assert!(
+            wrapper.cost[0].pointer.pointer.is_none(),
+            "should not have unified pointer"
         );
     }
 
     #[test]
     fn test_invalid_pointer_rejected() {
         let config = vec![UninitializedCostConfigEntry {
-            pointer: CostPointerConfig::Unified {
-                pointer: "no_leading_slash".to_string(),
-            },
+            pointer: unified("no_leading_slash"),
             rate: per_million(Decimal::from(1)),
             required: false,
         }];
@@ -249,10 +278,7 @@ cost_per_million = 1.5
     #[test]
     fn test_invalid_split_pointer_rejected() {
         let config = vec![UninitializedCostConfigEntry {
-            pointer: CostPointerConfig::Split {
-                pointer_nonstreaming: "/valid".to_string(),
-                pointer_streaming: "invalid_no_slash".to_string(),
-            },
+            pointer: split("/valid", "invalid_no_slash"),
             rate: per_unit(Decimal::from(1)),
             required: false,
         }];
@@ -289,8 +315,15 @@ pointer = "/usage/tokens"
 cost_per_million = 3.0
 ";
 
-        let result = toml::from_str::<UninitializedCostConfigWrapper>(toml_str);
-        assert!(result.is_err(), "should fail when no pointer is specified");
+        let wrapper: UninitializedCostConfigWrapper = toml::from_str(toml_str)
+            .expect("should deserialize with all pointers defaulting to None");
+        let err =
+            load_cost_config(wrapper.cost).expect_err("should fail when no pointer is specified");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("must specify either `pointer`"),
+            "error should mention missing pointer: {msg}"
+        );
     }
 
     #[test]
@@ -323,9 +356,7 @@ cost_per_unit = 0.3
     #[test]
     fn test_negative_cost_allowed() {
         let config = vec![UninitializedCostConfigEntry {
-            pointer: CostPointerConfig::Unified {
-                pointer: "/discount".to_string(),
-            },
+            pointer: unified("/discount"),
             rate: per_unit(Decimal::new(-5, 2)), // -0.05
             required: false,
         }];
@@ -358,12 +389,51 @@ cost_per_unit = 0.5
     }
 
     #[test]
+    fn test_mixed_pointer_and_split_rejected() {
+        let toml_str = r#"
+[[cost]]
+pointer = "/usage/tokens"
+pointer_nonstreaming = "/usage/ns_tokens"
+pointer_streaming = "/usage/s_tokens"
+cost_per_million = 3.0
+"#;
+
+        let wrapper: UninitializedCostConfigWrapper =
+            toml::from_str(toml_str).expect("should deserialize");
+        let err = load_cost_config(wrapper.cost)
+            .expect_err("should reject config with both unified and split pointers");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("invalid pointer configuration"),
+            "error should mention invalid pointer configuration: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_partial_split_pointer_rejected() {
+        let config = vec![UninitializedCostConfigEntry {
+            pointer: CostPointerConfig {
+                pointer: None,
+                pointer_nonstreaming: Some("/usage/ns".to_string()),
+                pointer_streaming: None,
+            },
+            rate: per_unit(Decimal::from(1)),
+            required: false,
+        }];
+        let err =
+            load_cost_config(config).expect_err("should reject config with only one split pointer");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("invalid pointer configuration"),
+            "error should mention invalid pointer configuration: {msg}"
+        );
+    }
+
+    #[test]
     fn test_empty_pointer_string_is_valid_root_pointer() {
         // Per RFC 6901, "" is the root JSON pointer and is valid.
         let config = vec![UninitializedCostConfigEntry {
-            pointer: CostPointerConfig::Unified {
-                pointer: String::new(),
-            },
+            pointer: unified(""),
             rate: per_unit(Decimal::from(1)),
             required: false,
         }];
@@ -381,17 +451,12 @@ cost_per_unit = 0.5
     fn test_load_cost_config_multi_entry() {
         let config = vec![
             UninitializedCostConfigEntry {
-                pointer: CostPointerConfig::Unified {
-                    pointer: "/usage/input_tokens".to_string(),
-                },
+                pointer: unified("/usage/input_tokens"),
                 rate: per_million(Decimal::from(3)),
                 required: true,
             },
             UninitializedCostConfigEntry {
-                pointer: CostPointerConfig::Split {
-                    pointer_nonstreaming: "/usage/output_tokens".to_string(),
-                    pointer_streaming: "/usage/stream_output_tokens".to_string(),
-                },
+                pointer: split("/usage/output_tokens", "/usage/stream_output_tokens"),
                 rate: per_unit(Decimal::new(15, 6)), // 0.000015
                 required: false,
             },
@@ -435,9 +500,7 @@ cost_per_unit = 0.5
     #[test]
     fn test_valid_json_pointer() {
         let config = vec![UninitializedCostConfigEntry {
-            pointer: CostPointerConfig::Unified {
-                pointer: "/foo/bar".to_string(),
-            },
+            pointer: unified("/foo/bar"),
             rate: per_unit(Decimal::from(1)),
             required: false,
         }];
@@ -450,9 +513,7 @@ cost_per_unit = 0.5
     #[test]
     fn test_invalid_json_pointer_no_leading_slash() {
         let config = vec![UninitializedCostConfigEntry {
-            pointer: CostPointerConfig::Unified {
-                pointer: "foo/bar".to_string(),
-            },
+            pointer: unified("foo/bar"),
             rate: per_unit(Decimal::from(1)),
             required: false,
         }];

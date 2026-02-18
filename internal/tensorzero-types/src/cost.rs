@@ -22,13 +22,11 @@ pub struct UninitializedCostRate {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum CostPointerConfig {
-    Unified {
-        pointer: String,
-    },
-    Split {
-        pointer_nonstreaming: String,
-        pointer_streaming: String,
-    },
+pub struct CostPointerConfig {
+    #[serde(default)]
+    pub pointer: Option<String>,
+    #[serde(default)]
+    pub pointer_nonstreaming: Option<String>,
+    #[serde(default)]
+    pub pointer_streaming: Option<String>,
 }
