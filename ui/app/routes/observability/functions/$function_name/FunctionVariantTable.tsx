@@ -21,21 +21,16 @@ import {
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
-import type { InferenceCountByVariant } from "~/types/tensorzero";
 import { Input } from "~/components/ui/input";
+import type { VariantCountWithMetadata } from "./variants-data.server";
 
-type VariantCountsWithMetadata = InferenceCountByVariant & {
-  type: string;
-  weight: number | null;
-};
-
-const columnHelper = createColumnHelper<VariantCountsWithMetadata>();
+const columnHelper = createColumnHelper<VariantCountWithMetadata>();
 
 export default function FunctionVariantTable({
   variant_counts,
   function_name,
 }: {
-  variant_counts: VariantCountsWithMetadata[];
+  variant_counts: VariantCountWithMetadata[];
   function_name: string;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);

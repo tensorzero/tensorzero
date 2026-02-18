@@ -1,16 +1,22 @@
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import type { FunctionConfig } from "~/types/tensorzero";
+import type {
+  FunctionConfig,
+  InferenceCountByVariant,
+} from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 
-export type VariantsSectionData = {
-  variant_counts: {
-    variant_name: string;
-    inference_count: bigint;
-    last_used_at: string;
-    type: string;
-    weight: number | null;
-  }[];
+export type VariantCountWithMetadata = Omit<
+  InferenceCountByVariant,
+  "inference_count"
+> & {
+  inference_count: number;
+  type: string;
+  weight: number | null;
 };
+
+export interface VariantsSectionData {
+  variant_counts: VariantCountWithMetadata[];
+}
 
 export async function fetchVariantsSectionData(params: {
   function_name: string;
@@ -31,6 +37,7 @@ export async function fetchVariantsSectionData(params: {
     const variant_config = function_config.variants[variant_count.variant_name];
     return {
       ...variant_count,
+      inference_count: Number(variant_count.inference_count),
       type:
         function_name === DEFAULT_FUNCTION
           ? "chat_completion"
@@ -50,7 +57,7 @@ export async function fetchVariantsSectionData(params: {
       if (!observedVariants.has(variant_name)) {
         variant_counts_with_metadata.push({
           variant_name,
-          inference_count: BigInt(0),
+          inference_count: 0,
           last_used_at: "",
           type: variant_config.inner.type,
           weight: variant_config.inner.weight,
