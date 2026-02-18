@@ -125,7 +125,7 @@ function InferenceContent({ uuid, obj, isOpen }: InferenceContentProps) {
     functionConfig?.variants[obj.variant_name]?.inner.type ?? null;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-4">
       <TypeBadgeLink uuid={uuid} obj={obj}>
         Inference
       </TypeBadgeLink>
@@ -161,7 +161,7 @@ function EpisodeContent({ uuid, obj, isOpen }: EpisodeContentProps) {
   });
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-4">
       <TypeBadgeLink uuid={uuid} obj={obj}>
         Episode
       </TypeBadgeLink>
@@ -194,7 +194,7 @@ function DatapointContent({ uuid, obj }: DatapointContentProps) {
   const typeLabel = getDatapointTypeLabel(obj.type);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-4">
       <TypeBadgeLink uuid={uuid} obj={obj}>
         {typeLabel}
       </TypeBadgeLink>
@@ -232,7 +232,7 @@ interface ItemProps {
 
 function Item({ label, children }: ItemProps) {
   return (
-    <div className="grid grid-cols-[4rem_1fr] items-center gap-2">
+    <div className="flex flex-col gap-1">
       <span className="text-muted-foreground text-xs">{label}</span>
       {children}
     </div>
@@ -247,13 +247,9 @@ interface FunctionItemProps {
 function FunctionItem({ functionName, functionType }: FunctionItemProps) {
   const iconConfig = getFunctionTypeIcon(functionType);
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-1">
       <span className="text-muted-foreground text-xs">Function</span>
-      <Link
-        to={toFunctionUrl(functionName)}
-        className="text-foreground hover:text-foreground/80 inline-flex min-w-0 items-center gap-1 font-mono text-xs transition-colors"
-        title={`${functionName} · ${functionType}`}
-      >
+      <span className="inline-flex min-w-0 items-center gap-1 font-mono text-xs">
         <span
           className={cn(
             "inline-flex shrink-0 items-center justify-center rounded p-0.5",
@@ -262,9 +258,15 @@ function FunctionItem({ functionName, functionType }: FunctionItemProps) {
         >
           {iconConfig.icon}
         </span>
-        <span className="truncate">{functionName}</span>
+        <Link
+          to={toFunctionUrl(functionName)}
+          className="text-foreground hover:text-foreground/80 truncate transition-colors hover:underline"
+          title={functionName}
+        >
+          {functionName}
+        </Link>
         <span className="text-muted-foreground shrink-0">· {functionType}</span>
-      </Link>
+      </span>
     </div>
   );
 }
@@ -281,18 +283,20 @@ function VariantItem({
   variantType,
 }: VariantItemProps) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-1">
       <span className="text-muted-foreground text-xs">Variant</span>
-      <Link
-        to={toVariantUrl(functionName, variantName)}
-        className="text-foreground hover:text-foreground/80 min-w-0 truncate font-mono text-xs transition-colors"
-        title={variantType ? `${variantName} · ${variantType}` : variantName}
-      >
-        {variantName}
+      <span className="min-w-0 font-mono text-xs">
+        <Link
+          to={toVariantUrl(functionName, variantName)}
+          className="text-foreground hover:text-foreground/80 transition-colors hover:underline"
+          title={variantName}
+        >
+          {variantName}
+        </Link>
         {variantType && (
           <span className="text-muted-foreground"> · {variantType}</span>
         )}
-      </Link>
+      </span>
     </div>
   );
 }
@@ -338,7 +342,7 @@ function Timestamp({ data, isLoading }: TimestampProps) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="text-muted-foreground w-fit cursor-default text-xs underline decoration-dotted underline-offset-2">
+          <span className="text-muted-foreground w-fit cursor-default text-xs">
             {getRelativeTimeString(date)}
           </span>
         </TooltipTrigger>
