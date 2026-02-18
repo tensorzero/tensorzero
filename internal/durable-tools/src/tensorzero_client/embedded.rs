@@ -420,12 +420,8 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         request: ListEpisodesRequest,
     ) -> Result<ListEpisodesResponse, TensorZeroClientError> {
-        let database = DelegatingDatabaseConnection::new(
-            self.app_state.clickhouse_connection_info.clone(),
-            self.app_state.postgres_connection_info.clone(),
-        );
         let episodes = tensorzero_core::endpoints::episodes::internal::list_episodes(
-            &database,
+            &self.app_state.get_delegating_database(),
             &self.app_state.config,
             request.limit,
             request.before,
