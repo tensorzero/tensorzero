@@ -7,4 +7,5 @@ export type KeyInfo = {
   description?: string;
   created_at: string;
   disabled_at?: string;
+  expires_at?: string;
 };

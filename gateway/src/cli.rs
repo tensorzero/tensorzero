@@ -4,6 +4,7 @@
 //! This constraint exists because CODEOWNERS requires specific review for CLI changes.
 
 use clap::{Args, Parser};
+use sqlx::types::chrono::{DateTime, Utc};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tensorzero_core::observability::LogFormat;
@@ -33,6 +34,10 @@ pub struct GatewayArgs {
     #[command(flatten)]
     pub early_exit_commands: EarlyExitCommands,
 
+    /// These arguments influence the execution of early exit "command" arguments.
+    #[command(flatten)]
+    pub early_exit_command_arguments: EarlyExitCommandArguments,
+
     /// Arguments that control the behavior of Postgres migrations.
     #[command(flatten)]
     pub postgres_migration_args: PostgresMigrationArgs,
@@ -60,6 +65,14 @@ pub struct EarlyExitCommands {
     /// Validate the config file then exit.
     #[arg(long)]
     pub validate_and_exit: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct EarlyExitCommandArguments {
+    /// Specify the expiration date-time for the created API key. Requires --create-api-key to also
+    /// be set.
+    #[arg(long, requires = "create_api_key", value_name = "DATETIME")]
+    pub expiration: Option<DateTime<Utc>>,
 }
 
 #[derive(Args, Debug)]
