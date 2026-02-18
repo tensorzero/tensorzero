@@ -338,7 +338,7 @@ function Timestamp({ data, isLoading }: TimestampProps) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="text-muted-foreground w-fit cursor-default text-xs">
+          <span className="text-muted-foreground w-fit cursor-default text-xs underline decoration-dotted underline-offset-2">
             {getRelativeTimeString(date)}
           </span>
         </TooltipTrigger>
