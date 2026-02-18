@@ -135,6 +135,7 @@ opentelemetry-http = "0.31.0"
 regex = { workspace = true }
 dashmap = "6.1.0"
 redis = { workspace = true }
+rustls = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
