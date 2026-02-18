@@ -98,31 +98,27 @@ export function InferencePreviewSheet({
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-full md:w-5/6">
-        <SheetHeader className="flex flex-row items-start justify-between gap-4 pr-8">
-          <SheetTitle className="min-w-0">
-            {inferenceData ? (
-              <>
-                Inference{" "}
-                <span className="font-mono font-semibold">
-                  {inferenceData.inference.inference_id}
-                </span>
-              </>
-            ) : (
-              "Loading..."
+        <SheetHeader className="space-y-1 pr-8">
+          <div className="flex items-center justify-between">
+            <span className="text-fg-secondary text-sm font-normal">
+              Inference
+            </span>
+            {showFullPageLink && inferenceData && (
+              <Link
+                to={toInferenceUrl(inferenceData.inference.inference_id)}
+                className="text-fg-secondary hover:text-foreground flex shrink-0 items-center gap-1 text-xs transition-colors"
+              >
+                Open full page
+                <ExternalLink className="h-3 w-3" />
+              </Link>
             )}
+          </div>
+          <SheetTitle className="text-2xl font-medium font-mono">
+            {inferenceId ?? "Loading..."}
           </SheetTitle>
-          {showFullPageLink && inferenceData && (
-            <Link
-              to={toInferenceUrl(inferenceData.inference.inference_id)}
-              className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1 text-xs transition-colors"
-            >
-              Open full page
-              <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
         </SheetHeader>
 
-        <div className="mt-6 space-y-6">
+        <div className="mt-8 space-y-6">
           {isLoading && !inferenceData && (
             <div className="flex items-center justify-center py-12">
               <div className="text-fg-muted text-sm">
