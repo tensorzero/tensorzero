@@ -116,6 +116,12 @@ pub async fn list_episodes(
     function_name: Option<String>,
     filters: Option<InferenceFilter>,
 ) -> Result<Vec<EpisodeByIdRow>, Error> {
+    if limit == 0 {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "Limit must be at least 1".to_string(),
+        }
+        .into());
+    }
     if limit > 100 {
         return Err(ErrorDetails::InvalidRequest {
             message: "Limit cannot exceed 100".to_string(),
