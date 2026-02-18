@@ -874,15 +874,6 @@ routing = ["anthropic"]
 type = "anthropic"
 model_name = "claude-sonnet-4-6"
 
-# Azure GPT-5-mini
-[models."gpt-5-mini-azure"]
-routing = ["azure"]
-
-[models."gpt-5-mini-azure".providers.azure]
-type = "azure"
-deployment_id = "gpt-5-mini"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"
-
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
