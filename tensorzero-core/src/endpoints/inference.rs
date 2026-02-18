@@ -2018,13 +2018,9 @@ impl InferenceResponseChunk {
                 };
 
                 // Compute chunk fields based on request flags
-                let raw_chunk_source = if cached {
-                    String::new()
-                } else {
-                    result.raw_chunk
-                };
                 let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
-                    raw_chunk_source,
+                    result.raw_chunk,
+                    cached,
                     include_original_response,
                     include_raw_response,
                 );
@@ -2053,13 +2049,9 @@ impl InferenceResponseChunk {
             }
             InferenceResultChunk::Json(result) => {
                 // Compute chunk fields based on request flags
-                let raw_chunk_source = if cached {
-                    String::new()
-                } else {
-                    result.raw_chunk
-                };
                 let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
-                    raw_chunk_source,
+                    result.raw_chunk,
+                    cached,
                     include_original_response,
                     include_raw_response,
                 );
@@ -2094,11 +2086,15 @@ impl InferenceResponseChunk {
     /// Returns None if the source is empty (e.g., for fake streams).
     fn compute_chunk_fields(
         source: String,
+        cached: bool,
         include_original: bool,
         include_raw: bool,
     ) -> (Option<String>, Option<String>) {
-        // Don't serialize empty strings - return None instead
-        let source = if source.is_empty() {
+        // Suppress raw chunk data on cache hits (no raw provider data for cached responses)
+        let source = if cached {
+            None
+        } else if source.is_empty() {
+            // Don't serialize empty strings - return None instead
             None
         } else {
             Some(source)
