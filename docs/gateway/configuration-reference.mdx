@@ -196,19 +196,19 @@ Setting this value too low may cause legitimate requests to timeout before recei
 
 </Warning>
 
-### `metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`
+### `metrics.tensorzero_inference_latency_overhead_seconds_buckets`
 
 - **Type:** array of floats
-- **Required:** no (default: disabled)
+- **Required:** no (default: `[0.001, 0.01, 0.1]`)
 
-Enable the `tensorzero_inference_latency_overhead_seconds_histogram` Prometheus metric with the specified histogram buckets.
+Configures the histogram buckets for the `tensorzero_inference_latency_overhead_seconds` Prometheus metric.
 This metric tracks the latency overhead introduced by TensorZero on HTTP requests.
 
 The buckets must be in strictly ascending order and contain at least one value.
 
 ```toml title="tensorzero.toml"
 [gateway.metrics]
-tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
+tensorzero_inference_latency_overhead_seconds_buckets = [0.001, 0.005, 0.01, 0.05, 0.1]
 ```
 
 See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
