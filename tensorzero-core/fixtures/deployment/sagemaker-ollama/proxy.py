@@ -1,16 +1,22 @@
 # A minimal proxy server that just forwards the '/invocations' request to ollama, and handles /ping
+import json
+
 import flask
 import requests
 from flask import Flask, Response
 
 app = Flask(__name__)
 
+NUM_CTX = 8192
+
 
 @app.route("/invocations", methods=["POST"])
 def invocations():
+    body = json.loads(flask.request.data)
+    body.setdefault("num_ctx", NUM_CTX)
     resp = requests.post(
         "http://localhost:11434/v1/chat/completions",
-        data=flask.request.data,
+        json=body,
         stream=True,
     )
 

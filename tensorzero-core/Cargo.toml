@@ -138,7 +138,7 @@ redis = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-rand_distr = "0.5.1"
+rand_distr = "0.6.0"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 paste = "1.0.15"
 base64 = "0.22.1"

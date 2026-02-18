@@ -83,6 +83,9 @@ pub struct ClientInferenceParams {
     /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
     #[serde(default)]
     pub include_raw_usage: bool,
+    /// If `true`, include an `aggregated_response` field in the final chunk in the stream
+    #[serde(default)]
+    pub include_aggregated_response: bool,
     // NOTE: Currently, ts_rs does not handle #[serde(transparent)] correctly,
     // so we disable the type generation for the extra_body and extra_headers fields.
     // I tried doing a direct #[ts(type = "InferenceExtraBody[]")] and
@@ -152,6 +155,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             include_original_response: this.include_original_response,
             include_raw_response: this.include_raw_response,
             include_raw_usage: this.include_raw_usage,
+            include_aggregated_response: this.include_aggregated_response,
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
             internal_dynamic_variant_config: this.internal_dynamic_variant_config,
@@ -183,6 +187,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         include_original_response,
         include_raw_response,
         include_raw_usage,
+        include_aggregated_response,
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,
@@ -210,6 +215,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         include_original_response,
         include_raw_response,
         include_raw_usage,
+        include_aggregated_response,
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,

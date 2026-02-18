@@ -232,8 +232,6 @@ pub(super) fn build_insert_batch_requests_query(
             BatchStatus::Completed => "completed",
             BatchStatus::Failed => "failed",
         };
-        let snapshot_hash_bytes = row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
-
         b.push_bind(row.batch_id)
             .push_bind(row.id)
             .push_bind(Json::from(&row.batch_params))
@@ -242,7 +240,7 @@ pub(super) fn build_insert_batch_requests_query(
             .push_bind(status)
             .push_bind(row.function_name.as_ref())
             .push_bind(row.variant_name.as_ref())
-            .push_bind(snapshot_hash_bytes)
+            .push_bind(row.snapshot_hash.as_ref())
             .push_bind(created_at);
     });
 
@@ -308,8 +306,6 @@ pub(super) fn build_insert_batch_model_inferences_query(
     );
 
     qb.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
-        let snapshot_hash_bytes = row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
-
         b.push_bind(row.inference_id)
             .push_bind(row.batch_id)
             .push_bind(row.function_name.as_ref())
@@ -318,7 +314,7 @@ pub(super) fn build_insert_batch_model_inferences_query(
             .push_bind(row.model_name.as_ref())
             .push_bind(row.model_provider_name.as_ref())
             .push_bind(Json::from(&row.tags))
-            .push_bind(snapshot_hash_bytes)
+            .push_bind(row.snapshot_hash.as_ref())
             .push_bind(created_at);
     });
 
@@ -643,8 +639,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for BatchRequestRow<'static> {
         let errors: Option<Json<Vec<Value>>> = row.try_get("errors")?;
         let model_name: String = row.try_get("model_name")?;
 
-        let snapshot_hash: Option<Vec<u8>> = row.try_get("snapshot_hash")?;
-        let snapshot_hash = snapshot_hash.map(|bytes| SnapshotHash::from_bytes(&bytes));
+        let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
 
         let raw_request: Option<String> = row.try_get("raw_request")?;
         let raw_response: Option<String> = row.try_get("raw_response")?;
@@ -699,8 +694,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for BatchModelInferenceRow<'st
             _ => None,
         };
 
-        let snapshot_hash: Option<Vec<u8>> = row.try_get("snapshot_hash")?;
-        let snapshot_hash = snapshot_hash.map(|bytes| SnapshotHash::from_bytes(&bytes));
+        let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
 
         Ok(BatchModelInferenceRow {
             inference_id: row.try_get("inference_id")?,

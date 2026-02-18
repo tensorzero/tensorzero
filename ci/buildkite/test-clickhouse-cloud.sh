@@ -125,8 +125,9 @@ echo "Starting background test compilation..."
 SQLX_OFFLINE=1 cargo test-clickhouse --no-run &
 TEST_BUILD_PID=$!
 
-export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
-export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
+export CLICKHOUSE_USER=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
+export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
+export CLICKHOUSE_SECURE=1
 export SQLX_OFFLINE=1
 cd ui/fixtures
 max_retries=3

@@ -56,40 +56,39 @@ routing = ["openai"]
 type = "openai"
 model_name = "o1-2024-12-17"
 
-[models."gpt-4o-mini-azure"]
+[models."gpt-5-mini-azure"]
 routing = ["azure"]
 
-[models."gpt-4o-mini-azure".providers.azure]
+[models."gpt-5-mini-azure".providers.azure]
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"
+deployment_id = "gpt-5-mini"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
 
-[models."gpt-4o-mini-azure-dynamic"]
+[models."gpt-5-mini-azure-dynamic"]
 routing = ["azure"]
 
-[models."gpt-4o-mini-azure-dynamic".providers.azure]
+[models."gpt-5-mini-azure-dynamic".providers.azure]
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"
+deployment_id = "gpt-5-mini"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
 api_key_location = "dynamic::azure_api_key"
 
-[models."llama-3.3-70b-instruct-azure"]
+[models."kimi-k2.5-azure"]
 routing = ["azure"]
 
-[models."llama-3.3-70b-instruct-azure".providers.azure]
+[models."kimi-k2.5-azure".providers.azure]
 type = "azure"
-deployment_id = "Llama-3.3-70B-Instruct"
-api_key_location = "env::AZURE_AI_FOUNDRY_API_KEY"
-endpoint = "https://t0-gha-resource.services.ai.azure.com"
+deployment_id = "Kimi-K2.5"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
 
-[models."llama-3.3-70b-instruct-azure-dynamic"]
+[models."kimi-k2.5-azure-dynamic"]
 routing = ["azure"]
 
-[models."llama-3.3-70b-instruct-azure-dynamic".providers.azure]
+[models."kimi-k2.5-azure-dynamic".providers.azure]
 type = "azure"
-deployment_id = "Phi-4-mini-instruct"
-endpoint = "https://t0-gha-resource.services.ai.azure.com"
-api_key_location = "dynamic::azure_ai_foundry_api_key"
+deployment_id = "Kimi-K2.5"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
+api_key_location = "dynamic::azure_api_key"
 
 ## Groq
 
@@ -199,9 +198,9 @@ routing = ["aws_sagemaker"]
 
 [models.gemma-3-1b-aws-sagemaker-openai.providers.aws_sagemaker]
 type = "aws_sagemaker"
-endpoint_name = "gemma3-1b-provisioned-endpoint"
+endpoint_name = "ollama-provisioned-endpoint"
 region = "us-east-2"
-model_name = "gemma3:1b"
+model_name = "smollm2:135m"
 # We actually host an ollama container, but we don't have an ollama provider yet
 hosted_provider = "openai"
 
@@ -212,7 +211,7 @@ routing = ["aws_sagemaker"]
 type = "aws_sagemaker"
 endpoint_name = "text-generation-inference-2025-05-21-17-14-43-396"
 region = "us-east-2"
-model_name = "gemma3:1b"
+model_name = "smollm2:135m"
 hosted_provider = "tgi"
 
 [models.claude-haiku-4-5-gcp-vertex]
@@ -867,15 +866,6 @@ extra_body = [
     { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
 ]
 
-# Azure GPT-5-mini
-[models."gpt-5-mini-azure"]
-routing = ["azure"]
-
-[models."gpt-5-mini-azure".providers.azure]
-type = "azure"
-deployment_id = "gpt-5-mini"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"
-
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
@@ -888,7 +878,7 @@ routing = ["azure"]
 
 [embedding_models.azure-text-embedding-3-small.providers.azure]
 type = "azure"
-endpoint = "https://t0-azure-openai-east.openai.azure.com/"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
 deployment_id = "text-embedding-3-small"
 
 [embedding_models.voyage_3_5_lite_256]
@@ -995,5 +985,29 @@ model_name = "flaky_raw_response_retries"
 routing = ["error_with_raw"]
 
 [models.error_with_raw_response.providers.error_with_raw]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+# Embedding model with fallback: first provider errors with raw_response, second succeeds
+[embedding_models.embedding_fallback_with_raw_response]
+routing = ["error_provider", "good_provider"]
+
+[embedding_models.embedding_fallback_with_raw_response.providers.error_provider]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+[embedding_models.embedding_fallback_with_raw_response.providers.good_provider]
+type = "dummy"
+model_name = "test-embeddings"
+
+# Embedding model where all providers error with raw_response
+[embedding_models.embedding_both_error_with_raw_response]
+routing = ["error_provider_1", "error_provider_2"]
+
+[embedding_models.embedding_both_error_with_raw_response.providers.error_provider_1]
+type = "dummy"
+model_name = "error_with_raw_response"
+
+[embedding_models.embedding_both_error_with_raw_response.providers.error_provider_2]
 type = "dummy"
 model_name = "error_with_raw_response"
