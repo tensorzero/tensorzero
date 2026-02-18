@@ -322,7 +322,7 @@ function InfoItem({ label, value, secondaryValue, isLoading }: InfoItemProps) {
           )}
         </span>
       ) : isLoading ? (
-        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-4 w-8" />
       ) : null}
     </Item>
   );
@@ -356,7 +356,7 @@ function Timestamp({ data, isLoading }: TimestampProps) {
     );
   }
   if (isLoading) {
-    return <Skeleton className="h-4 w-16" />;
+    return <Skeleton className="h-4 w-24" />;
   }
   return null;
 }
