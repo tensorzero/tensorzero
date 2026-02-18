@@ -2018,8 +2018,13 @@ impl InferenceResponseChunk {
                 };
 
                 // Compute chunk fields based on request flags
+                let raw_chunk_source = if cached {
+                    String::new()
+                } else {
+                    result.raw_chunk
+                };
                 let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
-                    result.raw_chunk,
+                    raw_chunk_source,
                     include_original_response,
                     include_raw_response,
                 );
@@ -2048,8 +2053,13 @@ impl InferenceResponseChunk {
             }
             InferenceResultChunk::Json(result) => {
                 // Compute chunk fields based on request flags
+                let raw_chunk_source = if cached {
+                    String::new()
+                } else {
+                    result.raw_chunk
+                };
                 let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
-                    result.raw_chunk,
+                    raw_chunk_source,
                     include_original_response,
                     include_raw_response,
                 );
