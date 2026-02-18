@@ -3,7 +3,7 @@ routing = ["aws_sagemaker"]
 
 [models.gemma_3.providers.aws_sagemaker]
 type = "aws_sagemaker"
-model_name = "qwen3:0.6b"
+model_name = "gemma3:1b"
 endpoint_name = "my-sagemaker-endpoint"
 region = "us-east-1"
 # ... or use `region = "sdk"` to auto-detect region with the AWS SDK
