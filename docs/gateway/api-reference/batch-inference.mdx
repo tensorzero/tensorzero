@@ -190,6 +190,12 @@ If the content block has type `raw_text`, it must have the following additional 
 - `value`: The text for the content block.
   This content block will ignore any relevant templates and schemas for this function.
 
+<Note>
+
+`raw_text` only works for user and assistant messages. For system messages, `raw_text` is treated as plain text and will not bypass templates.
+
+</Note>
+
 If the content block has type `thought`, it must have the following additional fields:
 
 - `text` (string, optional): The text for the content block.
