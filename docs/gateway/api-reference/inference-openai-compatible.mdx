@@ -808,6 +808,7 @@ This field should be provided as an extra body parameter in the request body.
 ### Request Headers
 
 You can attach custom OTLP trace metadata to individual inference requests using HTTP headers.
+This allows you to extend TensorZero's OpenTelemetry integration with per-request metadata useful for other observability solutions.
 When using the OpenAI client SDKs, pass these as `extra_headers`.
 
 | Header prefix                             | Description                                                                                                                                           |

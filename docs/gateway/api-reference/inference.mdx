@@ -867,6 +867,7 @@ This field is primarily used for testing or debugging purposes.
 ### Request Headers
 
 You can attach custom OTLP trace metadata to individual inference requests using HTTP headers.
+This allows you to extend TensorZero's OpenTelemetry integration with per-request metadata useful for other observability solutions.
 The TensorZero client SDKs handle this automatically through parameters like `otlp_traces_extra_headers`, `otlp_traces_extra_attributes`, and `otlp_traces_extra_resources`.
 
 When making raw HTTP requests, use the following header prefixes:
