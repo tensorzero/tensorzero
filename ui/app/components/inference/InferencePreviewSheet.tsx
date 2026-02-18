@@ -98,21 +98,19 @@ export function InferencePreviewSheet({
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-full md:w-5/6">
-        <SheetHeader className="space-y-1 pr-8">
-          <div className="flex items-center justify-between">
-            <span className="text-fg-secondary text-sm font-normal">
-              Inference
-            </span>
-            {showFullPageLink && inferenceData && (
-              <Link
-                to={toInferenceUrl(inferenceData.inference.inference_id)}
-                className="text-fg-secondary hover:text-foreground flex shrink-0 items-center gap-1 text-xs transition-colors"
-              >
-                Open full page
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            )}
-          </div>
+        {showFullPageLink && inferenceData && (
+          <Link
+            to={toInferenceUrl(inferenceData.inference.inference_id)}
+            className="text-fg-secondary hover:text-foreground absolute top-4 right-10 flex items-center gap-1 text-xs transition-colors"
+          >
+            Open full page
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        )}
+        <SheetHeader className="space-y-1">
+          <span className="text-fg-secondary text-sm font-normal">
+            Inference
+          </span>
           <SheetTitle className="text-2xl font-medium font-mono">
             {inferenceId ?? "Loading..."}
           </SheetTitle>
