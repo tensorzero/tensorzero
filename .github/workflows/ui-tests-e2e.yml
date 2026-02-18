@@ -468,7 +468,7 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml up --no-build -d
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml up --no-build -d
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml wait fixtures
 
       - name: Run UI E2E tests

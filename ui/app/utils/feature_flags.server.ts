@@ -17,3 +17,10 @@ export type { FeatureFlags } from "~/context/feature-flags";
 export function loadFeatureFlags(): FeatureFlags {
   return {};
 }
+
+/**
+ * Returns extra parameters for inference calls.
+ */
+export function getExtraInferenceOptions(): Record<string, unknown> {
+  return {};
+}
