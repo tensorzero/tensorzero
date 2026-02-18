@@ -535,7 +535,7 @@ If a content block has type `input_audio`, it must have the following additional
 
 The TensorZero-specific content block types are:
 
-- `tensorzero::raw_text`: Bypasses templates and schemas, sending text directly to the model. Useful for testing prompts or dynamic injection without configuration changes. Must have a `value` field containing the text.
+- `tensorzero::raw_text`: Bypasses templates and schemas, sending text directly to the model. Useful for testing prompts or dynamic injection without configuration changes. Must have a `value` field containing the text. Only works for user and assistant messages; for system messages, it is treated as plain text and will not bypass templates.
 - `tensorzero::template`: Explicitly specify a template to use. Must have `name` and `arguments` fields.
 
 #### `model`
