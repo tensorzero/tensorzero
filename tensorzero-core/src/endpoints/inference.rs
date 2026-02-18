@@ -3425,8 +3425,8 @@ mod tests {
         // - The input chunk (with metadata applied)
         // No artificial raw_usage chunk because include_raw_usage is false
         // Check that no chunks have raw_usage
-        for chunk in &chunks {
-            if let Ok(InferenceResponseChunk::Chat(c)) = chunk {
+        for chunk in chunks.iter().flatten() {
+            if let InferenceResponseChunk::Chat(c) = chunk {
                 assert!(
                     c.raw_usage.is_none(),
                     "raw_usage should not be present when include_raw_usage is false"

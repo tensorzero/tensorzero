@@ -145,55 +145,63 @@ max_tokens = 100
 
 [functions.basic_test.variants.azure]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
 [functions.basic_test.variants.azure-extra-body]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-extra_body = [{ pointer = "/temperature", value = 0.123 }]
+max_tokens = 1024
+reasoning_effort = "low"
+extra_body = [{ pointer = "/temperature", value = 1 }]
 
 [functions.basic_test.variants.azure-extra-headers]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 extra_headers = [{ name = "api-key", value = "invalid_azure_openai_auth" }]
 
 [functions.basic_test.variants.azure-dynamic]
 type = "chat_completion"
-model = "gpt-4o-mini-azure-dynamic"
+model = "gpt-5-mini-azure-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
-[functions.basic_test.variants.azure-ai-foundry]
+[functions.basic_test.variants.azure-kimi]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
-[functions.basic_test.variants.azure-ai-foundry-extra-body]
+[functions.basic_test.variants.azure-kimi-extra-body]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-extra_body = [{ pointer = "/temperature", value = 0.123 }]
+max_tokens = 1024
+reasoning_effort = "low"
+extra_body = [{ pointer = "/temperature", value = 1 }]
 
-[functions.basic_test.variants.azure-ai-foundry-extra-headers]
+[functions.basic_test.variants.azure-kimi-extra-headers]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 extra_headers = [{ name = "api-key", value = "invalid_azure_openai_auth" }]
 
-[functions.basic_test.variants.azure-ai-foundry-dynamic]
+[functions.basic_test.variants.azure-kimi-dynamic]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure-dynamic"
+model = "kimi-k2.5-azure-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
 [functions.basic_test.variants.fireworks]
 type = "chat_completion"

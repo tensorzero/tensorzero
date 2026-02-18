@@ -30,7 +30,7 @@ resolver = "2"
 
 [workspace.package]
 version = "2026.2.1"
-rust-version = "1.88.0"
+rust-version = "1.93.0"
 license = "Apache-2.0"
 edition = "2024"
 
