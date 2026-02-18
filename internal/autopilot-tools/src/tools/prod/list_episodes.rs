@@ -123,6 +123,16 @@ impl ToolMetadata for ListEpisodesTool {
                         },
                         {
                             "type": "object",
+                            "description": "Filter by whether an inference has a demonstration.",
+                            "properties": {
+                                "type": { "const": "demonstration_feedback" },
+                                "has_demonstration": { "type": "boolean", "description": "Whether the inference has a demonstration." }
+                            },
+                            "required": ["type", "has_demonstration"],
+                            "additionalProperties": false
+                        },
+                        {
+                            "type": "object",
                             "description": "Filter by tag key-value pair.",
                             "properties": {
                                 "type": { "const": "tag" },
