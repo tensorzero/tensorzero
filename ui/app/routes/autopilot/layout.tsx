@@ -9,8 +9,8 @@ import { AutopilotUnavailableState } from "~/components/ui/error/AutopilotUnavai
 import { LayoutErrorBoundary } from "~/components/ui/error";
 import { isAutopilotUnavailableError } from "~/utils/tensorzero/errors";
 import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
-import { InferenceSideSheetProvider } from "~/components/autopilot/InferenceSideSheetContext";
-import { InferenceSideSheet } from "~/components/autopilot/InferenceSideSheet";
+import { EntitySideSheetProvider } from "~/components/autopilot/EntitySideSheetContext";
+import { EntitySideSheet } from "~/components/autopilot/EntitySideSheet";
 
 export const handle: RouteHandle = {
   crumb: () => [{ label: "Autopilot", noLink: true }],
@@ -30,10 +30,10 @@ export async function loader() {
 
 export default function AutopilotLayout() {
   return (
-    <InferenceSideSheetProvider>
+    <EntitySideSheetProvider>
       <Outlet />
-      <InferenceSideSheet />
-    </InferenceSideSheetProvider>
+      <EntitySideSheet />
+    </EntitySideSheetProvider>
   );
 }
 
