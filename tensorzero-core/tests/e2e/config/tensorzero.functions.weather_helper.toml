@@ -95,6 +95,13 @@ system_template = "../../../fixtures/config/functions/weather_helper/prompt/syst
 max_tokens = 2048
 thinking_budget_tokens = 1024
 
+[functions.weather_helper.variants.anthropic-sonnet-4-6-reasoning]
+type = "chat_completion"
+model = "claude-sonnet-4-6"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 2048
+reasoning_effort = "low"
+
 [functions.weather_helper.variants.azure]
 type = "chat_completion"
 model = "gpt-4o-mini-azure"

@@ -3183,6 +3183,7 @@ presence_penalty = 0.5
 
 Controls the reasoning effort level for reasoning models.
 
+For Anthropic, this enables adaptive thinking (`thinking.type: "adaptive"`) with the specified effort level via `output_config.effort`.
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingLevel`.
 
 <Warning>
@@ -3191,11 +3192,11 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
-<Tip>
+<Warning>
 
-Some providers (e.g. Anthropic) support `thinking_budget_tokens` instead.
+For Anthropic, `reasoning_effort` and `thinking_budget_tokens` are mutually exclusive. Use `reasoning_effort` for adaptive thinking or `thinking_budget_tokens` for manual thinking.
 
-</Tip>
+</Warning>
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3306,7 +3307,7 @@ temperature = 0.5
 
 Controls the thinking budget in tokens for reasoning models.
 
-For Anthropic, this value corresponds to `thinking.budget_tokens`.
+For Anthropic, this value corresponds to `thinking.budget_tokens` (manual thinking mode with `thinking.type: "enabled"`).
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingBudget`.
 
 <Warning>
@@ -3315,9 +3316,15 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
+<Warning>
+
+For Anthropic, `thinking_budget_tokens` and `reasoning_effort` are mutually exclusive. Use `thinking_budget_tokens` for manual thinking or `reasoning_effort` for adaptive thinking.
+
+</Warning>
+
 <Tip>
 
-Some providers (e.g. OpenAI) support `reasoning_effort` instead.
+Some providers (e.g. OpenAI) support `reasoning_effort` instead. For Anthropic, both `reasoning_effort` and `thinking_budget_tokens` are supported but cannot be used together.
 
 </Tip>
 
