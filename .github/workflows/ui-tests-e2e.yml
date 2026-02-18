@@ -401,7 +401,6 @@ jobs:
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_PROVIDER_PROXY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
           echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env
           # Real API keys for cache misses (forwarded through provider-proxy to real providers)
