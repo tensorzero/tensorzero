@@ -200,7 +200,7 @@ routing = ["aws_sagemaker"]
 type = "aws_sagemaker"
 endpoint_name = "ollama-provisioned-endpoint"
 region = "us-east-2"
-model_name = "smollm2:135m"
+model_name = "gemma3:1b"
 # We actually host an ollama container, but we don't have an ollama provider yet
 hosted_provider = "openai"
 
@@ -211,7 +211,7 @@ routing = ["aws_sagemaker"]
 type = "aws_sagemaker"
 endpoint_name = "text-generation-inference-2025-05-21-17-14-43-396"
 region = "us-east-2"
-model_name = "smollm2:135m"
+model_name = "gemma3:1b"
 hosted_provider = "tgi"
 
 [models.claude-haiku-4-5-gcp-vertex]
