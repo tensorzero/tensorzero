@@ -11,8 +11,10 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockall::automock;
 
+use crate::config::Config;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
+use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
@@ -57,9 +59,12 @@ pub trait HealthCheckable {
 pub trait EpisodeQueries: Send + Sync {
     async fn query_episode_table(
         &self,
+        config: &Config,
         limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
+        function_name: Option<String>,
+        filters: Option<InferenceFilter>,
     ) -> Result<Vec<EpisodeByIdRow>, Error>;
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;

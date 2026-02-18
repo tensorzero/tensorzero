@@ -456,6 +456,24 @@ routing = ["openai", "azure"]
 # ...
 ```
 
+### `discard_unknown_chunks`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+When set to `true`, the gateway will silently discard streaming chunks with unknown or unsupported types instead of forwarding them.
+A warning is emitted for each discarded chunk.
+
+By default (`false`), unknown chunks are forwarded in the stream as-is.
+This is useful when a model provider introduces new chunk types that TensorZero doesn't yet support, and you'd prefer to drop them rather than receive unrecognized data.
+
+```toml title="tensorzero.toml"
+[models.my-model.providers.my-provider]
+# ...
+discard_unknown_chunks = true
+# ...
+```
+
 ### `extra_body`
 
 - **Type:** array of objects (see below)
@@ -2292,9 +2310,7 @@ credential_location = "dynamic::gcp_credentials_path"
 - **Type:** object
 - **Required:** no (default: `null`)
 
-The `batch` object allows you to configure batch processing for GCP Vertex models.
-Today we support batch inference through GCP Vertex using Google cloud storage as documented [here](https://cloud.google.com/vertex-ai/docs/tabular-data/classification-regression/get-batch-predictions#api:-cloud-storage).
-To do this you must also have object_storage (see the [object_storage](#object_storage) section) configured using GCP.
+The `batch` object allows you to configure [batch inference](/gateway/guides/batch-inference/) for GCP Vertex Gemini models using Google Cloud Storage.
 
 ```toml title="tensorzero.toml"
 [provider_types.gcp_vertex_gemini.batch]

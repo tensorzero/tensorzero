@@ -5,7 +5,7 @@
 
 use axum::{
     Router,
-    routing::{get, post, put},
+    routing::{get, post},
 };
 use tensorzero_core::endpoints;
 use tensorzero_core::utils::gateway::AppStateData;
@@ -83,7 +83,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         )
         .route(
             "/internal/episodes",
-            get(endpoints::episodes::internal::list_episodes_handler),
+            get(endpoints::episodes::internal::list_episodes_handler)
+                .post(endpoints::episodes::internal::list_episodes_post_handler),
         )
         .route(
             "/internal/episodes/bounds",
@@ -94,17 +95,8 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::episodes::internal::get_episode_inference_count_handler),
         )
         .route(
-            "/internal/datasets/{dataset_name}/datapoints",
-            #[expect(deprecated)]
-            post(endpoints::datasets::deprecated_create_datapoints_from_inferences_handler),
-        )
-        .route(
             "/internal/datasets/{dataset_name}/datapoints/clone",
             post(endpoints::datasets::internal::clone_datapoints_handler),
-        )
-        .route(
-            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
-            put(endpoints::datasets::update_datapoint_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/count",
