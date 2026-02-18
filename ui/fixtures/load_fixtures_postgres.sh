@@ -739,7 +739,7 @@ fi
 #
 
 BACKFILL_START=$SECONDS
-echo "Backfilling model provider statistics and latency histograms..."
+echo "Backfilling model provider statistics, latency histograms, and inference-by-function statistics..."
 psql -q "$POSTGRES_URL" <<EOF
 SELECT tensorzero.refresh_model_provider_statistics_incremental(
     full_refresh => TRUE
@@ -748,6 +748,9 @@ SELECT tensorzero.refresh_model_latency_histogram_minute_incremental(
     full_refresh => TRUE
 );
 SELECT tensorzero.refresh_model_latency_histogram_hour_incremental(
+    full_refresh => TRUE
+);
+SELECT tensorzero.refresh_inference_by_function_statistics_incremental(
     full_refresh => TRUE
 );
 EOF
