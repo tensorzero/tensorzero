@@ -22,6 +22,26 @@ env:
   RUST_MSRV: 1.88.0
 
 jobs:
+  check-docs-broken-links:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "24.13.0"
+
+      - name: Install Mintlify CLI
+        run: npm install -g mint@latest
+
+      - name: Check for broken links
+        working-directory: docs
+        run: mint broken-links
+
   check-version-consistency:
     permissions:
       contents: read
@@ -1476,6 +1496,7 @@ jobs:
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
+        check-docs-broken-links,
         check-version-consistency,
         check-production-deployment-docker-compose,
         check-docker-compose-released,
