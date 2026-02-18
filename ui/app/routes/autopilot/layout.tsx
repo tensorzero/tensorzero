@@ -9,8 +9,8 @@ import { AutopilotUnavailableState } from "~/components/ui/error/AutopilotUnavai
 import { LayoutErrorBoundary } from "~/components/ui/error";
 import { isAutopilotUnavailableError } from "~/utils/tensorzero/errors";
 import { getTensorZeroClient } from "~/utils/get-tensorzero-client.server";
-import { EntitySideSheetProvider } from "~/components/autopilot/EntitySideSheetContext";
-import { EntitySideSheet } from "~/components/autopilot/EntitySideSheet";
+import { EntitySideSheetProvider } from "~/components/entity-sheet/EntitySideSheetContext";
+import { EntitySideSheet } from "~/components/entity-sheet/EntitySideSheet";
 
 export const handle: RouteHandle = {
   crumb: () => [{ label: "Autopilot", noLink: true }],
