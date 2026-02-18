@@ -261,6 +261,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/autopilot/v1/sessions/{session_id}/config-writes",
             get(endpoints::internal::autopilot::list_config_writes_handler),
         )
+        .route(
+            "/internal/autopilot/v1/aws/s3_initiate_upload",
+            post(endpoints::internal::autopilot::s3_initiate_upload_handler),
+        )
         // Resolve UUID endpoint
         .route(
             "/internal/resolve_uuid/{id}",

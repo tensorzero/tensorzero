@@ -36,8 +36,8 @@ use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
     CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListSessionsParams,
-    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, TensorZeroClient,
-    TensorZeroClientError,
+    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, S3UploadRequest,
+    S3UploadResponse, TensorZeroClient, TensorZeroClientError,
 };
 
 /// Implementation of `TensorZeroClient` for the TensorZero SDK `Client`.
@@ -274,6 +274,64 @@ impl TensorZeroClient for Client {
                     .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
                 list_sessions(autopilot_client, params).await.map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })
+            }
+        }
+    }
+
+    async fn s3_initiate_upload(
+        &self,
+        request: S3UploadRequest,
+    ) -> Result<S3UploadResponse, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(http) => {
+                let url = http
+                    .base_url
+                    .join("internal/autopilot/v1/aws/s3_initiate_upload")
+                    .map_err(|e: url::ParseError| {
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
+                    })?;
+
+                let response = http
+                    .http_client
+                    .post(url)
+                    .json(&request)
+                    .send()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))?;
+
+                if !response.status().is_success() {
+                    let status = response.status().as_u16();
+                    let text = response.text().await.unwrap_or_default();
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
+                }
+
+                response
+                    .json()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => {
+                let autopilot_client = gateway
+                    .handle
+                    .app_state
+                    .autopilot_client
+                    .as_ref()
+                    .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
+
+                tensorzero_core::endpoints::internal::autopilot::s3_initiate_upload(
+                    autopilot_client,
+                    request,
+                )
+                .await
+                .map_err(|e| {
                     TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
                 })
             }
