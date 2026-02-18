@@ -67,124 +67,201 @@ fn build_query_episode_table(
     function_name: Option<&str>,
     filters: Option<&InferenceFilter>,
 ) -> Result<EpisodeTableQueryResult, Error> {
+    if before.is_some() && after.is_some() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Cannot specify both before and after in query_episode_table".to_string(),
+        }));
+    }
+
     let has_filters = function_name.is_some() || filters.is_some();
 
-    // For pagination, we need to handle the before/after cases differently
-    let (where_clause, order_direction, reverse_results) = match (before, after) {
-        (Some(before_id), None) => {
-            // Get episodes with IDs less than the cursor
-            (Some(("episode_id < ", before_id)), "DESC", false)
-        }
-        (None, Some(after_id)) => {
-            // Get episodes with IDs greater than the cursor
-            // Query in ASC order, then reverse the results
-            (Some(("episode_id > ", after_id)), "ASC", true)
-        }
-        (None, None) => (None, "DESC", false),
-        // Both before and after specified
-        (Some(_), Some(_)) => {
-            return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: "Cannot specify both before and after in query_episode_table".to_string(),
-            }));
-        }
-    };
-
-    // Build the query using a CTE to combine both inference tables
-    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("");
-
     if has_filters {
-        // When filtering, first find matching episode IDs via a filtered_episodes CTE,
-        // then aggregate from ALL inferences for those episodes (so count, start_time,
-        // end_time, and last_inference_id reflect the full episode, not just filtered inferences).
-        query_builder.push(
-            r"
-        WITH filtered_episodes AS (
-            SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
-            WHERE 1=1",
-        );
+        build_filtered_episode_query(config, limit, before, after, function_name, filters)
+    } else {
+        Ok(build_unfiltered_episode_query(limit, before, after))
+    }
+}
 
-        if let Some(fn_name) = function_name {
-            query_builder.push(" AND i.function_name = ");
-            query_builder.push_bind(fn_name.to_string());
-        }
+/// Builds an optimized episode listing query for the unfiltered case.
+///
+/// Fetches `limit` distinct episode_ids from each inference table using the
+/// episode_id index (one backward/forward Merge Append per table), then
+/// deduplicates and aggregates only those candidates. This avoids a full
+/// table scan while keeping the query plan simple and parallelizable.
+fn build_unfiltered_episode_query(
+    limit: u32,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
+) -> EpisodeTableQueryResult {
+    let reverse_results = after.is_some();
+    let order = if after.is_some() { "ASC" } else { "DESC" };
 
-        apply_inference_filter(&mut query_builder, filters, config)?;
+    let mut qb = QueryBuilder::<sqlx::Postgres>::new("");
 
-        query_builder.push(
-            r"
-            UNION
-            SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
-            WHERE 1=1",
-        );
+    // CTE 1: Get candidate episode_ids from both tables.
+    // Each inner query uses the episode_id index with LIMIT for an efficient
+    // single-pass Merge Append across partitions. The outer DISTINCT deduplicates
+    // episodes that appear in both tables.
+    qb.push(
+        r"
+        WITH candidate_episode_ids AS (
+            SELECT DISTINCT episode_id FROM (
+                (SELECT DISTINCT episode_id FROM tensorzero.chat_inferences",
+    );
 
-        if let Some(fn_name) = function_name {
-            query_builder.push(" AND i.function_name = ");
-            query_builder.push_bind(fn_name.to_string());
-        }
+    if let Some(before_id) = before {
+        qb.push(" WHERE episode_id < ");
+        qb.push_bind(before_id);
+    } else if let Some(after_id) = after {
+        qb.push(" WHERE episode_id > ");
+        qb.push_bind(after_id);
+    }
 
-        apply_inference_filter(&mut query_builder, filters, config)?;
+    qb.push(format!(" ORDER BY episode_id {order} LIMIT "));
+    qb.push_bind(limit as i64);
 
-        query_builder.push(
-            r"
+    qb.push(
+        r")
+                UNION ALL
+                (SELECT DISTINCT episode_id FROM tensorzero.json_inferences",
+    );
+
+    if let Some(before_id) = before {
+        qb.push(" WHERE episode_id < ");
+        qb.push_bind(before_id);
+    } else if let Some(after_id) = after {
+        qb.push(" WHERE episode_id > ");
+        qb.push_bind(after_id);
+    }
+
+    qb.push(format!(" ORDER BY episode_id {order} LIMIT "));
+    qb.push_bind(limit as i64);
+
+    // CTE 2: Aggregate only the candidate episodes
+    qb.push(format!(
+        r")
+            ) t
         ),
         all_inferences AS (
             SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
-            WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
+            WHERE episode_id IN (SELECT episode_id FROM candidate_episode_ids)
             UNION ALL
             SELECT episode_id, id, created_at FROM tensorzero.json_inferences
-            WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
-        ),",
-        );
-    } else {
-        query_builder.push(
-            r"
-        WITH all_inferences AS (
-            SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
-            UNION ALL
-            SELECT episode_id, id, created_at FROM tensorzero.json_inferences
-        ),",
-        );
-    }
-
-    query_builder.push(
-        r"
-        episode_aggregates AS (
-            SELECT
-                episode_id,
-                COUNT(*)::BIGINT as count,
-                MIN(created_at) as start_time,
-                MAX(created_at) as end_time,
-                tensorzero.max_uuid(id) as last_inference_id
-            FROM all_inferences
-            GROUP BY episode_id
+            WHERE episode_id IN (SELECT episode_id FROM candidate_episode_ids)
         )
         SELECT
             episode_id,
-            count,
-            start_time,
-            end_time,
-            last_inference_id
-        FROM episode_aggregates
-        ",
-    );
+            COUNT(*)::BIGINT as count,
+            MIN(created_at) as start_time,
+            MAX(created_at) as end_time,
+            tensorzero.max_uuid(id) as last_inference_id
+        FROM all_inferences
+        GROUP BY episode_id
+        ORDER BY episode_id {order} LIMIT "
+    ));
+    qb.push_bind(limit as i64);
 
-    // Add WHERE clause if we have pagination
-    if let Some((comparison, cursor_id)) = where_clause {
-        query_builder.push("WHERE ");
-        query_builder.push(comparison);
-        query_builder.push_bind(cursor_id);
+    EpisodeTableQueryResult {
+        query_builder: qb,
+        reverse_results,
     }
+}
 
-    // Add ORDER BY
-    query_builder.push(" ORDER BY episode_id ");
-    query_builder.push(order_direction);
+/// Builds an episode listing query with filters (function_name and/or inference filters).
+///
+/// Pushes filters, pagination, and limit into each per-table subquery so that
+/// the database can use indexes efficiently without scanning unneeded rows.
+/// Each inner query returns at most `limit` episode_ids; the outer DISTINCT +
+/// LIMIT deduplicates across tables and picks the final top `limit`.
+fn build_filtered_episode_query(
+    config: &Config,
+    limit: u32,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
+    function_name: Option<&str>,
+    filters: Option<&InferenceFilter>,
+) -> Result<EpisodeTableQueryResult, Error> {
+    let reverse_results = after.is_some();
+    let order = if after.is_some() { "ASC" } else { "DESC" };
 
-    // Add LIMIT
-    query_builder.push(" LIMIT ");
-    query_builder.push_bind(limit as i64);
+    let mut qb = QueryBuilder::<sqlx::Postgres>::new("");
+
+    // CTE 1: Find top episode_ids matching filters with pagination and limit.
+    qb.push(
+        r"
+        WITH top_episodes AS (
+            SELECT DISTINCT episode_id FROM (
+                (SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
+                WHERE 1=1",
+    );
+    if let Some(fn_name) = function_name {
+        qb.push(" AND i.function_name = ");
+        qb.push_bind(fn_name.to_string());
+    }
+    apply_inference_filter(&mut qb, filters, config)?;
+    if let Some(before_id) = before {
+        qb.push(" AND i.episode_id < ");
+        qb.push_bind(before_id);
+    } else if let Some(after_id) = after {
+        qb.push(" AND i.episode_id > ");
+        qb.push_bind(after_id);
+    }
+    qb.push(format!(" ORDER BY i.episode_id {order} LIMIT "));
+    qb.push_bind(limit as i64);
+
+    qb.push(
+        r")
+                UNION ALL
+                (SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
+                WHERE 1=1",
+    );
+    if let Some(fn_name) = function_name {
+        qb.push(" AND i.function_name = ");
+        qb.push_bind(fn_name.to_string());
+    }
+    apply_inference_filter(&mut qb, filters, config)?;
+    if let Some(before_id) = before {
+        qb.push(" AND i.episode_id < ");
+        qb.push_bind(before_id);
+    } else if let Some(after_id) = after {
+        qb.push(" AND i.episode_id > ");
+        qb.push_bind(after_id);
+    }
+    qb.push(format!(" ORDER BY i.episode_id {order} LIMIT "));
+    qb.push_bind(limit as i64);
+
+    qb.push(format!(
+        r")
+            ) t
+            ORDER BY episode_id {order} LIMIT "
+    ));
+    qb.push_bind(limit as i64);
+
+    // CTE 2: Get all inferences for the top episodes (for full aggregation)
+    qb.push(format!(
+        r"
+        ),
+        all_inferences AS (
+            SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
+            WHERE episode_id IN (SELECT episode_id FROM top_episodes)
+            UNION ALL
+            SELECT episode_id, id, created_at FROM tensorzero.json_inferences
+            WHERE episode_id IN (SELECT episode_id FROM top_episodes)
+        )
+        SELECT
+            episode_id,
+            COUNT(*)::BIGINT as count,
+            MIN(created_at) as start_time,
+            MAX(created_at) as end_time,
+            tensorzero.max_uuid(id) as last_inference_id
+        FROM all_inferences
+        GROUP BY episode_id
+        ORDER BY episode_id {order}
+        "
+    ));
 
     Ok(EpisodeTableQueryResult {
-        query_builder,
+        query_builder: qb,
         reverse_results,
     })
 }
@@ -227,20 +304,33 @@ async fn query_episode_table_impl(
 }
 
 async fn query_episode_table_bounds_impl(pool: &PgPool) -> Result<TableBoundsWithCount, Error> {
-    // Use a CTE to combine both inference tables and get bounds
-    // Use subqueries with ORDER BY/LIMIT instead of MIN/MAX since Postgres doesn't support MIN/MAX on UUID
+    // Bounds: find the min/max episode_id across chat and json inferences.
+    // Count: pg_class.reltuples for an approximate total (updated by autovacuum/analyze).
+    //
+    // TODO(#6472): Implement accurate episode count.
     sqlx::query_as(
         r"
-        WITH all_episodes AS (
-            SELECT DISTINCT episode_id FROM tensorzero.chat_inferences
-            UNION
-            SELECT DISTINCT episode_id FROM tensorzero.json_inferences
-        )
         SELECT
-            (SELECT episode_id FROM all_episodes ORDER BY episode_id ASC LIMIT 1) as first_id,
-            (SELECT episode_id FROM all_episodes ORDER BY episode_id DESC LIMIT 1) as last_id,
-            COUNT(*)::BIGINT as count
-        FROM all_episodes
+            (SELECT episode_id FROM (
+                (SELECT episode_id FROM tensorzero.chat_inferences ORDER BY episode_id ASC LIMIT 1)
+                UNION ALL
+                (SELECT episode_id FROM tensorzero.json_inferences ORDER BY episode_id ASC LIMIT 1)
+            ) t ORDER BY episode_id ASC LIMIT 1) as first_id,
+            (SELECT episode_id FROM (
+                (SELECT episode_id FROM tensorzero.chat_inferences ORDER BY episode_id DESC LIMIT 1)
+                UNION ALL
+                (SELECT episode_id FROM tensorzero.json_inferences ORDER BY episode_id DESC LIMIT 1)
+            ) t ORDER BY episode_id DESC LIMIT 1) as last_id,
+            COALESCE((
+                SELECT SUM(GREATEST(c.reltuples, 0))::BIGINT
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_inherits i ON i.inhrelid = c.oid
+                JOIN pg_class parent ON parent.oid = i.inhparent
+                JOIN pg_namespace pn ON pn.oid = parent.relnamespace
+                WHERE pn.nspname = 'tensorzero'
+                AND parent.relname IN ('chat_inferences', 'json_inferences')
+            ), 0) as count
         ",
     )
     .fetch_one(pool)
@@ -273,30 +363,29 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH all_inferences AS (
+            WITH candidate_episode_ids AS (
+                SELECT DISTINCT episode_id FROM (
+                    (SELECT DISTINCT episode_id FROM tensorzero.chat_inferences ORDER BY episode_id DESC LIMIT $1)
+                    UNION ALL
+                    (SELECT DISTINCT episode_id FROM tensorzero.json_inferences ORDER BY episode_id DESC LIMIT $2)
+                ) t
+            ),
+            all_inferences AS (
                 SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
+                WHERE episode_id IN (SELECT episode_id FROM candidate_episode_ids)
                 UNION ALL
                 SELECT episode_id, id, created_at FROM tensorzero.json_inferences
-            ),
-            episode_aggregates AS (
-                SELECT
-                    episode_id,
-                    COUNT(*)::BIGINT as count,
-                    MIN(created_at) as start_time,
-                    MAX(created_at) as end_time,
-                    tensorzero.max_uuid(id) as last_inference_id
-                FROM all_inferences
-                GROUP BY episode_id
+                WHERE episode_id IN (SELECT episode_id FROM candidate_episode_ids)
             )
             SELECT
                 episode_id,
-                count,
-                start_time,
-                end_time,
-                last_inference_id
-            FROM episode_aggregates
-            ORDER BY episode_id DESC
-            LIMIT $1
+                COUNT(*)::BIGINT as count,
+                MIN(created_at) as start_time,
+                MAX(created_at) as end_time,
+                tensorzero.max_uuid(id) as last_inference_id
+            FROM all_inferences
+            GROUP BY episode_id
+            ORDER BY episode_id DESC LIMIT $3
             ",
         );
     }
@@ -315,31 +404,29 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH all_inferences AS (
+            WITH candidate_episode_ids AS (
+                SELECT DISTINCT episode_id FROM (
+                    (SELECT DISTINCT episode_id FROM tensorzero.chat_inferences WHERE episode_id < $1 ORDER BY episode_id DESC LIMIT $2)
+                    UNION ALL
+                    (SELECT DISTINCT episode_id FROM tensorzero.json_inferences WHERE episode_id < $3 ORDER BY episode_id DESC LIMIT $4)
+                ) t
+            ),
+            all_inferences AS (
                 SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
+                WHERE episode_id IN (SELECT episode_id FROM candidate_episode_ids)
                 UNION ALL
                 SELECT episode_id, id, created_at FROM tensorzero.json_inferences
-            ),
-            episode_aggregates AS (
-                SELECT
-                    episode_id,
-                    COUNT(*)::BIGINT as count,
-                    MIN(created_at) as start_time,
-                    MAX(created_at) as end_time,
-                    tensorzero.max_uuid(id) as last_inference_id
-                FROM all_inferences
-                GROUP BY episode_id
+                WHERE episode_id IN (SELECT episode_id FROM candidate_episode_ids)
             )
             SELECT
                 episode_id,
-                count,
-                start_time,
-                end_time,
-                last_inference_id
-            FROM episode_aggregates
-            WHERE episode_id < $1
-            ORDER BY episode_id DESC
-            LIMIT $2
+                COUNT(*)::BIGINT as count,
+                MIN(created_at) as start_time,
+                MAX(created_at) as end_time,
+                tensorzero.max_uuid(id) as last_inference_id
+            FROM all_inferences
+            GROUP BY episode_id
+            ORDER BY episode_id DESC LIMIT $5
             ",
         );
     }
@@ -358,31 +445,29 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH all_inferences AS (
+            WITH candidate_episode_ids AS (
+                SELECT DISTINCT episode_id FROM (
+                    (SELECT DISTINCT episode_id FROM tensorzero.chat_inferences WHERE episode_id > $1 ORDER BY episode_id ASC LIMIT $2)
+                    UNION ALL
+                    (SELECT DISTINCT episode_id FROM tensorzero.json_inferences WHERE episode_id > $3 ORDER BY episode_id ASC LIMIT $4)
+                ) t
+            ),
+            all_inferences AS (
                 SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
+                WHERE episode_id IN (SELECT episode_id FROM candidate_episode_ids)
                 UNION ALL
                 SELECT episode_id, id, created_at FROM tensorzero.json_inferences
-            ),
-            episode_aggregates AS (
-                SELECT
-                    episode_id,
-                    COUNT(*)::BIGINT as count,
-                    MIN(created_at) as start_time,
-                    MAX(created_at) as end_time,
-                    tensorzero.max_uuid(id) as last_inference_id
-                FROM all_inferences
-                GROUP BY episode_id
+                WHERE episode_id IN (SELECT episode_id FROM candidate_episode_ids)
             )
             SELECT
                 episode_id,
-                count,
-                start_time,
-                end_time,
-                last_inference_id
-            FROM episode_aggregates
-            WHERE episode_id > $1
-            ORDER BY episode_id ASC
-            LIMIT $2
+                COUNT(*)::BIGINT as count,
+                MIN(created_at) as start_time,
+                MAX(created_at) as end_time,
+                tensorzero.max_uuid(id) as last_inference_id
+            FROM all_inferences
+            GROUP BY episode_id
+            ORDER BY episode_id ASC LIMIT $5
             ",
         );
     }
@@ -420,39 +505,32 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH filtered_episodes AS (
-                SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
-                WHERE 1=1 AND i.function_name = $1
-                UNION
-                SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
-                WHERE 1=1 AND i.function_name = $2
+            WITH top_episodes AS (
+                SELECT DISTINCT episode_id FROM (
+                    (SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
+                    WHERE 1=1 AND i.function_name = $1 ORDER BY i.episode_id DESC LIMIT $2)
+                    UNION ALL
+                    (SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
+                    WHERE 1=1 AND i.function_name = $3 ORDER BY i.episode_id DESC LIMIT $4)
+                ) t
+                ORDER BY episode_id DESC LIMIT $5
             ),
             all_inferences AS (
                 SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
-                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
+                WHERE episode_id IN (SELECT episode_id FROM top_episodes)
                 UNION ALL
                 SELECT episode_id, id, created_at FROM tensorzero.json_inferences
-                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
-            ),
-            episode_aggregates AS (
-                SELECT
-                    episode_id,
-                    COUNT(*)::BIGINT as count,
-                    MIN(created_at) as start_time,
-                    MAX(created_at) as end_time,
-                    tensorzero.max_uuid(id) as last_inference_id
-                FROM all_inferences
-                GROUP BY episode_id
+                WHERE episode_id IN (SELECT episode_id FROM top_episodes)
             )
             SELECT
                 episode_id,
-                count,
-                start_time,
-                end_time,
-                last_inference_id
-            FROM episode_aggregates
+                COUNT(*)::BIGINT as count,
+                MIN(created_at) as start_time,
+                MAX(created_at) as end_time,
+                tensorzero.max_uuid(id) as last_inference_id
+            FROM all_inferences
+            GROUP BY episode_id
             ORDER BY episode_id DESC
-            LIMIT $3
             ",
         );
     }
@@ -474,40 +552,32 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH filtered_episodes AS (
-                SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
-                WHERE 1=1 AND i.function_name = $1
-                UNION
-                SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
-                WHERE 1=1 AND i.function_name = $2
+            WITH top_episodes AS (
+                SELECT DISTINCT episode_id FROM (
+                    (SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
+                    WHERE 1=1 AND i.function_name = $1 AND i.episode_id < $2 ORDER BY i.episode_id DESC LIMIT $3)
+                    UNION ALL
+                    (SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
+                    WHERE 1=1 AND i.function_name = $4 AND i.episode_id < $5 ORDER BY i.episode_id DESC LIMIT $6)
+                ) t
+                ORDER BY episode_id DESC LIMIT $7
             ),
             all_inferences AS (
                 SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
-                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
+                WHERE episode_id IN (SELECT episode_id FROM top_episodes)
                 UNION ALL
                 SELECT episode_id, id, created_at FROM tensorzero.json_inferences
-                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
-            ),
-            episode_aggregates AS (
-                SELECT
-                    episode_id,
-                    COUNT(*)::BIGINT as count,
-                    MIN(created_at) as start_time,
-                    MAX(created_at) as end_time,
-                    tensorzero.max_uuid(id) as last_inference_id
-                FROM all_inferences
-                GROUP BY episode_id
+                WHERE episode_id IN (SELECT episode_id FROM top_episodes)
             )
             SELECT
                 episode_id,
-                count,
-                start_time,
-                end_time,
-                last_inference_id
-            FROM episode_aggregates
-            WHERE episode_id < $3
+                COUNT(*)::BIGINT as count,
+                MIN(created_at) as start_time,
+                MAX(created_at) as end_time,
+                tensorzero.max_uuid(id) as last_inference_id
+            FROM all_inferences
+            GROUP BY episode_id
             ORDER BY episode_id DESC
-            LIMIT $4
             ",
         );
     }
@@ -529,39 +599,32 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH filtered_episodes AS (
-                SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
-                WHERE 1=1 AND (i.tags ? $1 AND i.tags->>$2 = $3)
-                UNION
-                SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
-                WHERE 1=1 AND (i.tags ? $4 AND i.tags->>$5 = $6)
+            WITH top_episodes AS (
+                SELECT DISTINCT episode_id FROM (
+                    (SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
+                    WHERE 1=1 AND i.tags @> jsonb_build_object($1, $2) ORDER BY i.episode_id DESC LIMIT $3)
+                    UNION ALL
+                    (SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
+                    WHERE 1=1 AND i.tags @> jsonb_build_object($4, $5) ORDER BY i.episode_id DESC LIMIT $6)
+                ) t
+                ORDER BY episode_id DESC LIMIT $7
             ),
             all_inferences AS (
                 SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
-                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
+                WHERE episode_id IN (SELECT episode_id FROM top_episodes)
                 UNION ALL
                 SELECT episode_id, id, created_at FROM tensorzero.json_inferences
-                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
-            ),
-            episode_aggregates AS (
-                SELECT
-                    episode_id,
-                    COUNT(*)::BIGINT as count,
-                    MIN(created_at) as start_time,
-                    MAX(created_at) as end_time,
-                    tensorzero.max_uuid(id) as last_inference_id
-                FROM all_inferences
-                GROUP BY episode_id
+                WHERE episode_id IN (SELECT episode_id FROM top_episodes)
             )
             SELECT
                 episode_id,
-                count,
-                start_time,
-                end_time,
-                last_inference_id
-            FROM episode_aggregates
+                COUNT(*)::BIGINT as count,
+                MIN(created_at) as start_time,
+                MAX(created_at) as end_time,
+                tensorzero.max_uuid(id) as last_inference_id
+            FROM all_inferences
+            GROUP BY episode_id
             ORDER BY episode_id DESC
-            LIMIT $7
             ",
         );
     }
@@ -584,39 +647,32 @@ mod tests {
         assert_query_equals(
             result.query_builder.sql().as_str(),
             r"
-            WITH filtered_episodes AS (
-                SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
-                WHERE 1=1 AND i.function_name = $1 AND (i.tags ? $2 AND i.tags->>$3 = $4)
-                UNION
-                SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
-                WHERE 1=1 AND i.function_name = $5 AND (i.tags ? $6 AND i.tags->>$7 = $8)
+            WITH top_episodes AS (
+                SELECT DISTINCT episode_id FROM (
+                    (SELECT DISTINCT i.episode_id FROM tensorzero.chat_inferences i
+                    WHERE 1=1 AND i.function_name = $1 AND i.tags @> jsonb_build_object($2, $3) ORDER BY i.episode_id DESC LIMIT $4)
+                    UNION ALL
+                    (SELECT DISTINCT i.episode_id FROM tensorzero.json_inferences i
+                    WHERE 1=1 AND i.function_name = $5 AND i.tags @> jsonb_build_object($6, $7) ORDER BY i.episode_id DESC LIMIT $8)
+                ) t
+                ORDER BY episode_id DESC LIMIT $9
             ),
             all_inferences AS (
                 SELECT episode_id, id, created_at FROM tensorzero.chat_inferences
-                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
+                WHERE episode_id IN (SELECT episode_id FROM top_episodes)
                 UNION ALL
                 SELECT episode_id, id, created_at FROM tensorzero.json_inferences
-                WHERE episode_id IN (SELECT episode_id FROM filtered_episodes)
-            ),
-            episode_aggregates AS (
-                SELECT
-                    episode_id,
-                    COUNT(*)::BIGINT as count,
-                    MIN(created_at) as start_time,
-                    MAX(created_at) as end_time,
-                    tensorzero.max_uuid(id) as last_inference_id
-                FROM all_inferences
-                GROUP BY episode_id
+                WHERE episode_id IN (SELECT episode_id FROM top_episodes)
             )
             SELECT
                 episode_id,
-                count,
-                start_time,
-                end_time,
-                last_inference_id
-            FROM episode_aggregates
+                COUNT(*)::BIGINT as count,
+                MIN(created_at) as start_time,
+                MAX(created_at) as end_time,
+                tensorzero.max_uuid(id) as last_inference_id
+            FROM all_inferences
+            GROUP BY episode_id
             ORDER BY episode_id DESC
-            LIMIT $9
             ",
         );
     }
