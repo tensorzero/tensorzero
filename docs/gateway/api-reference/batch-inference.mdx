@@ -192,7 +192,8 @@ If the content block has type `raw_text`, it must have the following additional 
 
 If the content block has type `thought`, it must have the following additional fields:
 
-- `text`: The text for the content block.
+- `text` (string, optional): The text for the content block.
+- `signature` (string, optional): An opaque signature used for multi-turn reasoning conversations with Anthropic and OpenRouter. Pass through the `signature` from the model's response to continue a reasoning conversation.
 
 If the content block has type `unknown`, it must have the following additional fields:
 
