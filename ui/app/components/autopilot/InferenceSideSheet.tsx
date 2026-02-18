@@ -9,6 +9,7 @@ export function InferenceSideSheet() {
       inferenceId={inferenceId}
       isOpen={Boolean(inferenceId)}
       onClose={closeSheet}
+      showFullPageLink
     />
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from "react";
-import { useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 import {
   Sheet,
   SheetContent,
@@ -12,11 +12,13 @@ import {
 } from "~/components/inference/InferenceDetailContent";
 import { toInferenceUrl } from "~/utils/urls";
 import { useToast } from "~/hooks/use-toast";
+import { ExternalLink } from "lucide-react";
 
 interface InferencePreviewSheetProps {
   inferenceId: string | null;
   isOpen: boolean;
   onClose: () => void;
+  showFullPageLink?: boolean;
 }
 
 function getInferenceApiUrl(inferenceId: string) {
@@ -27,6 +29,7 @@ export function InferencePreviewSheet({
   inferenceId,
   isOpen,
   onClose,
+  showFullPageLink = false,
 }: InferencePreviewSheetProps) {
   const fetcher = useFetcher<InferenceDetailData>();
   const { toast } = useToast();
@@ -95,22 +98,28 @@ export function InferencePreviewSheet({
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-full md:w-5/6">
-        <SheetHeader>
-          <SheetTitle>
+        <SheetHeader className="flex flex-row items-start justify-between gap-4">
+          <SheetTitle className="min-w-0">
             {inferenceData ? (
               <>
                 Inference{" "}
-                <a
-                  href={toInferenceUrl(inferenceData.inference.inference_id)}
-                  className="text-md font-mono font-semibold hover:underline"
-                >
+                <span className="font-mono font-semibold">
                   {inferenceData.inference.inference_id}
-                </a>
+                </span>
               </>
             ) : (
               "Loading..."
             )}
           </SheetTitle>
+          {showFullPageLink && inferenceData && (
+            <Link
+              to={toInferenceUrl(inferenceData.inference.inference_id)}
+              className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1 text-xs transition-colors"
+            >
+              Open full page
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
         </SheetHeader>
 
         <div className="mt-6 space-y-6">

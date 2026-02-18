@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { HoverCard } from "radix-ui";
@@ -15,6 +15,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 import { toFunctionUrl, toResolvedObjectUrl, toVariantUrl } from "~/utils/urls";
+import { useInferenceSideSheet } from "./InferenceSideSheetContext";
 
 interface UuidHoverCardProps {
   uuid: string;
@@ -212,11 +213,24 @@ interface TypeBadgeLinkProps {
 
 function TypeBadgeLink({ uuid, obj, children }: TypeBadgeLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
+  const { openSheet } = useInferenceSideSheet();
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (obj.type === "inference") {
+        e.preventDefault();
+        openSheet(uuid);
+      }
+    },
+    [obj.type, uuid, openSheet],
+  );
+
   if (!url) return null;
 
   return (
     <Link
       to={url}
+      onClick={handleClick}
       className="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
     >
       {children}
