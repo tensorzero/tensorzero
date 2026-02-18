@@ -309,7 +309,7 @@ const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -337,6 +337,7 @@ impl BaseTensorZeroGateway {
         include_original_response: Option<bool>,
         include_raw_response: Option<bool>,
         include_raw_usage: Option<bool>,
+        include_aggregated_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
@@ -368,6 +369,7 @@ impl BaseTensorZeroGateway {
             include_original_response.unwrap_or(false),
             include_raw_response.unwrap_or(false),
             include_raw_usage.unwrap_or(false),
+            include_aggregated_response.unwrap_or(false),
             otlp_traces_extra_headers,
             otlp_traces_extra_attributes,
             otlp_traces_extra_resources,
@@ -446,6 +448,7 @@ impl BaseTensorZeroGateway {
         include_original_response: bool,
         include_raw_response: bool,
         include_raw_usage: bool,
+        include_aggregated_response: bool,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
@@ -565,6 +568,7 @@ impl BaseTensorZeroGateway {
             include_original_response,
             include_raw_response,
             include_raw_usage,
+            include_aggregated_response,
             extra_body,
             extra_headers,
             internal_dynamic_variant_config,
@@ -770,7 +774,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -804,6 +808,7 @@ impl TensorZeroGateway {
     /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
     /// :param include_raw_usage: If set, include raw provider-specific usage data in the response.
+    /// :param include_aggregated_response: If set, include the aggregated response in each streaming chunk. Only supported in streaming mode.
     /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
@@ -842,6 +847,7 @@ impl TensorZeroGateway {
         include_original_response: Option<bool>,
         include_raw_response: Option<bool>,
         include_raw_usage: Option<bool>,
+        include_aggregated_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
@@ -874,6 +880,7 @@ impl TensorZeroGateway {
             include_original_response.unwrap_or(false),
             include_raw_response.unwrap_or(false),
             include_raw_usage.unwrap_or(false),
+            include_aggregated_response.unwrap_or(false),
             otlp_traces_extra_headers,
             otlp_traces_extra_attributes,
             otlp_traces_extra_resources,
@@ -1955,7 +1962,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1989,6 +1996,7 @@ impl AsyncTensorZeroGateway {
     /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
     /// :param include_raw_usage: If set, include raw provider-specific usage data in the response.
+    /// :param include_aggregated_response: If set, include the aggregated response in each streaming chunk. Only supported in streaming mode.
     /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
@@ -2021,6 +2029,7 @@ impl AsyncTensorZeroGateway {
         include_original_response: Option<bool>,
         include_raw_response: Option<bool>,
         include_raw_usage: Option<bool>,
+        include_aggregated_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
@@ -2052,6 +2061,7 @@ impl AsyncTensorZeroGateway {
             include_original_response.unwrap_or(false),
             include_raw_response.unwrap_or(false),
             include_raw_usage.unwrap_or(false),
+            include_aggregated_response.unwrap_or(false),
             otlp_traces_extra_headers,
             otlp_traces_extra_attributes,
             otlp_traces_extra_resources,
