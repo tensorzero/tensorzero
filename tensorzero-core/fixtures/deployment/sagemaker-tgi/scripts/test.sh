@@ -3,7 +3,7 @@
 curl "http://localhost:8080/invocations" \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "smollm2:135m",
+        "model": "qwen3:0.6b",
         "messages": [
             {
                 "role": "user",

@@ -1,7 +1,7 @@
 # AWS Sagemaker ollama Docker Image
 
 This image is used to run [ollama](https://github.com/ollama/ollama) on AWS Sagemaker, with
-`smollm2:135m` automatically pulled.
+`qwen3:0.6b` automatically pulled.
 We use it to provide a persistent endpoint for our e2e tests
 
 ## Deploying (for TensorZero team)
