@@ -2,9 +2,7 @@ use json_pointer::JsonPointer;
 use rust_decimal::Decimal;
 
 use crate::error::{Error, ErrorDetails};
-use tensorzero_types::{
-    CostPointerConfig, UninitializedCostConfig, UninitializedCostConfigEntry, UninitializedCostRate,
-};
+use tensorzero_types::{CostPointerConfig, UninitializedCostConfig, UninitializedCostConfigEntry};
 
 /// Decimal type alias for cost values.
 pub type Cost = Decimal;
@@ -76,11 +74,19 @@ fn load_cost_config_entry(entry: UninitializedCostConfigEntry) -> Result<CostCon
         }
     };
 
-    let cost_per_unit = match entry.rate {
-        UninitializedCostRate::PerMillion { cost_per_million } => {
-            cost_per_million / Decimal::from(1_000_000)
+    let cost_per_unit = match (entry.rate.cost_per_million, entry.rate.cost_per_unit) {
+        (Some(_), Some(_)) => {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "cannot specify both `cost_per_million` and `cost_per_unit`".to_string(),
+            }));
         }
-        UninitializedCostRate::PerUnit { cost_per_unit } => cost_per_unit,
+        (None, None) => {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "must specify either `cost_per_million` or `cost_per_unit`".to_string(),
+            }));
+        }
+        (Some(cost_per_million), None) => cost_per_million / Decimal::from(1_000_000),
+        (None, Some(cost_per_unit)) => cost_per_unit,
     };
 
     Ok(CostConfigEntry {
@@ -93,8 +99,23 @@ fn load_cost_config_entry(entry: UninitializedCostConfigEntry) -> Result<CostCon
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;
+    use tensorzero_types::UninitializedCostRate;
 
     use super::*;
+
+    fn per_million(value: Decimal) -> UninitializedCostRate {
+        UninitializedCostRate {
+            cost_per_million: Some(value),
+            cost_per_unit: None,
+        }
+    }
+
+    fn per_unit(value: Decimal) -> UninitializedCostRate {
+        UninitializedCostRate {
+            cost_per_million: None,
+            cost_per_unit: Some(value),
+        }
+    }
 
     #[derive(Deserialize)]
     struct UninitializedCostConfigWrapper {
@@ -111,9 +132,7 @@ mod tests {
             pointer: CostPointerConfig::Unified {
                 pointer: "/usage/input_tokens".to_string(),
             },
-            rate: UninitializedCostRate::PerMillion {
-                cost_per_million: Decimal::from(3),
-            },
+            rate: per_million(Decimal::from(3)),
             required: false,
         }];
         let result = load_cost_config(config).expect("should load successfully");
@@ -131,9 +150,7 @@ mod tests {
             pointer: CostPointerConfig::Unified {
                 pointer: "/usage/total_cost".to_string(),
             },
-            rate: UninitializedCostRate::PerUnit {
-                cost_per_unit: Decimal::new(5, 2), // 0.05
-            },
+            rate: per_unit(Decimal::new(5, 2)), // 0.05
             required: true,
         }];
         let result = load_cost_config(config).expect("should load successfully");
@@ -166,11 +183,12 @@ cost_per_million = 3.0
             "should be a unified pointer"
         );
         assert!(
-            matches!(
-                wrapper.cost[0].rate,
-                UninitializedCostRate::PerMillion { .. }
-            ),
-            "should be a per-million rate"
+            wrapper.cost[0].rate.cost_per_million.is_some(),
+            "should have a per-million rate"
+        );
+        assert!(
+            wrapper.cost[0].rate.cost_per_unit.is_none(),
+            "should not have a per-unit rate"
         );
     }
 
@@ -185,8 +203,12 @@ cost_per_unit = 0.05
         let wrapper: UninitializedCostConfigWrapper =
             toml::from_str(toml_str).expect("should deserialize");
         assert!(
-            matches!(wrapper.cost[0].rate, UninitializedCostRate::PerUnit { .. }),
-            "should be a per-unit rate"
+            wrapper.cost[0].rate.cost_per_unit.is_some(),
+            "should have a per-unit rate"
+        );
+        assert!(
+            wrapper.cost[0].rate.cost_per_million.is_none(),
+            "should not have a per-million rate"
         );
     }
 
@@ -213,9 +235,7 @@ cost_per_million = 1.5
             pointer: CostPointerConfig::Unified {
                 pointer: "no_leading_slash".to_string(),
             },
-            rate: UninitializedCostRate::PerMillion {
-                cost_per_million: Decimal::from(1),
-            },
+            rate: per_million(Decimal::from(1)),
             required: false,
         }];
         let err = load_cost_config(config).expect_err("should fail on invalid pointer");
@@ -233,9 +253,7 @@ cost_per_million = 1.5
                 pointer_nonstreaming: "/valid".to_string(),
                 pointer_streaming: "invalid_no_slash".to_string(),
             },
-            rate: UninitializedCostRate::PerUnit {
-                cost_per_unit: Decimal::from(1),
-            },
+            rate: per_unit(Decimal::from(1)),
             required: false,
         }];
         let err = load_cost_config(config).expect_err("should fail on invalid split pointer");
@@ -253,10 +271,14 @@ cost_per_million = 1.5
 pointer = "/usage/tokens"
 "#;
 
-        let result = toml::from_str::<UninitializedCostConfigWrapper>(toml_str);
+        let wrapper: UninitializedCostConfigWrapper = toml::from_str(toml_str)
+            .expect("should deserialize with both rates defaulting to None");
+        let err =
+            load_cost_config(wrapper.cost).expect_err("should fail when neither rate is specified");
+        let msg = err.to_string();
         assert!(
-            result.is_err(),
-            "should fail when no rate (cost_per_million or cost_per_unit) is specified"
+            msg.contains("must specify either"),
+            "error should mention missing rate: {msg}"
         );
     }
 
@@ -304,9 +326,7 @@ cost_per_unit = 0.3
             pointer: CostPointerConfig::Unified {
                 pointer: "/discount".to_string(),
             },
-            rate: UninitializedCostRate::PerUnit {
-                cost_per_unit: Decimal::new(-5, 2), // -0.05
-            },
+            rate: per_unit(Decimal::new(-5, 2)), // -0.05
             required: false,
         }];
         let result = load_cost_config(config).expect("negative costs should be allowed");
@@ -318,9 +338,7 @@ cost_per_unit = 0.3
     }
 
     #[test]
-    fn test_both_rates_present_takes_per_million() {
-        // When both cost_per_million and cost_per_unit are present,
-        // `#[serde(untagged)]` tries PerMillion first.
+    fn test_both_rates_rejected() {
         let toml_str = r#"
 [[cost]]
 pointer = "/usage/tokens"
@@ -330,12 +348,12 @@ cost_per_unit = 0.5
 
         let wrapper: UninitializedCostConfigWrapper =
             toml::from_str(toml_str).expect("should deserialize");
+        let err = load_cost_config(wrapper.cost)
+            .expect_err("should reject config with both rates specified");
+        let msg = err.to_string();
         assert!(
-            matches!(
-                wrapper.cost[0].rate,
-                UninitializedCostRate::PerMillion { .. }
-            ),
-            "when both rates are present, per_million should take precedence (listed first in enum)"
+            msg.contains("cannot specify both"),
+            "error should mention both rates: {msg}"
         );
     }
 
@@ -346,9 +364,7 @@ cost_per_unit = 0.5
             pointer: CostPointerConfig::Unified {
                 pointer: String::new(),
             },
-            rate: UninitializedCostRate::PerUnit {
-                cost_per_unit: Decimal::from(1),
-            },
+            rate: per_unit(Decimal::from(1)),
             required: false,
         }];
         assert!(
@@ -368,9 +384,7 @@ cost_per_unit = 0.5
                 pointer: CostPointerConfig::Unified {
                     pointer: "/usage/input_tokens".to_string(),
                 },
-                rate: UninitializedCostRate::PerMillion {
-                    cost_per_million: Decimal::from(3),
-                },
+                rate: per_million(Decimal::from(3)),
                 required: true,
             },
             UninitializedCostConfigEntry {
@@ -378,9 +392,7 @@ cost_per_unit = 0.5
                     pointer_nonstreaming: "/usage/output_tokens".to_string(),
                     pointer_streaming: "/usage/stream_output_tokens".to_string(),
                 },
-                rate: UninitializedCostRate::PerUnit {
-                    cost_per_unit: Decimal::new(15, 6), // 0.000015
-                },
+                rate: per_unit(Decimal::new(15, 6)), // 0.000015
                 required: false,
             },
         ];
@@ -426,9 +438,7 @@ cost_per_unit = 0.5
             pointer: CostPointerConfig::Unified {
                 pointer: "/foo/bar".to_string(),
             },
-            rate: UninitializedCostRate::PerUnit {
-                cost_per_unit: Decimal::from(1),
-            },
+            rate: per_unit(Decimal::from(1)),
             required: false,
         }];
         assert!(
@@ -443,9 +453,7 @@ cost_per_unit = 0.5
             pointer: CostPointerConfig::Unified {
                 pointer: "foo/bar".to_string(),
             },
-            rate: UninitializedCostRate::PerUnit {
-                cost_per_unit: Decimal::from(1),
-            },
+            rate: per_unit(Decimal::from(1)),
             required: false,
         }];
         assert!(

@@ -14,16 +14,11 @@ pub struct UninitializedCostConfigEntry {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum UninitializedCostRate {
-    PerMillion {
-        #[serde(with = "rust_decimal::serde::float")]
-        cost_per_million: Decimal,
-    },
-    PerUnit {
-        #[serde(with = "rust_decimal::serde::float")]
-        cost_per_unit: Decimal,
-    },
+pub struct UninitializedCostRate {
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub cost_per_million: Option<Decimal>,
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub cost_per_unit: Option<Decimal>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
