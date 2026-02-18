@@ -214,6 +214,8 @@ services:
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
       # Flaky tests to skip (nextest filter expression, e.g. "test(hyperbolic)|test(tgi)")
       CARGO_NEXTEST_FLAKY_TESTS: ${CARGO_NEXTEST_FLAKY_TESTS:-}
+      # Override retry count (e.g. 0 for scheduled no-cache runs to avoid burning time on provider failures)
+      CARGO_NEXTEST_RETRIES: ${CARGO_NEXTEST_RETRIES:-}
     volumes:
       - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
       - ./config:/app/tensorzero-core/tests/e2e/config:ro

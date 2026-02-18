@@ -49,4 +49,5 @@ ENV CI=true
 
 # Set the entrypoint to run tests from archive with absolute config file path and e2e profile
 # If CARGO_NEXTEST_FLAKY_TESTS is set, exclude those tests using -E filter
-CMD ["sh", "-c", "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app --config-file /app/.config/nextest.toml --profile e2e -j 32 ${CARGO_NEXTEST_FLAKY_TESTS:+-E \"not ($CARGO_NEXTEST_FLAKY_TESTS)\"}"]
+# If CARGO_NEXTEST_RETRIES is set, override the profile's retry count (e.g. 0 for scheduled no-cache runs)
+CMD ["sh", "-c", "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app --config-file /app/.config/nextest.toml --profile e2e -j 32 ${CARGO_NEXTEST_RETRIES:+--retries $CARGO_NEXTEST_RETRIES} ${CARGO_NEXTEST_FLAKY_TESTS:+-E \"not ($CARGO_NEXTEST_FLAKY_TESTS)\"}"]

@@ -210,6 +210,12 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
+      - name: Disable nextest retries for scheduled runs
+        # Scheduled runs bypass the provider-proxy cache to detect provider flakiness.
+        # Retries waste time when providers are down — we want fast, complete failure lists.
+        if: github.event_name == 'schedule'
+        run: echo "CARGO_NEXTEST_RETRIES=0" >> $GITHUB_ENV
+
       - name: Pull images referenced by the compose file
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
 
