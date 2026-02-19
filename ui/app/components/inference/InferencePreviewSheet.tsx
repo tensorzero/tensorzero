@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from "react";
 import { Link, useFetcher } from "react-router";
-import { Maximize2, X } from "lucide-react";
+import { MoveUpRight, X } from "lucide-react";
 import {
   Sheet,
   SheetClose,
@@ -117,7 +117,7 @@ export function InferencePreviewSheet({
                   className="text-fg-secondary cursor-pointer rounded-sm transition-colors hover:text-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2"
                   aria-label="Open full page"
                 >
-                  <Maximize2 className="h-3.5 w-3.5" />
+                  <MoveUpRight className="h-4 w-4" />
                 </Link>
               </TooltipTrigger>
               <TooltipContent>Open full page</TooltipContent>
