@@ -93,6 +93,7 @@ function HoverCardContent({ uuid, obj, isOpen }: HoverCardContentProps) {
     case "json_datapoint":
       return <DatapointContent uuid={uuid} obj={obj} />;
     case "model_inference":
+      return <ModelInferenceContent uuid={uuid} obj={obj} />;
     case "boolean_feedback":
     case "float_feedback":
     case "comment_feedback":
@@ -205,6 +206,23 @@ function DatapointContent({ uuid, obj }: DatapointContentProps) {
   );
 }
 
+interface ModelInferenceContentProps {
+  uuid: string;
+  obj: Extract<ResolvedObject, { type: "model_inference" }>;
+}
+
+function ModelInferenceContent({ uuid, obj }: ModelInferenceContentProps) {
+  return (
+    <div className="flex flex-col gap-4">
+      <TypeHeaderLink uuid={uuid} obj={obj}>
+        Model Inference
+      </TypeHeaderLink>
+      <InfoItem label="Model" value={obj.model_name} />
+      <InfoItem label="Provider" value={obj.model_provider_name} />
+    </div>
+  );
+}
+
 interface TypeHeaderLinkProps {
   uuid: string;
   obj: ResolvedObject;
@@ -213,7 +231,8 @@ interface TypeHeaderLinkProps {
 
 export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
-  const { openInferenceSheet, openEpisodeSheet } = useEntitySheet();
+  const { openInferenceSheet, openEpisodeSheet, openModelInferenceSheet } =
+    useEntitySheet();
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -224,9 +243,18 @@ export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
       } else if (obj.type === "episode") {
         e.preventDefault();
         openEpisodeSheet(uuid);
+      } else if (obj.type === "model_inference") {
+        e.preventDefault();
+        openModelInferenceSheet(uuid);
       }
     },
-    [obj.type, uuid, openInferenceSheet, openEpisodeSheet],
+    [
+      obj.type,
+      uuid,
+      openInferenceSheet,
+      openEpisodeSheet,
+      openModelInferenceSheet,
+    ],
   );
 
   if (!url) return null;
