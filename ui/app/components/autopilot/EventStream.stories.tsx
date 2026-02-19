@@ -660,10 +660,10 @@ const visualizationEvents: GatewayEvent[] = [
             },
           },
           confident_top_k_sizes: [1, 3],
-          summary_text: `## Top-K Evaluation Overview
+          summary_text: `## Overview
 The top-k evaluation tool identifies the best-performing variants from a set of candidates using adaptive evaluation with statistical confidence bounds.
 
-## Chart Descriptions
+## Chart Description
 The top chart shows the estimated mean performance with final 95% confidence intervals for each variant.
 
 The bottom chart shows the number of evaluations per variant.
@@ -671,12 +671,12 @@ The bottom chart shows the number of evaluations per variant.
 ## Results
 The algorithm identified the top-1 variant and the top-3 variants.
 
-### Efficiency
-- Total evaluations: 170.
-- Total evaluations that would have been run without adaptive stopping: 250.
-- Savings: (250 - 170) / 250 * 100% = 32%.
+## Efficiency
+- Total evaluations: 190.
+- Total evaluations that would have been run without adaptive stopping: 300.
+- Savings: (300 - 190) / 300 * 100% = 36.7%.
 
-### Recommended Next Steps
+## Next Steps
 Deploy the "echo" variant to production for improved performance.`,
         },
       },
