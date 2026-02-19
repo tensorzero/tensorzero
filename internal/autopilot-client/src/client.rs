@@ -359,9 +359,12 @@ impl AutopilotClient {
     /// Initiates an S3 upload by requesting temporary credentials from the Autopilot API.
     pub async fn s3_initiate_upload(
         &self,
+        session_id: Uuid,
         request: S3UploadRequest,
     ) -> Result<S3UploadResponse, AutopilotError> {
-        let url = self.base_url.join("/v1/aws/s3_initiate_upload")?;
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/aws/s3_initiate_upload"))?;
         let response = self
             .http_client
             .post(url)

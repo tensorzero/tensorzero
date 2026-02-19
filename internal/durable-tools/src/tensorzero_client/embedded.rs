@@ -176,6 +176,7 @@ impl TensorZeroClient for EmbeddedClient {
 
     async fn s3_initiate_upload(
         &self,
+        session_id: Uuid,
         request: S3UploadRequest,
     ) -> Result<S3UploadResponse, TensorZeroClientError> {
         let autopilot_client = self
@@ -184,7 +185,7 @@ impl TensorZeroClient for EmbeddedClient {
             .as_ref()
             .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
-        s3_initiate_upload(autopilot_client, request)
+        s3_initiate_upload(autopilot_client, session_id, request)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
