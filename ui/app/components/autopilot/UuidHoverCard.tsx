@@ -127,9 +127,9 @@ function InferenceContent({ uuid, obj, isOpen }: InferenceContentProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <TypeBadgeLink uuid={uuid} obj={obj}>
+      <TypeHeaderLink uuid={uuid} obj={obj}>
         Inference
-      </TypeBadgeLink>
+      </TypeHeaderLink>
       <FunctionItem
         functionName={obj.function_name}
         functionType={obj.function_type}
@@ -163,9 +163,9 @@ function EpisodeContent({ uuid, obj, isOpen }: EpisodeContentProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <TypeBadgeLink uuid={uuid} obj={obj}>
+      <TypeHeaderLink uuid={uuid} obj={obj}>
         Episode
-      </TypeBadgeLink>
+      </TypeHeaderLink>
       <InfoItem
         label="Inferences"
         value={data ? String(data.inference_count) : null}
@@ -196,22 +196,22 @@ function DatapointContent({ uuid, obj }: DatapointContentProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <TypeBadgeLink uuid={uuid} obj={obj}>
+      <TypeHeaderLink uuid={uuid} obj={obj}>
         {typeLabel}
-      </TypeBadgeLink>
+      </TypeHeaderLink>
       <InfoItem label="Dataset" value={obj.dataset_name} />
       <InfoItem label="Function" value={obj.function_name} />
     </div>
   );
 }
 
-interface TypeBadgeLinkProps {
+interface TypeHeaderLinkProps {
   uuid: string;
   obj: ResolvedObject;
   children: React.ReactNode;
 }
 
-export function TypeBadgeLink({ uuid, obj, children }: TypeBadgeLinkProps) {
+export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
   const { openInferenceSheet } = useEntitySheet();
 
