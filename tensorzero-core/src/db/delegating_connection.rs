@@ -70,14 +70,8 @@ use crate::tool::ToolCallConfigDatabaseInsert;
 /// This struct delegates database operations as follows:
 /// - Read operations: Delegate to Postgres if `ENABLE_POSTGRES_READ` is set,
 ///   otherwise delegate to ClickHouse
-/// - Write operations: Always write to ClickHouse, conditionally write to Postgres
-///   based on the `ENABLE_POSTGRES_WRITE` feature flag
-///
-/// Postgres write errors are logged but do not cause the operation to fail,
-/// as ClickHouse remains the source of truth.
-///
-/// TODO(#5691): Once we're ready to remove ClickHouse dependency, reason about
-/// the write path and which write is required for the operation to succeed.
+/// - Write operations: Write to Postgres when `ENABLE_POSTGRES_WRITE` is set,
+///   otherwise write to ClickHouse
 #[derive(Clone)]
 pub struct DelegatingDatabaseConnection {
     pub clickhouse: ClickHouseConnectionInfo,
@@ -116,10 +110,11 @@ impl DelegatingDatabaseQueries for PostgresConnectionInfo {
 impl DelegatingDatabaseQueries for DelegatingDatabaseConnection {
     fn batcher_join_handles(&self) -> Vec<BatchWriterHandle> {
         let mut handles = Vec::new();
-        if let Some(h) = self.clickhouse.batcher_join_handle() {
-            handles.push(h);
-        }
-        if let Some(h) = self.postgres.batcher_join_handle() {
+        if ENABLE_POSTGRES_WRITE.get() {
+            if let Some(h) = self.postgres.batcher_join_handle() {
+                handles.push(h);
+            }
+        } else if let Some(h) = self.clickhouse.batcher_join_handle() {
             handles.push(h);
         }
         handles
@@ -141,6 +136,14 @@ impl DelegatingDatabaseConnection {
             &self.clickhouse
         }
     }
+
+    fn get_write_database(&self) -> &(dyn DelegatingDatabaseQueries + Sync) {
+        if ENABLE_POSTGRES_WRITE.get() {
+            &self.postgres
+        } else {
+            &self.clickhouse
+        }
+    }
 }
 
 #[async_trait]
@@ -155,15 +158,9 @@ impl ConfigQueries for DelegatingDatabaseConnection {
     }
 
     async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
-        self.clickhouse.write_config_snapshot(snapshot).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.write_config_snapshot(snapshot).await
-        {
-            tracing::error!("Error writing config snapshot to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database()
+            .write_config_snapshot(snapshot)
+            .await
     }
 }
 
@@ -291,75 +288,39 @@ impl FeedbackQueries for DelegatingDatabaseConnection {
             .await
     }
 
-    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+    // ===== Write methods: delegate to write database =====
 
     async fn insert_boolean_feedback(
         &self,
         row: &BooleanMetricFeedbackInsert,
     ) -> Result<(), Error> {
-        self.clickhouse.insert_boolean_feedback(row).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_boolean_feedback(row).await
-        {
-            tracing::error!("Error writing boolean feedback to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database().insert_boolean_feedback(row).await
     }
 
     async fn insert_float_feedback(&self, row: &FloatMetricFeedbackInsert) -> Result<(), Error> {
-        self.clickhouse.insert_float_feedback(row).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_float_feedback(row).await
-        {
-            tracing::error!("Error writing float feedback to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database().insert_float_feedback(row).await
     }
 
     async fn insert_comment_feedback(&self, row: &CommentFeedbackInsert) -> Result<(), Error> {
-        self.clickhouse.insert_comment_feedback(row).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_comment_feedback(row).await
-        {
-            tracing::error!("Error writing comment feedback to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database().insert_comment_feedback(row).await
     }
 
     async fn insert_demonstration_feedback(
         &self,
         row: &DemonstrationFeedbackInsert,
     ) -> Result<(), Error> {
-        self.clickhouse.insert_demonstration_feedback(row).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_demonstration_feedback(row).await
-        {
-            tracing::error!("Error writing demonstration feedback to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database()
+            .insert_demonstration_feedback(row)
+            .await
     }
 
     async fn insert_static_eval_feedback(
         &self,
         row: &StaticEvaluationHumanFeedbackInsert,
     ) -> Result<(), Error> {
-        self.clickhouse.insert_static_eval_feedback(row).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_static_eval_feedback(row).await
-        {
-            tracing::error!("Error writing static eval feedback to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database()
+            .insert_static_eval_feedback(row)
+            .await
     }
 }
 
@@ -439,7 +400,7 @@ impl InferenceQueries for DelegatingDatabaseConnection {
             .await
     }
 
-    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+    // ===== Write methods: delegate to write database =====
 
     async fn insert_chat_inferences(
         &self,
@@ -449,15 +410,7 @@ impl InferenceQueries for DelegatingDatabaseConnection {
             return Ok(());
         }
 
-        self.clickhouse.insert_chat_inferences(rows).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_chat_inferences(rows).await
-        {
-            tracing::error!("Error writing chat inferences to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database().insert_chat_inferences(rows).await
     }
 
     async fn insert_json_inferences(
@@ -468,15 +421,7 @@ impl InferenceQueries for DelegatingDatabaseConnection {
             return Ok(());
         }
 
-        self.clickhouse.insert_json_inferences(rows).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_json_inferences(rows).await
-        {
-            tracing::error!("Error writing json inferences to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database().insert_json_inferences(rows).await
     }
 
     // ===== Inference count methods (merged from InferenceCountQueries trait) =====
@@ -549,18 +494,12 @@ impl DatasetQueries for DelegatingDatabaseConnection {
         self.get_read_database().get_datapoints(params).await
     }
 
-    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+    // ===== Write methods: delegate to write database =====
 
     async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error> {
-        let count = self.clickhouse.insert_datapoints(datapoints).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_datapoints(datapoints).await
-        {
-            tracing::error!("Error writing datapoints to Postgres: {e}");
-        }
-
-        Ok(count)
+        self.get_write_database()
+            .insert_datapoints(datapoints)
+            .await
     }
 
     async fn delete_datapoints(
@@ -568,21 +507,9 @@ impl DatasetQueries for DelegatingDatabaseConnection {
         dataset_name: &str,
         datapoint_ids: Option<&[Uuid]>,
     ) -> Result<u64, Error> {
-        let count = self
-            .clickhouse
+        self.get_write_database()
             .delete_datapoints(dataset_name, datapoint_ids)
-            .await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self
-                .postgres
-                .delete_datapoints(dataset_name, datapoint_ids)
-                .await
-        {
-            tracing::error!("Error deleting datapoints from Postgres: {e}");
-        }
-
-        Ok(count)
+            .await
     }
 
     async fn clone_datapoints(
@@ -591,21 +518,9 @@ impl DatasetQueries for DelegatingDatabaseConnection {
         source_datapoint_ids: &[Uuid],
         id_mappings: &HashMap<Uuid, Uuid>,
     ) -> Result<Vec<Option<Uuid>>, Error> {
-        let results = self
-            .clickhouse
+        self.get_write_database()
             .clone_datapoints(target_dataset_name, source_datapoint_ids, id_mappings)
-            .await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self
-                .postgres
-                .clone_datapoints(target_dataset_name, source_datapoint_ids, id_mappings)
-                .await
-        {
-            tracing::error!("Error cloning datapoints in Postgres: {e}");
-        }
-
-        Ok(results)
+            .await
     }
 }
 #[async_trait]
@@ -666,33 +581,19 @@ impl BatchInferenceQueries for DelegatingDatabaseConnection {
             .await
     }
 
-    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+    // ===== Write methods: delegate to write database =====
 
     async fn write_batch_request(&self, row: &BatchRequestRow<'_>) -> Result<(), Error> {
-        self.clickhouse.write_batch_request(row).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.write_batch_request(row).await
-        {
-            tracing::error!("Error writing batch request to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database().write_batch_request(row).await
     }
 
     async fn write_batch_model_inferences(
         &self,
         rows: &[BatchModelInferenceRow<'_>],
     ) -> Result<(), Error> {
-        self.clickhouse.write_batch_model_inferences(rows).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.write_batch_model_inferences(rows).await
-        {
-            tracing::error!("Error writing batch model inferences to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database()
+            .write_batch_model_inferences(rows)
+            .await
     }
 }
 
@@ -737,22 +638,16 @@ impl ModelInferenceQueries for DelegatingDatabaseConnection {
             .get_model_latency_quantile_function_inputs()
     }
 
-    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+    // ===== Write methods: delegate to write database =====
 
     async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {
         if rows.is_empty() {
             return Ok(());
         }
 
-        self.clickhouse.insert_model_inferences(rows).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_model_inferences(rows).await
-        {
-            tracing::error!("Error writing model inferences to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database()
+            .insert_model_inferences(rows)
+            .await
     }
 }
 #[async_trait]
@@ -871,7 +766,7 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
             .await
     }
 
-    // ===== Write methods: write to ClickHouse, conditionally write to Postgres =====
+    // ===== Write methods: delegate to write database =====
 
     async fn insert_workflow_evaluation_run(
         &self,
@@ -882,7 +777,7 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
         run_display_name: Option<&str>,
         snapshot_hash: &SnapshotHash,
     ) -> Result<(), Error> {
-        self.clickhouse
+        self.get_write_database()
             .insert_workflow_evaluation_run(
                 run_id,
                 variant_pins,
@@ -891,25 +786,7 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
                 run_display_name,
                 snapshot_hash,
             )
-            .await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self
-                .postgres
-                .insert_workflow_evaluation_run(
-                    run_id,
-                    variant_pins,
-                    tags,
-                    project_name,
-                    run_display_name,
-                    snapshot_hash,
-                )
-                .await
-        {
-            tracing::error!("Error writing workflow evaluation run to Postgres: {e}");
-        }
-
-        Ok(())
+            .await
     }
 
     async fn insert_workflow_evaluation_run_episode(
@@ -920,7 +797,7 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
         tags: &HashMap<String, String>,
         snapshot_hash: &SnapshotHash,
     ) -> Result<(), Error> {
-        self.clickhouse
+        self.get_write_database()
             .insert_workflow_evaluation_run_episode(
                 run_id,
                 episode_id,
@@ -928,24 +805,7 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
                 tags,
                 snapshot_hash,
             )
-            .await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self
-                .postgres
-                .insert_workflow_evaluation_run_episode(
-                    run_id,
-                    episode_id,
-                    task_name,
-                    tags,
-                    snapshot_hash,
-                )
-                .await
-        {
-            tracing::error!("Error writing workflow evaluation run episode to Postgres: {e}");
-        }
-
-        Ok(())
+            .await
     }
 }
 
@@ -1092,27 +952,13 @@ impl EpisodeQueries for DelegatingDatabaseConnection {
 #[async_trait]
 impl DICLQueries for DelegatingDatabaseConnection {
     async fn insert_dicl_example(&self, example: &StoredDICLExample) -> Result<(), Error> {
-        self.clickhouse.insert_dicl_example(example).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_dicl_example(example).await
-        {
-            tracing::error!("Error writing DICL example to Postgres: {e}");
-        }
-
-        Ok(())
+        self.get_write_database().insert_dicl_example(example).await
     }
 
     async fn insert_dicl_examples(&self, examples: &[StoredDICLExample]) -> Result<u64, Error> {
-        let count = self.clickhouse.insert_dicl_examples(examples).await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self.postgres.insert_dicl_examples(examples).await
-        {
-            tracing::error!("Error writing DICL examples to Postgres: {e}");
-        }
-
-        Ok(count)
+        self.get_write_database()
+            .insert_dicl_examples(examples)
+            .await
     }
 
     async fn get_similar_dicl_examples(
@@ -1143,21 +989,9 @@ impl DICLQueries for DelegatingDatabaseConnection {
         variant_name: &str,
         namespace: Option<&str>,
     ) -> Result<u64, Error> {
-        let count = self
-            .clickhouse
+        self.get_write_database()
             .delete_dicl_examples(function_name, variant_name, namespace)
-            .await?;
-
-        if ENABLE_POSTGRES_WRITE.get()
-            && let Err(e) = self
-                .postgres
-                .delete_dicl_examples(function_name, variant_name, namespace)
-                .await
-        {
-            tracing::error!("Error deleting DICL examples from Postgres: {e}");
-        }
-
-        Ok(count)
+            .await
     }
 }
 
