@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useEntitySheet } from "~/context/entity-sheet";
 import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSheet";
 import { EpisodePreviewSheet } from "~/components/episode/EpisodePreviewSheet";
+import { FeedbackPreviewSheet } from "~/components/feedback/FeedbackPreviewSheet";
 
 export function EntitySheet() {
   const { sheetState, closeSheet } = useEntitySheet();
@@ -34,6 +35,14 @@ export function EntitySheet() {
         <EpisodePreviewSheet
           episodeId={activeState.id}
           isOpen={isOpen}
+          onClose={closeSheet}
+        />
+      );
+    case "feedback":
+      return (
+        <FeedbackPreviewSheet
+          feedbackId={sheetState.id}
+          isOpen
           onClose={closeSheet}
         />
       );

@@ -60,6 +60,8 @@ export default [
 
     route("episode/:episode_id", "routes/api/episode/$episode_id/route.ts"),
 
+    route("feedback-detail/:id", "routes/api/feedback-detail/$id/route.ts"),
+
     route(
       "datasets/datapoints/from-inference",
       "routes/api/datasets/datapoints/from-inference/route.ts",
