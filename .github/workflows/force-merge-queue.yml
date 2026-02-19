@@ -1,5 +1,6 @@
 name: Force add to merge queue
 permissions:
+  checks: read
   contents: read
   actions: write
   statuses: write
@@ -35,15 +36,17 @@ jobs:
         if: github.event.action == 'labeled'
         continue-on-error: true
         run: |
-          # Find the latest general.yml run for this PR's head commit
-          RUN_ID=$(gh run list \
-            --workflow=general.yml \
-            --commit=${{ github.event.pull_request.head.sha }} \
-            --limit=1 \
-            --json databaseId,conclusion \
-            --jq '.[0] | select(.conclusion == "failure") | .databaseId')
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
 
-          if [ -n "$RUN_ID" ]; then
+          # Find the workflow run ID through the check-runs API, which works reliably
+          # for both fork and non-fork PRs (fork commits are reachable via refs/pull/N/head).
+          # gh run list --commit doesn't always find runs for fork PRs.
+          DETAILS_URL=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
+            --jq '[.check_runs[] | select(.name == "check-all-general-jobs-passed" and .conclusion == "failure")] | .[0].details_url // empty')
+
+          if [ -n "$DETAILS_URL" ]; then
+            # Extract the run ID from the details URL (format: .../actions/runs/{run_id}/job/{job_id})
+            RUN_ID=$(echo "$DETAILS_URL" | sed 's|.*/actions/runs/||; s|/.*||')
             echo "Restarting failed general.yml run: $RUN_ID"
             gh run rerun "$RUN_ID"
           else
