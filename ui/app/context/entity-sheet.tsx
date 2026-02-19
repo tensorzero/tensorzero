@@ -34,18 +34,12 @@ const EntitySheetContext = createContext<EntitySheetContextValue | null>(null);
 /**
  * Manages entity sheet state as URL search params (?sheet=inference&sheetId=…).
  *
- * URL-backed state serves four purposes:
- *  1. Deep links — users can share or bookmark a URL with a sheet already open,
- *     enabling progressive drill-down through the information chain without
- *     leaving the current page context.
- *  2. History navigation — each step (open sheet, navigate to full page) pushes
- *     a history entry, so the back button rewinds exactly as the user played
- *     forward: full page → sheet → original page.
- *  3. Seamless round-trips — when a user opens a sheet, clicks through to the
- *     full detail page, then presses back, they land on the sheet still open,
- *     not a bare page with the sheet gone.
- *  4. Dev hot-reload — sheet state survives HMR, making iterative development
- *     of sheet content seamless.
+ * URL-backed state serves three purposes:
+ *  1. Deep links — shareable/bookmarkable URLs with a sheet already open.
+ *  2. Reversible progressive disclosure — each drill-down step (open sheet,
+ *     navigate to full page) is a history entry, so the back button rewinds
+ *     the same path with no surprises.
+ *  3. Dev hot-reload — sheet state survives HMR.
  *
  * We use window.history.pushState/replaceState rather than React Router's
  * setSearchParams to avoid triggering loader revalidation, which would reset
