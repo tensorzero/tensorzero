@@ -58,6 +58,8 @@ export default [
       "routes/api/inference/$inference_id/route.ts",
     ),
 
+    route("episode/:episode_id", "routes/api/episode/$episode_id/route.ts"),
+
     route(
       "datasets/datapoints/from-inference",
       "routes/api/datasets/datapoints/from-inference/route.ts",
