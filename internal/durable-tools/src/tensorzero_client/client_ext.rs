@@ -282,13 +282,16 @@ impl TensorZeroClient for Client {
 
     async fn s3_initiate_upload(
         &self,
+        session_id: Uuid,
         request: S3UploadRequest,
     ) -> Result<S3UploadResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 let url = http
                     .base_url
-                    .join("internal/autopilot/v1/aws/s3_initiate_upload")
+                    .join(&format!(
+                        "internal/autopilot/v1/sessions/{session_id}/aws/s3_initiate_upload"
+                    ))
                     .map_err(|e: url::ParseError| {
                         TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
@@ -328,6 +331,7 @@ impl TensorZeroClient for Client {
 
                 tensorzero_core::endpoints::internal::autopilot::s3_initiate_upload(
                     autopilot_client,
+                    session_id,
                     request,
                 )
                 .await

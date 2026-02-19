@@ -229,11 +229,11 @@ impl TaskTool for UploadDatasetTool {
         let credentials: S3UploadResponse = ctx
             .step(
                 "get_credentials",
-                side_info.tool_call_event_id,
-                |tool_call_event_id, state| async move {
+                (side_info.tool_call_event_id, side_info.session_id),
+                |(tool_call_event_id, session_id), state| async move {
                     let response = state
                         .t0_client()
-                        .s3_initiate_upload(S3UploadRequest { tool_call_event_id })
+                        .s3_initiate_upload(session_id, S3UploadRequest { tool_call_event_id })
                         .await
                         .map_err(|e| anyhow::Error::msg(e.to_string()))?;
                     Ok(response)

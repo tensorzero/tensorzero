@@ -195,10 +195,11 @@ pub async fn list_config_writes(
 /// This is the core function called by both the HTTP handler and embedded client.
 pub async fn s3_initiate_upload(
     autopilot_client: &AutopilotClient,
+    session_id: Uuid,
     request: S3UploadRequest,
 ) -> Result<S3UploadResponse, Error> {
     autopilot_client
-        .s3_initiate_upload(request)
+        .s3_initiate_upload(session_id, request)
         .await
         .map_err(Error::from)
 }
@@ -330,20 +331,21 @@ pub async fn list_config_writes_handler(
     Ok(Json(response))
 }
 
-/// Handler for `POST /internal/autopilot/v1/aws/s3_initiate_upload`
+/// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/aws/s3_initiate_upload`
 ///
 /// Initiates an S3 upload via the Autopilot API.
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.s3_initiate_upload", skip_all)]
 pub async fn s3_initiate_upload_handler(
     State(app_state): AppState,
+    Path(session_id): Path<Uuid>,
     StructuredJson(http_request): StructuredJson<S3InitiateUploadGatewayRequest>,
 ) -> Result<Json<S3UploadResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
     let request = S3UploadRequest {
         tool_call_event_id: http_request.tool_call_event_id,
     };
-    let response = s3_initiate_upload(&client, request).await?;
+    let response = s3_initiate_upload(&client, session_id, request).await?;
     Ok(Json(response))
 }
 

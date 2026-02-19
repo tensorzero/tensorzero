@@ -158,6 +158,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     /// Returns temporary S3 credentials for uploading data.
     async fn s3_initiate_upload(
         &self,
+        session_id: Uuid,
         request: S3UploadRequest,
     ) -> Result<S3UploadResponse, TensorZeroClientError>;
 
