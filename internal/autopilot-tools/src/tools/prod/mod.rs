@@ -48,7 +48,8 @@ pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};
 pub use run_evaluation::{RunEvaluationTool, RunEvaluationToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};
 pub use upload_dataset::{
-    UploadDatasetTool, UploadDatasetToolOutput, UploadDatasetToolParams, upload_dataset_parquet,
+    UploadDatasetFormat, UploadDatasetTool, UploadDatasetToolOutput, UploadDatasetToolParams,
+    upload_dataset_parquet,
 };
 pub use write_config::{
     EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
