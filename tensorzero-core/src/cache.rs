@@ -28,8 +28,6 @@ use std::fmt::Debug;
 use uuid::Uuid;
 
 /// Manager for cache operations, wrapping a `dyn CacheQueries` backend.
-///
-/// Uses Valkey if available, otherwise falls back to ClickHouse.
 #[derive(Clone)]
 pub struct CacheManager {
     client: Arc<dyn CacheQueries>,
@@ -42,8 +40,9 @@ impl CacheManager {
 
     /// Select the appropriate cache backend.
     ///
-    /// When `ENABLE_POSTGRES_WRITE` is off (legacy mode), uses ClickHouse.
-    /// When `ENABLE_POSTGRES_WRITE` is on, uses Valkey if available, otherwise disabled.
+    /// When `ENABLE_POSTGRES_WRITE` is off, uses ClickHouse.
+    /// When `ENABLE_POSTGRES_WRITE` is on (Postgres is the write target), uses Valkey
+    /// if available, otherwise falls back to ClickHouse.
     pub fn new_from_connections(
         valkey_connection_info: &ValkeyConnectionInfo,
         clickhouse_connection_info: &ClickHouseConnectionInfo,

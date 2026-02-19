@@ -29,7 +29,7 @@ define_flags! {
     /// A dummy test flag for unit tests.
     pub TEST_FLAG: bool = ("test_flag", false);
 
-    /// Enable writing to Postgres for data in addition to ClickHouse.
+    /// Write data to Postgres instead of ClickHouse.
     pub ENABLE_POSTGRES_WRITE: bool = ("enable_postgres_write", false);
 
     /// Enable reading from Postgres for data instead of ClickHouse.
