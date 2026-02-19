@@ -107,7 +107,7 @@ export function InferencePreviewSheet({
                 { label: "Inferences", href: "/observability/inferences" },
               ]}
             />
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-6">
               {showFullPageLink && inferenceData && (
                 <Link
                   to={toInferenceUrl(inferenceData.inference.inference_id)}
@@ -116,7 +116,7 @@ export function InferencePreviewSheet({
                   Open full page
                 </Link>
               )}
-              <SheetClose className="ring-offset-background focus:ring-ring rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden">
+              <SheetClose className="ring-offset-background focus:ring-ring cursor-pointer rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden">
                 <X className="h-4 w-4" />
                 <span className="sr-only">Close</span>
               </SheetClose>
