@@ -8,7 +8,7 @@ use crate::config::snapshot::SnapshotHash;
 use crate::endpoints::datasets::Datapoint;
 use crate::error::Error;
 use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text};
+use crate::inference::types::{ContentBlockChatOutput, FunctionType, JsonInferenceOutput, Text};
 use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
     serialize_none_as_empty_map,
@@ -257,24 +257,24 @@ impl StoredSample for StoredDatapoint {
         }
     }
 
-    fn input(&self) -> &StoredInput {
+    fn input(&self) -> Option<&StoredInput> {
         match self {
-            StoredDatapoint::Chat(datapoint) => &datapoint.input,
-            StoredDatapoint::Json(datapoint) => &datapoint.input,
+            StoredDatapoint::Chat(datapoint) => Some(&datapoint.input),
+            StoredDatapoint::Json(datapoint) => Some(&datapoint.input),
         }
     }
 
-    fn input_mut(&mut self) -> &mut StoredInput {
+    fn input_mut(&mut self) -> Option<&mut StoredInput> {
         match self {
-            StoredDatapoint::Chat(datapoint) => &mut datapoint.input,
-            StoredDatapoint::Json(datapoint) => &mut datapoint.input,
+            StoredDatapoint::Chat(datapoint) => Some(&mut datapoint.input),
+            StoredDatapoint::Json(datapoint) => Some(&mut datapoint.input),
         }
     }
 
-    fn into_input(self) -> StoredInput {
+    fn into_input(self) -> Option<StoredInput> {
         match self {
-            StoredDatapoint::Chat(datapoint) => datapoint.input,
-            StoredDatapoint::Json(datapoint) => datapoint.input,
+            StoredDatapoint::Chat(datapoint) => Some(datapoint.input),
+            StoredDatapoint::Json(datapoint) => Some(datapoint.input),
         }
     }
 
@@ -282,7 +282,8 @@ impl StoredSample for StoredDatapoint {
         match self {
             StoredDatapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
-                input: datapoint.input,
+                function_type: FunctionType::Chat,
+                input: Some(datapoint.input),
                 output: datapoint.output.clone(),
                 stored_output: datapoint.output.map(StoredOutput::Chat),
                 dispreferred_outputs: Vec::default(),
@@ -300,7 +301,8 @@ impl StoredSample for StoredDatapoint {
                 });
                 SimpleStoredSampleInfo {
                     function_name: datapoint.function_name,
-                    input: datapoint.input,
+                    function_type: FunctionType::Json,
+                    input: Some(datapoint.input),
                     output,
                     stored_output,
                     dispreferred_outputs: Vec::default(),

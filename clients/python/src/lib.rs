@@ -31,7 +31,7 @@ use python_helpers::{
 
 use crate::gil_helpers::in_tokio_runtime_no_gil;
 use tensorzero_core::{
-    config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
+    config::{ConfigPyClass, FunctionsConfigPyClass, Namespace, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
@@ -56,10 +56,7 @@ use tensorzero_core::{
     },
 };
 use tensorzero_core::{
-    endpoints::{
-        datasets::InsertDatapointParams,
-        workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
-    },
+    endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
     },
@@ -67,10 +64,10 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
-    ClientSecretString, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, Input, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference,
-    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
+    InferenceStream, Input, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
+    PostgresConfig, RenderedSample, StoredInference, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -114,7 +111,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<UninitializedGEPAConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
-    m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
     m.add_class::<ConfigPyClass>()?;
@@ -309,7 +305,7 @@ const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -317,6 +313,7 @@ impl BaseTensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -336,6 +333,7 @@ impl BaseTensorZeroGateway {
         include_original_response: Option<bool>,
         include_raw_response: Option<bool>,
         include_raw_usage: Option<bool>,
+        include_aggregated_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
@@ -347,6 +345,7 @@ impl BaseTensorZeroGateway {
             function_name,
             model_name,
             episode_id,
+            namespace,
             stream,
             params,
             variant_name,
@@ -366,6 +365,7 @@ impl BaseTensorZeroGateway {
             include_original_response.unwrap_or(false),
             include_raw_response.unwrap_or(false),
             include_raw_usage.unwrap_or(false),
+            include_aggregated_response.unwrap_or(false),
             otlp_traces_extra_headers,
             otlp_traces_extra_attributes,
             otlp_traces_extra_resources,
@@ -424,6 +424,7 @@ impl BaseTensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -443,6 +444,7 @@ impl BaseTensorZeroGateway {
         include_original_response: bool,
         include_raw_response: bool,
         include_raw_usage: bool,
+        include_aggregated_response: bool,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
@@ -450,6 +452,13 @@ impl BaseTensorZeroGateway {
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
             .map(|id| python_uuid_to_uuid("episode_id", id))
+            .transpose()?;
+
+        let namespace = namespace
+            .map(|ns| {
+                Namespace::new(ns)
+                    .map_err(|e| PyValueError::new_err(format!("Invalid namespace: {e}")))
+            })
             .transpose()?;
 
         let params: Option<InferenceParams> = if let Some(params) = params {
@@ -535,6 +544,7 @@ impl BaseTensorZeroGateway {
             model_name,
             stream,
             episode_id,
+            namespace,
             variant_name,
             dryrun,
             tags: tags.unwrap_or_default(),
@@ -554,6 +564,7 @@ impl BaseTensorZeroGateway {
             include_original_response,
             include_raw_response,
             include_raw_usage,
+            include_aggregated_response,
             extra_body,
             extra_headers,
             internal_dynamic_variant_config,
@@ -667,7 +678,7 @@ impl TensorZeroGateway {
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
-    /// :param postgres_url: The URL of the PostgreSQL instance to use for rate limiting.
+    /// :param postgres_url: The URL of the Postgres instance to use for rate limiting.
     /// :param valkey_url: The URL of the Valkey instance to use for rate limiting.
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
@@ -759,7 +770,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -793,6 +804,7 @@ impl TensorZeroGateway {
     /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
     /// :param include_raw_usage: If set, include raw provider-specific usage data in the response.
+    /// :param include_aggregated_response: If set, include the aggregated response in each streaming chunk. Only supported in streaming mode.
     /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
@@ -811,6 +823,7 @@ impl TensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -830,6 +843,7 @@ impl TensorZeroGateway {
         include_original_response: Option<bool>,
         include_raw_response: Option<bool>,
         include_raw_usage: Option<bool>,
+        include_aggregated_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
@@ -842,6 +856,7 @@ impl TensorZeroGateway {
             function_name,
             model_name,
             episode_id,
+            namespace,
             stream,
             params,
             variant_name,
@@ -861,6 +876,7 @@ impl TensorZeroGateway {
             include_original_response.unwrap_or(false),
             include_raw_response.unwrap_or(false),
             include_raw_usage.unwrap_or(false),
+            include_aggregated_response.unwrap_or(false),
             otlp_traces_extra_headers,
             otlp_traces_extra_attributes,
             otlp_traces_extra_resources,
@@ -991,149 +1007,6 @@ impl TensorZeroGateway {
             ),
         )?;
         Self::workflow_evaluation_run_episode(this, run_id, task_name, tags)
-    }
-
-    ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to insert the datapoints into.
-    /// :param datapoints: A list of datapoints to insert.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    #[pyo3(warn(message = "Please use `create_datapoints` instead of `create_datapoints_legacy`. In a future release, `create_datapoints_legacy` will be removed.", category = PyDeprecationWarning))]
-    fn create_datapoints_legacy(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyList>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        #[expect(deprecated)]
-        let fut =
-            client.create_datapoints_legacy(dataset_name, InsertDatapointParams { datapoints });
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        let uuids = res
-            .iter()
-            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
-            .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(Bound::unbind)
-    }
-
-    /// DEPRECATED: Use `create_datapoints` instead.
-    ///
-    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to insert the datapoints into.
-    /// :param datapoints: A list of datapoints to insert.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    #[pyo3(warn(message = "Please use `create_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.", category = PyDeprecationWarning))]
-    fn bulk_insert_datapoints(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyList>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let params = InsertDatapointParams { datapoints };
-        #[expect(deprecated)]
-        let fut = client.bulk_insert_datapoints(dataset_name, params);
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        let uuids = res
-            .iter()
-            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
-            .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(Bound::unbind)
-    }
-
-    /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to delete the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to delete.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    #[pyo3(warn(message = "Please use `delete_datapoints` instead of `delete_datapoint`. In a future release, `delete_datapoint` will be removed.", category = PyDeprecationWarning))]
-    fn delete_datapoint(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        let client = this.as_super().client.clone();
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        #[expect(deprecated)]
-        let fut = client.delete_datapoint(dataset_name, datapoint_id);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
-    }
-
-    /// Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to get the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `Datapoint` object.
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    #[pyo3(warn(message = "Please use `get_datapoints` instead of `get_datapoint`. In a future release, `get_datapoint` will be removed.", category = PyDeprecationWarning))]
-    fn get_datapoint<'py>(
-        this: PyRef<'py, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, Datapoint>> {
-        let client = this.as_super().client.clone();
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        #[expect(deprecated)]
-        let fut = client.get_datapoint(dataset_name, datapoint_id);
-        let wire: Datapoint =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        wire.into_pyobject(this.py())
-    }
-
-    /// DEPRECATED: Use `list_datapoints` instead.
-    ///
-    /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to get the datapoints from.
-    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
-    #[pyo3(warn(message = "Please use `list_datapoints` instead of `list_datapoints_legacy`. In a future release, `list_datapoints_legacy` will be removed.", category = PyDeprecationWarning))]
-    fn list_datapoints_legacy(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        function_name: Option<String>,
-        limit: Option<u32>,
-        offset: Option<u32>,
-    ) -> PyResult<Bound<'_, PyList>> {
-        let client = this.as_super().client.clone();
-
-        let request = ListDatapointsRequest {
-            function_name,
-            limit,
-            offset,
-            ..Default::default()
-        };
-
-        let fut = client.list_datapoints(dataset_name, request);
-        let resp = tokio_block_on_without_gil(this.py(), fut);
-        match resp {
-            Ok(datapoints) => {
-                let py_datapoints = datapoints
-                    .datapoints
-                    .into_iter()
-                    .map(|x| x.into_pyobject(this.py()))
-                    .collect::<Result<Vec<_>, _>>()?;
-                PyList::new(this.py(), py_datapoints)
-            }
-            Err(e) => Err(convert_error(this.py(), e)),
-        }
     }
 
     /// Create one or more datapoints in a dataset.
@@ -1505,7 +1378,7 @@ impl TensorZeroGateway {
 
         let core_args = EvaluationCoreArgs {
             inference_executor,
-            clickhouse_client: app_state.clickhouse_connection_info.clone(),
+            db: Arc::new(app_state.get_delegating_database()),
             evaluation_config,
             function_configs,
             evaluation_name,
@@ -1879,7 +1752,7 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
-    /// :param postgres_url: The URL of the PostgreSQL instance to use for rate limiting.
+    /// :param postgres_url: The URL of the Postgres instance to use for rate limiting.
     /// :param valkey_url: The URL of the Valkey instance to use for rate limiting.
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :param async_setup: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
@@ -1942,7 +1815,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1976,6 +1849,7 @@ impl AsyncTensorZeroGateway {
     /// :param extra_headers: If set, injects extra fields into the provider request headers.
     /// :param include_original_response: If set, add an `original_response` field to the response, containing the raw string response from the model.
     /// :param include_raw_usage: If set, include raw provider-specific usage data in the response.
+    /// :param include_aggregated_response: If set, include the aggregated response in each streaming chunk. Only supported in streaming mode.
     /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
@@ -1988,6 +1862,7 @@ impl AsyncTensorZeroGateway {
         function_name: Option<String>,
         model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
+        namespace: Option<String>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
@@ -2007,6 +1882,7 @@ impl AsyncTensorZeroGateway {
         include_original_response: Option<bool>,
         include_raw_response: Option<bool>,
         include_raw_usage: Option<bool>,
+        include_aggregated_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
@@ -2018,6 +1894,7 @@ impl AsyncTensorZeroGateway {
             function_name,
             model_name,
             episode_id,
+            namespace,
             stream,
             params,
             variant_name,
@@ -2037,6 +1914,7 @@ impl AsyncTensorZeroGateway {
             include_original_response.unwrap_or(false),
             include_raw_response.unwrap_or(false),
             include_raw_usage.unwrap_or(false),
+            include_aggregated_response.unwrap_or(false),
             otlp_traces_extra_headers,
             otlp_traces_extra_attributes,
             otlp_traces_extra_resources,
@@ -2225,156 +2103,6 @@ impl AsyncTensorZeroGateway {
             ),
         )?;
         Self::workflow_evaluation_run_episode(this, run_id, task_name, tags)
-    }
-
-    ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to insert the datapoints into.
-    /// :param datapoints: A list of datapoints to insert.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    #[pyo3(warn(message = "Please use `create_datapoints` instead of `create_datapoints_legacy`. In a future release, `create_datapoints_legacy` will be removed.", category = PyDeprecationWarning))]
-    fn create_datapoints_legacy<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'a, PyAny>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let params = InsertDatapointParams { datapoints };
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            #[expect(deprecated)]
-            let res = client.create_datapoints_legacy(dataset_name, params).await;
-            Python::attach(|py| match res {
-                Ok(uuids) => Ok(PyList::new(
-                    py,
-                    uuids
-                        .iter()
-                        .map(|id| uuid.call(py, (id.to_string(),), None))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )?
-                .unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// DEPRECATED: Use `create_datapoints` instead.
-    ///
-    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to insert the datapoints into.
-    /// :param datapoints: A list of datapoints to insert.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    #[pyo3(warn(message = "Please use `create_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.", category = PyDeprecationWarning))]
-    fn bulk_insert_datapoints<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'a, PyAny>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let params = InsertDatapointParams { datapoints };
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            #[expect(deprecated)]
-            let res = client.bulk_insert_datapoints(dataset_name, params).await;
-            Python::attach(|py| match res {
-                Ok(uuids) => Ok(PyList::new(
-                    py,
-                    uuids
-                        .iter()
-                        .map(|id| uuid.call(py, (id.to_string(),), None))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )?
-                .unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to delete the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to delete.
-    /// :return: None.
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    #[pyo3(warn(message = "Please use `delete_datapoints` instead of `delete_datapoint`. In a future release, `delete_datapoint` will be removed.", category = PyDeprecationWarning))]
-    fn delete_datapoint<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'a, PyAny>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            #[expect(deprecated)]
-            let res = client.delete_datapoint(dataset_name, datapoint_id).await;
-            Python::attach(|py| match res {
-                Ok(()) => Ok(()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to get the datapoint from.
-    /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `Datapoint` object.
-    #[pyo3(signature = (*, dataset_name, datapoint_id))]
-    #[pyo3(warn(message = "Please use `get_datapoints` instead of `get_datapoint`. In a future release, `get_datapoint` will be removed.", category = PyDeprecationWarning))]
-    fn get_datapoint<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoint_id: Bound<'_, PyAny>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
-        let client = this.as_super().client.clone();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            #[expect(deprecated)]
-            let res = client.get_datapoint(dataset_name, datapoint_id).await;
-            Python::attach(|py| match res {
-                Ok(wire) => Ok(wire.into_py_any(py)?),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// DEPRECATED: Use `list_datapoints` instead.
-    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
-    #[pyo3(warn(message = "Please use `list_datapoints` instead of `list_datapoints_legacy`. In a future release, `list_datapoints_legacy` will be removed.", category = PyDeprecationWarning))]
-    fn list_datapoints_legacy<'py>(
-        this: PyRef<'py, Self>,
-        dataset_name: String,
-        function_name: Option<String>,
-        limit: Option<u32>,
-        offset: Option<u32>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let client = this.as_super().client.clone();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let request = ListDatapointsRequest {
-                function_name,
-                limit,
-                offset,
-                ..Default::default()
-            };
-            let res = client.list_datapoints(dataset_name, request).await;
-            Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(py, response.datapoints)?.unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
     }
 
     /// Create one or more datapoints in a dataset.
@@ -2771,7 +2499,7 @@ impl AsyncTensorZeroGateway {
 
             let core_args = EvaluationCoreArgs {
                 inference_executor,
-                clickhouse_client: app_state.clickhouse_connection_info.clone(),
+                db: Arc::new(app_state.get_delegating_database()),
                 evaluation_config,
                 function_configs,
                 evaluation_name,

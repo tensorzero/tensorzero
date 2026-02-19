@@ -7,7 +7,6 @@ use tensorzero_core::client::{
     ClientInferenceParams, DynamicToolParams, File, InferenceOutput, InferenceParams,
     InferenceResponse, Input, InputMessage, InputMessageContent, Role,
 };
-use tensorzero_core::db::evaluation_queries::EvaluationQueries;
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
     LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType, get_evaluator_metric_name,
@@ -75,7 +74,7 @@ pub async fn run_llm_judge_evaluator(
     debug!("Checking for existing human feedback");
     let serialized_output = inference_response.get_serialized_output()?;
     if let Some(human_feedback) = clients
-        .clickhouse_client
+        .db
         .get_inference_evaluation_human_feedback(
             &get_evaluator_metric_name(evaluation_name, evaluator_name),
             &datapoint.id(),
@@ -120,11 +119,13 @@ pub async fn run_llm_judge_evaluator(
         function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
         model_name: None,
         episode_id: None,
+        namespace: None,
         input: judge_input,
         stream: Some(false),
         include_original_response: false,
         include_raw_response: false,
         include_raw_usage: false,
+        include_aggregated_response: false,
         params: InferenceParams::default(),
         variant_name: None,
         dryrun: Some(false),

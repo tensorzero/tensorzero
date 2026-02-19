@@ -8,6 +8,7 @@ permissions:
   contents: read
 
 env:
+  CARGO_INCREMENTAL: 0
   RUST_TOOLCHAIN: "1.90"
 
 jobs:
@@ -50,7 +51,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build wheels
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
@@ -102,7 +103,7 @@ jobs:
         with:
           version: "0.9.27"
       - name: Build wheels
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
@@ -153,7 +154,7 @@ jobs:
         with:
           version: "0.9.27"
       - name: Build wheels
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
@@ -209,7 +210,7 @@ jobs:
           version: "0.9.27"
 
       - name: Build wheels
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
@@ -231,7 +232,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build sdist
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
           working-directory: ./clients/python
           command: sdist

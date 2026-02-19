@@ -55,7 +55,7 @@ use super::UninitializedConfig;
 /// let snapshot = ConfigSnapshot::new(sorted_table, extra_templates)?;
 ///
 /// // Later, after database connection is established
-/// write_config_snapshot(&clickhouse, snapshot).await?;
+/// db.write_config_snapshot(&snapshot).await?;
 /// ```
 #[expect(clippy::manual_non_exhaustive)]
 #[derive(Debug)]
@@ -155,6 +155,34 @@ impl<'de> Deserialize<'de> for SnapshotHash {
     {
         let s = String::deserialize(deserializer)?;
         s.parse::<SnapshotHash>().map_err(serde::de::Error::custom)
+    }
+}
+
+/// Maps `SnapshotHash` to Postgres BYTEA so it can be used directly in
+/// `push_bind` and `FromRow` without manual `as_bytes()`/`from_bytes()` conversion.
+impl sqlx::Type<sqlx::Postgres> for SnapshotHash {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <Vec<u8> as sqlx::Type<sqlx::Postgres>>::type_info()
+    }
+
+    fn compatible(ty: &sqlx::postgres::PgTypeInfo) -> bool {
+        <Vec<u8> as sqlx::Type<sqlx::Postgres>>::compatible(ty)
+    }
+}
+
+impl sqlx::Encode<'_, sqlx::Postgres> for SnapshotHash {
+    fn encode_by_ref(
+        &self,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        <&[u8] as sqlx::Encode<'_, sqlx::Postgres>>::encode_by_ref(&self.as_bytes(), buf)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SnapshotHash {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let bytes = <Vec<u8> as sqlx::Decode<'r, sqlx::Postgres>>::decode(value)?;
+        Ok(SnapshotHash::from_bytes(&bytes))
     }
 }
 

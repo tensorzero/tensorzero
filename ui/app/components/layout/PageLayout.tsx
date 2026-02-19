@@ -38,6 +38,7 @@ interface PageHeaderProps {
   name?: string;
   count?: CountValue;
   tag?: ReactNode;
+  help?: ReactNode;
   children?: ReactNode;
 }
 
@@ -47,6 +48,7 @@ function PageHeader({
   name,
   count,
   tag,
+  help,
   children,
 }: PageHeaderProps) {
   const title = heading ?? name;
@@ -68,6 +70,7 @@ function PageHeader({
               {title}
             </h1>
           )}
+          {help}
           {count !== undefined && <PageCount count={count} />}
           {tag && <span className="ml-1 inline-flex items-center">{tag}</span>}
         </div>
@@ -101,6 +104,7 @@ interface SectionHeaderProps {
   heading: string;
   count?: CountValue;
   badge?: { name: string; tooltip: string };
+  help?: ReactNode;
   children?: ReactNode;
 }
 
@@ -108,11 +112,13 @@ function SectionHeader({
   heading,
   count,
   badge,
+  help,
   children,
 }: SectionHeaderProps) {
   return (
     <h2 className="flex items-center gap-2 text-xl font-medium">
       {heading}
+      {help}
       {count !== undefined && <SectionCount count={count} />}
       {badge && (
         <Tooltip delayDuration={0}>

@@ -6,15 +6,21 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
+default = []
 e2e_tests = []
+ts-bindings = ["dep:ts-rs", "config-applier/ts-bindings"]
 
 [dependencies]
 durable-tools = { path = "../durable-tools" }
 tensorzero = { path = "../../clients/rust" }
 autopilot-client = { path = "../autopilot-client" }
 tensorzero-core = { path = "../../tensorzero-core" }
-config-writer = { path = "../config-writer" }
+config-applier = { path = "../config-applier" }
 tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
+object_store = { workspace = true }
+arrow = { workspace = true }
+parquet = { workspace = true }
+serde_arrow = { workspace = true }
 anyhow.workspace = true
 async-trait.workspace = true
 schemars.workspace = true
@@ -30,6 +36,10 @@ uuid.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "postgres"] }
 durable = { workspace = true }
 mockall = "0.14"
+
+[dependencies.ts-rs]
+workspace = true
+optional = true
 
 [lints]
 workspace = true

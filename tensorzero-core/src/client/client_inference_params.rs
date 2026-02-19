@@ -2,7 +2,7 @@ use std::{collections::HashMap, ops::Deref};
 
 use crate::{
     cache::CacheParamsOptions,
-    config::UninitializedVariantInfo,
+    config::{Namespace, UninitializedVariantInfo},
     endpoints::inference::{InferenceParams, Params},
     error::Error,
     inference::types::{
@@ -30,6 +30,11 @@ pub struct ClientInferenceParams {
     // the episode ID (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     pub episode_id: Option<Uuid>,
+    // The namespace for experimentation. If provided, namespace-specific experimentation
+    // configs will be used if available. Stored as a `tensorzero::namespace` tag.
+    // Must be a non-empty string.
+    #[serde(default)]
+    pub namespace: Option<Namespace>,
     // the input for the inference
     pub input: Input,
     // default False
@@ -78,6 +83,9 @@ pub struct ClientInferenceParams {
     /// If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
     #[serde(default)]
     pub include_raw_usage: bool,
+    /// If `true`, include an `aggregated_response` field in the final chunk in the stream
+    #[serde(default)]
+    pub include_aggregated_response: bool,
     // NOTE: Currently, ts_rs does not handle #[serde(transparent)] correctly,
     // so we disable the type generation for the extra_body and extra_headers fields.
     // I tried doing a direct #[ts(type = "InferenceExtraBody[]")] and
@@ -127,6 +135,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             function_name: this.function_name,
             model_name: this.model_name,
             episode_id: this.episode_id,
+            namespace: this.namespace,
             input: this.input,
             stream: this.stream,
             params: this.params,
@@ -146,6 +155,7 @@ impl TryFrom<ClientInferenceParams> for Params {
             include_original_response: this.include_original_response,
             include_raw_response: this.include_raw_response,
             include_raw_usage: this.include_raw_usage,
+            include_aggregated_response: this.include_aggregated_response,
             extra_body: this.extra_body,
             extra_headers: this.extra_headers,
             internal_dynamic_variant_config: this.internal_dynamic_variant_config,
@@ -162,6 +172,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         function_name,
         model_name,
         episode_id,
+        namespace,
         input,
         stream,
         params,
@@ -176,6 +187,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         include_original_response,
         include_raw_response,
         include_raw_usage,
+        include_aggregated_response,
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,
@@ -188,6 +200,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         function_name,
         model_name,
         episode_id,
+        namespace,
         input,
         stream,
         params,
@@ -202,6 +215,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         include_original_response,
         include_raw_response,
         include_raw_usage,
+        include_aggregated_response,
         extra_body,
         extra_headers,
         internal_dynamic_variant_config,

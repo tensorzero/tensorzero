@@ -12,6 +12,11 @@ import {
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
+import { UuidLink } from "~/components/autopilot/UuidLink";
+import {
+  remarkUuidLinks,
+  UUID_LINK_ELEMENT,
+} from "~/components/autopilot/remarkUuidLinks";
 import { Skeleton } from "~/components/ui/skeleton";
 import { logger } from "~/utils/logger";
 import { DotSeparator } from "~/components/ui/DotSeparator";
@@ -31,7 +36,14 @@ import type {
   VisualizationType,
 } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
+import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
+
+/**
+ * Max height for expandable tool content (tool call arguments, tool results, errors).
+ * Keeps long content from dominating the chat view by making it scrollable.
+ */
+export const TOOL_CONTENT_MAX_HEIGHT = "400px";
 
 /**
  * Optimistic messages are shown after the API confirms receipt but before
@@ -65,10 +77,10 @@ type EventStreamProps = {
   onRetryLoad?: () => void;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
-  authLoadingStates?: Map<string, "approving" | "rejecting">;
-  onAuthorize?: (eventId: string, approved: boolean) => Promise<void>;
   optimisticMessages?: OptimisticMessage[];
   status?: AutopilotStatus;
+  configApplyEnabled?: boolean;
+  sessionId?: string;
 };
 
 export function ToolEventId({ id }: { id: string }) {
@@ -138,6 +150,16 @@ export function getToolCallEventId(event: ToolEvent): string {
     return payload.tool_execution_id;
   }
   return payload.tool_call_event_id;
+}
+
+/**
+ * Type guard to check if an event is a config write event.
+ * A config write event is a tool_call with name === "write_config".
+ */
+export function isConfigWriteEvent(event: GatewayEvent): boolean {
+  return (
+    event.payload.type === "tool_call" && event.payload.name === "write_config"
+  );
 }
 
 function getMessageText(content: EventPayloadMessageContent[]) {
@@ -255,11 +277,11 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
         description: payload.message,
       };
     case "visualization":
-      // Visualization events render their own content, no text description needed
-      return {};
+    case "user_questions":
+    case "user_questions_answers":
     case "unknown":
-      return {};
-    default:
+      // Visualization events render their own content, no text description needed
+      // TODO (#6270): add a real component for `user_questions` and `user_responses`
       return {};
   }
 }
@@ -420,6 +442,8 @@ function renderEventTitle(event: GatewayEvent) {
           <span>{getVisualizationTitle(payload.visualization)}</span>
         </span>
       );
+    case "user_questions":
+    case "user_questions_answers":
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -497,17 +521,25 @@ class EventErrorBoundary extends Component<
   }
 }
 
+const uuidRemarkPlugins = [remarkUuidLinks];
+const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
+
 function EventItem({
   event,
   isPending = false,
+  configApplyEnabled = false,
+  sessionId,
 }: {
   event: GatewayEvent;
   isPending?: boolean;
+  configApplyEnabled?: boolean;
+  sessionId?: string;
 }) {
   const { yoloMode } = useAutopilotSession();
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
+  const isConfigWrite = isConfigWriteEvent(event);
   const isExpandable =
     event.payload.type === "tool_call" ||
     event.payload.type === "error" ||
@@ -553,6 +585,9 @@ function EventItem({
           label
         )}
         <div className="text-fg-muted flex items-center gap-1.5 text-xs">
+          {isConfigWrite && configApplyEnabled && sessionId && (
+            <ApplyConfigChangeButton sessionId={sessionId} event={event} />
+          )}
           {eventIsToolEvent && (
             <>
               <ToolEventId id={getToolCallEventId(event)} />
@@ -564,9 +599,13 @@ function EventItem({
       </div>
       {shouldShowDetails && summary.description && (
         <>
-          {event.payload.type === "message" &&
-          event.payload.role === "assistant" ? (
-            <Markdown>{summary.description}</Markdown>
+          {event.payload.type === "message" ? (
+            <Markdown
+              remarkPlugins={uuidRemarkPlugins}
+              components={uuidComponents}
+            >
+              {summary.description}
+            </Markdown>
           ) : event.payload.type === "tool_call" ? (
             <ReadOnlyCodeBlock code={summary.description} language="json" />
           ) : (
@@ -575,8 +614,14 @@ function EventItem({
                 "text-fg-secondary text-sm whitespace-pre-wrap",
                 (event.payload.type === "tool_result" ||
                   event.payload.type === "error") &&
-                  "font-mono",
+                  "overflow-y-auto font-mono",
               )}
+              style={
+                event.payload.type === "tool_result" ||
+                event.payload.type === "error"
+                  ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
+                  : undefined
+              }
             >
               {summary.description}
             </p>
@@ -632,9 +677,9 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
         <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
-      <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+      <Markdown remarkPlugins={uuidRemarkPlugins} components={uuidComponents}>
         {message.text}
-      </p>
+      </Markdown>
     </div>
   );
 }
@@ -702,6 +747,8 @@ export default function EventStream({
   pendingToolCallIds,
   optimisticMessages = [],
   status,
+  configApplyEnabled = false,
+  sessionId,
 }: EventStreamProps) {
   // Determine what to show at the top: sentinel, error, or session start
   // Only show session start when there's content to display (events or optimistic messages)
@@ -736,6 +783,8 @@ export default function EventStream({
           <EventItem
             event={event}
             isPending={pendingToolCallIds?.has(event.id)}
+            configApplyEnabled={configApplyEnabled}
+            sessionId={sessionId}
           />
         </EventErrorBoundary>
       ))}

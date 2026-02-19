@@ -1,1 +1,1 @@
-To deploy: `uv run modal deploy sgl_inference.py`
+To deploy: `uvx modal deploy sgl_inference.py`

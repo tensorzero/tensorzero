@@ -1,6 +1,6 @@
 # ========== base ==========
 
-FROM rust:1.88.0 AS base
+FROM rust:1.93.0 AS base
 
 # Install required system dependencies
 RUN apt-get update && \
@@ -23,6 +23,7 @@ RUN curl -L --proto '=https' --tlsv1.2 -sSf \
 FROM base AS build-env
 
 WORKDIR /build
+ENV CARGO_INCREMENTAL=0
 
 # Copy the entire project
 COPY . .

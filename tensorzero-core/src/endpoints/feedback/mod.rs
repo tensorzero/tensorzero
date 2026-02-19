@@ -55,6 +55,13 @@ const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1000);
 /// We also poll in the intermediate time so that we can return as soon as we find a target entry.
 const FEEDBACK_TARGET_POLL_INTERVAL: Duration = Duration::from_millis(2000);
 
+/// A supertrait combining `InferenceQueries` and `FeedbackQueries`, used by feedback
+/// business logic to query inference data and write feedback. Automatically implemented
+/// for any type that satisfies both bounds (e.g. `DelegatingDatabaseConnection`,
+/// `MockClickHouseConnectionInfo`).
+pub(crate) trait FeedbackDatabaseQueries: InferenceQueries + FeedbackQueries {}
+impl<T: InferenceQueries + FeedbackQueries> FeedbackDatabaseQueries for T {}
+
 // TODO(shuyangli): rename this to CreateFeedbackRequest and export
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -157,9 +164,26 @@ pub async fn feedback(
             api_key_ext.0.api_key.get_public_id().into(),
         );
     }
+
+    let database: Arc<dyn FeedbackDatabaseQueries + Send + Sync> =
+        Arc::new(DelegatingDatabaseConnection::new(
+            clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
+        ));
+
+    feedback_inner(&config, database, &deferred_tasks, params).await
+}
+
+/// Business logic for feedback, separated from the handler to allow testing with mock databases.
+async fn feedback_inner(
+    config: &Config,
+    database: Arc<dyn FeedbackDatabaseQueries + Send + Sync>,
+    deferred_tasks: &TaskTracker,
+    params: Params,
+) -> Result<FeedbackResponse, Error> {
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
-        &config,
+        config,
         &params.metric_name,
         params.episode_id,
         params.inference_id,
@@ -179,24 +203,11 @@ pub async fn feedback(
         .increment(1);
     }
 
-    // Note: InferenceQueries is only implemented for ClickHouse currently.
-    // When Postgres implements InferenceQueries, we can use ENABLE_POSTGRES_READ to select.
-    //
-    // TODO(shuyangli): Also implement InferenceQueries for DelegatingDatabaseConnection and only pass one in
-    let read_database: Arc<dyn InferenceQueries + Send + Sync> =
-        Arc::new(clickhouse_connection_info.clone());
-    let write_database: Arc<dyn FeedbackQueries + Send + Sync> =
-        Arc::new(DelegatingDatabaseConnection::new(
-            clickhouse_connection_info.clone(),
-            postgres_connection_info.clone(),
-        ));
-
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
-                read_database,
-                write_database,
-                &deferred_tasks,
+                database,
+                deferred_tasks,
                 &params,
                 feedback_metadata.target_id,
                 feedback_metadata.level,
@@ -209,10 +220,9 @@ pub async fn feedback(
         }
         FeedbackType::Demonstration => {
             write_demonstration(
-                read_database,
-                write_database,
-                &deferred_tasks,
-                &config,
+                database,
+                deferred_tasks,
+                config,
                 &params,
                 feedback_metadata.target_id,
                 feedback_id,
@@ -222,10 +232,9 @@ pub async fn feedback(
         }
         FeedbackType::Float => {
             write_float(
-                read_database,
-                write_database,
-                &deferred_tasks,
-                &config,
+                database,
+                deferred_tasks,
+                config,
                 params,
                 feedback_metadata.target_id,
                 feedback_id,
@@ -236,10 +245,9 @@ pub async fn feedback(
         }
         FeedbackType::Boolean => {
             write_boolean(
-                read_database,
-                write_database,
-                &deferred_tasks,
-                &config,
+                database,
+                deferred_tasks,
+                config,
                 params,
                 feedback_metadata.target_id,
                 feedback_id,
@@ -316,8 +324,7 @@ fn get_feedback_metadata<'a>(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_comment(
-    read_database: Arc<dyn InferenceQueries + Send + Sync>,
-    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
+    database: Arc<dyn FeedbackDatabaseQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     params: &Params,
     target_id: Uuid,
@@ -330,7 +337,7 @@ async fn write_comment(
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
     if !disable_validation {
-        let _ = throttled_get_function_info(read_database.as_ref(), level, &target_id).await?;
+        let _ = throttled_get_function_info(database.as_ref(), level, &target_id).await?;
     }
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
@@ -350,16 +357,14 @@ async fn write_comment(
 
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = write_database.insert_comment_feedback(&insert).await;
+            let _ = database.insert_comment_feedback(&insert).await;
         });
     }
     Ok(())
 }
 
-#[expect(clippy::too_many_arguments)]
 async fn write_demonstration(
-    read_database: Arc<dyn InferenceQueries + Send + Sync>,
-    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
+    database: Arc<dyn FeedbackDatabaseQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: &Params,
@@ -369,14 +374,14 @@ async fn write_demonstration(
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     let function_info = throttled_get_function_info(
-        read_database.as_ref(),
+        database.as_ref(),
         &MetricConfigLevel::Inference,
         &inference_id,
     )
     .await?;
     let function_config = config.get_function(&function_info.function_name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
-        read_database.as_ref(),
+        database.as_ref(),
         inference_id,
         &function_info.function_name,
         &function_config,
@@ -400,7 +405,7 @@ async fn write_demonstration(
 
     if !dryrun {
         deferred_tasks.spawn(async move {
-            let _ = write_database.insert_demonstration_feedback(&insert).await;
+            let _ = database.insert_demonstration_feedback(&insert).await;
         });
     }
     Ok(())
@@ -408,8 +413,7 @@ async fn write_demonstration(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_float(
-    read_database: Arc<dyn InferenceQueries + Send + Sync>,
-    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
+    database: Arc<dyn FeedbackDatabaseQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
@@ -430,7 +434,7 @@ async fn write_float(
     } else {
         // This will also throw if the function does not exist.
         Some(
-            throttled_get_function_info(read_database.as_ref(), &metric_config.level, &target_id)
+            throttled_get_function_info(database.as_ref(), &metric_config.level, &target_id)
                 .await?,
         )
     };
@@ -453,8 +457,7 @@ async fn write_float(
         deferred_tasks.spawn(async move {
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
-                    read_database.as_ref(),
-                    write_database.as_ref(),
+                    database.as_ref(),
                     maybe_function_info,
                     &metric_name,
                     &tags,
@@ -462,7 +465,7 @@ async fn write_float(
                     &value,
                     target_id
                 ),
-                write_database.insert_float_feedback(&insert)
+                database.insert_float_feedback(&insert)
             );
         });
     }
@@ -471,8 +474,7 @@ async fn write_float(
 
 #[expect(clippy::too_many_arguments)]
 async fn write_boolean(
-    read_database: Arc<dyn InferenceQueries + Send + Sync>,
-    write_database: Arc<dyn FeedbackQueries + Send + Sync>,
+    database: Arc<dyn FeedbackDatabaseQueries + Send + Sync>,
     deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
@@ -493,7 +495,7 @@ async fn write_boolean(
     } else {
         // This will also throw if the function does not exist.
         Some(
-            throttled_get_function_info(read_database.as_ref(), &metric_config.level, &target_id)
+            throttled_get_function_info(database.as_ref(), &metric_config.level, &target_id)
                 .await?,
         )
     };
@@ -515,8 +517,7 @@ async fn write_boolean(
         deferred_tasks.spawn(async move {
             let _ = try_join!(
                 write_static_evaluation_human_feedback_if_necessary(
-                    read_database.as_ref(),
-                    write_database.as_ref(),
+                    database.as_ref(),
                     maybe_function_info,
                     &metric_name,
                     &tags,
@@ -524,7 +525,7 @@ async fn write_boolean(
                     &value,
                     target_id
                 ),
-                write_database.insert_boolean_feedback(&insert)
+                database.insert_boolean_feedback(&insert)
             );
         });
     }
@@ -894,10 +895,12 @@ mod tests {
     use std::sync::Arc;
 
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
-    use crate::experimentation::ExperimentationConfig;
+    use crate::db::clickhouse::MockClickHouseConnectionInfo;
+    use crate::db::inferences::FunctionInfo;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::inference::types::FunctionType;
     use crate::jsonschema_util::JSONSchema;
-    use crate::testing::get_unit_test_gateway_handle;
     use crate::tool::{
         FunctionToolConfig, InferenceResponseToolCall, StaticToolConfig, ToolChoice,
     };
@@ -1078,32 +1081,30 @@ mod tests {
     }
     #[tokio::test]
     async fn test_feedback_handler_comment() {
-        let config = Arc::new(Config {
-            ..Default::default()
-        });
-        let gateway_handle = get_unit_test_gateway_handle(config);
+        let config = Config::default();
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(|_, _| Box::pin(async { Ok(None) }));
+
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
-        let value = json!("test comment");
         let params = Params {
             episode_id: Some(episode_id),
             inference_id: None,
             metric_name: "comment".to_string(),
-            value: value.clone(),
+            value: json!("test comment"),
             tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
             internal: false,
             dryrun: Some(false),
         };
-        let response = feedback_handler(
-            State(gateway_handle.app_state.clone()),
-            None,
-            StructuredJson(params),
-        )
-        .await;
-        let error = response.unwrap_err();
-        let details = error.get_details();
+        let deferred_tasks = TaskTracker::new();
+        let error = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap_err();
         assert_eq!(
-            *details,
+            *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: format!("Episode ID: {episode_id} does not exist"),
             }
@@ -1111,35 +1112,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_feedback_handler_comment_success() {
+        let config = Config::default();
+        let episode_id = Uuid::now_v7();
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(move |_, _| {
+                let episode_id = episode_id;
+                Box::pin(async move {
+                    Ok(Some(FunctionInfo {
+                        function_name: "test_fn".to_string(),
+                        function_type: FunctionType::Chat,
+                        variant_name: "v0".to_string(),
+                        episode_id,
+                    }))
+                })
+            });
+        mock_db
+            .feedback_queries
+            .expect_insert_comment_feedback()
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let params = Params {
+            episode_id: Some(episode_id),
+            inference_id: None,
+            metric_name: "comment".to_string(),
+            value: json!("test comment"),
+            tags: HashMap::new(),
+            internal: false,
+            dryrun: Some(false),
+        };
+        let deferred_tasks = TaskTracker::new();
+        let response = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap();
+        deferred_tasks.close();
+        deferred_tasks.wait().await;
+        assert_ne!(response.feedback_id, Uuid::nil());
+    }
+
+    #[tokio::test]
     async fn test_feedback_handler_demonstration() {
-        let config = Arc::new(Config {
-            ..Default::default()
-        });
-        let gateway_handle = get_unit_test_gateway_handle(config);
+        let config = Config::default();
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
-        let value = json!("test demonstration");
 
-        // Test with episode_id (should fail)
+        // Test with episode_id (should fail — demonstration requires inference_id)
+        let mock_db = MockClickHouseConnectionInfo::new();
         let params = Params {
             episode_id: Some(episode_id),
             inference_id: None,
             metric_name: "demonstration".to_string(),
-            value: value.clone(),
+            value: json!("test demonstration"),
             tags: HashMap::from([("baz".to_string(), "bat".to_string())]),
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(
-            State(gateway_handle.app_state.clone()),
-            None,
-            StructuredJson(params),
-        )
-        .await
-        .unwrap_err();
-        let details = response.get_details();
+        let deferred_tasks = TaskTracker::new();
+        let error = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap_err();
         assert_eq!(
-            *details,
+            *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
@@ -1147,30 +1183,93 @@ mod tests {
         );
 
         // Test with inference_id (should fail with non-existent ID)
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(|_, _| Box::pin(async { Ok(None) }));
+
         let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,
             inference_id: Some(inference_id),
             metric_name: "demonstration".to_string(),
-            value: value.clone(),
+            value: json!("test demonstration"),
             tags: HashMap::from([("bat".to_string(), "man".to_string())]),
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(
-            State(gateway_handle.app_state.clone()),
-            None,
-            StructuredJson(params),
-        )
-        .await;
-        let error = response.unwrap_err();
-        let details = error.get_details();
+        let error = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap_err();
         assert_eq!(
-            *details,
+            *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: format!("Inference ID: {inference_id} does not exist"),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_feedback_handler_demonstration_success() {
+        // Build a chat function config so demonstration validation can find it
+        let chat_fn = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            description: None,
+            all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
+        });
+        let config = Config {
+            functions: HashMap::from([("test_fn".to_string(), Arc::new(chat_fn))]),
+            ..Default::default()
+        };
+
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(move |_, _| {
+                let episode_id = episode_id;
+                Box::pin(async move {
+                    Ok(Some(FunctionInfo {
+                        function_name: "test_fn".to_string(),
+                        function_type: FunctionType::Chat,
+                        variant_name: "v0".to_string(),
+                        episode_id,
+                    }))
+                })
+            });
+        mock_db
+            .inference_queries
+            .expect_get_chat_inference_tool_params()
+            .returning(|_, _| Box::pin(async { Ok(None) }));
+        mock_db
+            .feedback_queries
+            .expect_insert_demonstration_feedback()
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let params = Params {
+            episode_id: None,
+            inference_id: Some(inference_id),
+            metric_name: "demonstration".to_string(),
+            value: json!("a valid text demonstration"),
+            tags: HashMap::new(),
+            internal: false,
+            dryrun: Some(false),
+        };
+        let deferred_tasks = TaskTracker::new();
+        let response = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap();
+        deferred_tasks.close();
+        deferred_tasks.wait().await;
+        assert_ne!(response.feedback_id, Uuid::nil());
     }
 
     #[tokio::test]
@@ -1185,65 +1284,116 @@ mod tests {
                 description: None,
             },
         );
-        let config = Arc::new(Config {
+        let config = Config {
             metrics,
             ..Default::default()
-        });
-        let gateway_handle = get_unit_test_gateway_handle(config);
-        let value = json!(4.5);
+        };
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
         let episode_id = Uuid::new_v7(timestamp);
+        let deferred_tasks = TaskTracker::new();
 
-        // Test with inference_id (should fail)
+        // Test with inference_id (should fail — metric is episode-level)
+        let mock_db = MockClickHouseConnectionInfo::new();
         let params = Params {
             episode_id: None,
             inference_id: Some(inference_id),
             metric_name: "test_float".to_string(),
-            value: value.clone(),
+            value: json!(4.5),
             tags: HashMap::from([("boo".to_string(), "far".to_string())]),
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(
-            State(gateway_handle.app_state.clone()),
-            None,
-            StructuredJson(params),
-        )
-        .await
-        .unwrap_err();
-        let details = response.get_details();
+        let error = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap_err();
         assert_eq!(
-            *details,
+            *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"episode\".".to_string(),
             }
         );
 
         // Test with episode_id (should fail with non-existent ID)
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(|_, _| Box::pin(async { Ok(None) }));
+
         let params = Params {
             episode_id: Some(episode_id),
             inference_id: None,
             metric_name: "test_float".to_string(),
-            value: value.clone(),
+            value: json!(4.5),
             tags: HashMap::from([("poo".to_string(), "bar".to_string())]),
             dryrun: Some(false),
             internal: false,
         };
-        let response = feedback_handler(
-            State(gateway_handle.app_state.clone()),
-            None,
-            StructuredJson(params),
-        )
-        .await;
-        let error = response.unwrap_err();
-        let details = error.get_details();
+        let error = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap_err();
         assert_eq!(
-            *details,
+            *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: format!("Episode ID: {episode_id} does not exist"),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_feedback_handler_float_success() {
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_float".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                level: MetricConfigLevel::Episode,
+                optimize: MetricConfigOptimize::Max,
+                description: None,
+            },
+        );
+        let config = Config {
+            metrics,
+            ..Default::default()
+        };
+        let episode_id = Uuid::now_v7();
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(move |_, _| {
+                let episode_id = episode_id;
+                Box::pin(async move {
+                    Ok(Some(FunctionInfo {
+                        function_name: "test_fn".to_string(),
+                        function_type: FunctionType::Chat,
+                        variant_name: "v0".to_string(),
+                        episode_id,
+                    }))
+                })
+            });
+        mock_db
+            .feedback_queries
+            .expect_insert_float_feedback()
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let params = Params {
+            episode_id: Some(episode_id),
+            inference_id: None,
+            metric_name: "test_float".to_string(),
+            value: json!(4.5),
+            tags: HashMap::new(),
+            internal: false,
+            dryrun: Some(false),
+        };
+        let deferred_tasks = TaskTracker::new();
+        let response = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap();
+        deferred_tasks.close();
+        deferred_tasks.wait().await;
+        assert_ne!(response.feedback_id, Uuid::nil());
     }
 
     #[tokio::test]
@@ -1258,37 +1408,93 @@ mod tests {
                 description: None,
             },
         );
-        let config = Arc::new(Config {
+        let config = Config {
             metrics,
             ..Default::default()
-        });
-        let gateway_handle = get_unit_test_gateway_handle(config.clone());
-        let value = json!(true);
+        };
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(|_, _| Box::pin(async { Ok(None) }));
+
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,
             inference_id: Some(inference_id),
             metric_name: "test_boolean".to_string(),
-            value: value.clone(),
+            value: json!(true),
             tags: HashMap::from([("new".to_string(), "car".to_string())]),
             dryrun: None,
             internal: false,
         };
-        let response = feedback_handler(
-            State(gateway_handle.app_state.clone()),
-            None,
-            StructuredJson(params),
-        )
-        .await;
-        let error = response.unwrap_err();
-        let details = error.get_details();
+        let deferred_tasks = TaskTracker::new();
+        let error = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap_err();
         assert_eq!(
-            *details,
+            *error.get_details(),
             ErrorDetails::InvalidRequest {
                 message: format!("Inference ID: {inference_id} does not exist"),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_feedback_handler_boolean_success() {
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_boolean".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Boolean,
+                level: MetricConfigLevel::Inference,
+                optimize: MetricConfigOptimize::Max,
+                description: None,
+            },
+        );
+        let config = Config {
+            metrics,
+            ..Default::default()
+        };
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db
+            .inference_queries
+            .expect_get_function_info()
+            .returning(move |_, _| {
+                let episode_id = episode_id;
+                Box::pin(async move {
+                    Ok(Some(FunctionInfo {
+                        function_name: "test_fn".to_string(),
+                        function_type: FunctionType::Chat,
+                        variant_name: "v0".to_string(),
+                        episode_id,
+                    }))
+                })
+            });
+        mock_db
+            .feedback_queries
+            .expect_insert_boolean_feedback()
+            .returning(|_| Box::pin(async { Ok(()) }));
+
+        let params = Params {
+            episode_id: None,
+            inference_id: Some(inference_id),
+            metric_name: "test_boolean".to_string(),
+            value: json!(true),
+            tags: HashMap::new(),
+            internal: false,
+            dryrun: Some(false),
+        };
+        let deferred_tasks = TaskTracker::new();
+        let response = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap();
+        deferred_tasks.close();
+        deferred_tasks.wait().await;
+        assert_ne!(response.feedback_id, Uuid::nil());
     }
 
     #[tokio::test]
@@ -1321,7 +1527,7 @@ mod tests {
                 parallel_tool_calls: None,
                 description: None,
                 all_explicit_templates_names: HashSet::new(),
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
             })));
 
         // Case 1: a string passed to a chat function
@@ -1466,7 +1672,7 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         })));
 
         // Case 5: a JSON function with correct output

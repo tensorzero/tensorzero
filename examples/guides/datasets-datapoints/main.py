@@ -80,13 +80,13 @@ with TensorZeroGateway.build_http(
     print(create_datapoints_response)
 
     # Retrieve a single datapoint
-    get_datapoint_response = t0.get_datapoint(
+    get_datapoints_response = t0.get_datapoints(
         dataset_name="email_application",
-        datapoint_id=create_datapoints_response[0],
+        ids=[create_datapoints_response[0]],
     )
 
-    print("\nget_datapoint_response:\n")
-    print(get_datapoint_response)
+    print("\nget_datapoints_response:\n")
+    print(get_datapoints_response)
 
     # Delete a single datapoint
     t0.delete_datapoint(

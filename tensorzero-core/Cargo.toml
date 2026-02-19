@@ -13,7 +13,12 @@ exclude = ["tests/", "fixtures/"]
 e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests"]
 optimization_tests = ["e2e_tests"]
 pyo3 = ["dep:pyo3", "tensorzero-types/pyo3"]
-ts-bindings = ["dep:ts-rs", "tensorzero-types/ts-bindings", "autopilot-client/ts-bindings", "tensorzero-auth/ts-bindings"]
+ts-bindings = [
+    "dep:ts-rs",
+    "tensorzero-types/ts-bindings",
+    "autopilot-client/ts-bindings",
+    "tensorzero-auth/ts-bindings",
+]
 
 [[test]]
 name = "e2e"
@@ -50,7 +55,7 @@ futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
-jsonschema = "0.41.0"
+jsonschema = "0.42.1"
 jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.3"
@@ -109,15 +114,15 @@ thiserror = { workspace = true }
 globset = { workspace = true }
 walkdir = { workspace = true }
 enum-map = "2.7.3"
-tokio-util = { version = "0.7.17", features = ["rt"] }
+tokio-util = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 moka = { workspace = true }
-tonic = { version = "0.14.2", default-features = false }
+tonic = { version = "0.14.4", default-features = false }
 sqlx = { workspace = true }
 pin-project = { workspace = true }
 once_cell = "1.21.3"
 clarabel = { version = "0", default-features = false, features = ["serde"] }
-arc-swap = "1.7.1"
+arc-swap = "1.8.2"
 infer.workspace = true
 urlencoding = "2.1.3"
 http-body = "1.0.1"
@@ -133,7 +138,7 @@ redis = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-rand_distr = "0.5.1"
+rand_distr = "0.6.0"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 paste = "1.0.15"
 base64 = "0.22.1"

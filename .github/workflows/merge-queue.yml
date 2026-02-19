@@ -17,15 +17,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  CARGO_INCREMENTAL: 0
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
   AWS_REGION: "us-east-1"
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AZURE_AI_FOUNDRY_API_KEY: ${{ secrets.AZURE_AI_FOUNDRY_API_KEY }}
-  AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
-  AZURE_OPENAI_EASTUS2_API_KEY: ${{ secrets.AZURE_OPENAI_EASTUS2_API_KEY }}
-  AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
+  AZURE_API_KEY: ${{ secrets.AZURE_API_KEY_NEW }}
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
@@ -181,6 +179,7 @@ jobs:
           docker load < gateway-e2e-container.tar
           docker load < live-tests-container.tar
           docker load < fixtures-container.tar
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
       - name: Restore provider-proxy cache
         if: github.event_name != 'schedule'
@@ -350,11 +349,12 @@ jobs:
           docker load < fixtures-container.tar
           docker load < gateway-e2e-container.tar
           docker load < provider-proxy-container.tar
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -456,9 +456,6 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> gateway.env
           echo "AWS_REGION=${AWS_REGION}" >> gateway.env
           echo "AZURE_API_KEY=${AZURE_API_KEY}" >> gateway.env
-          echo "AZURE_OPENAI_EASTUS2_API_KEY=${AZURE_OPENAI_EASTUS2_API_KEY}" >> gateway.env
-          echo "AZURE_OPENAI_DEPLOYMENT_ID=${AZURE_OPENAI_DEPLOYMENT_ID}" >> gateway.env
-          echo "AZURE_AI_FOUNDRY_API_KEY=${AZURE_AI_FOUNDRY_API_KEY}" >> gateway.env
           echo "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}" >> gateway.env
           echo "FIREWORKS_API_KEY=${FIREWORKS_API_KEY}" >> gateway.env
           echo "FIREWORKS_ACCOUNT_ID=${FIREWORKS_ACCOUNT_ID}" >> gateway.env

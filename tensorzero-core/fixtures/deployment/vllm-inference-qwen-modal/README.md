@@ -1,1 +1,1 @@
-To deploy: `uv run modal deploy vllm_inference.py`
+To deploy: `uvx modal deploy vllm_inference.py`

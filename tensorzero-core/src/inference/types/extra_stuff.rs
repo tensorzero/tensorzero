@@ -274,6 +274,7 @@ mod tests {
                 )]),
                 timeouts: Default::default(),
                 skip_relay: false,
+                namespace: None,
             },
         )]);
 

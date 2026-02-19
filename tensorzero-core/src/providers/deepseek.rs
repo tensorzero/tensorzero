@@ -2,7 +2,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -35,12 +35,16 @@ use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolC
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::providers::openai::{
     OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
-    OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage,
-    StreamOptions, SystemOrDeveloper, get_chat_url, handle_openai_error,
-    prepare_system_or_developer_message, tensorzero_to_openai_messages,
+    OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
+    SystemOrDeveloper, get_chat_url, handle_openai_error,
+    openai_response_tool_call_to_tensorzero_tool_call, prepare_system_or_developer_message,
+    tensorzero_to_openai_messages,
 };
 use crate::tool::ToolCallChunk;
 use serde_json::Value;
+use tensorzero_types_providers::deepseek::{
+    DeepSeekChatChunk, DeepSeekResponse, DeepSeekResponseChoice, DeepSeekResponseFormat,
+};
 use uuid::Uuid;
 
 lazy_static! {
@@ -182,6 +186,7 @@ impl InferenceProvider for DeepSeekProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -201,6 +206,7 @@ impl InferenceProvider for DeepSeekProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -213,6 +219,7 @@ impl InferenceProvider for DeepSeekProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -240,6 +247,7 @@ impl InferenceProvider for DeepSeekProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
             Err(handle_openai_error(
@@ -248,6 +256,7 @@ impl InferenceProvider for DeepSeekProvider {
                 &response,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -288,6 +297,7 @@ impl InferenceProvider for DeepSeekProvider {
             .bearer_auth(api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -327,23 +337,14 @@ impl InferenceProvider for DeepSeekProvider {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum DeepSeekResponseFormat {
-    #[default]
-    Text,
-    JsonObject,
-}
-
-impl DeepSeekResponseFormat {
-    fn new(json_mode: ModelInferenceRequestJsonMode) -> Option<Self> {
-        match json_mode {
-            ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
-            // For now, we never explicitly send `DeepSeekResponseFormat::Text`
-            ModelInferenceRequestJsonMode::Off => None,
-            ModelInferenceRequestJsonMode::Strict => Some(DeepSeekResponseFormat::JsonObject),
-        }
+fn deepseek_response_format(
+    json_mode: ModelInferenceRequestJsonMode,
+) -> Option<DeepSeekResponseFormat> {
+    match json_mode {
+        ModelInferenceRequestJsonMode::On => Some(DeepSeekResponseFormat::JsonObject),
+        // For now, we never explicitly send `DeepSeekResponseFormat::Text`
+        ModelInferenceRequestJsonMode::Off => None,
+        ModelInferenceRequestJsonMode::Strict => Some(DeepSeekResponseFormat::JsonObject),
     }
 }
 
@@ -435,7 +436,7 @@ impl<'a> DeepSeekRequest<'a> {
             );
         }
 
-        let response_format = DeepSeekResponseFormat::new(request.json_mode);
+        let response_format = deepseek_response_format(request.json_mode);
 
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
@@ -490,7 +491,7 @@ fn stream_deepseek(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -506,6 +507,7 @@ fn stream_deepseek(
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }));
 
                         let latency = start_time.elapsed();
@@ -526,49 +528,6 @@ fn stream_deepseek(
     })
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekFunctionCallChunk {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    arguments: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekToolCallChunk {
-    index: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
-    // If we were to do this better, we would need to check the `type` field
-    function: DeepSeekFunctionCallChunk,
-}
-
-// This doesn't include role
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekDelta {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<DeepSeekToolCallChunk>>,
-}
-
-// This doesn't include logprobs, finish_reason, and index
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekChatChunkChoice {
-    delta: DeepSeekDelta,
-    finish_reason: Option<OpenAIFinishReason>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekChatChunk {
-    choices: Vec<DeepSeekChatChunkChoice>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<OpenAIUsage>,
-}
-
 /// Maps a DeepSeek chunk to a TensorZero chunk for streaming inferences
 fn deepseek_to_tensorzero_chunk(
     raw_message: String,
@@ -583,6 +542,7 @@ fn deepseek_to_tensorzero_chunk(
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into());
     }
@@ -634,6 +594,7 @@ fn deepseek_to_tensorzero_chunk(
                                 raw_request: None,
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }))?
                             .clone()
                     }
@@ -656,31 +617,6 @@ fn deepseek_to_tensorzero_chunk(
         finish_reason,
         raw_usage,
     ))
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct DeepSeekResponseMessage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
-}
-
-// Leaving out logprobs and finish_reason for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct DeepSeekResponseChoice {
-    index: u8,
-    message: DeepSeekResponseMessage,
-    finish_reason: Option<OpenAIFinishReason>,
-}
-
-// Leaving out id, created, model, service_tier, system_fingerprint, object for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct DeepSeekResponse {
-    choices: Vec<DeepSeekResponseChoice>,
-    usage: OpenAIUsage,
 }
 
 pub(super) async fn prepare_deepseek_messages<'a>(
@@ -748,6 +684,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -764,6 +701,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(reasoning) = message.reasoning_content {
@@ -780,7 +718,9 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
         let raw_usage = deepseek_usage_from_raw_response(&raw_response).map(|usage| {
@@ -863,9 +803,19 @@ fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<Ope
                     (None, None) => None,
                 };
 
+                let combined_reasoning_content =
+                    match (&curr.reasoning_content, &next.reasoning_content) {
+                        (Some(r1), Some(r2)) => {
+                            Some(Cow::Owned(format!("{}\n\n{}", r1.as_ref(), r2.as_ref())))
+                        }
+                        (Some(r), None) | (None, Some(r)) => Some(r.clone()),
+                        (None, None) => None,
+                    };
+
                 result[i] = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                     content: combined_content,
                     tool_calls: combined_tool_calls,
+                    reasoning_content: combined_reasoning_content,
                 });
                 result.remove(i + 1);
             }
@@ -894,6 +844,7 @@ mod tests {
         OpenAIUsage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use tensorzero_types_providers::deepseek::DeepSeekResponseMessage;
 
     #[tokio::test]
     async fn test_deepseek_request_new() {
@@ -1311,6 +1262,7 @@ mod tests {
         OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
             content: content.map(|c| vec![OpenAIContentBlock::Text { text: c.into() }]),
             tool_calls,
+            reasoning_content: None,
         })
     }
     fn tool_message<'a>(content: &'a str, tool_call_id: &'a str) -> OpenAIRequestMessage<'a> {
@@ -1422,6 +1374,7 @@ mod tests {
             OpenAIAssistantRequestMessage {
                 content: Some(content),
                 tool_calls: Some(vec![tool_call1.clone(), tool_call2.clone()]),
+                reasoning_content: None,
             },
         )];
         assert_eq!(output, expected);
@@ -1481,6 +1434,7 @@ mod tests {
                     },
                 ]),
                 tool_calls: None,
+                reasoning_content: None,
             }),
         ];
         assert_eq!(output, expected);
@@ -1500,6 +1454,7 @@ mod tests {
                     OpenAIContentBlock::Text { text: "A3".into() },
                 ]),
                 tool_calls: Some(vec![tool_call1.clone()]),
+                reasoning_content: None,
             },
         )];
         assert_eq!(output, expected);

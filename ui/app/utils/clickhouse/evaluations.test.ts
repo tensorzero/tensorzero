@@ -164,8 +164,9 @@ describe("getEvaluationsForDatapoint", () => {
       "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
     );
     expect(first_evaluation.metric_value).toBe("false");
+    expect(first_evaluation.generated_output).toBeDefined();
     expect(first_evaluation.generated_output).toHaveLength(1);
-    const first_evaluation_output = first_evaluation.generated_output[0];
+    const first_evaluation_output = first_evaluation.generated_output![0];
     if (first_evaluation_output.type === "text") {
       expect(first_evaluation_output.text).toContain("Swallowing moonlight");
     } else {
@@ -180,8 +181,9 @@ describe("getEvaluationsForDatapoint", () => {
       "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
     );
     expect(second_evaluation.metric_value).toBe("true");
-    expect(second_evaluation.input.messages).toHaveLength(1);
-    const second_evaluation_input = second_evaluation.input;
+    expect(second_evaluation.input).toBeDefined();
+    expect(second_evaluation.input!.messages).toHaveLength(1);
+    const second_evaluation_input = second_evaluation.input!;
     if (second_evaluation_input.messages[0].content[0].type === "template") {
       expect(
         second_evaluation_input.messages[0].content[0].arguments,

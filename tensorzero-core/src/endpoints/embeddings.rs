@@ -6,7 +6,7 @@ use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::{
-    cache::CacheParamsOptions,
+    cache::{CacheManager, CacheParamsOptions},
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
@@ -52,6 +52,7 @@ pub async fn embeddings(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    cache_manager: CacheManager,
     deferred_tasks: TaskTracker,
     rate_limiting_manager: std::sync::Arc<RateLimitingManager>,
     params: EmbeddingsParams,
@@ -94,6 +95,7 @@ pub async fn embeddings(
         http_client: http_client.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
+        cache_manager,
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
         tags: tags.clone(),
@@ -104,18 +106,21 @@ pub async fn embeddings(
         relay: None,
         include_raw_usage: false, // not supported for embeddings endpoint (#5451)
         include_raw_response: params.include_raw_response,
+        include_aggregated_response: false, // not supported for embeddings endpoint
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
         .await?;
     let usage = response.usage_considering_cached();
     let tensorzero_raw_response = if params.include_raw_response && !response.cached {
-        Some(vec![RawResponseEntry {
-            model_inference_id: response.id,
-            provider_type: response.embedding_provider_name.to_string(),
+        let mut entries = response.failed_raw_response.clone();
+        entries.push(RawResponseEntry {
+            model_inference_id: Some(response.id),
+            provider_type: response.provider_type.to_string(),
             api_type: ApiType::Embeddings,
             data: response.raw_response.clone(),
-        }])
+        });
+        Some(entries)
     } else if params.include_raw_response {
         Some(vec![]) // Empty array for cached responses
     } else {
@@ -203,11 +208,13 @@ mod tests {
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let cache_manager = CacheManager::new(Arc::new(clickhouse_connection_info.clone()));
         let result = embeddings(
             config,
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            cache_manager,
             tokio_util::task::TaskTracker::new(),
             Arc::new(RateLimitingManager::new_dummy()),
             params,
@@ -240,12 +247,14 @@ mod tests {
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let cache_manager = CacheManager::new(Arc::new(clickhouse_connection_info.clone()));
 
         let result = embeddings(
             config,
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            cache_manager,
             tokio_util::task::TaskTracker::new(),
             Arc::new(RateLimitingManager::new_dummy()),
             params,

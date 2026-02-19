@@ -81,9 +81,9 @@ pub async fn get_or_load_config(
         return Ok(config);
     }
 
-    // Cache miss: load from ClickHouse
+    // Cache miss: load from database
     let snapshot = app_state
-        .clickhouse_connection_info
+        .get_delegating_database()
         .get_config_snapshot(snapshot_hash.clone())
         .await?;
 
@@ -128,6 +128,7 @@ pub async fn action(
                 &app_state.http_client,
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
+                app_state.cache_manager.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.rate_limiting_manager.clone(),
                 (*inference_params).try_into()?,
@@ -153,6 +154,7 @@ pub async fn action(
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
                 app_state.valkey_connection_info.clone(),
+                app_state.valkey_cache_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.shutdown_token.clone(),
             )?;
@@ -168,6 +170,7 @@ pub async fn action(
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
                 app_state.valkey_connection_info.clone(),
+                app_state.valkey_cache_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.shutdown_token.clone(),
             )?;

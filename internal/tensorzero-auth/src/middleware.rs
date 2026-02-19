@@ -7,6 +7,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use chrono::Utc;
 use moka::sync::Cache;
 use serde_json::{Value, json};
 use tracing::{Instrument, field::Empty};
@@ -129,7 +130,7 @@ pub async fn tensorzero_auth_middleware(
 
         let Some(pool) = &state.pool else {
             return Err(TensorZeroAuthError::Middleware {
-                message: "PostgreSQL connection is disabled".to_string(),
+                message: "Postgres connection is disabled".to_string(),
                 key_info: None,
             });
         };
@@ -139,10 +140,28 @@ pub async fn tensorzero_auth_middleware(
             let cache_key = parsed_key.cache_key();
             if let Some(cached_result) = cache.get(&cache_key) {
                 return match cached_result {
-                    AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
+                    AuthResult::Success(key_info) => {
+                        // The cache entry may have been stored before the key expired,
+                        // so we re-check expiration here.
+                        if let Some(expires_at) = key_info.expires_at
+                            && expires_at <= Utc::now()
+                        {
+                            return Err(TensorZeroAuthError::Middleware {
+                                message: format!("API key expired at: {expires_at}"),
+                                key_info: Some(Box::new(key_info)),
+                            });
+                        }
+                        Ok((parsed_key, key_info))
+                    }
                     AuthResult::Disabled(disabled_at, key_info) => {
                         Err(TensorZeroAuthError::Middleware {
                             message: format!("API key was disabled at: {disabled_at}"),
+                            key_info: Some(Box::new(key_info)),
+                        })
+                    }
+                    AuthResult::Expired(expired_at, key_info) => {
+                        Err(TensorZeroAuthError::Middleware {
+                            message: format!("API key expired at: {expired_at}"),
                             key_info: Some(Box::new(key_info)),
                         })
                     }
@@ -167,6 +186,10 @@ pub async fn tensorzero_auth_middleware(
             AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
             AuthResult::Disabled(disabled_at, key_info) => Err(TensorZeroAuthError::Middleware {
                 message: format!("API key was disabled at: {disabled_at}"),
+                key_info: Some(Box::new(key_info)),
+            }),
+            AuthResult::Expired(expired_at, key_info) => Err(TensorZeroAuthError::Middleware {
+                message: format!("API key expired at: {expired_at}"),
                 key_info: Some(Box::new(key_info)),
             }),
             AuthResult::MissingKey => Err(TensorZeroAuthError::Middleware {

@@ -16,6 +16,9 @@ permissions:
   contents: read
   actions: read
 
+env:
+  CARGO_INCREMENTAL: 0
+
 jobs:
   check-python-client-build:
     if: github.repository == 'tensorzero/tensorzero'
@@ -34,10 +37,10 @@ jobs:
       - name: Cleanup disk space
         if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then

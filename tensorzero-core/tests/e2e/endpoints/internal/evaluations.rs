@@ -5,13 +5,21 @@ use std::time::Duration;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+use tensorzero_core::endpoints::datasets::v1::types::{
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
+    CreateDatapointsResponse,
+};
 use tensorzero_core::endpoints::internal::evaluations::types::GetEvaluationStatisticsResponse;
 use tensorzero_core::endpoints::internal::evaluations::{
     GetEvaluationResultsResponse, GetEvaluationRunInfosResponse,
 };
+use tensorzero_core::inference::types::{
+    Arguments, ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Role, System, Text,
+};
+use tensorzero_core::tool::DynamicToolParams;
 use tokio::time::sleep;
 use uuid::Uuid;
 
@@ -19,7 +27,6 @@ use crate::common::get_gateway_endpoint;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_run_infos_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use evaluation run IDs from the test fixture data
@@ -65,7 +72,6 @@ async fn test_get_evaluation_run_infos_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_run_infos_single_run() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
@@ -99,7 +105,6 @@ async fn test_get_evaluation_run_infos_single_run() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_run_infos_nonexistent_run() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint("/internal/evaluations/run_infos").to_string()
@@ -123,7 +128,6 @@ async fn test_get_evaluation_run_infos_nonexistent_run() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_run_infos_wrong_function() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use a valid evaluation run ID but with wrong function name
@@ -154,7 +158,6 @@ async fn test_get_evaluation_run_infos_wrong_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_run_infos_for_datapoint_json_function() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use datapoint ID from the test fixture data for extract_entities function
@@ -192,7 +195,6 @@ async fn test_get_evaluation_run_infos_for_datapoint_json_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use datapoint ID from the test fixture data for write_haiku function
@@ -229,7 +231,6 @@ async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_run_infos_for_datapoint_nonexistent() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let datapoint_id = "00000000-0000-0000-0000-000000000000";
@@ -258,7 +259,6 @@ async fn test_get_evaluation_run_infos_for_datapoint_nonexistent() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_run_infos_for_datapoint_wrong_function() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use a valid datapoint ID but with wrong function name - this will return an error since
@@ -286,7 +286,6 @@ async fn test_get_evaluation_run_infos_for_datapoint_wrong_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_statistics_endpoint() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
@@ -324,7 +323,6 @@ async fn test_get_evaluation_statistics_endpoint() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_statistics_multiple_runs() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let evaluation_run_id1 = "0196368f-19bd-7082-a677-1c0bf346ff24";
@@ -355,7 +353,6 @@ async fn test_get_evaluation_statistics_multiple_runs() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_statistics_empty_run_ids() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
@@ -379,7 +376,6 @@ async fn test_get_evaluation_statistics_empty_run_ids() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_statistics_nonexistent_run() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
@@ -403,7 +399,6 @@ async fn test_get_evaluation_statistics_nonexistent_run() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_statistics_invalid_function_type() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
@@ -419,7 +414,6 @@ async fn test_get_evaluation_statistics_invalid_function_type() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_statistics_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint("/internal/evaluations/statistics").to_string()
@@ -437,7 +431,6 @@ async fn test_get_evaluation_statistics_invalid_uuid() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_results_haiku() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use evaluation run ID from the test fixture data for haiku evaluation
@@ -477,7 +470,6 @@ async fn test_get_evaluation_results_haiku() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_results_entity_extraction() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use evaluation run ID from the test fixture data for entity_extraction (JSON function)
@@ -514,7 +506,6 @@ async fn test_get_evaluation_results_entity_extraction() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_results_multiple_runs() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Use two evaluation run IDs from the test fixture data
@@ -557,7 +548,6 @@ async fn test_get_evaluation_results_multiple_runs() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_results_pagination() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
@@ -617,7 +607,6 @@ async fn test_get_evaluation_results_pagination() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_results_evaluation_not_found() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
@@ -637,7 +626,6 @@ async fn test_get_evaluation_results_evaluation_not_found() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_results_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint("/internal/evaluations/results").to_string()
@@ -653,7 +641,6 @@ async fn test_get_evaluation_results_invalid_uuid() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_results_nonexistent_run() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let url = get_gateway_endpoint("/internal/evaluations/results").to_string()
@@ -676,7 +663,6 @@ async fn test_get_evaluation_results_nonexistent_run() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_results_default_pagination() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
@@ -705,28 +691,42 @@ async fn test_get_evaluation_results_default_pagination() {
 // run_evaluation SSE streaming endpoint tests
 // ============================================================================
 
-/// Helper function to create a chat datapoint for testing evaluations
-async fn create_test_chat_datapoint(
-    client: &Client,
-    dataset_name: &str,
-    datapoint_id: Uuid,
-) -> Value {
-    let resp = client
-        .put(get_gateway_endpoint(&format!(
-            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
-        )))
-        .json(&json!({
-            "function_name": "basic_test",
-            "input": {
-                "system": { "assistant_name": "TestBot" },
-                "messages": [{
-                    "role": "user",
-                    "content": [{ "type": "text", "text": "Hello, write me a haiku" }]
-                }]
+/// Helper function to create a chat datapoint for testing evaluations.
+/// Returns the ID of the created datapoint.
+async fn create_test_chat_datapoint(client: &Client, dataset_name: &str) -> Uuid {
+    let mut system_args = Map::new();
+    system_args.insert(
+        "assistant_name".to_string(),
+        Value::String("TestBot".to_string()),
+    );
+
+    let payload = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+            function_name: "basic_test".to_string(),
+            episode_id: None,
+            input: Input {
+                system: Some(System::Template(Arguments(system_args))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello, write me a haiku".to_string(),
+                    })],
+                }],
             },
-            "output": [{ "type": "text", "text": "Test output response" }],
-            "is_custom": true,
-        }))
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Test output response".to_string(),
+            })]),
+            dynamic_tool_params: DynamicToolParams::default(),
+            tags: None,
+            name: None,
+        })],
+    };
+
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&payload)
         .send()
         .await
         .unwrap();
@@ -737,23 +737,26 @@ async fn create_test_chat_datapoint(
         resp.status()
     );
 
-    resp.json().await.unwrap()
+    let body: CreateDatapointsResponse = resp.json().await.unwrap();
+    assert_eq!(
+        body.ids.len(),
+        1,
+        "Expected exactly one datapoint to be created"
+    );
+    body.ids[0]
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_success() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let _clickhouse = get_clickhouse().await;
 
     // Create a unique dataset with test datapoints
     let dataset_name = format!("test-eval-dataset-{}", Uuid::now_v7());
-    let datapoint_id1 = Uuid::now_v7();
-    let datapoint_id2 = Uuid::now_v7();
 
     // Create test datapoints
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id1).await;
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
+    create_test_chat_datapoint(&http_client, &dataset_name).await;
+    create_test_chat_datapoint(&http_client, &dataset_name).await;
 
     // Wait for data to be available in ClickHouse
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -864,7 +867,6 @@ async fn test_run_evaluation_streaming_success() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_missing_variant() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Request without variant_name or internal_dynamic_variant_config
@@ -904,7 +906,6 @@ async fn test_run_evaluation_streaming_missing_variant() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_nonexistent_dataset() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let payload = json!({
@@ -975,20 +976,16 @@ async fn test_run_evaluation_streaming_nonexistent_dataset() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let _clickhouse = get_clickhouse().await;
 
     // Create a unique dataset with test datapoints
     let dataset_name = format!("test-eval-ids-dataset-{}", Uuid::now_v7());
-    let datapoint_id1 = Uuid::now_v7();
-    let datapoint_id2 = Uuid::now_v7();
-    let datapoint_id3 = Uuid::now_v7();
 
     // Create test datapoints
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id1).await;
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id3).await;
+    let datapoint_id1 = create_test_chat_datapoint(&http_client, &dataset_name).await;
+    let datapoint_id2 = create_test_chat_datapoint(&http_client, &dataset_name).await;
+    let _datapoint_id3 = create_test_chat_datapoint(&http_client, &dataset_name).await;
 
     // Wait for data to be available
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1060,7 +1057,6 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_conflicting_variant_config() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // Provide both variant_name AND internal_dynamic_variant_config (should fail)
@@ -1105,7 +1101,6 @@ async fn test_run_evaluation_streaming_conflicting_variant_config() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_invalid_inference_cache() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let payload = json!({
@@ -1151,7 +1146,6 @@ async fn test_run_evaluation_streaming_invalid_inference_cache() {
 /// and then verifies the endpoint returns the correct feedback.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_human_feedback_returns_feedback_when_exists() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // First, run an inference to get an inference_id
@@ -1256,7 +1250,6 @@ async fn test_get_human_feedback_returns_feedback_when_exists() {
 /// Test that get_human_feedback returns None when no feedback exists.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_human_feedback_returns_none_when_not_exists() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let nonexistent_datapoint_id = Uuid::now_v7();
@@ -1290,7 +1283,6 @@ async fn test_get_human_feedback_returns_none_when_not_exists() {
 /// Test that get_human_feedback works with boolean feedback values.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_human_feedback_with_boolean_value() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // First, run an inference to get an inference_id
@@ -1379,7 +1371,6 @@ async fn test_get_human_feedback_with_boolean_value() {
 /// Test that get_human_feedback returns the correct feedback when output doesn't match.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_human_feedback_output_mismatch() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     // First, run an inference to get an inference_id
@@ -1476,7 +1467,6 @@ async fn test_get_human_feedback_output_mismatch() {
 /// Test that get_human_feedback handles invalid UUID in datapoint_id.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_human_feedback_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
 
     let resp = http_client
@@ -1500,7 +1490,6 @@ async fn test_get_human_feedback_invalid_uuid() {
 /// Test that get_human_feedback requires all parameters.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_human_feedback_missing_parameters() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let datapoint_id = Uuid::now_v7();
 

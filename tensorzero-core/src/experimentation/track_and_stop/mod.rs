@@ -57,7 +57,7 @@ use tokio_util::sync::CancellationToken;
 use estimate_optimal_probabilities::{
     EstimateOptimalProbabilitiesArgs, estimate_optimal_probabilities,
 };
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
@@ -454,13 +454,13 @@ impl VariantSampler for TrackAndStopConfig {
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
     ) -> Result<(), Error> {
-        // Track-and-Stop requires PostgreSQL for episode-to-variant mapping
+        // Track-and-Stop requires Postgres for episode-to-variant mapping
         match postgres {
             PostgresConnectionInfo::Disabled => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is not available. \
-                        Track-and-Stop requires PostgreSQL for episode-to-variant consistency. \
+                        "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is not available. \
+                        Track-and-Stop requires Postgres for episode-to-variant consistency. \
                         Please set the `TENSORZERO_POSTGRES_URL` environment variable.",
                     ),
                 }));
@@ -475,8 +475,8 @@ impl VariantSampler for TrackAndStopConfig {
         postgres.health().await.map_err(|e| {
             Error::new(ErrorDetails::Config {
                 message: format!(
-                    "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is unhealthy: {e}. \
-                    Track-and-Stop requires a healthy PostgreSQL connection for episode-to-variant consistency.",
+                    "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is unhealthy: {e}. \
+                    Track-and-Stop requires a healthy Postgres connection for episode-to-variant consistency.",
                 ),
             })
         })?;
@@ -488,11 +488,13 @@ impl VariantSampler for TrackAndStopConfig {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
-            return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Track-and-Stop probability update task has already been spawned for function '{function_name}'"
-                ),
-            }));
+            // This can happen when running GEPA, which re-uses the existing gateway config.
+            // We don't need to spawn another background update task - the existing task will update
+            // the `ArcSwap` read by all consumers
+            tracing::info!(
+                "Track-and-Stop experimentation background task has already been spawned for function '{function_name}'"
+            );
+            return Ok(());
         }
 
         // Spawn a background task that continuously updates sampling probabilities.
@@ -2084,6 +2086,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_prevents_duplicate_task_spawning() {
+        let logs_contain = crate::utils::testing::capture_logs();
+
         // Create a TrackAndStopConfig instance
         let config = TrackAndStopConfig {
             metric: "test_metric".to_string(),
@@ -2112,17 +2116,21 @@ mod tests {
             .await;
         assert!(result1.is_ok(), "First setup call should succeed");
 
-        // Second call to setup should fail with an error
+        // Second call to setup should also succeed (no-op) and log a message
         let result2 = config
             .setup(db, "test_function", &postgres, cancel_token.clone())
             .await;
-        assert!(result2.is_err(), "Second setup call should fail");
-
-        // Verify the error message mentions the task has already been spawned
-        let err = result2.unwrap_err();
         assert!(
-            err.to_string().contains("already been spawned"),
-            "Error should mention task already spawned, got: {err}"
+            result2.is_ok(),
+            "Second setup call should succeed (task already spawned)"
+        );
+
+        // Verify the info log message is emitted
+        assert!(
+            logs_contain(
+                "Track-and-Stop experimentation background task has already been spawned for function"
+            ),
+            "Expected log message about task already being spawned"
         );
 
         // Clean up: cancel the spawned task
@@ -2174,8 +2182,8 @@ mod tests {
             "Error message should mention Track-and-Stop, got: {err_msg}"
         );
         assert!(
-            err_msg.contains("PostgreSQL"),
-            "Error message should mention PostgreSQL, got: {err_msg}"
+            err_msg.contains("Postgres"),
+            "Error message should mention Postgres, got: {err_msg}"
         );
         assert!(
             err_msg.contains("test_function"),

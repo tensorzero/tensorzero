@@ -43,6 +43,7 @@ import {
 import { useToast } from "~/hooks/use-toast";
 import { logger } from "~/utils/logger";
 import { ActionBar } from "~/components/layout/ActionBar";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DatasetSelect } from "~/components/dataset/DatasetSelect";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
@@ -387,13 +388,14 @@ function ResultsContent({
         selectedRows={selectedRows}
         setSelectedRows={setSelectedRows}
       />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={offset <= 0}
-        disableNext={offset + limit >= total_datapoints}
-      />
-      {!has_selected_runs && (
+      {has_selected_runs ? (
+        <PageButtons
+          onPreviousPage={handlePreviousPage}
+          onNextPage={handleNextPage}
+          disablePrevious={offset <= 0}
+          disableNext={offset + limit >= total_datapoints}
+        />
+      ) : (
         <div className="mt-4 text-center text-gray-500">
           Select evaluation run IDs to view results
         </div>
@@ -499,6 +501,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                 : "Add selected inferences to dataset"
             }
           />
+          <AskAutopilotButton message={`Evaluation: ${evaluation_name}\n\n`} />
         </ActionBar>
       </PageHeader>
 

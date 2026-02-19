@@ -1,19 +1,28 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use feedback::FeedbackQueries;
+use futures::future::Shared;
 use serde::{Deserialize, Serialize};
-use std::future::Future;
 use uuid::Uuid;
 
 #[cfg(test)]
 use mockall::automock;
 
+use crate::config::Config;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
+use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
+pub type BatchWriterHandle = Shared<Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
+
 pub mod batch_inference;
+pub mod batching;
+pub mod cache;
 pub mod clickhouse;
 pub mod datasets;
 pub mod delegating_connection;
@@ -24,6 +33,7 @@ pub mod model_inferences;
 pub mod postgres;
 pub mod query_helpers;
 pub mod rate_limiting;
+pub mod resolve_uuid;
 pub mod stored_datapoint;
 pub mod test_helpers;
 pub mod valkey;
@@ -34,27 +44,30 @@ pub use rate_limiting::*;
 
 #[async_trait]
 pub trait ClickHouseConnection:
-    SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync
+    EpisodeQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync
 {
 }
 
+#[cfg_attr(test, automock)]
 #[async_trait]
 pub trait HealthCheckable {
     async fn health(&self) -> Result<(), Error>;
 }
 
 #[cfg_attr(test, automock)]
-pub trait SelectQueries {
-    fn query_episode_table(
+#[async_trait]
+pub trait EpisodeQueries: Send + Sync {
+    async fn query_episode_table(
         &self,
+        config: &Config,
         limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
-    ) -> impl Future<Output = Result<Vec<EpisodeByIdRow>, Error>> + Send;
+        function_name: Option<String>,
+        filters: Option<InferenceFilter>,
+    ) -> Result<Vec<EpisodeByIdRow>, Error>;
 
-    fn query_episode_table_bounds(
-        &self,
-    ) -> impl Future<Output = Result<TableBoundsWithCount, Error>> + Send;
+    async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -84,7 +97,7 @@ impl TimeWindow {
         }
     }
 
-    /// Converts the time window to the PostgreSQL date_trunc time unit.
+    /// Converts the time window to the Postgres date_trunc time unit.
     pub fn to_postgres_time_unit(&self) -> &'static str {
         match self {
             TimeWindow::Minute => "minute",
@@ -147,7 +160,7 @@ pub struct TableBoundsWithCount {
     pub count: u64,
 }
 
-impl<T: SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync>
+impl<T: EpisodeQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync>
     ClickHouseConnection for T
 {
 }
@@ -171,10 +184,108 @@ pub trait ExperimentationQueries {
     ) -> Result<String, Error>;
 }
 
+#[async_trait]
 #[cfg_attr(test, automock)]
-pub trait ConfigQueries {
-    fn get_config_snapshot(
+pub trait ConfigQueries: Send + Sync {
+    async fn get_config_snapshot(
         &self,
         snapshot_hash: SnapshotHash,
-    ) -> impl Future<Output = Result<ConfigSnapshot, Error>> + Send;
+    ) -> Result<ConfigSnapshot, Error>;
+
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error>;
+}
+
+#[async_trait]
+pub trait DeploymentIdQueries: Send + Sync {
+    async fn get_deployment_id(&self) -> Result<String, Error>;
+}
+
+#[derive(Debug)]
+pub struct HowdyInferenceCounts {
+    pub chat_inference_count: u64,
+    pub json_inference_count: u64,
+}
+
+#[derive(Debug)]
+pub struct HowdyFeedbackCounts {
+    pub boolean_metric_feedback_count: u64,
+    pub float_metric_feedback_count: u64,
+    pub comment_feedback_count: u64,
+    pub demonstration_feedback_count: u64,
+}
+
+#[derive(Debug)]
+pub struct HowdyTokenUsage {
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+}
+
+#[async_trait]
+pub trait HowdyQueries: Send + Sync {
+    async fn count_inferences_for_howdy(&self) -> Result<HowdyInferenceCounts, Error>;
+    async fn count_feedbacks_for_howdy(&self) -> Result<HowdyFeedbackCounts, Error>;
+    async fn get_token_totals_for_howdy(&self) -> Result<HowdyTokenUsage, Error>;
+}
+
+/// A stored DICL (Dynamic In-Context Learning) example.
+#[derive(Debug, Clone)]
+pub struct StoredDICLExample {
+    pub id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub namespace: String,
+    pub input: String,
+    pub output: String,
+    pub embedding: Vec<f32>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A DICL example returned from similarity search.
+#[derive(Debug, Clone)]
+pub struct DICLExampleWithDistance {
+    pub input: String,
+    pub output: String,
+    pub cosine_distance: f32,
+}
+
+/// Trait for DICL (Dynamic In-Context Learning) queries.
+///
+/// DICL stores examples with embeddings for similarity search during inference.
+/// The variant retrieves similar examples based on the input embedding to provide
+/// in-context learning examples to the model.
+#[async_trait]
+pub trait DICLQueries: Send + Sync {
+    /// Insert a DICL example into the database.
+    async fn insert_dicl_example(&self, example: &StoredDICLExample) -> Result<(), Error>;
+
+    /// Insert multiple DICL examples in a batch.
+    async fn insert_dicl_examples(&self, examples: &[StoredDICLExample]) -> Result<u64, Error>;
+
+    /// Get similar DICL examples using cosine distance.
+    ///
+    /// Returns examples sorted by cosine distance (ascending).
+    async fn get_similar_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        embedding: &[f32],
+        limit: u32,
+    ) -> Result<Vec<DICLExampleWithDistance>, Error>;
+
+    /// Check if DICL examples exist for a given function and variant.
+    async fn has_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+    ) -> Result<bool, Error>;
+
+    /// Delete DICL examples for a given function and variant.
+    ///
+    /// If namespace is provided, only deletes examples in that namespace.
+    async fn delete_dicl_examples(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        namespace: Option<&str>,
+    ) -> Result<u64, Error>;
 }

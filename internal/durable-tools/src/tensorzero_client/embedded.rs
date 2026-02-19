@@ -5,6 +5,7 @@
 
 use async_trait::async_trait;
 use autopilot_client::GatewayListEventsResponse;
+use std::sync::Arc;
 use tensorzero::{
     ClientInferenceParams, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
@@ -14,8 +15,8 @@ use tensorzero::{
     UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use tensorzero_core::config::write_config_snapshot;
 use tensorzero_core::db::ConfigQueries;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::datasets::v1::types::{
@@ -25,7 +26,9 @@ use tensorzero_core::endpoints::datasets::v1::types::{
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
-use tensorzero_core::endpoints::internal::autopilot::{create_event, list_events, list_sessions};
+use tensorzero_core::endpoints::internal::autopilot::{
+    create_event, list_events, list_sessions, s3_initiate_upload,
+};
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::utils::gateway::AppStateData;
 use uuid::Uuid;
@@ -34,8 +37,8 @@ use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
 
 use super::{
     CreateEventGatewayRequest, CreateEventResponse, ListEventsParams, ListSessionsParams,
-    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, TensorZeroClient,
-    TensorZeroClientError,
+    ListSessionsResponse, RunEvaluationParams, RunEvaluationResponse, S3UploadRequest,
+    S3UploadResponse, TensorZeroClient, TensorZeroClientError,
 };
 
 /// TensorZero client that uses an existing gateway's state directly.
@@ -70,6 +73,7 @@ impl TensorZeroClient for EmbeddedClient {
             &self.app_state.http_client,
             self.app_state.clickhouse_connection_info.clone(),
             self.app_state.postgres_connection_info.clone(),
+            self.app_state.cache_manager.clone(),
             self.app_state.deferred_tasks.clone(),
             self.app_state.rate_limiting_manager.clone(),
             internal_params,
@@ -170,6 +174,23 @@ impl TensorZeroClient for EmbeddedClient {
         })
     }
 
+    async fn s3_initiate_upload(
+        &self,
+        request: S3UploadRequest,
+    ) -> Result<S3UploadResponse, TensorZeroClientError> {
+        let autopilot_client = self
+            .app_state
+            .autopilot_client
+            .as_ref()
+            .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
+
+        s3_initiate_upload(autopilot_client, request)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
+    }
+
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
@@ -205,7 +226,7 @@ impl TensorZeroClient for EmbeddedClient {
 
         let snapshot = self
             .app_state
-            .clickhouse_connection_info
+            .get_delegating_database()
             .get_config_snapshot(snapshot_hash)
             .await
             .map_err(|e| {
@@ -241,7 +262,9 @@ impl TensorZeroClient for EmbeddedClient {
 
         let hash = snapshot.hash.to_string();
 
-        write_config_snapshot(&self.app_state.clickhouse_connection_info, snapshot)
+        self.app_state
+            .get_delegating_database()
+            .write_config_snapshot(&snapshot)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
@@ -262,7 +285,7 @@ impl TensorZeroClient for EmbeddedClient {
         tensorzero_core::endpoints::datasets::v1::create_datapoints(
             &self.app_state.config,
             &self.app_state.http_client,
-            &self.app_state.clickhouse_connection_info,
+            &self.app_state.get_delegating_database(),
             &dataset_name,
             request,
         )
@@ -279,7 +302,7 @@ impl TensorZeroClient for EmbeddedClient {
 
         tensorzero_core::endpoints::datasets::v1::create_from_inferences(
             &self.app_state.config,
-            &self.app_state.clickhouse_connection_info,
+            &self.app_state.get_delegating_database(),
             dataset_name,
             request,
         )
@@ -292,7 +315,7 @@ impl TensorZeroClient for EmbeddedClient {
         request: ListDatasetsRequest,
     ) -> Result<ListDatasetsResponse, TensorZeroClientError> {
         tensorzero_core::endpoints::datasets::v1::list_datasets(
-            &self.app_state.clickhouse_connection_info,
+            &self.app_state.get_delegating_database(),
             request,
         )
         .await
@@ -305,7 +328,7 @@ impl TensorZeroClient for EmbeddedClient {
         request: ListDatapointsRequest,
     ) -> Result<GetDatapointsResponse, TensorZeroClientError> {
         tensorzero_core::endpoints::datasets::v1::list_datapoints(
-            &self.app_state.clickhouse_connection_info,
+            &self.app_state.get_delegating_database(),
             dataset_name,
             request,
         )
@@ -321,7 +344,7 @@ impl TensorZeroClient for EmbeddedClient {
         let request = GetDatapointsRequest { ids };
 
         tensorzero_core::endpoints::datasets::v1::get_datapoints(
-            &self.app_state.clickhouse_connection_info,
+            &self.app_state.get_delegating_database(),
             dataset_name,
             request,
         )
@@ -353,7 +376,7 @@ impl TensorZeroClient for EmbeddedClient {
         let request = DeleteDatapointsRequest { ids };
 
         tensorzero_core::endpoints::datasets::v1::delete_datapoints(
-            &self.app_state.clickhouse_connection_info,
+            &self.app_state.get_delegating_database(),
             &dataset_name,
             request,
         )
@@ -369,7 +392,7 @@ impl TensorZeroClient for EmbeddedClient {
     ) -> Result<GetInferencesResponse, TensorZeroClientError> {
         tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
             &self.app_state.config,
-            &self.app_state.clickhouse_connection_info,
+            &self.app_state.get_delegating_database(),
             request,
         )
         .await
@@ -382,7 +405,7 @@ impl TensorZeroClient for EmbeddedClient {
     ) -> Result<GetInferencesResponse, TensorZeroClientError> {
         tensorzero_core::endpoints::stored_inferences::v1::get_inferences(
             &self.app_state.config,
-            &self.app_state.clickhouse_connection_info,
+            &self.app_state.get_delegating_database(),
             request,
         )
         .await
@@ -395,10 +418,12 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         params: tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams,
     ) -> Result<super::OptimizationJobHandle, TensorZeroClientError> {
+        let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+            Arc::new(self.app_state.get_delegating_database());
         tensorzero_optimizers::endpoints::launch_optimization_workflow(
             &self.app_state.http_client,
             self.app_state.config.clone(),
-            &self.app_state.clickhouse_connection_info,
+            &db,
             params,
         )
         .await
@@ -424,7 +449,7 @@ impl TensorZeroClient for EmbeddedClient {
         target_id: Uuid,
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError> {
         tensorzero_core::endpoints::feedback::internal::get_latest_feedback_id_by_metric(
-            &self.app_state.clickhouse_connection_info,
+            &self.app_state.get_delegating_database(),
             target_id,
         )
         .await
@@ -438,7 +463,7 @@ impl TensorZeroClient for EmbeddedClient {
         variant_names: Option<Vec<String>>,
     ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
         self.app_state
-            .clickhouse_connection_info
+            .get_delegating_database()
             .get_feedback_by_variant(&metric_name, &function_name, variant_names.as_ref())
             .await
             .map_err(|e| {

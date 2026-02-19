@@ -69,7 +69,8 @@ TensorZero will attempt the following methods in order:
 3. `AWS_BEARER_TOKEN_BEDROCK` environment variable (bearer auth)
 4. AWS SDK credential chain (SigV4)
 
-See the [Configuration Reference](/gateway/configuration-reference/) for more details on authentication options.
+You can also provide credentials dynamically at inference time using the `dynamic::` prefix (e.g. `access_key_id = "dynamic::aws_access_key_id"`).
+See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more details on authentication options.
 
 ### AWS Region
 

@@ -2,6 +2,7 @@
 import type { CacheParamsOptions } from "./CacheParamsOptions";
 import type { InferenceParams } from "./InferenceParams";
 import type { Input } from "./Input";
+import type { Namespace } from "./Namespace";
 import type { ProviderTool } from "./ProviderTool";
 import type { Tool } from "./Tool";
 import type { ToolChoice } from "./ToolChoice";
@@ -15,6 +16,7 @@ export type ClientInferenceParams = {
   function_name?: string;
   model_name?: string;
   episode_id?: string;
+  namespace?: Namespace;
   input: Input;
   stream?: boolean;
   params: InferenceParams;
@@ -42,6 +44,10 @@ export type ClientInferenceParams = {
    * If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
    */
   include_raw_usage: boolean;
+  /**
+   * If `true`, include an `aggregated_response` field in the final chunk in the stream
+   */
+  include_aggregated_response: boolean;
   internal_dynamic_variant_config?: UninitializedVariantInfo;
   /**
    * A subset of static tools configured for the function that the inference is allowed to use. Optional.

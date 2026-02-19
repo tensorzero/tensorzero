@@ -4,17 +4,11 @@ set -euo pipefail
 
 DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
 CLICKHOUSE_HOST_VAR="${CLICKHOUSE_HOST}"
-# Determine credentials based on environment
-if command -v buildkite-agent >/dev/null 2>&1; then
-  # Running on Buildkite - use secrets (fail if not available)
-  CLICKHOUSE_USER_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
-  CLICKHOUSE_PASSWORD_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
+CLICKHOUSE_USER_VAR="${CLICKHOUSE_USER:-chuser}"
+CLICKHOUSE_PASSWORD_VAR="${CLICKHOUSE_PASSWORD:-chpassword}"
+CLICKHOUSE_SECURE_FLAG=""
+if [ "${CLICKHOUSE_SECURE:-0}" = "1" ]; then
   CLICKHOUSE_SECURE_FLAG="--secure"
-else
-  # Not on Buildkite - use environment variables with defaults
-  CLICKHOUSE_USER_VAR="${CLICKHOUSE_USER:-chuser}"
-  CLICKHOUSE_PASSWORD_VAR="${CLICKHOUSE_PASSWORD:-chpassword}"
-  CLICKHOUSE_SECURE_FLAG=""
 fi
 
 echo "Verifying fixture counts for tables..."
@@ -33,7 +27,6 @@ all_tables["ChatInference"]="./small-fixtures/chat_inference_examples.jsonl ./la
 all_tables["ModelInference"]="./small-fixtures/model_inference_examples.jsonl ./large-fixtures/large_chat_model_inference_v2.parquet ./large-fixtures/large_json_model_inference_v2.parquet"
 all_tables["ChatInferenceDatapoint FINAL"]="./small-fixtures/chat_inference_datapoint_examples.jsonl"
 all_tables["JsonInferenceDatapoint FINAL"]="./small-fixtures/json_inference_datapoint_examples.jsonl"
-all_tables["ModelInferenceCache"]="./small-fixtures/model_inference_cache_e2e.jsonl"
 all_tables["DynamicEvaluationRun"]="./small-fixtures/dynamic_evaluation_run_examples.jsonl"
 all_tables["DynamicEvaluationRunEpisode"]="./small-fixtures/dynamic_evaluation_run_episode_examples.jsonl"
 

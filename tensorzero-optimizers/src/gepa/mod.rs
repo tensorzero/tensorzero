@@ -9,8 +9,8 @@ use tensorzero_core::{
     client::{ClientBuilder, ClientBuilderMode},
     config::{Config, UninitializedVariantConfig, provider_types::ProviderTypesConfig},
     db::{
-        clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo,
-        valkey::ValkeyConnectionInfo,
+        clickhouse::ClickHouseConnectionInfo, delegating_connection::DelegatingDatabaseQueries,
+        postgres::PostgresConnectionInfo, valkey::ValkeyConnectionInfo,
     },
     endpoints::{datasets::v1::delete_dataset, inference::InferenceCredentials},
     error::{Error, ErrorDetails},
@@ -57,7 +57,7 @@ impl Optimizer for GEPAConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         _credentials: &InferenceCredentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo,
+        db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: std::sync::Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Validate configuration and examples, get the FunctionContext (function_config, static_tools, and evaluation_config)
@@ -82,12 +82,26 @@ impl Optimizer for GEPAConfig {
             val_examples.len()
         );
 
-        // Build the gateway client once for the entire optimization run
+        // Build the gateway client once for the entire optimization run.
+        // The gateway client needs its own ClickHouseConnectionInfo for observability writes.
+        // Read TENSORZERO_CLICKHOUSE_URL from env, consistent with gateway startup
+        // (see tensorzero-core/src/utils/gateway.rs).
+        let gateway_clickhouse = match std::env::var("TENSORZERO_CLICKHOUSE_URL") {
+            Ok(url) => {
+                ClickHouseConnectionInfo::new(
+                    &url,
+                    config.gateway.observability.batch_writes.clone(),
+                )
+                .await?
+            }
+            Err(_) => ClickHouseConnectionInfo::new_disabled(),
+        };
         let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config: config.clone(),
-            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            clickhouse_connection_info: gateway_clickhouse,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             http_client: client.clone(),
             timeout: Some(Duration::from_secs(self.timeout)),
         })
@@ -131,7 +145,7 @@ impl Optimizer for GEPAConfig {
         let val_create_datapoints_response = create_evaluation_dataset(
             &config,
             client,
-            clickhouse_connection_info,
+            db.as_ref(),
             val_examples,
             &val_dataset_name,
         )
@@ -164,7 +178,7 @@ impl Optimizer for GEPAConfig {
             .iter()
             .map(|(variant_name, variant_config)| {
                 let gateway_client = gateway_client.clone();
-                let clickhouse_connection_info = clickhouse_connection_info.clone();
+                let db = Arc::clone(db);
                 let functions = config.functions.clone();
                 let evaluation_config_param = Arc::clone(&function_context.evaluation_config);
                 let evaluation_name = evaluation_name.clone();
@@ -175,7 +189,7 @@ impl Optimizer for GEPAConfig {
                 async move {
                     match evaluate_variant(EvaluateVariantParams {
                         gateway_client,
-                        clickhouse_connection_info,
+                        db,
                         functions,
                         evaluation_config: evaluation_config_param,
                         evaluation_name,
@@ -294,7 +308,7 @@ impl Optimizer for GEPAConfig {
             let batch_size = self.batch_size.min(train_examples.len());
             let mutation_examples: Vec<RenderedSample> = train_examples
                 .iter()
-                .choose_multiple(&mut rng, batch_size)
+                .sample(&mut rng, batch_size)
                 .into_iter()
                 .cloned()
                 .collect();
@@ -314,7 +328,7 @@ impl Optimizer for GEPAConfig {
             let _mutation_create_datapoints_response = create_evaluation_dataset(
                 &config,
                 client,
-                clickhouse_connection_info,
+                db.as_ref(),
                 mutation_examples,
                 &mutation_dataset_name,
             )
@@ -330,7 +344,7 @@ impl Optimizer for GEPAConfig {
             // to the next iteration rather than stopping the entire optimization.
             let parent_evaluation_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
-                clickhouse_connection_info: clickhouse_connection_info.clone(),
+                db: Arc::clone(db),
                 functions: config.functions.clone(),
                 evaluation_config: Arc::clone(&function_context.evaluation_config),
                 evaluation_name: self.evaluation_name.clone(),
@@ -433,7 +447,7 @@ impl Optimizer for GEPAConfig {
             // evaluation fails, consistent with parent evaluation error handling.
             let child_evaluation_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
-                clickhouse_connection_info: clickhouse_connection_info.clone(),
+                db: Arc::clone(db),
                 functions: config.functions.clone(),
                 evaluation_config: Arc::clone(&function_context.evaluation_config),
                 evaluation_name: self.evaluation_name.clone(),
@@ -485,7 +499,7 @@ impl Optimizer for GEPAConfig {
 
                 match evaluate_variant(EvaluateVariantParams {
                     gateway_client: gateway_client.clone(),
-                    clickhouse_connection_info: clickhouse_connection_info.clone(),
+                    db: Arc::clone(db),
                     functions: config.functions.clone(),
                     evaluation_config: Arc::clone(&function_context.evaluation_config),
                     evaluation_name: self.evaluation_name.clone(),
@@ -567,7 +581,7 @@ impl Optimizer for GEPAConfig {
 
         // Clean up temporary datasets
         for dataset_name in &temporary_datasets {
-            if let Err(err) = delete_dataset(clickhouse_connection_info, dataset_name).await {
+            if let Err(err) = delete_dataset(db.as_ref(), dataset_name).await {
                 tracing::warn!(
                     "Failed to delete temporary GEPA dataset '{}': {}",
                     dataset_name,

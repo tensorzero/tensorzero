@@ -20,8 +20,8 @@ use crate::endpoints::openai_compatible::types::embeddings::{
 use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
 use crate::inference::types::{
-    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    TextChunk, Usage,
+    ApiType, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponseChunk, TextChunk, Usage,
 };
 use crate::model::Credential;
 use crate::{
@@ -169,6 +169,7 @@ impl TensorzeroRelay {
                     message: e.to_string(),
                     status_code: None,
                     provider_type: "tensorzero_relay".to_string(),
+                    api_type: ApiType::Embeddings,
                     raw_request: None,
                     raw_response: None,
                 })
@@ -524,6 +525,7 @@ impl TensorzeroRelay {
             },
             internal_dynamic_variant_config: None,
             episode_id: None,
+            namespace: None,
             dryrun: None,
             // Filter out internal tags (those starting with "tensorzero::") before forwarding
             // to the downstream gateway, as they will be rejected by tag validation
@@ -539,6 +541,7 @@ impl TensorzeroRelay {
             include_original_response: false,
             include_raw_response: clients.include_raw_response,
             include_raw_usage: clients.include_raw_usage,
+            include_aggregated_response: clients.include_aggregated_response,
             api_key,
         };
         Ok(res)

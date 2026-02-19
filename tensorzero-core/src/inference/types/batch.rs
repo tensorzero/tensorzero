@@ -10,7 +10,7 @@ use super::{
 
 use crate::config::snapshot::SnapshotHash;
 use crate::inference::types::StoredRequestMessage;
-use crate::serde_util::deserialize_json_string;
+use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use crate::{
     endpoints::{
         batch_inference::{BatchEpisodeIdInput, BatchOutputSchemas},
@@ -54,6 +54,7 @@ pub struct StartBatchModelInferenceResponse {
     pub raw_request: String,  // The raw text of the batch request body
     pub raw_response: String, // The raw text of the response from the batch request
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub status: BatchStatus,
     pub errors: Vec<Value>,
 }
@@ -62,6 +63,7 @@ impl StartBatchModelInferenceResponse {
     pub fn new(
         provider_batch_response: StartBatchProviderInferenceResponse,
         model_provider_name: Arc<str>,
+        provider_type: Arc<str>,
     ) -> Self {
         Self {
             batch_id: provider_batch_response.batch_id,
@@ -70,6 +72,7 @@ impl StartBatchModelInferenceResponse {
             raw_request: provider_batch_response.raw_request,
             raw_response: provider_batch_response.raw_response,
             model_provider_name,
+            provider_type,
             status: provider_batch_response.status,
             errors: provider_batch_response.errors,
         }
@@ -147,7 +150,10 @@ pub enum PollBatchInferenceResponse {
     },
 }
 
-/// Data retrieved from the BatchRequest table in ClickHouse
+/// Data retrieved from the BatchRequest table.
+/// In Postgres, `raw_request` and `raw_response` live in a separate
+/// `batch_request_data` table with daily partitions. They may be `None`
+/// if the data was dropped due to retention policy.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BatchRequestRow<'a> {
     pub batch_id: Uuid,
@@ -155,12 +161,15 @@ pub struct BatchRequestRow<'a> {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub batch_params: Cow<'a, Value>,
     pub model_name: Arc<str>,
-    pub raw_request: Cow<'a, str>,
-    pub raw_response: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_request: Option<Cow<'a, str>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<Cow<'a, str>>,
     pub model_provider_name: Cow<'a, str>,
     pub status: BatchStatus,
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<SnapshotHash>,
@@ -205,17 +214,18 @@ pub struct BatchModelInferenceRow<'a> {
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
     pub episode_id: Uuid,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub input_messages: Vec<StoredRequestMessage>,
+    #[serde(default, deserialize_with = "deserialize_optional_json_string")]
+    pub input: Option<StoredInput>,
+    #[serde(default, deserialize_with = "deserialize_optional_json_string")]
+    pub input_messages: Option<Vec<StoredRequestMessage>>,
     pub system: Option<Cow<'a, str>>,
     #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub inference_params: Cow<'a, InferenceParams>,
+    #[serde(default, deserialize_with = "deserialize_optional_json_string")]
+    pub inference_params: Option<Cow<'a, InferenceParams>>,
     pub output_schema: Option<String>,
-    pub raw_request: Cow<'a, str>,
+    #[serde(default)]
+    pub raw_request: Option<Cow<'a, str>>,
     pub model_name: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
     pub tags: HashMap<String, String>,
@@ -260,8 +270,8 @@ impl<'a> BatchRequestRow<'a> {
             function_name: Cow::Borrowed(function_name),
             variant_name: Cow::Borrowed(variant_name),
             model_name: Arc::from(model_name),
-            raw_request: Cow::Borrowed(raw_request),
-            raw_response: Cow::Borrowed(raw_response),
+            raw_request: Some(Cow::Borrowed(raw_request)),
+            raw_response: Some(Cow::Borrowed(raw_response)),
             model_provider_name: Cow::Borrowed(model_provider_name),
             status,
             errors,

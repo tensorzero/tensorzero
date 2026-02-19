@@ -97,7 +97,6 @@ from .tensorzero import (
     FunctionsConfig,
     GCPVertexGeminiSFTConfig,
     GEPAConfig,
-    LegacyDatapoint,
     MixtureOfNConfig,
     OpenAIRFTConfig,
     OpenAISFTConfig,
@@ -167,9 +166,6 @@ from .types import (
 
 # DEPRECATED: use RenderedSample instead
 RenderedStoredInference = RenderedSample
-# Type aliases to preserve backward compatibility with main
-ChatDatapoint = LegacyDatapoint.Chat
-JsonDatapoint = LegacyDatapoint.Json
 
 
 # CAREFUL: deprecated
@@ -215,7 +211,6 @@ __all__ = [
     "ChainOfThoughtConfig",
     "ChatCompletionConfig",
     "ChatCompletionInferenceParams",
-    "ChatDatapoint",
     "ChatDatapointInsert",
     "ChatInferenceResponse",
     "Config",
@@ -273,12 +268,10 @@ __all__ = [
     "InputMessage",
     "InputMessageContentTemplate",
     "InputMessageContentText",
-    "JsonDatapoint",
     "JsonDatapointInsert",
     "JsonDatapointOutputUpdate",
     "JsonInferenceOutput",
     "JsonInferenceResponse",
-    "LegacyDatapoint",
     "ListDatapointsRequest",
     "ListInferencesRequest",
     "Message",

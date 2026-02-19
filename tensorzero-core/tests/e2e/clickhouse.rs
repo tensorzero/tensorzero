@@ -102,6 +102,7 @@ pub async fn get_clean_clickhouse(
             __force_allow_embedded_batch_writes: false,
             flush_interval_ms: 1000,
             max_rows: 100,
+            max_rows_postgres: None,
         },
     )
     .await
@@ -522,7 +523,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39
     ]
 );
 
@@ -796,11 +797,11 @@ async fn test_clickhouse_migration_manager() {
     let row = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        raw_request: String::new(),
-        raw_response: String::new(),
+        raw_request: Some(String::new()),
+        raw_response: Some(String::new()),
         system: None,
-        input_messages: vec![],
-        output: vec![],
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
         input_tokens: Some(123),
         output_tokens: None,
         response_time_ms: None,

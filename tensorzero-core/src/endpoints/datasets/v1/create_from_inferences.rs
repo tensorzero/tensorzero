@@ -136,7 +136,7 @@ mod tests {
     use crate::db::clickhouse::query_builder::{InferenceFilter, TagComparisonOperator, TagFilter};
     use crate::db::stored_datapoint::StoredDatapoint;
     use crate::endpoints::stored_inferences::v1::types::ListInferencesRequest;
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{ContentBlockChatOutput, Text};
     use crate::jsonschema_util::JSONSchema;
@@ -160,7 +160,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: Default::default(),
             })),
         );
@@ -174,7 +174,7 @@ mod tests {
                 output_schema: JSONSchema::default(),
                 json_mode_tool_call_config: ToolCallConfig::default(),
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_template_names: Default::default(),
             })),
         );
@@ -187,21 +187,21 @@ mod tests {
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
-            input: crate::inference::types::StoredInput {
+            input: Some(crate::inference::types::StoredInput {
                 system: None,
                 messages: vec![],
-            },
-            output: vec![ContentBlockChatOutput::Text(Text {
+            }),
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "test output".to_string(),
-            })],
+            })]),
             dispreferred_outputs: vec![],
             timestamp: chrono::Utc::now(),
             episode_id: Uuid::now_v7(),
             inference_id: id,
-            tool_params: ToolCallConfigDatabaseInsert::default(),
+            tool_params: Some(ToolCallConfigDatabaseInsert::default()),
             tags: HashMap::new(),
-            extra_body: Default::default(),
-            inference_params: Default::default(),
+            extra_body: Some(Default::default()),
+            inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
         })
