@@ -122,9 +122,7 @@ async fn synchronize_deployment_id(
     clickhouse: &ClickHouseConnectionInfo,
     postgres: &PostgresConnectionInfo,
 ) -> Result<(), ()> {
-    // Even though this writes deployment ID to Postgres, we gate it behind ENABLE_POSTGRES_READ
-    // because it's serving a read query.
-    if !feature_flags::ENABLE_POSTGRES_READ.get() {
+    if !feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
         return Ok(());
     }
     if clickhouse.client_type() != ClickHouseClientType::Production {

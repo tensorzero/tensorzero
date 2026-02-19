@@ -17,7 +17,7 @@ use crate::db::inferences::{
 };
 use crate::endpoints::stored_inferences::v1::types::DemonstrationFeedbackFilter;
 use crate::error::{Error, ErrorDetails};
-use crate::feature_flags::ENABLE_POSTGRES_READ;
+use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -347,7 +347,7 @@ pub async fn get_function_throughput_by_variant(
 pub async fn list_functions_with_inference_count_handler(
     State(state): State<AppStateData>,
 ) -> Result<Json<ListFunctionsWithInferenceCountResponse>, Error> {
-    let database: &(dyn InferenceQueries + Sync) = if ENABLE_POSTGRES_READ.get() {
+    let database: &(dyn InferenceQueries + Sync) = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
         &state.postgres_connection_info
     } else {
         &state.clickhouse_connection_info
@@ -627,7 +627,7 @@ mod tests {
         assert_eq!(result.inference_count, 10);
     }
 
-    // Tests for ENABLE_POSTGRES_READ flag dispatch
+    // Tests for ENABLE_POSTGRES_AS_PRIMARY_DATASTORE flag dispatch
     // Note: The business logic functions take `&impl InferenceCountQueries` and are database-agnostic.
     // The flag only affects which connection the handlers pass to the business logic.
     // These tests verify the Postgres implementation can be invoked through the same interface.

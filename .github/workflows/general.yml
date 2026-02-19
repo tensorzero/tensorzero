@@ -1088,11 +1088,10 @@ jobs:
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
           echo "TENSORZERO_SKIP_LARGE_FIXTURES=1" >> $GITHUB_ENV
 
-      - name: Set Postgres read and write feature flags
+      - name: Set Postgres as primary datastore
         if: matrix.database == 'postgres'
         run: |
-          echo "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ=1" >> $GITHUB_ENV
-          echo "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE=1" >> $GITHUB_ENV
+          echo "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=1" >> $GITHUB_ENV
 
       - name: Launch dependency services
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait

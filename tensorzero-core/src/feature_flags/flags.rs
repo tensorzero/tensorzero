@@ -29,9 +29,6 @@ define_flags! {
     /// A dummy test flag for unit tests.
     pub TEST_FLAG: bool = ("test_flag", false);
 
-    /// Write data to Postgres instead of ClickHouse.
-    pub ENABLE_POSTGRES_WRITE: bool = ("enable_postgres_write", false);
-
-    /// Enable reading from Postgres for data instead of ClickHouse.
-    pub ENABLE_POSTGRES_READ: bool = ("enable_postgres_read", false);
+    /// Use Postgres as the primary datastore instead of ClickHouse.
+    pub ENABLE_POSTGRES_AS_PRIMARY_DATASTORE: bool = ("enable_postgres_as_primary_datastore", false);
 }
