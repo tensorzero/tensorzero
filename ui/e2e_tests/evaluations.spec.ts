@@ -134,8 +134,9 @@ test("run evaluation with dataset with no output", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-// This test depends on model inference cache hits (within ClickHouse)
-// If it starts failing, you may need to regenerate the model inference cache
+// Uses dummy::slow (5s per inference) to guarantee the evaluation is still
+// running when we click Stop. No model inference cache needed.
+const CANCEL_TEST_DATASET_SIZE = 10;
 test("cancel a running evaluation and verify partial results", async ({
   page,
 }) => {
@@ -146,16 +147,16 @@ test("cancel a running evaluation and verify partial results", async ({
   await page.waitForTimeout(500);
   await page.getByPlaceholder("Select evaluation").click();
   await page.waitForTimeout(500);
-  await page.getByRole("option", { name: "entity_extraction" }).click();
+  await page.getByRole("option", { name: "dummy_evaluation" }).click();
   await page.waitForTimeout(500);
   await page.getByPlaceholder("Select dataset").click();
   await page.waitForTimeout(500);
-  await page.locator('[data-dataset-name="foo"]').click();
+  await page.locator('[data-dataset-name="cancel_test"]').click();
   await page.waitForTimeout(500);
   await page.getByPlaceholder("Select variant").click();
   await page.waitForTimeout(500);
-  await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
-  // Concurrency 1 ensures sequential processing, giving us time to cancel
+  await page.getByRole("option", { name: "dummy_slow" }).click();
+  // Concurrency 1 ensures sequential processing so each datapoint takes ~5s
   await page.getByTestId("concurrency-limit").fill("1");
   await page.getByRole("button", { name: "Launch" }).click();
 
@@ -169,10 +170,8 @@ test("cancel a running evaluation and verify partial results", async ({
     "true",
   );
 
-  // Wait for at least one datapoint to complete before cancelling.
-  // The start event fires before any datapoints are processed, so clicking
-  // Stop immediately could result in 0 completed datapoints.
-  await page.waitForTimeout(2_000);
+  // Wait for at least one datapoint to complete (~5s per datapoint with dummy::slow)
+  await page.waitForTimeout(8_000);
 
   // Click the Stop button
   const stopButton = page.getByRole("button", { name: "Stop" });
@@ -182,8 +181,7 @@ test("cancel a running evaluation and verify partial results", async ({
   // Verify the button shows the "Stopping..." state
   await expect(page.getByText("Stopping...")).toBeVisible();
 
-  // Wait for the evaluation to actually stop — 30s timeout is much shorter
-  // than the 500s needed for natural completion, proving cancellation worked
+  // Wait for the evaluation to actually stop
   await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
     "data-running",
     "false",
@@ -203,6 +201,10 @@ test("cancel a running evaluation and verify partial results", async ({
   expect(match, "Should match n=X pattern").toBeTruthy();
   const n = parseInt(match![1], 10);
   expect(n, "Should have at least 1 completed datapoint").toBeGreaterThan(0);
+  expect(
+    n,
+    "Should have fewer than all datapoints (cancellation stopped the evaluation)",
+  ).toBeLessThan(CANCEL_TEST_DATASET_SIZE);
 });
 
 // This test verifies that adaptive stopping parameters work correctly

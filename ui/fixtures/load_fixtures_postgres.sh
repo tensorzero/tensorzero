@@ -412,6 +412,36 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id) DO NOTHING;
 "
 
+# Cancel test chat datapoints (local fixture, not from R2)
+load_jsonl "cancel_test_chat_datapoints.jsonl" "tensorzero.chat_datapoints" "
+INSERT INTO tensorzero.chat_datapoints (
+    id, dataset_name, function_name, episode_id,
+    input, output,
+    dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice, parallel_tool_calls,
+    tags, is_custom, source_inference_id, staled_at, created_at, updated_at
+)
+SELECT
+    (j->>'id')::uuid,
+    j->>'dataset_name',
+    j->>'function_name',
+    (j->>'episode_id')::uuid,
+    COALESCE(NULLIF(j->>'input', '')::jsonb, '{}'),
+    NULLIF(j->>'output', '')::jsonb,
+    COALESCE(NULLIF(j->>'dynamic_tools', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'dynamic_provider_tools', '')::jsonb, '[]'),
+    NULLIF(j->>'allowed_tools', '')::jsonb,
+    j->'tool_choice',
+    (j->>'parallel_tool_calls')::boolean,
+    COALESCE(j->'tags', '{}')::jsonb,
+    COALESCE((j->>'is_custom')::boolean, false),
+    (j->>'source_inference_id')::uuid,
+    NULLIF(j->>'staled_at', '')::timestamptz,
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid),
+    COALESCE(NULLIF(j->>'updated_at', '')::timestamptz, NOW())
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id) DO NOTHING;
+"
+
 # JSON Datapoints
 # Note: input, output, output_schema are stored as JSON-encoded strings in ClickHouse
 # We use ->> to extract text then cast to jsonb

@@ -58,6 +58,10 @@ system_template = "functions/extract_entities/initial_prompt/system_template.min
 model = "dummy::good"
 retries = { num_retries = 4, max_delay_s = 10 }
 
+[functions.dummy_function.variants.dummy_slow]
+type = "chat_completion"
+model = "dummy::slow"
+
 [functions.extract_entities]
 type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
@@ -498,6 +502,13 @@ system_instructions = "evaluations/images/matches_reference/system_instructions.
 temperature = 0
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
+
+[evaluations.dummy_evaluation]
+type = "inference"
+function_name = "dummy_function"
+
+[evaluations.dummy_evaluation.evaluators.exact_match]
+type = "exact_match"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                               PROVIDER TYPES                               │

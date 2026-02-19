@@ -327,7 +327,6 @@ export function prepareInferenceActionRequest(
     include_original_response: false, // deprecated
     include_raw_response: false,
     include_raw_usage: false,
-    include_aggregated_response: false,
   };
 
   // Prepare request based on source and function type
