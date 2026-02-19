@@ -30,6 +30,7 @@ use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
 use crate::endpoints::openai_compatible::RouterExt;
 use crate::error::{Error, ErrorDetails};
+use crate::feature_flags::{ENABLE_POSTGRES_READ, ENABLE_POSTGRES_WRITE};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::RateLimitingManager;
@@ -490,6 +491,17 @@ pub async fn setup_clickhouse(
     clickhouse_url: Option<String>,
     embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
+    // When both Postgres flags are set, ClickHouse is not used for reads or writes.
+    if ENABLE_POSTGRES_READ.get() && ENABLE_POSTGRES_WRITE.get() {
+        if clickhouse_url.is_some() {
+            tracing::warn!(
+                "`TENSORZERO_CLICKHOUSE_URL` is set but will not be used: \
+                 both `ENABLE_POSTGRES_READ` and `ENABLE_POSTGRES_WRITE` are enabled."
+            );
+        }
+        return Ok(ClickHouseConnectionInfo::new_disabled());
+    }
+
     let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
         // Observability disabled by config
         (Some(false), _) => {
@@ -899,6 +911,8 @@ mod tests {
     };
     #[tokio::test]
     async fn test_setup_clickhouse() {
+        ENABLE_POSTGRES_READ.override_for_test(false);
+        ENABLE_POSTGRES_WRITE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Disabled observability
         let gateway_config = GatewayConfig {
@@ -1047,6 +1061,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_unhealthy_clickhouse() {
+        ENABLE_POSTGRES_READ.override_for_test(false);
+        ENABLE_POSTGRES_WRITE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Sensible URL that doesn't point to ClickHouse
         let gateway_config = GatewayConfig {

@@ -1289,6 +1289,8 @@ mod tests {
     use tempfile::NamedTempFile;
     #[tokio::test]
     async fn test_missing_clickhouse() {
+        feature_flags::ENABLE_POSTGRES_READ.override_for_test(false);
+        feature_flags::ENABLE_POSTGRES_WRITE.override_for_test(false);
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
@@ -1306,6 +1308,27 @@ mod tests {
         assert!(
             err_msg.contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"),
             "Bad error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clickhouse_not_required_with_both_postgres_flags() {
+        feature_flags::ENABLE_POSTGRES_READ.override_for_test(true);
+        feature_flags::ENABLE_POSTGRES_WRITE.override_for_test(true);
+        // With both Postgres flags set, ClickHouse should not be required
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: None,
+            clickhouse_url: None,
+            postgres_config: None,
+            valkey_url: None,
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .expect(
+            "Embedded gateway should start without ClickHouse when both Postgres flags are set",
         );
     }
 
@@ -1446,6 +1469,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_log_no_clickhouse() {
+        feature_flags::ENABLE_POSTGRES_READ.override_for_test(false);
+        feature_flags::ENABLE_POSTGRES_WRITE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
@@ -1470,6 +1495,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_log_no_config() {
+        feature_flags::ENABLE_POSTGRES_READ.override_for_test(false);
+        feature_flags::ENABLE_POSTGRES_WRITE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,
