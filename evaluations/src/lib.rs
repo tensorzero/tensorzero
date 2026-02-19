@@ -549,7 +549,7 @@ pub async fn run_evaluation_core_streaming(
             let mut dataset_names = dataset.iter().map(|dp| dp.dataset_name());
             let first = dataset_names
                 .next()
-                .ok_or_else(|| anyhow!("No datapoints found for the provided datapoint_ids"))?;
+                .ok_or_else(|| anyhow!("No datapoints found for the provided `datapoint_ids`"))?;
             if let Some(mismatched) = dataset_names.find(|name| *name != first) {
                 bail!(
                     "All datapoints must belong to the same dataset when using `datapoint_ids`, \
