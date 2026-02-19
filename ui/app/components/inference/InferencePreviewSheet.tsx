@@ -25,14 +25,12 @@ interface InferencePreviewSheetProps {
   inferenceId: string | null;
   isOpen: boolean;
   onClose: () => void;
-  showFullPageLink?: boolean;
 }
 
 export function InferencePreviewSheet({
   inferenceId,
   isOpen,
   onClose,
-  showFullPageLink = false,
 }: InferencePreviewSheetProps) {
   const fetcher = useFetcher<InferenceDetailData>();
   const { toast } = useToast();
@@ -106,7 +104,7 @@ export function InferencePreviewSheet({
         className="pt-page-top pb-page-bottom w-full overflow-y-auto border-l-0 px-8 focus:outline-hidden sm:max-w-full md:w-5/6 [&>button.absolute]:hidden"
       >
         <div className="absolute top-8 right-8 z-10 flex items-center gap-5">
-          {showFullPageLink && inferenceData && (
+          {inferenceData && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link

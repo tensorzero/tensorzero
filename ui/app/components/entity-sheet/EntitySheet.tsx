@@ -13,7 +13,6 @@ export function EntitySheet() {
           inferenceId={sheetState.id}
           isOpen
           onClose={closeSheet}
-          showFullPageLink
         />
       );
     default: {
