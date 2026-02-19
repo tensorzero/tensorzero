@@ -104,40 +104,42 @@ export function InferencePreviewSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full overflow-y-auto pb-20 sm:max-w-full md:w-5/6 [&>button.absolute]:hidden">
+      <SheetContent
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="pt-page-top pb-page-bottom w-full overflow-y-auto border-l-0 px-8 focus:outline-hidden sm:max-w-full md:w-5/6 [&>button.absolute]:hidden"
+      >
+        <div className="absolute top-8 right-8 z-10 flex items-center gap-5">
+          {showFullPageLink && inferenceData && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to={toInferenceUrl(inferenceData.inference.inference_id)}
+                  className="text-fg-secondary cursor-pointer rounded-sm transition-colors hover:text-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2"
+                  aria-label="Open full page"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent>Open full page</TooltipContent>
+            </Tooltip>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <SheetClose className="text-fg-secondary cursor-pointer rounded-sm transition-colors hover:text-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </SheetClose>
+            </TooltipTrigger>
+            <TooltipContent>Close</TooltipContent>
+          </Tooltip>
+        </div>
+
         <SheetHeader className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Breadcrumbs
-              segments={[
-                { label: "Inferences", href: "/observability/inferences" },
-              ]}
-            />
-            <div className="flex items-center gap-4">
-              {showFullPageLink && inferenceData && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      to={toInferenceUrl(inferenceData.inference.inference_id)}
-                      className="text-fg-secondary cursor-pointer transition-colors hover:text-orange-600 focus:outline-hidden"
-                      aria-label="Open full page"
-                    >
-                      <Maximize2 className="h-3.5 w-3.5" />
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent>Open full page</TooltipContent>
-                </Tooltip>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <SheetClose className="text-fg-secondary cursor-pointer transition-colors hover:text-orange-600 focus:outline-hidden">
-                    <X className="h-4 w-4" />
-                    <span className="sr-only">Close</span>
-                  </SheetClose>
-                </TooltipTrigger>
-                <TooltipContent>Close</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
+          <Breadcrumbs
+            segments={[
+              { label: "Inferences", href: "/observability/inferences" },
+            ]}
+          />
           <SheetTitle className="font-mono text-2xl font-medium">
             {inferenceId ? (
               <Link
