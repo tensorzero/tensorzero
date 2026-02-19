@@ -1113,37 +1113,15 @@ impl ClientExt for Client {
                         .into(),
                     }
                 })?;
-                if filters.is_some() {
-                    // POST with JSON body when filters are present
-                    let request = ListEpisodesRequest {
-                        limit,
-                        before,
-                        after,
-                        function_name,
-                        filters,
-                    };
-                    let builder = client.http_client.post(url).json(&request);
-                    Ok(client.send_and_parse_http_response(builder).await?.0)
-                } else {
-                    // GET with query params when no filters
-                    let mut url = url;
-                    url.query_pairs_mut()
-                        .append_pair("limit", &limit.to_string());
-                    if let Some(before) = before {
-                        url.query_pairs_mut()
-                            .append_pair("before", &before.to_string());
-                    }
-                    if let Some(after) = after {
-                        url.query_pairs_mut()
-                            .append_pair("after", &after.to_string());
-                    }
-                    if let Some(function_name) = &function_name {
-                        url.query_pairs_mut()
-                            .append_pair("function_name", function_name);
-                    }
-                    let builder = client.http_client.get(url);
-                    Ok(client.send_and_parse_http_response(builder).await?.0)
-                }
+                let request = ListEpisodesRequest {
+                    limit,
+                    before,
+                    after,
+                    function_name,
+                    filters,
+                };
+                let builder = client.http_client.post(url).json(&request);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
