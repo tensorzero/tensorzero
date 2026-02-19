@@ -32,11 +32,20 @@ interface EntitySheetContextValue {
 const EntitySheetContext = createContext<EntitySheetContextValue | null>(null);
 
 /**
- * Provides entity sheet state via URL search params using the History API.
+ * Manages entity sheet state as URL search params (?sheet=inference&sheetId=…).
  *
- * Uses window.history.pushState/replaceState instead of React Router's
- * setSearchParams to avoid triggering loader revalidation, which would
- * reset streamed/paginated state (e.g., autopilot event streams).
+ * URL-backed state serves three purposes:
+ *  1. Deep links — users can share or bookmark a URL with a sheet already open,
+ *     enabling progressive drill-down through the information chain without
+ *     leaving the current page context.
+ *  2. History navigation — opening a sheet pushes a history entry so the
+ *     browser back button naturally closes it.
+ *  3. Dev hot-reload — sheet state survives HMR, making iterative development
+ *     of sheet content seamless.
+ *
+ * We use window.history.pushState/replaceState rather than React Router's
+ * setSearchParams to avoid triggering loader revalidation, which would reset
+ * streamed or paginated state (e.g., autopilot event streams).
  */
 export function EntitySheetProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
