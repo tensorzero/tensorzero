@@ -10,6 +10,7 @@ import {
   InferenceDetailContent,
   type InferenceDetailData,
 } from "~/components/inference/InferenceDetailContent";
+import { Breadcrumbs } from "~/components/layout/Breadcrumbs";
 import { toInferenceUrl } from "~/utils/urls";
 import { useToast } from "~/hooks/use-toast";
 
@@ -100,15 +101,19 @@ export function InferencePreviewSheet({
         {showFullPageLink && inferenceData && (
           <Link
             to={toInferenceUrl(inferenceData.inference.inference_id)}
-            className="text-fg-secondary hover:text-foreground absolute top-4 right-14 text-xs transition-colors"
+            className="text-fg-secondary absolute top-4 right-14 text-sm transition-colors hover:text-orange-600"
           >
             Open full page
           </Link>
         )}
         <SheetHeader className="gap-3">
-          <span className="text-fg-secondary text-sm font-normal">
-            Inference
-          </span>
+          <div className="text-fg-secondary text-sm font-normal">
+            <Breadcrumbs
+              segments={[
+                { label: "Inferences", href: "/observability/inferences" },
+              ]}
+            />
+          </div>
           <SheetTitle className="font-mono text-2xl font-medium">
             {inferenceId ?? "Loading..."}
           </SheetTitle>
