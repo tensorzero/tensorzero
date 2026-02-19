@@ -1,7 +1,9 @@
 import { useEffect, useCallback, useRef } from "react";
 import { Link, useFetcher } from "react-router";
+import { X } from "lucide-react";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetHeader,
   SheetTitle,
@@ -97,21 +99,29 @@ export function InferencePreviewSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full overflow-y-auto pb-20 sm:max-w-full md:w-5/6">
-        {showFullPageLink && inferenceData && (
-          <Link
-            to={toInferenceUrl(inferenceData.inference.inference_id)}
-            className="text-fg-secondary absolute top-4 right-14 text-sm transition-colors hover:text-orange-600"
-          >
-            Open full page
-          </Link>
-        )}
+      <SheetContent className="w-full overflow-y-auto pb-20 sm:max-w-full md:w-5/6 [&>button.absolute]:hidden">
         <SheetHeader className="space-y-3">
-          <Breadcrumbs
-            segments={[
-              { label: "Inferences", href: "/observability/inferences" },
-            ]}
-          />
+          <div className="flex items-center justify-between">
+            <Breadcrumbs
+              segments={[
+                { label: "Inferences", href: "/observability/inferences" },
+              ]}
+            />
+            <div className="flex items-center gap-3">
+              {showFullPageLink && inferenceData && (
+                <Link
+                  to={toInferenceUrl(inferenceData.inference.inference_id)}
+                  className="text-fg-secondary text-sm transition-colors hover:text-orange-600"
+                >
+                  Open full page
+                </Link>
+              )}
+              <SheetClose className="ring-offset-background focus:ring-ring rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </SheetClose>
+            </div>
+          </div>
           <SheetTitle className="font-mono text-2xl font-medium">
             {inferenceId ?? "Loading..."}
           </SheetTitle>
