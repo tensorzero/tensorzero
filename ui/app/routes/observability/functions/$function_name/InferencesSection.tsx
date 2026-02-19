@@ -86,6 +86,7 @@ function InferencesSkeleton() {
         <TableHeader>
           <TableRow>
             <TableHead>ID</TableHead>
+            <TableHead>Episode ID</TableHead>
             <TableHead>Variant</TableHead>
             <TableHead>Time</TableHead>
           </TableRow>
@@ -93,6 +94,9 @@ function InferencesSkeleton() {
         <TableBody>
           {[1, 2, 3, 4, 5].map((i) => (
             <TableRow key={i}>
+              <TableCell>
+                <Skeleton className="h-4 w-48" />
+              </TableCell>
               <TableCell>
                 <Skeleton className="h-4 w-48" />
               </TableCell>
