@@ -11,7 +11,7 @@ use crate::db::valkey::ValkeyConnectionInfo;
 use crate::db::valkey::cache::ValkeyCacheClient;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
-use crate::feature_flags::ENABLE_POSTGRES_WRITE;
+use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -40,15 +40,15 @@ impl CacheManager {
 
     /// Select the appropriate cache backend.
     ///
-    /// When `ENABLE_POSTGRES_WRITE` is off, uses ClickHouse.
-    /// When `ENABLE_POSTGRES_WRITE` is on (Postgres is the write target), uses Valkey
-    /// if available, otherwise falls back to ClickHouse.
+    /// When Postgres is the primary datastore, uses Valkey if available,
+    /// otherwise falls back to ClickHouse. When ClickHouse is the primary
+    /// datastore, uses ClickHouse directly.
     pub fn new_from_connections(
         valkey_connection_info: &ValkeyConnectionInfo,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         cache_config: &ModelInferenceCacheConfig,
     ) -> Self {
-        if !ENABLE_POSTGRES_WRITE.get() {
+        if !ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
             return Self::new(Arc::new(clickhouse_connection_info.clone()));
         }
         match valkey_connection_info {
@@ -57,7 +57,7 @@ impl CacheManager {
             )),
             ValkeyConnectionInfo::Disabled => {
                 tracing::warn!(
-                    "Postgres is used for data writes, but `TENSORZERO_VALKEY_URL` is not set; falling back to ClickHouse for cache writes if configured."
+                    "Postgres is the primary datastore, but `TENSORZERO_VALKEY_URL` is not set; falling back to ClickHouse for cache writes if configured."
                 );
                 Self::new(Arc::new(clickhouse_connection_info.clone()))
             }
