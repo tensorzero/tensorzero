@@ -46,10 +46,7 @@ interface RunningEvaluationInfo {
 // This is a map of evaluation run id to running evaluation info
 const runningEvaluations = new Map<string, RunningEvaluationInfo>();
 
-export type RunningEvaluationView = Omit<
-  RunningEvaluationInfo,
-  "abortController"
->;
+type RunningEvaluationView = Omit<RunningEvaluationInfo, "abortController">;
 
 /** @internal Exposed for testing only — injects an entry into the in-memory map. */
 export function _test_registerRunningEvaluation(

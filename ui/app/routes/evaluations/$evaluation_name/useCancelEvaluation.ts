@@ -41,12 +41,15 @@ export function useCancelEvaluation({
       return () => dismiss({ immediate: true });
     }
 
-    // Error response or network error — reset so user can retry
+    // Error response from server
     if (fetcher.data?.error) {
       toast.error({
         title: "Failed to stop evaluation",
         description: fetcher.data.error,
       });
+    } else {
+      // Network error — fetcher completed but no data returned
+      toast.error({ title: "Failed to stop evaluation" });
     }
     setIsCancelling(false);
     return;
