@@ -411,7 +411,9 @@ pub async fn run_evaluation_with_app_state(
 ///
 /// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
 /// 2. Loads the evaluation and function configurations
-/// 3. Queries the dataset (limited by `max_datapoints` if specified)
+/// 3. Queries the dataset (limited by `max_datapoints` if specified). When `datapoint_ids`
+///    are provided instead of `dataset_name`, the dataset name is derived from the loaded
+///    datapoints — all datapoints must belong to the same dataset or an error is returned.
 /// 4. If `precision_targets` is provided, creates a `StoppingManager` which internally creates cancellation
 ///    tokens and tracks evaluator statistics
 /// 5. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
@@ -539,11 +541,24 @@ pub async fn run_evaluation_core_streaming(
         dataset_size = dataset.len(),
         "Datapoints loaded successfully"
     );
-    let dataset_name = Arc::new(
-        args.dataset_name
-            .clone()
-            .unwrap_or_else(|| format!("datapoint_ids[{}]", datapoint_ids.len())),
-    );
+    // Get dataset name when datapoint_ids are passed. Error if the datapoints don't all belong to the same dataset.
+    let dataset_name = Arc::new(match args.dataset_name.clone() {
+        Some(name) => name,
+        None => {
+            // Derive dataset_name from the loaded datapoints
+            let mut dataset_names = dataset.iter().map(|dp| dp.dataset_name());
+            let first = dataset_names
+                .next()
+                .ok_or_else(|| anyhow!("No datapoints found for the provided datapoint_ids"))?;
+            if let Some(mismatched) = dataset_names.find(|name| *name != first) {
+                bail!(
+                    "All datapoints must belong to the same dataset when using `datapoint_ids`, \
+                     but found datapoints from both `{first}` and `{mismatched}`"
+                );
+            }
+            first.to_string()
+        }
+    });
     let variant = Arc::new(args.variant);
     let variants = [variant]; // Single-element array for process_batch
     let evaluation_name = Arc::new(args.evaluation_name);
