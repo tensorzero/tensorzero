@@ -1,50 +1,63 @@
-import { useCallback } from "react";
-import { useSearchParams } from "react-router";
+import { useCallback, useEffect, useState } from "react";
+import { useLocation } from "react-router";
 
 const SHEET_PARAM = "sheet";
 const SHEET_ID_PARAM = "sheetId";
 
 type EntitySheetState = { type: "inference"; id: string } | null;
 
-function parseSheetState(searchParams: URLSearchParams): EntitySheetState {
-  const type = searchParams.get(SHEET_PARAM);
-  const id = searchParams.get(SHEET_ID_PARAM);
+function parseSheetStateFromUrl(): EntitySheetState {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const type = params.get(SHEET_PARAM);
+  const id = params.get(SHEET_ID_PARAM);
   if (type === "inference" && id) {
     return { type, id };
   }
   return null;
 }
 
+/**
+ * Manages entity sheet state via URL search params using direct history API.
+ *
+ * Uses window.history.pushState instead of React Router's setSearchParams
+ * to avoid triggering loader revalidation, which would reset streamed/paginated
+ * state (e.g., autopilot event streams).
+ */
 export function useEntitySheet() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const sheetState = parseSheetState(searchParams);
-
-  const openInferenceSheet = useCallback(
-    (id: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set(SHEET_PARAM, "inference");
-          next.set(SHEET_ID_PARAM, id);
-          return next;
-        },
-        { preventScrollReset: true },
-      );
-    },
-    [setSearchParams],
+  const location = useLocation();
+  const [sheetState, setSheetState] = useState<EntitySheetState>(
+    parseSheetStateFromUrl,
   );
 
+  // Sync state on browser back/forward (popstate doesn't fire for pushState)
+  useEffect(() => {
+    const handler = () => setSheetState(parseSheetStateFromUrl());
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, []);
+
+  // Sync state on React Router navigations (which don't fire popstate).
+  // When React Router navigates, it replaces the URL, clearing our sheet params.
+  useEffect(() => {
+    setSheetState(parseSheetStateFromUrl());
+  }, [location.pathname, location.search]);
+
+  const openInferenceSheet = useCallback((id: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set(SHEET_PARAM, "inference");
+    url.searchParams.set(SHEET_ID_PARAM, id);
+    window.history.pushState(null, "", url.toString());
+    setSheetState({ type: "inference", id });
+  }, []);
+
   const closeSheet = useCallback(() => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete(SHEET_PARAM);
-        next.delete(SHEET_ID_PARAM);
-        return next;
-      },
-      { preventScrollReset: true },
-    );
-  }, [setSearchParams]);
+    const url = new URL(window.location.href);
+    url.searchParams.delete(SHEET_PARAM);
+    url.searchParams.delete(SHEET_ID_PARAM);
+    window.history.pushState(null, "", url.toString());
+    setSheetState(null);
+  }, []);
 
   return { sheetState, openInferenceSheet, closeSheet };
 }

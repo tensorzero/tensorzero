@@ -4,17 +4,21 @@ import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSh
 export function EntitySheet() {
   const { sheetState, closeSheet } = useEntitySheet();
 
-  switch (sheetState?.type ?? null) {
+  if (!sheetState) return null;
+
+  switch (sheetState.type) {
     case "inference":
       return (
         <InferencePreviewSheet
-          inferenceId={sheetState!.id}
+          inferenceId={sheetState.id}
           isOpen
           onClose={closeSheet}
           showFullPageLink
         />
       );
-    case null:
-      return null;
+    default: {
+      const _exhaustiveCheck: never = sheetState.type;
+      return _exhaustiveCheck;
+    }
   }
 }

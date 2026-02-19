@@ -18,7 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { toInferenceUrl } from "~/utils/urls";
+import { toInferenceApiUrl, toInferenceUrl } from "~/utils/urls";
 import { useToast } from "~/hooks/use-toast";
 
 interface InferencePreviewSheetProps {
@@ -26,10 +26,6 @@ interface InferencePreviewSheetProps {
   isOpen: boolean;
   onClose: () => void;
   showFullPageLink?: boolean;
-}
-
-function getInferenceApiUrl(inferenceId: string) {
-  return `/api/inference/${inferenceId}`;
 }
 
 export function InferencePreviewSheet({
@@ -74,7 +70,7 @@ export function InferencePreviewSheet({
 
     if (fetcherState !== "idle") return;
 
-    fetcherRef.current.load(getInferenceApiUrl(inferenceId));
+    fetcherRef.current.load(toInferenceApiUrl(inferenceId));
   }, [isOpen, inferenceId, fetcherState, fetcherDataInferenceId]);
 
   const refreshInferenceData = useCallback(
@@ -86,7 +82,7 @@ export function InferencePreviewSheet({
       if (redirectUrl) {
         fetcherRef.current.load(redirectUrl);
       } else {
-        fetcherRef.current.load(getInferenceApiUrl(inferenceId));
+        fetcherRef.current.load(toInferenceApiUrl(inferenceId));
       }
     },
     [inferenceId, toast],
@@ -105,6 +101,7 @@ export function InferencePreviewSheet({
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
+        aria-describedby={undefined}
         onOpenAutoFocus={(e) => e.preventDefault()}
         className="pt-page-top pb-page-bottom w-full overflow-y-auto border-l-0 px-8 focus:outline-hidden sm:max-w-full md:w-5/6 [&>button.absolute]:hidden"
       >
