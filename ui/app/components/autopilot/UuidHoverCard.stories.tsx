@@ -9,7 +9,7 @@ import {
   Timestamp,
   TypeBadgeLink,
   VariantItem,
-} from "~/components/entity-sheet/UuidHoverCard";
+} from "~/components/autopilot/UuidHoverCard";
 
 const MOCK_UUID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 const MOCK_TIMESTAMP = "2026-01-15T14:30:00Z";

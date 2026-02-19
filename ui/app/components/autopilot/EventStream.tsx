@@ -12,7 +12,7 @@ import {
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
-import { UuidLink } from "~/components/entity-sheet/UuidLink";
+import { UuidLink } from "~/components/autopilot/UuidLink";
 import {
   remarkUuidLinks,
   UUID_LINK_ELEMENT,
