@@ -258,7 +258,7 @@ describe("config cache and hash polling", () => {
       );
 
       expect(result).not.toBeNull();
-      expect(result!.value.type).toBe("json");
+      expect(result!.value.type).toBe("chat");
       expect(result!.config.config_hash).toBe("hash_new");
       // Two fetches: initial + retry
       expect(mockGetUiConfig).toHaveBeenCalledTimes(2);
