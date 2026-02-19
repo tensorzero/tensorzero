@@ -1089,49 +1089,26 @@ async fn test_run_evaluation_streaming_datapoint_ids_mixed_datasets() {
         "inference_cache": "off",
     });
 
-    let mut event_stream = http_client
+    // The error occurs inside run_evaluation_with_app_state (before the SSE stream
+    // is established), so it comes back as an HTTP error response, not an SSE event.
+    let resp = http_client
         .post(get_gateway_endpoint("/internal/evaluations/run"))
         .json(&payload)
-        .eventsource()
+        .send()
         .await
         .unwrap();
 
-    let mut found_fatal_error = false;
-    let mut error_message = String::new();
-
-    while let Some(event_result) = event_stream.next().await {
-        match event_result {
-            Ok(Event::Open) => continue,
-            Ok(Event::Message(message)) => {
-                if message.data == "[DONE]" {
-                    break;
-                }
-
-                let event: Value = serde_json::from_str(&message.data).unwrap();
-                let event_type = event.get("type").and_then(|t| t.as_str());
-
-                match event_type {
-                    Some("fatal_error") => {
-                        found_fatal_error = true;
-                        error_message = event
-                            .get("message")
-                            .and_then(|m| m.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        break;
-                    }
-                    Some("complete") => break,
-                    _ => {}
-                }
-            }
-            Err(e) => panic!("SSE stream error: {e:?}"),
-        }
-    }
-
     assert!(
-        found_fatal_error,
-        "Should receive fatal_error when datapoint_ids span multiple datasets"
+        resp.status().is_server_error(),
+        "Should return an error when datapoint_ids span multiple datasets, got: {:?}",
+        resp.status()
     );
+
+    let body: Value = resp.json().await.unwrap();
+    let error_message = body
+        .get("error")
+        .and_then(|e| e.as_str())
+        .unwrap_or_default();
     assert!(
         error_message.contains("All datapoints must belong to the same dataset"),
         "Error message should mention the multi-dataset constraint, got: {error_message}"
