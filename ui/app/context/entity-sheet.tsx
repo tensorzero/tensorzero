@@ -35,7 +35,8 @@ const EntitySheetContext = createContext<EntitySheetContextValue | null>(null);
  * Manages entity sheet state as URL search params (?sheet=inference&sheetId=…).
  *
  * URL-backed state serves three purposes:
- *  1. Deep links — shareable/bookmarkable URLs with a sheet already open.
+ *  1. Deep links — shareable/bookmarkable URLs with a sheet already open
+ *     (e.g., an autopilot session with a particular inference highlighted).
  *  2. Reversible progressive disclosure — each drill-down step (open sheet,
  *     navigate to full page) is a history entry, so the back button rewinds
  *     the same path with no surprises.
