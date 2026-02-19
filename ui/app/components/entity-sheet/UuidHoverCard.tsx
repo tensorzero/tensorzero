@@ -23,7 +23,7 @@ interface UuidHoverCardProps {
   children: React.ReactNode;
 }
 
-function getHoverCardWidth(type: ResolvedObject["type"]): string {
+export function getHoverCardWidth(type: ResolvedObject["type"]): string {
   switch (type) {
     case "inference":
       return "w-80";
@@ -105,7 +105,7 @@ function HoverCardContent({ uuid, obj, isOpen }: HoverCardContentProps) {
   }
 }
 
-interface InferencePreview {
+export interface InferencePreview {
   timestamp: string;
 }
 
@@ -211,7 +211,7 @@ interface TypeBadgeLinkProps {
   children: React.ReactNode;
 }
 
-function TypeBadgeLink({ uuid, obj, children }: TypeBadgeLinkProps) {
+export function TypeBadgeLink({ uuid, obj, children }: TypeBadgeLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
   const { openInferenceSheet } = useEntitySheet();
 
@@ -258,7 +258,10 @@ interface FunctionItemProps {
   functionType: string;
 }
 
-function FunctionItem({ functionName, functionType }: FunctionItemProps) {
+export function FunctionItem({
+  functionName,
+  functionType,
+}: FunctionItemProps) {
   const iconConfig = getFunctionTypeIcon(functionType);
   return (
     <div className="flex flex-col gap-1">
@@ -291,7 +294,7 @@ interface VariantItemProps {
   variantType: string | null;
 }
 
-function VariantItem({
+export function VariantItem({
   functionName,
   variantName,
   variantType,
@@ -299,16 +302,19 @@ function VariantItem({
   return (
     <div className="flex flex-col gap-1">
       <span className="text-muted-foreground text-xs">Variant</span>
-      <span className="min-w-0 font-mono text-xs">
+      <span className="inline-flex min-w-0 items-center font-mono text-xs">
         <Link
           to={toVariantUrl(functionName, variantName)}
-          className="text-foreground hover:text-foreground/80 transition-colors hover:underline"
+          className="text-foreground hover:text-foreground/80 truncate transition-colors hover:underline"
           title={variantName}
         >
           {variantName}
         </Link>
         {variantType && (
-          <span className="text-muted-foreground"> · {variantType}</span>
+          <span className="text-muted-foreground shrink-0">
+            {" "}
+            · {variantType}
+          </span>
         )}
       </span>
     </div>
@@ -322,7 +328,12 @@ interface InfoItemProps {
   isLoading?: boolean;
 }
 
-function InfoItem({ label, value, secondaryValue, isLoading }: InfoItemProps) {
+export function InfoItem({
+  label,
+  value,
+  secondaryValue,
+  isLoading,
+}: InfoItemProps) {
   return (
     <Item label={label}>
       {value ? (
@@ -347,7 +358,7 @@ interface TimestampProps {
   isLoading: boolean;
 }
 
-function Timestamp({ data, isLoading }: TimestampProps) {
+export function Timestamp({ data, isLoading }: TimestampProps) {
   if (data) {
     const date = new Date(data.timestamp);
     const { formattedDate, formattedTime } = getTimestampTooltipData(
