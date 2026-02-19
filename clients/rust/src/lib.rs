@@ -1094,13 +1094,6 @@ impl ClientExt for Client {
         &self,
         request: ListEpisodesRequest,
     ) -> Result<ListEpisodesResponse, TensorZeroError> {
-        let ListEpisodesRequest {
-            limit,
-            before,
-            after,
-            function_name,
-            filters,
-        } = request;
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("internal/episodes").map_err(|e| {
@@ -1113,17 +1106,17 @@ impl ClientExt for Client {
                         .into(),
                     }
                 })?;
-                let request = ListEpisodesRequest {
+                let builder = client.http_client.post(url).json(&request);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                let ListEpisodesRequest {
                     limit,
                     before,
                     after,
                     function_name,
                     filters,
-                };
-                let builder = client.http_client.post(url).json(&request);
-                Ok(client.send_and_parse_http_response(builder).await?.0)
-            }
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                } = request;
                 with_embedded_timeout(*timeout, async {
                     let episodes = tensorzero_core::endpoints::episodes::internal::list_episodes(
                         &gateway.handle.app_state.get_delegating_database(),
