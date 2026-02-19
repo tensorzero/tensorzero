@@ -107,13 +107,11 @@ export function InferencePreviewSheet({
           </Link>
         )}
         <SheetHeader className="gap-3">
-          <div className="text-fg-secondary text-sm font-normal">
-            <Breadcrumbs
-              segments={[
-                { label: "Inferences", href: "/observability/inferences" },
-              ]}
-            />
-          </div>
+          <Breadcrumbs
+            segments={[
+              { label: "Inferences", href: "/observability/inferences" },
+            ]}
+          />
           <SheetTitle className="font-mono text-2xl font-medium">
             {inferenceId ?? "Loading..."}
           </SheetTitle>
