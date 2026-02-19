@@ -61,9 +61,24 @@ async fn test_model_latency_endpoint() {
 
     let response: GetModelLatencyResponse = resp.json().await.unwrap();
 
-    // The response should have data (may be empty if no recent usage)
-    // Just verify we can deserialize the response successfully
-    let _ = response.data;
+    assert!(
+        !response.quantiles.is_empty(),
+        "Expected non-empty quantiles in latency response"
+    );
+    for datapoint in &response.data {
+        assert_eq!(
+            datapoint.response_time_ms_quantiles.len(),
+            response.quantiles.len(),
+            "response_time_ms_quantiles length should match quantiles length for model `{}`",
+            datapoint.model_name
+        );
+        assert_eq!(
+            datapoint.ttft_ms_quantiles.len(),
+            response.quantiles.len(),
+            "ttft_ms_quantiles length should match quantiles length for model `{}`",
+            datapoint.model_name
+        );
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]

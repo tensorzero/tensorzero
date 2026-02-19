@@ -1,17 +1,17 @@
 //! Inference tool for calling TensorZero inference endpoint.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
 use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
+use durable_tools::{ActionInput, ActionResponse};
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{
-    ActionInput, ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse,
-    Input,
+    ClientInferenceParams, DynamicToolParams, InferenceParams, InferenceResponse, Input,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 
@@ -54,17 +54,17 @@ impl ToolMetadata for InferenceTool {
     type Output = InferenceResponse;
     type LlmParams = InferenceToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("inference")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Call TensorZero inference endpoint. Optionally use a config snapshot hash to use historical configuration.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Call TensorZero inference endpoint to get an LLM response.",
@@ -83,7 +83,7 @@ impl ToolMetadata for InferenceTool {
                     "properties": {
                         "system": {
                             "description": "System prompt (string or array of content blocks)",
-                            "oneOf": [
+                            "anyOf": [
                                 { "type": "string" },
                                 { "type": "array", "items": { "type": "object" } }
                             ]
@@ -97,17 +97,19 @@ impl ToolMetadata for InferenceTool {
                                     "role": { "type": "string", "enum": ["user", "assistant"] },
                                     "content": {
                                         "description": "Message content (string or array of content blocks)",
-                                        "oneOf": [
+                                        "anyOf": [
                                             { "type": "string" },
                                             { "type": "array", "items": { "type": "object" } }
                                         ]
                                     }
                                 },
-                                "required": ["role", "content"]
+                                "required": ["role", "content"],
+                                "additionalProperties": false
                             }
                         }
                     },
-                    "required": ["messages"]
+                    "required": ["messages"],
+                    "additionalProperties": false
                 },
                 "params": {
                     "type": "object",
@@ -119,9 +121,11 @@ impl ToolMetadata for InferenceTool {
                                 "temperature": { "type": "number", "description": "Sampling temperature (0.0-2.0)" },
                                 "max_tokens": { "type": "integer", "description": "Maximum tokens to generate" },
                                 "seed": { "type": "integer", "description": "Random seed for reproducibility" }
-                            }
+                            },
+                            "additionalProperties": false
                         }
-                    }
+                    },
+                    "additionalProperties": false
                 },
                 "variant_name": {
                     "type": "string",
@@ -132,7 +136,8 @@ impl ToolMetadata for InferenceTool {
                     "description": "Output schema override for JSON functions (optional)"
                 }
             },
-            "required": ["input"]
+            "required": ["input"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
@@ -141,6 +146,14 @@ impl ToolMetadata for InferenceTool {
             }
             .into()
         })
+    }
+
+    fn strict(&self) -> bool {
+        false // We need an arbitrary object for 'output_schema'
+    }
+
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(5 * 60)
     }
 }
 
@@ -168,25 +181,25 @@ impl SimpleTool for InferenceTool {
             ..Default::default()
         };
 
-        let response = if let Some(hash) = side_info.config_snapshot_hash {
-            let snapshot_hash: SnapshotHash =
-                hash.parse().map_err(|_: std::convert::Infallible| {
-                    AutopilotToolError::validation("Invalid snapshot hash")
-                })?;
-            ctx.client()
-                .action(
-                    snapshot_hash,
-                    ActionInput::Inference(Box::new(client_params)),
-                )
-                .await
-                .map_err(|e| AutopilotToolError::client_error("inference", e))?
-        } else {
-            ctx.client()
-                .inference(client_params)
-                .await
-                .map_err(|e| AutopilotToolError::client_error("inference", e))?
-        };
+        let snapshot_hash: SnapshotHash = side_info
+            .config_snapshot_hash
+            .parse()
+            .map_err(|_| AutopilotToolError::validation("Invalid snapshot hash"))?;
+        let response = ctx
+            .client()
+            .action(
+                snapshot_hash,
+                ActionInput::Inference(Box::new(client_params)),
+            )
+            .await
+            .map_err(|e| AutopilotToolError::client_error("inference", e))?;
 
-        Ok(response)
+        match response {
+            ActionResponse::Inference(inference_response) => Ok(inference_response),
+            _ => Err(AutopilotToolError::validation(
+                "Unexpected response type from action endpoint",
+            )
+            .into()),
+        }
     }
 }

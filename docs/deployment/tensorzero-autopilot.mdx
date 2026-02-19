@@ -1,0 +1,93 @@
+---
+title: Set up TensorZero Autopilot
+description: Learn how to set up TensorZero Autopilot on your self-hosted TensorZero deployment.
+---
+
+TensorZero Autopilot is an automated AI engineer that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests.
+It's an optional complementary service that runs on top of your self-hosted TensorZero deployment.
+
+<Note>
+
+TensorZero Autopilot is currently in a private beta. [Join the waitlist →](https://www.tensorzero.com/autopilot-waitlist)
+
+</Note>
+
+## Deploy
+
+<Steps>
+
+<Step title="Generate a TensorZero Autopilot API key">
+
+Visit [autopilot.tensorzero.com](https://autopilot.tensorzero.com/) to generate an API key.
+
+</Step>
+
+<Step title="Set the environment variable for the TensorZero Gateway">
+
+Set the environment variable `TENSORZERO_AUTOPILOT_API_KEY` for your TensorZero Gateway:
+
+```bash
+export TENSORZERO_AUTOPILOT_API_KEY="sk-t0-..."
+```
+
+</Step>
+
+<Step title="Deploy TensorZero">
+
+TensorZero Autopilot requires the TensorZero Gateway, TensorZero UI, ClickHouse, and Postgres.
+
+<Warning>
+
+Make sure the gateway has the `TENSORZERO_AUTOPILOT_API_KEY` environment variable.
+
+</Warning>
+
+<Tip>
+
+Learn more about how to:
+
+- [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway)
+- [Deploy the TensorZero UI](/deployment/tensorzero-ui)
+- [Deploy ClickHouse](/deployment/clickhouse)
+- [Deploy Postgres](/deployment/postgres)
+
+</Tip>
+
+</Step>
+
+<Step title="Allow TensorZero Autopilot to edit your local configuration (optional)">
+
+TensorZero Autopilot can edit your local TensorZero configuration.
+
+When this feature is enabled, an "Apply changes" button appears in the UI, allowing you to easily apply any configuration changes proposed by Autopilot.
+
+<Warning>
+
+We recommend enabling this feature only in a local setup.
+Do not enable this feature if the TensorZero UI is shared by multiple users.
+
+</Warning>
+
+To enable it, mount the configuration directory as a writable volume and pass the `--config-file` flag to the TensorZero UI container.
+For example:
+
+```yaml
+# ...
+ui:
+  image: tensorzero/ui
+  # ...
+  command: --config-file /app/config/tensorzero.toml
+  volumes:
+    - ./config:/app/config
+  # ...
+```
+
+</Step>
+
+<Step title="Use TensorZero Autopilot">
+
+Visit `/autopilot` in the self-hosted TensorZero UI to use Autopilot.
+
+</Step>
+
+</Steps>

@@ -4,8 +4,9 @@ use std::future::Future;
 use std::sync::Arc;
 
 use futures::future::{join_all, try_join_all};
+use indexmap::IndexMap;
 use lazy_static::lazy_static;
-use rand::Rng;
+use rand::RngExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -23,7 +24,7 @@ use crate::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceResponseWithMetadata, RequestMessage, Role,
     System, batch::StartBatchModelInferenceWithMetadata,
 };
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::JSONSchema;
 use crate::model::ModelTable;
 use crate::tool::create_json_mode_tool_call_config_with_allowed_tools;
 use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
@@ -42,8 +43,9 @@ use crate::{
 use super::chat_completion::UninitializedChatCompletionConfig;
 use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct BestOfNSamplingConfig {
     weight: Option<f64>,
     candidates: Vec<String>,
@@ -81,8 +83,9 @@ impl BestOfNSamplingConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
@@ -94,15 +97,17 @@ pub struct UninitializedBestOfNSamplingConfig {
     pub evaluator: UninitializedBestOfNEvaluatorConfig,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct BestOfNEvaluatorConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNEvaluatorConfig {
     #[serde(flatten)]
@@ -142,9 +147,9 @@ impl UninitializedBestOfNSamplingConfig {
 const IMPLICIT_TOOL_NAME: &str = "respond";
 
 lazy_static! {
-    static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
+    static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchema = {
         #[expect(clippy::expect_used)]
-        StaticJSONSchema::from_value(json!({
+        JSONSchema::from_value(json!({
             "type": "object",
             "properties": {
                 "thinking": { "type": "string" },
@@ -180,7 +185,7 @@ impl Variant for BestOfNSamplingConfig {
         _inference_params: InferenceParams,
     ) -> impl Future<Output = Result<InferenceResult, Error>> + Send {
         async move {
-            let candidate_inference_results = self
+            let (successful_results, candidate_errors) = self
                 .infer_candidates(
                     &input,
                     &models,
@@ -194,7 +199,8 @@ impl Variant for BestOfNSamplingConfig {
                 &models.models,
                 &inference_config,
                 &clients,
-                candidate_inference_results,
+                successful_results,
+                candidate_errors,
             )
             .await
         }
@@ -209,7 +215,7 @@ impl Variant for BestOfNSamplingConfig {
         clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-        let candidate_inference_results = self
+        let (successful_results, candidate_errors) = self
             .infer_candidates(
                 &input,
                 &models,
@@ -224,7 +230,8 @@ impl Variant for BestOfNSamplingConfig {
                 &models.models,
                 &inference_config,
                 &clients,
-                candidate_inference_results,
+                successful_results,
+                candidate_errors,
             )
             .await?;
 
@@ -322,7 +329,7 @@ impl BestOfNSamplingConfig {
         function: &Arc<FunctionConfig>,
         inference_config: Arc<InferenceConfig>,
         clients: &InferenceClients,
-    ) -> Result<Vec<InferenceResult>, Error> {
+    ) -> Result<(Vec<InferenceResult>, IndexMap<String, Error>), Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
             .candidates
@@ -389,15 +396,21 @@ impl BestOfNSamplingConfig {
         )
         .await;
 
-        // Collect the successful results
+        // Collect the successful results and errors.
+        // Use an enumerated key to avoid overwriting errors when the same
+        // candidate variant appears more than once in the candidates list.
         let mut successful_results = Vec::new();
-        for (_candidate_name, result) in inference_results {
-            if let Ok(res) = result {
-                successful_results.push(res);
+        let mut candidate_errors = IndexMap::new();
+        for (i, (candidate_name, result)) in inference_results.into_iter().enumerate() {
+            match result {
+                Ok(res) => successful_results.push(res),
+                Err(e) => {
+                    candidate_errors.insert(format!("candidates[{i}] ({candidate_name})"), e);
+                }
             }
         }
 
-        Ok(successful_results)
+        Ok((successful_results, candidate_errors))
     }
 
     /// Gets the best candidate using the evaluator config.
@@ -410,23 +423,37 @@ impl BestOfNSamplingConfig {
         inference_config: &InferenceConfig,
         clients: &InferenceClients,
         candidates: Vec<InferenceResult>,
+        candidate_errors: IndexMap<String, Error>,
     ) -> Result<InferenceResult, Error> {
         if candidates.is_empty() {
-            return Err(ErrorDetails::Inference {
-                message: "No candidates to select from in best of n".to_string(),
-            }
-            .into());
+            return Err(ErrorDetails::AllCandidatesFailed { candidate_errors }.into());
         }
         if candidates.len() == 1 {
             let mut candidates = candidates;
-            return candidates.pop().ok_or_else(|| {
+            let mut selected = candidates.pop().ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
                     message: "Expected one candidate but found none".to_string(),
                 })
-            });
+            })?;
+            // Inject failed candidate raw_responses before returning
+            if clients.include_raw_response {
+                let failed_entries: Vec<_> = candidate_errors
+                    .values()
+                    .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                    .collect();
+                if !failed_entries.is_empty()
+                    && let Some(first) = selected.mut_model_inference_results().first_mut()
+                {
+                    let mut new_failed = failed_entries;
+                    new_failed.append(&mut first.failed_raw_response);
+                    first.failed_raw_response = new_failed;
+                }
+            }
+            return Ok(selected);
         }
         // If the evaluator fails, we randomly select one of the candidates
         // As long as the evaluator returns an inference result, we want to include it in the observability
+        let mut evaluator_error: Option<Error> = None;
         let (selection_idx, inference_result) = match inner_select_best_candidate(
             &self.evaluator,
             input,
@@ -441,7 +468,10 @@ impl BestOfNSamplingConfig {
                 idx_opt.unwrap_or_else(|| rand::rng().random_range(0..candidates.len())),
                 inf_result,
             ),
-            Err(_) => (rand::rng().random_range(0..candidates.len()), None),
+            Err(eval_err) => {
+                evaluator_error = Some(eval_err);
+                (rand::rng().random_range(0..candidates.len()), None)
+            }
         };
 
         // Safely remove the selected candidate without panicking
@@ -456,11 +486,25 @@ impl BestOfNSamplingConfig {
             .into());
         };
         if let Some(inference_result) = &inference_result {
-            // Pass the evaluator response back to the user as 'original_response'
+            // Pass the evaluator response back to the user as `original_response`
             selected_candidate.set_original_response(Some(inference_result.raw_response.clone()));
         } else {
-            // If the evaluator failed, don't provide an 'original_response' to the uesr
+            // If the evaluator failed, don't provide an `original_response` to the user
             selected_candidate.set_original_response(None);
+        }
+        // Inject failed candidate raw_responses
+        if clients.include_raw_response {
+            let failed_entries: Vec<_> = candidate_errors
+                .values()
+                .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                .collect();
+            if !failed_entries.is_empty()
+                && let Some(first) = selected_candidate.mut_model_inference_results().first_mut()
+            {
+                let mut new_failed = failed_entries;
+                new_failed.append(&mut first.failed_raw_response);
+                first.failed_raw_response = new_failed;
+            }
         }
         for candidate in candidates {
             selected_candidate
@@ -471,6 +515,14 @@ impl BestOfNSamplingConfig {
             selected_candidate
                 .mut_model_inference_results()
                 .push(inference_result);
+        }
+        // Inject evaluator failure raw_responses
+        if clients.include_raw_response
+            && let Some(eval_err) = &evaluator_error
+            && let Some(entries) = eval_err.extract_raw_response_entries()
+            && let Some(first) = selected_candidate.mut_model_inference_results().first_mut()
+        {
+            first.failed_raw_response.extend(entries);
         }
 
         Ok(selected_candidate)
@@ -835,11 +887,12 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::Arc;
     use uuid::Uuid;
 
     use crate::rate_limiting::ScopeInfo;
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
+        cache::{CacheEnabledMode, CacheManager, CacheOptions},
         config::{UninitializedSchemas, provider_types::ProviderTypesConfig},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
@@ -854,18 +907,19 @@ mod tests {
         model::{ModelConfig, ModelProvider, ProviderConfig},
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
+        rate_limiting::RateLimitingManager,
     };
 
     use super::*;
 
-    #[test]
-    fn test_static_schema() {
+    #[tokio::test]
+    async fn test_static_schema() {
         // Also covers the fact that the lazy schema works
         let instance = json!({
             "thinking": "I am thinking",
             "answer_choice": 0
         });
-        let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance);
+        let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance).await;
         assert!(result.is_ok());
     }
 
@@ -873,7 +927,7 @@ mod tests {
     async fn test_prepare_system_message() {
         let templates = get_test_template_config().await;
 
-        let system_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let system_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "assistant_name": {
@@ -1061,7 +1115,6 @@ mod tests {
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: None,
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1078,10 +1131,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1099,7 +1155,6 @@ mod tests {
 
         let model_inference_response2 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 2".to_string().into()],
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1116,10 +1171,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1156,7 +1214,6 @@ mod tests {
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1173,10 +1230,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1193,7 +1253,6 @@ mod tests {
 
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec![
                 "{\"response\": \"Malformed JSON response\""
                     .to_string()
@@ -1214,10 +1273,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel2".into(),
             finish_reason: Some(FinishReason::ToolCall),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1270,7 +1332,6 @@ mod tests {
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 200u64,
             output: vec!["Candidate answer 0".to_string().into()],
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
@@ -1287,10 +1348,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1308,7 +1372,6 @@ mod tests {
 
         let model_inference_response1 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
-            created: 201u64,
             output: vec!["Candidate answer 1".to_string().into()],
             system: Some("test_system".to_string()),
             input_messages: RequestMessagesOrBatch::Message(vec![RequestMessage {
@@ -1325,10 +1388,13 @@ mod tests {
                 response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider1".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "ExampleModel1".into(),
             finish_reason: Some(FinishReason::Stop),
             cached: false,
             raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1366,6 +1432,7 @@ mod tests {
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
@@ -1384,8 +1451,9 @@ mod tests {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
+            cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
             tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
@@ -1394,6 +1462,8 @@ mod tests {
             },
             relay: None,
             include_raw_usage: false,
+            include_raw_response: false,
+            include_aggregated_response: false,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1422,6 +1492,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                IndexMap::new(),
             )
             .await
             .expect("Failed to select best candidate");
@@ -1483,6 +1554,7 @@ mod tests {
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1505,6 +1577,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                IndexMap::new(),
             )
             .await;
 
@@ -1558,6 +1631,7 @@ mod tests {
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1581,6 +1655,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                IndexMap::new(),
             )
             .await;
 
@@ -1604,15 +1679,17 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 empty_candidates.clone(),
+                IndexMap::new(),
             )
             .await;
         let err = result.unwrap_err();
         assert_eq!(
             err,
-            ErrorDetails::Inference {
-                message: "No candidates to select from in best of n".to_string()
+            ErrorDetails::AllCandidatesFailed {
+                candidate_errors: IndexMap::new()
             }
-            .into()
+            .into(),
+            "Empty candidates should return AllCandidatesFailed error"
         );
 
         // Test case: Index returned too large (should return an error)
@@ -1651,6 +1728,7 @@ mod tests {
                 )]),
                 timeouts: Default::default(),
                 skip_relay: false,
+                namespace: None,
             },
         );
         let provider_types = ProviderTypesConfig::default();
@@ -1668,6 +1746,7 @@ mod tests {
                 &inference_config,
                 &inference_clients,
                 candidates.clone(),
+                IndexMap::new(),
             )
             .await;
         // we gracefully handle the error and return a random candidate
@@ -1735,7 +1814,7 @@ mod tests {
             exported.candidates,
             vec!["variant1".to_string(), "variant2".to_string()]
         );
-        assert_eq!(exported.evaluator.inner.model, "gpt-4".into());
+        assert_eq!(exported.evaluator.inner.model, Arc::<str>::from("gpt-4"));
         assert_eq!(exported.evaluator.inner.temperature, Some(0.3));
     }
 
@@ -1763,7 +1842,10 @@ mod tests {
 
         let exported = config.as_uninitialized();
 
-        assert_eq!(exported.evaluator.inner.model, "judge-model".into());
+        assert_eq!(
+            exported.evaluator.inner.model,
+            Arc::<str>::from("judge-model")
+        );
         assert_eq!(exported.evaluator.inner.temperature, Some(0.1));
         assert_eq!(exported.evaluator.inner.max_tokens, Some(50));
         assert_eq!(exported.evaluator.inner.seed, Some(99));

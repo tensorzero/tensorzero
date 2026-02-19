@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::common::get_gateway_endpoint;
 
 #[tokio::test]
-async fn e2e_test_template_no_schema() {
+async fn test_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "variant_name": "test",
@@ -123,7 +123,7 @@ async fn e2e_test_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_template_no_schema() {
+async fn test_mixture_of_n_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "variant_name": "mixture_of_n",
@@ -205,7 +205,7 @@ async fn e2e_test_mixture_of_n_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_best_of_n_template_no_schema() {
+async fn test_best_of_n_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "variant_name": "best_of_n",
@@ -348,7 +348,7 @@ async fn e2e_test_best_of_n_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_invalid_system_input_template_no_schema() {
+async fn test_invalid_system_input_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "input":{
@@ -391,7 +391,7 @@ async fn e2e_test_invalid_system_input_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_invalid_json_user_input_template_no_schema() {
+async fn test_invalid_json_user_input_template_no_schema() {
     let payload = json!({
         "function_name": "null_json",
         "input":{
@@ -426,7 +426,7 @@ async fn e2e_test_invalid_json_user_input_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_invalid_user_input_template_no_schema() {
+async fn test_invalid_user_input_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "input":{
@@ -461,7 +461,7 @@ async fn e2e_test_invalid_user_input_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_invalid_assistant_input_template_no_schema() {
+async fn test_invalid_assistant_input_template_no_schema() {
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "variant_name": "test",
@@ -496,7 +496,7 @@ async fn e2e_test_invalid_assistant_input_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_invalid_json_assistant_input_template_no_schema() {
+async fn test_invalid_json_assistant_input_template_no_schema() {
     let payload = json!({
         "function_name": "null_json",
         "input":{
@@ -530,7 +530,7 @@ async fn e2e_test_invalid_json_assistant_input_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_named_system_template_no_schema() {
+async fn test_named_system_template_no_schema() {
     let config_dir = tempfile::tempdir().unwrap();
     let config_path = config_dir.path().join("tensorzero.toml");
     let config = r#"
@@ -553,6 +553,7 @@ async fn e2e_test_named_system_template_no_schema() {
         config_file: Some(config_path.to_owned()),
         clickhouse_url: None,
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,
@@ -589,7 +590,7 @@ async fn e2e_test_named_system_template_no_schema() {
 }
 
 #[tokio::test]
-async fn e2e_test_named_system_template_with_schema() {
+async fn test_named_system_template_with_schema() {
     let config_dir = tempfile::tempdir().unwrap();
     let config_path = config_dir.path().join("tensorzero.toml");
     let config = r#"
@@ -618,6 +619,7 @@ async fn e2e_test_named_system_template_with_schema() {
         config_file: Some(config_path.to_owned()),
         clickhouse_url: Some(CLICKHOUSE_URL.to_string()),
         postgres_config: None,
+        valkey_url: None,
         timeout: None,
         verify_credentials: true,
         allow_batch_writes: true,

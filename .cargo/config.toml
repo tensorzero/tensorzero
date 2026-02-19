@@ -87,6 +87,14 @@ test-clickhouse-fast = [
     "0",
     "--no-fail-fast",
 ]
+test-endpoints = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "endpoints",
+]
 test-rate-limit-load = [
     "run",
     "--release",
@@ -111,6 +119,8 @@ watch-e2e = "watch -x run-e2e"
 tsbuild = [
     "test",
     "export_bindings",
+    "--features",
+    "ts-bindings",
     "-p",
     "tensorzero-core",
     "-p",
@@ -125,7 +135,11 @@ tsbuild = [
     "autopilot-client",
     "-p",
     "tensorzero-types",
+    "-p",
+    "config-applier",
+    "-p",
+    "autopilot-tools",
     # TODO(shuyangli): Remove `gateway` when we redesign evaluations crate.
     "-p",
-    "gateway"
+    "gateway",
 ] # Export Typescript bindings for TensorZero

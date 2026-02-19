@@ -4,9 +4,11 @@ allow-unwrap-in-tests = true
 doc-valid-idents = ["TensorZero", "ClickHouse", ".."]
 disallowed-types = [
     { path = "backon::Retryable", reason = "Use the retry functionality in tensorzero-core/src/utils/retries.rs instead" },
+    { path = "backon::BackoffBuilder", reason = "Use the retry functionality in tensorzero-core/src/utils/retries.rs instead" },
 ]
 disallowed-methods = [
     { path = "tracing_subscriber::layer::Layer::with_filter", reason = "Call `apply_filter_fixing_tracing_bug` instead" },
     { path = "tokio::task::spawn", reason = "Verify that it's okay for the gateway to shut down without waiting for this task" },
     { path = "std::process::exit", reason = "Verify that it's okay to shut down the entire process without our normal shutdown logic" },
+    { path = "uuid::Uuid::new_v4", reason = "Use `Uuid::now_v7` for new UUIDs instead" },
 ]

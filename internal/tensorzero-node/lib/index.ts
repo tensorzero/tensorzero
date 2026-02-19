@@ -1,6 +1,9 @@
 import { createRequire } from "module";
-import type { KeyInfo } from "./bindings";
-import type { PostgresClient as NativePostgresClientType } from "../index";
+import type { EditPayload, KeyInfo } from "./bindings";
+import type {
+  ConfigApplier as NativeConfigApplierType,
+  PostgresClient as NativePostgresClientType,
+} from "../index";
 
 // Re-export types from bindings
 export type * from "./bindings";
@@ -8,8 +11,10 @@ export type * from "./bindings";
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
 
-const { PostgresClient: NativePostgresClient } =
-  require("../index.cjs") as typeof import("../index");
+const {
+  ConfigApplier: NativeConfigApplier,
+  PostgresClient: NativePostgresClient,
+} = require("../index.cjs") as typeof import("../index");
 
 /**
  * Wrapper class for type safety and convenience
@@ -48,5 +53,25 @@ export class PostgresClient {
       description ?? null,
     );
     return JSON.parse(result) as KeyInfo;
+  }
+}
+
+/**
+ * Wrapper class for type safety and convenience
+ * around the native ConfigApplier
+ */
+export class ConfigApplier {
+  private nativeConfigApplier: NativeConfigApplierType;
+
+  private constructor(applier: NativeConfigApplierType) {
+    this.nativeConfigApplier = applier;
+  }
+
+  static async new(globPattern: string): Promise<ConfigApplier> {
+    return new ConfigApplier(await NativeConfigApplier.new(globPattern));
+  }
+
+  async applyEdit(edit: EditPayload): Promise<string[]> {
+    return this.nativeConfigApplier.applyEdit(JSON.stringify(edit));
   }
 }

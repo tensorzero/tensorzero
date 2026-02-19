@@ -7,38 +7,6 @@ volumes:
   shared-tmpdir:
 
 services:
-  provider-proxy:
-    image: tensorzero/provider-proxy:${TENSORZERO_COMMIT_TAG}
-    build:
-      context: ../../..
-      dockerfile: provider-proxy/Dockerfile
-      target: provider-proxy
-    ports:
-      - "3003:3003"
-    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
-    volumes:
-      # Mount cache directory for downloading cache files separately
-      - ../../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache
-    # Cache mode can be overridden via PROVIDER_PROXY_CACHE_MODE environment variable.
-    # Options: read-old-write-new (default), read-only, read-write
-    # See: https://github.com/tensorzero/tensorzero/issues/5380
-    command:
-      [
-        "--cache-path",
-        "/app/ci/provider-proxy-cache",
-        "--mode",
-        "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
-      ]
-    healthcheck:
-      test:
-        ["CMD", "wget", "--spider", "--tries=1", "http://localhost:3004/health"]
-      start_period: 10s
-      start_interval: 1s
-      timeout: 1s
-    depends_on:
-      minio:
-        condition: service_healthy
-
   gateway:
     image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG}
     build:
@@ -52,9 +20,9 @@ services:
       # Test environment variables
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
       TENSORZERO_MINIO_URL: http://minio:9000/
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
-      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       # API Keys
@@ -63,9 +31,6 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AZURE_API_KEY: ${AZURE_API_KEY:-}
-      AZURE_OPENAI_EASTUS2_API_KEY: ${AZURE_OPENAI_EASTUS2_API_KEY:-}
-      AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
-      AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-}
@@ -155,7 +120,38 @@ services:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
+      start_period: 5s # Give the script time to start
+
+  # fixtures-postgres and fixtures have exactly the same build context, so the fixture is downloaded only once and shared.
+  fixtures-postgres:
+    image: tensorzero/fixtures-postgres:${TENSORZERO_COMMIT_TAG:-latest}
+    build:
+      dockerfile: ui/fixtures/Dockerfile
+      context: ../../..
+    volumes:
+      - ../../../ui/fixtures:/fixtures
+      - ~/.aws:/root/.aws
+    environment:
+      - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
+    command:
+      [
+        "bash",
+        "-c",
+        "cd /fixtures && ./load_fixtures_postgres.sh && touch /load_complete_postgres.marker",
+      ]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/load_complete_postgres.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 72 # Retry for up to 6 minutes
       start_period: 5s # Give the script time to start
 
   live-tests:
@@ -170,21 +166,19 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
+      TENSORZERO_VALKEY_URL: redis://valkey:6379
       TENSORZERO_MINIO_URL: http://minio:9000
       TENSORZERO_TEMPO_URL: http://tempo:3200
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
-      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TMPDIR: /tmp
       # API Keys
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AZURE_API_KEY: ${AZURE_API_KEY:-}
-      AZURE_OPENAI_EASTUS2_API_KEY: ${AZURE_OPENAI_EASTUS2_API_KEY:-}
-      AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
-      AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-}
@@ -209,8 +203,6 @@ services:
       VLLM_API_KEY: ${VLLM_API_KEY:-}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
-      # Buildkite analytics
-      BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
       # Flaky tests to skip (nextest filter expression, e.g. "test(hyperbolic)|test(tgi)")
       CARGO_NEXTEST_FLAKY_TESTS: ${CARGO_NEXTEST_FLAKY_TESTS:-}
     volumes:
@@ -224,6 +216,8 @@ services:
     depends_on:
       fixtures:
         condition: service_completed_successfully
+      fixtures-postgres:
+        condition: service_completed_successfully
       clickhouse:
         condition: service_healthy
       postgres:
@@ -233,6 +227,8 @@ services:
       provider-proxy:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      valkey:
         condition: service_healthy
       otel-collector:
         condition: service_started

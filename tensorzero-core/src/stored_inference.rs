@@ -12,6 +12,7 @@ use crate::endpoints::datasets::v1::types::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
+#[cfg(feature = "ts-bindings")]
 use crate::inference::types::extra_body::DynamicExtraBody;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 #[cfg(feature = "pyo3")]
@@ -20,12 +21,12 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage, ResolvedInput,
-    ResolvedRequestMessage, Text,
+    ContentBlockChatOutput, FunctionType, JsonInferenceOutput, ModelInput, RequestMessage,
+    ResolvedInput, ResolvedRequestMessage, Text,
 };
-use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::{
-    DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert, deserialize_tool_info,
+    DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert,
+    deserialize_optional_tool_info,
 };
 use crate::variant::{VariantConfig, chat_completion::prepare_model_input};
 use chrono::{DateTime, Utc};
@@ -36,6 +37,7 @@ use pyo3::{IntoPyObjectExt, prelude::*};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 /// This trait is used to represent a stored sample of data.
@@ -45,9 +47,9 @@ use uuid::Uuid;
 /// datasets and stored inferences.
 pub trait StoredSample {
     fn function_name(&self) -> &str;
-    fn into_input(self) -> StoredInput;
-    fn input(&self) -> &StoredInput;
-    fn input_mut(&mut self) -> &mut StoredInput;
+    fn into_input(self) -> Option<StoredInput>;
+    fn input(&self) -> Option<&StoredInput>;
+    fn input_mut(&mut self) -> Option<&mut StoredInput>;
     fn owned_simple_info(self) -> SimpleStoredSampleInfo;
 }
 
@@ -55,7 +57,8 @@ pub trait StoredSample {
 /// that is just copied over from the StoredSample.
 pub struct SimpleStoredSampleInfo {
     pub function_name: String,
-    pub input: StoredInput,
+    pub function_type: FunctionType,
+    pub input: Option<StoredInput>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
     pub output: Option<Vec<ContentBlockChatOutput>>,
@@ -68,9 +71,11 @@ pub struct SimpleStoredSampleInfo {
 
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StoredInference {
     #[schemars(title = "StoredInferenceChat")]
     Chat(StoredChatInference),
@@ -107,18 +112,40 @@ impl StoredInference {
             StoredInference::Json(inference) => {
                 let output = match output_source {
                     InferenceOutputSource::None => None,
-                    InferenceOutputSource::Inference => Some(inference.output),
-                    InferenceOutputSource::Demonstration => Some(inference.output),
+                    InferenceOutputSource::Inference | InferenceOutputSource::Demonstration => {
+                        Some(inference.output.ok_or_else(|| {
+                            Error::new(ErrorDetails::InvalidRequest {
+                                message:
+                                    "Cannot create datapoint from inference with missing output"
+                                        .to_string(),
+                            })
+                        })?)
+                    }
                 };
+
+                let input = inference.input.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: "Cannot create datapoint from inference with missing input"
+                            .to_string(),
+                    })
+                })?;
+
+                let output_schema = inference.output_schema.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message:
+                            "Cannot create datapoint from inference with missing output_schema"
+                                .to_string(),
+                    })
+                })?;
 
                 let datapoint = StoredJsonInferenceDatapoint {
                     dataset_name: dataset_name.to_string(),
                     function_name: inference.function_name,
                     id: datapoint_id,
                     episode_id: Some(inference.episode_id),
-                    input: inference.input,
+                    input,
                     output,
-                    output_schema: inference.output_schema,
+                    output_schema,
                     tags: Some(inference.tags),
                     auxiliary: String::new(),
                     is_deleted: false,
@@ -135,9 +162,23 @@ impl StoredInference {
             StoredInference::Chat(inference) => {
                 let output = match output_source {
                     InferenceOutputSource::None => None,
-                    InferenceOutputSource::Inference => Some(inference.output),
-                    InferenceOutputSource::Demonstration => Some(inference.output),
+                    InferenceOutputSource::Inference | InferenceOutputSource::Demonstration => {
+                        Some(inference.output.ok_or_else(|| {
+                            Error::new(ErrorDetails::InvalidRequest {
+                                message:
+                                    "Cannot create datapoint from inference with missing output"
+                                        .to_string(),
+                            })
+                        })?)
+                    }
                 };
+
+                let input = inference.input.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: "Cannot create datapoint from inference with missing input"
+                            .to_string(),
+                    })
+                })?;
 
                 // Convert DynamicToolParams (wire type) to ToolCallConfigDatabaseInsert (storage type)
                 let function_config = config.get_function(&inference.function_name)?;
@@ -150,7 +191,7 @@ impl StoredInference {
                     function_name: inference.function_name,
                     id: datapoint_id,
                     episode_id: Some(inference.episode_id),
-                    input: inference.input,
+                    input,
                     output,
                     tool_params: Some(tool_params),
                     tags: Some(inference.tags),
@@ -217,7 +258,7 @@ impl StoredChatInference {
             timestamp: self.timestamp,
             episode_id: self.episode_id,
             inference_id: self.inference_id,
-            tool_params,
+            tool_params: Some(tool_params),
             tags: self.tags,
             extra_body: self.extra_body,
             inference_params: self.inference_params,
@@ -228,8 +269,9 @@ impl StoredChatInference {
 }
 
 /// Storage variant of StoredInference for database operations (no Python/TypeScript bindings)
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum StoredInferenceDatabase {
     Chat(StoredChatInferenceDatabase),
     Json(StoredJsonInference),
@@ -249,16 +291,28 @@ impl StoredInferenceDatabase {
             StoredInferenceDatabase::Chat(inference) => inference.inference_id,
         }
     }
+
+    pub fn timestamp(&self) -> DateTime<Utc> {
+        match self {
+            StoredInferenceDatabase::Json(inference) => inference.timestamp,
+            StoredInferenceDatabase::Chat(inference) => inference.timestamp,
+        }
+    }
 }
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
-    pub input: StoredInput,
-    pub output: Vec<ContentBlockChatOutput>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<StoredInput>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     #[schemars(with = "String")]
@@ -271,12 +325,16 @@ pub struct StoredChatInference {
     #[serde(default)]
     pub tags: HashMap<String, String>,
     #[serde(default)]
-    #[ts(as = "Vec<DynamicExtraBody>")]
-    pub extra_body: UnfilteredInferenceExtraBody,
-    pub inference_params: InferenceParams,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<DynamicExtraBody>>"))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_body: Option<UnfilteredInferenceExtraBody>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference_params: Option<InferenceParams>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub processing_time_ms: Option<u64>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub ttft_ms: Option<u64>,
 }
 
@@ -299,7 +357,7 @@ impl StoredChatInferenceDatabase {
             timestamp: self.timestamp,
             episode_id: self.episode_id,
             inference_id: self.inference_id,
-            tool_params: self.tool_params.into(),
+            tool_params: self.tool_params.map(Into::into).unwrap_or_default(),
             tags: self.tags,
             extra_body: self.extra_body,
             inference_params: self.inference_params,
@@ -314,21 +372,23 @@ impl StoredChatInferenceDatabase {
 pub struct StoredChatInferenceDatabase {
     pub function_name: String,
     pub variant_name: String,
-    pub input: StoredInput,
-    pub output: Vec<ContentBlockChatOutput>,
+    #[serde(default)]
+    pub input: Option<StoredInput>,
+    #[serde(default)]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(flatten, deserialize_with = "deserialize_tool_info")]
-    pub tool_params: ToolCallConfigDatabaseInsert,
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(default)]
     pub tags: HashMap<String, String>,
-    #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
-    pub extra_body: UnfilteredInferenceExtraBody,
-    #[serde(default, deserialize_with = "deserialize_json_string")]
-    pub inference_params: InferenceParams,
+    #[serde(default)]
+    pub extra_body: Option<UnfilteredInferenceExtraBody>,
+    #[serde(default)]
+    pub inference_params: Option<InferenceParams>,
     pub processing_time_ms: Option<u64>,
     pub ttft_ms: Option<u64>,
 }
@@ -340,31 +400,41 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
-    pub input: StoredInput,
-    pub output: JsonInferenceOutput,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<StoredInput>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<JsonInferenceOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<JsonInferenceOutput>,
     #[schemars(with = "String")]
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    pub output_schema: Value,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<Value>,
     #[serde(default)]
     pub tags: HashMap<String, String>,
     #[serde(default)]
-    #[ts(as = "Vec<DynamicExtraBody>")]
-    pub extra_body: UnfilteredInferenceExtraBody,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<DynamicExtraBody>>"))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_body: Option<UnfilteredInferenceExtraBody>,
     #[serde(default)]
-    #[schemars(!default)]
-    pub inference_params: InferenceParams,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inference_params: Option<InferenceParams>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub processing_time_ms: Option<u64>,
-    #[ts(optional)]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub ttft_ms: Option<u64>,
 }
 
@@ -376,20 +446,21 @@ impl std::fmt::Display for StoredJsonInference {
 }
 
 impl StoredSample for StoredInferenceDatabase {
-    fn input_mut(&mut self) -> &mut StoredInput {
+    fn input_mut(&mut self) -> Option<&mut StoredInput> {
         match self {
-            StoredInferenceDatabase::Chat(example) => &mut example.input,
-            StoredInferenceDatabase::Json(example) => &mut example.input,
-        }
-    }
-    fn input(&self) -> &StoredInput {
-        match self {
-            StoredInferenceDatabase::Chat(example) => &example.input,
-            StoredInferenceDatabase::Json(example) => &example.input,
+            StoredInferenceDatabase::Chat(example) => example.input.as_mut(),
+            StoredInferenceDatabase::Json(example) => example.input.as_mut(),
         }
     }
 
-    fn into_input(self) -> StoredInput {
+    fn input(&self) -> Option<&StoredInput> {
+        match self {
+            StoredInferenceDatabase::Chat(example) => example.input.as_ref(),
+            StoredInferenceDatabase::Json(example) => example.input.as_ref(),
+        }
+    }
+
+    fn into_input(self) -> Option<StoredInput> {
         match self {
             StoredInferenceDatabase::Chat(example) => example.input,
             StoredInferenceDatabase::Json(example) => example.input,
@@ -407,18 +478,23 @@ impl StoredSample for StoredInferenceDatabase {
         match self {
             StoredInferenceDatabase::Chat(example) => SimpleStoredSampleInfo {
                 function_name: example.function_name,
+                function_type: FunctionType::Chat,
                 input: example.input,
                 episode_id: Some(example.episode_id),
                 inference_id: Some(example.inference_id),
-                output: Some(example.output.clone()),
-                stored_output: Some(StoredOutput::Chat(example.output)),
+                output: example.output.clone(),
+                stored_output: example.output.map(StoredOutput::Chat),
                 dispreferred_outputs: example.dispreferred_outputs,
-                tool_params: Some(example.tool_params),
+                tool_params: example.tool_params,
                 output_schema: None,
                 tags: example.tags,
             },
             StoredInferenceDatabase::Json(example) => {
-                let output = json_output_to_content_block_chat_output(example.output.clone());
+                let output = example
+                    .output
+                    .as_ref()
+                    .map(|o| json_output_to_content_block_chat_output(o.clone()));
+                let stored_output = example.output.map(StoredOutput::Json);
                 let dispreferred_outputs = example
                     .dispreferred_outputs
                     .into_iter()
@@ -426,14 +502,15 @@ impl StoredSample for StoredInferenceDatabase {
                     .collect();
                 SimpleStoredSampleInfo {
                     function_name: example.function_name,
+                    function_type: FunctionType::Json,
                     input: example.input,
                     episode_id: Some(example.episode_id),
                     inference_id: Some(example.inference_id),
-                    output: Some(output),
-                    stored_output: Some(StoredOutput::Json(example.output)),
+                    output,
+                    stored_output,
                     dispreferred_outputs,
                     tool_params: None,
-                    output_schema: Some(example.output_schema),
+                    output_schema: example.output_schema,
                     tags: example.tags,
                 }
             }
@@ -450,8 +527,9 @@ fn json_output_to_content_block_chat_output(
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(untagged)]
 pub enum StoredOutput {
     Chat(Vec<ContentBlockChatOutput>),
@@ -463,11 +541,13 @@ pub enum StoredOutput {
 /// and by resolving all network resources (e.g. images).
 /// This is a wire type - it uses DynamicToolParams and has Python/TypeScript bindings.
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RenderedSample {
     pub function_name: String,
+    pub function_type: FunctionType,
     pub input: ModelInput,
     pub stored_input: StoredInput,
     pub output: Option<Vec<ContentBlockChatOutput>>,
@@ -484,6 +564,7 @@ impl RenderedSample {
     pub fn into_lazy_rendered_sample(self) -> LazyRenderedSample {
         LazyRenderedSample {
             function_name: self.function_name,
+            function_type: self.function_type,
             system_input: self.input.system,
             messages: self
                 .input
@@ -508,18 +589,25 @@ impl RenderedSample {
     /// This method handles the conversion from RenderedSample (which has StoredInput and StoredOutput)
     /// to CreateDatapointRequest (which expects Input and type-specific output).
     ///
-    /// The type discrimination (Chat vs JSON) is based on the stored_output enum variant.
+    /// The type discrimination (Chat vs JSON) is based on the `function_type` field.
     pub fn into_create_datapoint_request(self) -> Result<CreateDatapointRequest, Error> {
         // Convert StoredInput to Input
         let input = self.stored_input.into_input();
 
-        // Use stored_output to determine whether this is a Chat or JSON datapoint
-        match self.stored_output {
-            Some(StoredOutput::Json(json_output)) => {
-                // JSON function datapoint
-                let output = json_output
-                    .raw
-                    .map(|raw| JsonDatapointOutputUpdate { raw: Some(raw) });
+        match self.function_type {
+            FunctionType::Json => {
+                let output = match self.stored_output {
+                    Some(StoredOutput::Json(json_output)) => json_output
+                        .raw
+                        .map(|raw| JsonDatapointOutputUpdate { raw: Some(raw) }),
+                    None => None,
+                    Some(StoredOutput::Chat(_)) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: "Expected JSON output for JSON function, got Chat output"
+                                .to_string(),
+                        }));
+                    }
+                };
 
                 Ok(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
                     function_name: self.function_name,
@@ -531,18 +619,15 @@ impl RenderedSample {
                     name: None,
                 }))
             }
-            Some(StoredOutput::Chat(_)) | None => {
-                // Chat function datapoint
-                Ok(CreateDatapointRequest::Chat(CreateChatDatapointRequest {
-                    function_name: self.function_name,
-                    episode_id: self.episode_id,
-                    input,
-                    output: self.output,
-                    dynamic_tool_params: self.tool_params,
-                    tags: Some(self.tags),
-                    name: None,
-                }))
-            }
+            FunctionType::Chat => Ok(CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                function_name: self.function_name,
+                episode_id: self.episode_id,
+                input,
+                output: self.output,
+                dynamic_tool_params: self.tool_params,
+                tags: Some(self.tags),
+                name: None,
+            })),
         }
     }
 }
@@ -550,6 +635,7 @@ impl RenderedSample {
 /// Like `RenderedSample`, but holds `RequestMessage`s instead of `ResolvedRequestMessage`s
 pub struct LazyRenderedSample {
     pub function_name: String,
+    pub function_type: FunctionType,
     pub system_input: Option<String>,
     // This is a a `Vec<ResolvedRequestMessage>` in `RenderedSample`
     pub messages: Vec<RequestMessage>,
@@ -746,6 +832,7 @@ pub async fn render_stored_sample<T: StoredSample>(
 ) -> Result<RenderedSample, Error> {
     let SimpleStoredSampleInfo {
         function_name,
+        function_type,
         input: _,
         output,
         stored_output,
@@ -767,6 +854,7 @@ pub async fn render_stored_sample<T: StoredSample>(
 
     Ok(RenderedSample {
         function_name,
+        function_type,
         episode_id,
         inference_id,
         input: model_input,
@@ -786,11 +874,11 @@ mod tests {
     use crate::config::{Config, SchemaData};
     use crate::db::stored_datapoint::StoredDatapoint;
     use crate::endpoints::inference::InferenceParams;
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::System;
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text};
-    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::jsonschema_util::JSONSchema;
     use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
     use std::sync::Arc;
 
@@ -808,7 +896,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: Default::default(),
             })),
         );
@@ -819,10 +907,10 @@ mod tests {
             Arc::new(FunctionConfig::Json(FunctionConfigJson {
                 variants: Default::default(),
                 schemas: SchemaData::default(),
-                output_schema: StaticJSONSchema::default(),
+                output_schema: JSONSchema::default(),
                 json_mode_tool_call_config: ToolCallConfig::default(),
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_template_names: Default::default(),
             })),
         );
@@ -838,18 +926,18 @@ mod tests {
         StoredChatInference {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
-            input: StoredInput {
+            input: Some(StoredInput {
                 system: Some(System::Text("Test system prompt".to_string())),
                 messages: vec![],
-            },
-            output: vec![
+            }),
+            output: Some(vec![
                 ContentBlockChatOutput::Text(Text {
                     text: "Test output 1".to_string(),
                 }),
                 ContentBlockChatOutput::Text(Text {
                     text: "Test output 2".to_string(),
                 }),
-            ],
+            ]),
             dispreferred_outputs: vec![],
             timestamp: DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
                 .unwrap()
@@ -863,8 +951,8 @@ mod tests {
                 tags.insert("key2".to_string(), "value2".to_string());
                 tags
             },
-            extra_body: UnfilteredInferenceExtraBody::default(),
-            inference_params: InferenceParams::default(),
+            extra_body: Some(UnfilteredInferenceExtraBody::default()),
+            inference_params: Some(InferenceParams::default()),
             processing_time_ms: None,
             ttft_ms: None,
         }
@@ -878,33 +966,33 @@ mod tests {
         StoredJsonInference {
             function_name: "json_function".to_string(),
             variant_name: "json_variant".to_string(),
-            input: StoredInput {
+            input: Some(StoredInput {
                 system: Some(System::Text("JSON system prompt".to_string())),
                 messages: vec![],
-            },
-            output: JsonInferenceOutput {
+            }),
+            output: Some(JsonInferenceOutput {
                 raw: Some(r#"{"result": "test"}"#.to_string()),
                 parsed: Some(serde_json::json!({"result": "test"})),
-            },
+            }),
             dispreferred_outputs: vec![],
             timestamp: DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
                 .unwrap()
                 .with_timezone(&Utc),
             episode_id,
             inference_id,
-            output_schema: serde_json::json!({
+            output_schema: Some(serde_json::json!({
                 "type": "object",
                 "properties": {
                     "result": {"type": "string"}
                 }
-            }),
+            })),
             tags: {
                 let mut tags = HashMap::new();
                 tags.insert("json_key".to_string(), "json_value".to_string());
                 tags
             },
-            extra_body: UnfilteredInferenceExtraBody::default(),
-            inference_params: InferenceParams::default(),
+            extra_body: Some(UnfilteredInferenceExtraBody::default()),
+            inference_params: Some(InferenceParams::default()),
             processing_time_ms: None,
             ttft_ms: None,
         }
@@ -917,6 +1005,7 @@ mod tests {
 
         RenderedSample {
             function_name: "test_function".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("Test system prompt".to_string()),
                 messages: vec![],
@@ -962,6 +1051,7 @@ mod tests {
 
         RenderedSample {
             function_name: "json_function".to_string(),
+            function_type: FunctionType::Json,
             input: ModelInput {
                 system: Some("JSON system prompt".to_string()),
                 messages: vec![],
@@ -1019,8 +1109,15 @@ mod tests {
                 assert_eq!(dp.name, None);
                 assert_ne!(dp.id, Uuid::nil());
                 assert_eq!(dp.episode_id, Some(original_episode_id));
-                assert_eq!(dp.input, original_input);
-                assert_eq!(dp.output, Some(original_output));
+                assert_eq!(
+                    dp.input,
+                    original_input.unwrap(),
+                    "Datapoint input should match the original inference input"
+                );
+                assert_eq!(
+                    dp.output, original_output,
+                    "Datapoint output should match the original inference output"
+                );
                 // tool_params are converted from DynamicToolParams to ToolCallConfigDatabaseInsert
                 // Since we used default DynamicToolParams, we should get default ToolCallConfigDatabaseInsert
                 assert!(dp.tool_params.is_some());
@@ -1031,6 +1128,22 @@ mod tests {
             }
             StoredDatapoint::Json(_) => panic!("Expected Chat datapoint, got Json"),
         }
+    }
+
+    #[test]
+    fn test_chat_inference_to_datapoint_errors_on_missing_output() {
+        let mut chat_inference = create_test_chat_inference();
+        chat_inference.output = None;
+        let dataset_name = "test_dataset";
+        let output_source = InferenceOutputSource::Inference;
+        let config = create_test_config();
+
+        let inference = StoredInference::Chat(chat_inference);
+        let result = inference.into_datapoint_insert(dataset_name, &output_source, &config);
+        assert!(
+            result.is_err(),
+            "Should error when output is missing and output_source is Inference"
+        );
     }
 
     #[test]
@@ -1074,7 +1187,7 @@ mod tests {
         match datapoint {
             StoredDatapoint::Chat(dp) => {
                 // Demonstration output is joined during the query; we just make sure it's present.
-                assert_eq!(dp.output, Some(original_output));
+                assert_eq!(dp.output, original_output);
             }
             StoredDatapoint::Json(_) => panic!("Expected Chat datapoint, got Json"),
         }
@@ -1107,9 +1220,20 @@ mod tests {
                 assert_eq!(dp.name, None);
                 assert_ne!(dp.id, Uuid::nil());
                 assert_eq!(dp.episode_id, Some(original_episode_id));
-                assert_eq!(dp.input, original_input);
-                assert_eq!(dp.output, Some(original_output));
-                assert_eq!(dp.output_schema, original_output_schema);
+                assert_eq!(
+                    dp.input,
+                    original_input.unwrap(),
+                    "Datapoint input should match the original inference input"
+                );
+                assert_eq!(
+                    dp.output, original_output,
+                    "Datapoint output should match the original inference output"
+                );
+                assert_eq!(
+                    dp.output_schema,
+                    original_output_schema.unwrap(),
+                    "Datapoint output_schema should match the original inference output_schema"
+                );
                 assert_eq!(dp.tags, Some(original_tags));
                 assert_eq!(dp.staled_at, None);
                 assert_eq!(dp.source_inference_id, Some(original_inference_id));
@@ -1145,6 +1269,22 @@ mod tests {
     }
 
     #[test]
+    fn test_json_inference_to_datapoint_errors_on_missing_output() {
+        let mut json_inference = create_test_json_inference();
+        json_inference.output = None;
+        let dataset_name = "json_dataset";
+        let output_source = InferenceOutputSource::Inference;
+        let config = create_test_config();
+
+        let inference = StoredInference::Json(json_inference);
+        let result = inference.into_datapoint_insert(dataset_name, &output_source, &config);
+        assert!(
+            result.is_err(),
+            "Should error when output is missing and output_source is Inference"
+        );
+    }
+
+    #[test]
     fn test_json_inference_to_datapoint_with_demonstration_output() {
         let json_inference = create_test_json_inference();
         let dataset_name = "json_dataset";
@@ -1160,7 +1300,7 @@ mod tests {
         match datapoint {
             StoredDatapoint::Json(dp) => {
                 // Demonstration output is joined during the query; we just make sure it's present.
-                assert_eq!(dp.output, Some(original_output));
+                assert_eq!(dp.output, original_output);
             }
             StoredDatapoint::Chat(_) => panic!("Expected Json datapoint, got Chat"),
         }
@@ -1402,6 +1542,61 @@ mod tests {
     }
 
     #[test]
+    fn test_stored_sample_returns_none_for_missing_input() {
+        let chat_inference = StoredChatInferenceDatabase {
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            input: None,
+            output: None,
+            dispreferred_outputs: vec![],
+            timestamp: Utc::now(),
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            tool_params: None,
+            tags: HashMap::new(),
+            extra_body: None,
+            inference_params: None,
+            processing_time_ms: None,
+            ttft_ms: None,
+        };
+        let chat_db = StoredInferenceDatabase::Chat(chat_inference);
+        assert!(
+            chat_db.input().is_none(),
+            "input() should return None when the stored input is missing"
+        );
+        assert!(
+            chat_db.into_input().is_none(),
+            "into_input() should return None when the stored input is missing"
+        );
+
+        let json_inference = StoredJsonInference {
+            function_name: "json_function".to_string(),
+            variant_name: "json_variant".to_string(),
+            input: None,
+            output: None,
+            dispreferred_outputs: vec![],
+            timestamp: Utc::now(),
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            output_schema: None,
+            tags: HashMap::new(),
+            extra_body: None,
+            inference_params: None,
+            processing_time_ms: None,
+            ttft_ms: None,
+        };
+        let json_db = StoredInferenceDatabase::Json(json_inference);
+        assert!(
+            json_db.input().is_none(),
+            "input() should return None when the stored input is missing"
+        );
+        assert!(
+            json_db.into_input().is_none(),
+            "into_input() should return None when the stored input is missing"
+        );
+    }
+
+    #[test]
     fn test_stored_input_to_input_conversion() {
         let sample = create_test_chat_rendered_sample();
 
@@ -1418,5 +1613,267 @@ mod tests {
             }
             CreateDatapointRequest::Json(_) => panic!("Expected Chat datapoint"),
         }
+    }
+
+    // ── Serde roundtrip tests with None data fields ──────────────────────
+
+    #[test]
+    fn test_chat_inference_serde_roundtrip_with_none_data() {
+        let mut inference = create_test_chat_inference();
+        inference.input = None;
+        inference.output = None;
+        inference.extra_body = None;
+        inference.inference_params = None;
+
+        let json = serde_json::to_value(&inference).unwrap();
+
+        assert!(
+            !json.as_object().unwrap().contains_key("input"),
+            "None input should be omitted from serialized JSON"
+        );
+        assert!(
+            !json.as_object().unwrap().contains_key("output"),
+            "None output should be omitted from serialized JSON"
+        );
+
+        let deserialized: StoredChatInference =
+            serde_json::from_value(json).expect("should deserialize back");
+        assert_eq!(
+            deserialized.input, None,
+            "Deserialized input should be None"
+        );
+        assert_eq!(
+            deserialized.output, None,
+            "Deserialized output should be None"
+        );
+        assert_eq!(
+            deserialized.extra_body, None,
+            "Deserialized extra_body should be None"
+        );
+        assert_eq!(
+            deserialized.inference_params, None,
+            "Deserialized inference_params should be None"
+        );
+    }
+
+    #[test]
+    fn test_json_inference_serde_roundtrip_with_none_data() {
+        let mut inference = create_test_json_inference();
+        inference.input = None;
+        inference.output = None;
+        inference.output_schema = None;
+        inference.extra_body = None;
+        inference.inference_params = None;
+
+        let json = serde_json::to_value(&inference).unwrap();
+
+        assert!(
+            !json.as_object().unwrap().contains_key("input"),
+            "None input should be omitted from serialized JSON"
+        );
+        assert!(
+            !json.as_object().unwrap().contains_key("output"),
+            "None output should be omitted from serialized JSON"
+        );
+        assert!(
+            !json.as_object().unwrap().contains_key("output_schema"),
+            "None output_schema should be omitted from serialized JSON"
+        );
+
+        let deserialized: StoredJsonInference =
+            serde_json::from_value(json).expect("should deserialize back");
+        assert_eq!(
+            deserialized.input, None,
+            "Deserialized input should be None"
+        );
+        assert_eq!(
+            deserialized.output, None,
+            "Deserialized output should be None"
+        );
+        assert_eq!(
+            deserialized.output_schema, None,
+            "Deserialized output_schema should be None"
+        );
+        assert_eq!(
+            deserialized.extra_body, None,
+            "Deserialized extra_body should be None"
+        );
+        assert_eq!(
+            deserialized.inference_params, None,
+            "Deserialized inference_params should be None"
+        );
+    }
+
+    // ── into_datapoint_insert error tests for missing input ──────────────
+
+    #[test]
+    fn test_chat_inference_to_datapoint_errors_on_missing_input() {
+        let mut chat_inference = create_test_chat_inference();
+        chat_inference.input = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Chat(chat_inference);
+        let result =
+            inference.into_datapoint_insert("ds", &InferenceOutputSource::Inference, &config);
+        assert!(
+            result.is_err(),
+            "Should error when input is missing regardless of output_source"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("missing input"),
+            "Error should mention missing input, got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn test_json_inference_to_datapoint_errors_on_missing_input() {
+        let mut json_inference = create_test_json_inference();
+        json_inference.input = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Json(json_inference);
+        let result =
+            inference.into_datapoint_insert("ds", &InferenceOutputSource::Inference, &config);
+        assert!(
+            result.is_err(),
+            "Should error when input is missing regardless of output_source"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("missing input"),
+            "Error should mention missing input, got: {err_msg}"
+        );
+    }
+
+    // ── into_datapoint_insert error test for missing output_schema (JSON only) ──
+
+    #[test]
+    fn test_json_inference_to_datapoint_errors_on_missing_output_schema() {
+        let mut json_inference = create_test_json_inference();
+        json_inference.output_schema = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Json(json_inference);
+        let result =
+            inference.into_datapoint_insert("ds", &InferenceOutputSource::Inference, &config);
+        assert!(
+            result.is_err(),
+            "Should error when output_schema is missing"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("missing output_schema"),
+            "Error should mention missing output_schema, got: {err_msg}"
+        );
+    }
+
+    // ── into_datapoint_insert success with output_source=None and missing data ──
+
+    #[test]
+    fn test_chat_inference_to_datapoint_succeeds_with_none_output_source_and_none_data() {
+        let mut chat_inference = create_test_chat_inference();
+        chat_inference.output = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Chat(chat_inference);
+        let datapoint = inference
+            .into_datapoint_insert("ds", &InferenceOutputSource::None, &config)
+            .expect("Should succeed when output_source is None even with missing output");
+
+        match datapoint {
+            StoredDatapoint::Chat(dp) => {
+                assert_eq!(
+                    dp.output, None,
+                    "Output should be None when output_source is None"
+                );
+            }
+            StoredDatapoint::Json(_) => panic!("Expected Chat datapoint, got Json"),
+        }
+    }
+
+    #[test]
+    fn test_json_inference_to_datapoint_succeeds_with_none_output_source_and_none_data() {
+        let mut json_inference = create_test_json_inference();
+        json_inference.output = None;
+        let config = create_test_config();
+
+        let inference = StoredInference::Json(json_inference);
+        let datapoint = inference
+            .into_datapoint_insert("ds", &InferenceOutputSource::None, &config)
+            .expect("Should succeed when output_source is None even with missing output");
+
+        match datapoint {
+            StoredDatapoint::Json(dp) => {
+                assert_eq!(
+                    dp.output, None,
+                    "Output should be None when output_source is None"
+                );
+            }
+            StoredDatapoint::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+        }
+    }
+
+    // ── owned_simple_info propagates None correctly ──────────────────────
+
+    #[test]
+    fn test_owned_simple_info_chat_with_none_data() {
+        let chat_db = StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            input: None,
+            output: None,
+            dispreferred_outputs: vec![],
+            timestamp: Utc::now(),
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            tool_params: None,
+            tags: HashMap::new(),
+            extra_body: None,
+            inference_params: None,
+            processing_time_ms: None,
+            ttft_ms: None,
+        });
+
+        let info = chat_db.owned_simple_info();
+        assert_eq!(info.input, None, "input should be None");
+        assert_eq!(info.output, None, "output should be None");
+        assert_eq!(info.stored_output, None, "stored_output should be None");
+        assert_eq!(
+            info.function_type,
+            FunctionType::Chat,
+            "function_type should be Chat"
+        );
+    }
+
+    #[test]
+    fn test_owned_simple_info_json_with_none_data() {
+        let json_db = StoredInferenceDatabase::Json(StoredJsonInference {
+            function_name: "json_function".to_string(),
+            variant_name: "json_variant".to_string(),
+            input: None,
+            output: None,
+            dispreferred_outputs: vec![],
+            timestamp: Utc::now(),
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            output_schema: None,
+            tags: HashMap::new(),
+            extra_body: None,
+            inference_params: None,
+            processing_time_ms: None,
+            ttft_ms: None,
+        });
+
+        let info = json_db.owned_simple_info();
+        assert_eq!(info.input, None, "input should be None");
+        assert_eq!(info.output, None, "output should be None");
+        assert_eq!(info.stored_output, None, "stored_output should be None");
+        assert_eq!(info.output_schema, None, "output_schema should be None");
+        assert_eq!(
+            info.function_type,
+            FunctionType::Json,
+            "function_type should be Json"
+        );
     }
 }

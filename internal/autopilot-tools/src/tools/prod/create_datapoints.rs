@@ -34,18 +34,22 @@ impl ToolMetadata for CreateDatapointsTool {
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("create_datapoints")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Create datapoints in a dataset. Datapoints can be Chat or Json type. \
              Autopilot tags are automatically added for tracking.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn strict(&self) -> bool {
+        false // Datapoints have arbitrary input/output objects
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Create datapoints in a dataset.",
@@ -87,11 +91,13 @@ impl ToolMetadata for CreateDatapointsTool {
                                 "description": "Optional tags for the datapoint."
                             }
                         },
-                        "required": ["type", "function_name", "input"]
+                        "required": ["type", "function_name", "input"],
+                        "additionalProperties": false
                     }
                 }
             },
-            "required": ["dataset_name", "datapoints"]
+            "required": ["dataset_name", "datapoints"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

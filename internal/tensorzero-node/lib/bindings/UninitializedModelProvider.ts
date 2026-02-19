@@ -10,9 +10,7 @@ export type UninitializedModelProvider = {
   /**
    * If `true`, we emit a warning and discard chunks that we don't recognize
    * (on a best-effort, per-provider basis).
-   * By default, we produce an error in the stream
-   * We can't meaningfully return unknown chunks to the user, as we don't
-   * know how to correctly merge them.
+   * By default, unknown chunks are forwarded as-is in the stream.
    */
   discard_unknown_chunks: boolean;
 } & (
@@ -21,21 +19,41 @@ export type UninitializedModelProvider = {
       model_name: string;
       api_base: string | null;
       api_key_location: string | null;
-      beta_structured_outputs: boolean;
+      beta_structured_outputs?: boolean;
+      provider_tools: Array<JsonValue>;
     }
   | {
       type: "aws_bedrock";
       model_id: string;
       region: string | null;
+      /**
+       * Deprecated: Use `region = "sdk"` instead to enable auto-detection.
+       */
       allow_auto_detect_region: boolean;
+      endpoint_url: string | null;
+      /**
+       * API key for bearer token authentication (alternative to IAM credentials).
+       * If set, uses `Authorization: Bearer <token>` instead of SigV4 signing.
+       */
+      api_key: string | null;
+      access_key_id: string | null;
+      secret_access_key: string | null;
+      session_token: string | null;
     }
   | {
       type: "aws_sagemaker";
       endpoint_name: string;
       model_name: string;
       region: string | null;
+      /**
+       * Deprecated: Use `region = "sdk"` instead to enable auto-detection.
+       */
       allow_auto_detect_region: boolean;
       hosted_provider: HostedProviderKind;
+      endpoint_url: string | null;
+      access_key_id: string | null;
+      secret_access_key: string | null;
+      session_token: string | null;
     }
   | {
       type: "azure";
@@ -49,11 +67,12 @@ export type UninitializedModelProvider = {
       location: string;
       project_id: string;
       credential_location: string | null;
+      provider_tools: Array<JsonValue>;
     }
   | {
       type: "gcp_vertex_gemini";
-      model_id: string | null;
-      endpoint_id: string | null;
+      model_id?: string;
+      endpoint_id?: string;
       location: string;
       project_id: string;
       credential_location: string | null;
@@ -63,7 +82,12 @@ export type UninitializedModelProvider = {
       model_name: string;
       api_key_location: string | null;
     }
-  | { type: "groq"; model_name: string; api_key_location: string | null }
+  | {
+      type: "groq";
+      model_name: string;
+      api_key_location: string | null;
+      reasoning_format?: string;
+    }
   | { type: "hyperbolic"; model_name: string; api_key_location: string | null }
   | {
       type: "fireworks";
@@ -71,11 +95,16 @@ export type UninitializedModelProvider = {
       api_key_location: string | null;
       parse_think_blocks: boolean;
     }
-  | { type: "mistral"; model_name: string; api_key_location: string | null }
+  | {
+      type: "mistral";
+      model_name: string;
+      api_key_location: string | null;
+      prompt_mode?: string;
+    }
   | {
       type: "openai";
       model_name: string;
-      api_base: string | null;
+      api_base?: string;
       api_key_location: string | null;
       api_type: OpenAIAPIType;
       include_encrypted_reasoning: boolean;

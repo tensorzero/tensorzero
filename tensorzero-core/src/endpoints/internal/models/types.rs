@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
 
 /// Response containing the count of distinct models used.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CountModelsResponse {
     /// The count of distinct models used.
     pub model_count: u32,
@@ -22,8 +23,9 @@ pub struct GetModelUsageQueryParams {
 }
 
 /// Response containing model usage timeseries data.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetModelUsageResponse {
     /// The model usage data points.
     pub data: Vec<ModelUsageTimePoint>,
@@ -37,9 +39,12 @@ pub struct GetModelLatencyQueryParams {
 }
 
 /// Response containing model latency quantile data.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetModelLatencyResponse {
+    /// The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) used to compute the distributions.
+    pub quantiles: Vec<f64>,
     /// The model latency data points with quantile distributions.
     pub data: Vec<ModelLatencyDatapoint>,
 }

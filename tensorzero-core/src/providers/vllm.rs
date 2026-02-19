@@ -10,7 +10,8 @@ use url::Url;
 
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
-    OpenAITool, OpenAIToolChoice, StreamOptions, get_chat_url, handle_openai_error, stream_openai,
+    OpenAITool, OpenAIToolChoice, StreamOptions, get_chat_url, handle_openai_error,
+    openai_response_tool_call_to_tensorzero_tool_call, stream_openai,
     tensorzero_to_openai_messages,
 };
 use crate::cache::ModelProviderRequest;
@@ -39,8 +40,9 @@ use uuid::Uuid;
 const PROVIDER_NAME: &str = "vLLM";
 pub const PROVIDER_TYPE: &str = "vllm";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VLLMProvider {
     model_name: String,
     api_base: Url,
@@ -168,6 +170,7 @@ impl InferenceProvider for VLLMProvider {
         }
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -187,6 +190,7 @@ impl InferenceProvider for VLLMProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
             let response_body = serde_json::from_str(&raw_response).map_err(|e| {
@@ -195,6 +199,7 @@ impl InferenceProvider for VLLMProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
             Ok(VLLMResponseWithMetadata {
@@ -217,6 +222,7 @@ impl InferenceProvider for VLLMProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
             Err(handle_openai_error(
@@ -225,6 +231,7 @@ impl InferenceProvider for VLLMProvider {
                 &raw_response,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -264,6 +271,7 @@ impl InferenceProvider for VLLMProvider {
         }
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -491,6 +499,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -504,6 +513,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
@@ -514,6 +524,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 signature: None,
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }));
         }
         if let Some(text) = message.content {
@@ -521,7 +532,9 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
         let raw_usage = vllm_usage_from_raw_response(&raw_response).map(|usage| {
@@ -544,7 +557,8 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
-                latency,
+                relay_raw_response: None,
+                provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,
             },
@@ -738,10 +752,10 @@ mod tests {
                 },
                 finish_reason: OpenAIFinishReason::Stop,
             }],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
-            },
+            }),
         };
         let generic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -791,10 +805,78 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(10));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
-            inference_response.latency,
+            inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_secs(0)
             }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_vllm_response_with_null_usage() {
+        let response_with_null_usage = OpenAIResponse {
+            choices: vec![OpenAIResponseChoice {
+                index: 0,
+                message: OpenAIResponseMessage {
+                    content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
+                    tool_calls: None,
+                },
+                finish_reason: OpenAIFinishReason::Stop,
+            }],
+            usage: None,
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let vllm_response_with_metadata = VLLMResponseWithMetadata {
+            response: response_with_null_usage,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            raw_request: serde_json::to_string(
+                &VLLMRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap(),
+            generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
+        };
+        let inference_response: ProviderInferenceResponse =
+            vllm_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(inference_response.output.len(), 1);
+        assert_eq!(
+            inference_response.output[0],
+            "Hello, world!".to_string().into()
+        );
+        assert_eq!(
+            inference_response.usage.input_tokens, None,
+            "input_tokens should be None when usage is null"
+        );
+        assert_eq!(
+            inference_response.usage.output_tokens, None,
+            "output_tokens should be None when usage is null"
         );
     }
 

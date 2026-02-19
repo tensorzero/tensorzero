@@ -89,7 +89,7 @@ export function VariantEditor({
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="right" className="w-full md:w-5/6">
-        <PageHeader label="Variant Configuration" name={variantName} />
+        <PageHeader eyebrow="Variant Configuration" name={variantName} />
 
         <div className="mt-4 max-h-[calc(100vh-12rem)] space-y-6 overflow-y-auto">
           {/* Weight */}
@@ -278,7 +278,7 @@ export function VariantEditor({
               <CardTitle>Timeouts</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Non-Streaming Total (ms)</Label>
                   <div className="text-sm">
@@ -297,6 +297,18 @@ export function VariantEditor({
                     {variantInfo.timeouts.streaming.ttft_ms !== null ? (
                       <div className="font-mono text-sm">
                         {variantInfo.timeouts.streaming.ttft_ms.toString()}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">Default</span>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Streaming Total (ms)</Label>
+                  <div className="text-sm">
+                    {variantInfo.timeouts.streaming.total_ms !== null ? (
+                      <div className="font-mono text-sm">
+                        {variantInfo.timeouts.streaming.total_ms.toString()}
                       </div>
                     ) : (
                       <span className="text-muted-foreground">Default</span>

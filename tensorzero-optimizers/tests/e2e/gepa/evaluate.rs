@@ -55,7 +55,7 @@ async fn test_evaluate_variant_chat() {
     // Evaluate variant
     let evaluation_params = EvaluateVariantParams {
         gateway_client,
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -74,7 +74,7 @@ async fn test_evaluate_variant_chat() {
 
     let evaluation_results = evaluation_result.unwrap();
     assert_eq!(
-        evaluation_results.evaluation_infos.len(),
+        evaluation_results.evaluation_infos().len(),
         2,
         "Expected 2 evaluation results"
     );
@@ -127,7 +127,7 @@ async fn test_evaluate_variant_json() {
     // Evaluate variant
     let evaluation_params = EvaluateVariantParams {
         gateway_client,
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -146,7 +146,7 @@ async fn test_evaluate_variant_json() {
 
     let evaluation_results = evaluation_result.unwrap();
     assert_eq!(
-        evaluation_results.evaluation_infos.len(),
+        evaluation_results.evaluation_infos().len(),
         2,
         "Expected 2 evaluation results"
     );
@@ -200,7 +200,7 @@ async fn test_evaluate_variant_per_datapoint_scores() {
     // Evaluate variant
     let evaluation_params = EvaluateVariantParams {
         gateway_client,
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),

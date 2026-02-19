@@ -13,69 +13,115 @@ async fn get_providers() -> E2ETestProviders {
         Err(_) => HashMap::new(),
     };
 
-    let standard_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "azure".to_string(),
-        model_name: "gpt-4o-mini-azure".into(),
-        model_provider_name: "azure".into(),
-        credentials: HashMap::new(),
-    }];
+    let standard_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure".to_string(),
+            model_name: "gpt-5-mini-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure-kimi".to_string(),
+            model_name: "kimi-k2.5-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
-    let extra_body_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "azure-extra-body".to_string(),
-        model_name: "gpt-4o-mini-azure".into(),
-        model_provider_name: "azure".into(),
-        credentials: HashMap::new(),
-    }];
+    let extra_body_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure-extra-body".to_string(),
+            model_name: "gpt-5-mini-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure-kimi-extra-body".to_string(),
+            model_name: "kimi-k2.5-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
-    let bad_auth_extra_headers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "azure-extra-headers".to_string(),
-        model_name: "gpt-4o-mini-azure".into(),
-        model_provider_name: "azure".into(),
-        credentials: HashMap::new(),
-    }];
+    let bad_auth_extra_headers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure-extra-headers".to_string(),
+            model_name: "gpt-5-mini-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure-kimi-extra-headers".to_string(),
+            model_name: "kimi-k2.5-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
-    let inference_params_dynamic_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "azure-dynamic".to_string(),
-        model_name: "gpt-4o-mini-azure-dynamic".into(),
-        model_provider_name: "azure".into(),
-        credentials,
-    }];
+    let inference_params_dynamic_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure-dynamic".to_string(),
+            model_name: "gpt-5-mini-azure-dynamic".into(),
+            model_provider_name: "azure".into(),
+            credentials: credentials.clone(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure-kimi-dynamic".to_string(),
+            model_name: "kimi-k2.5-azure-dynamic".into(),
+            model_provider_name: "azure".into(),
+            credentials,
+        },
+    ];
 
+    // Kimi-K2.5 doesn't reliably produce correct JSON via Azure's json_mode
     let json_providers = vec![
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "azure".to_string(),
-            model_name: "gpt-4o-mini-azure".into(),
+            model_name: "gpt-5-mini-azure".into(),
             model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "azure-implicit".to_string(),
-            model_name: "gpt-4o-mini-azure".into(),
+            model_name: "gpt-5-mini-azure".into(),
             model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "azure-strict".to_string(),
-            model_name: "gpt-4o-mini-azure".into(),
+            model_name: "gpt-5-mini-azure".into(),
             model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
     ];
 
-    let json_mode_off_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "azure_json_mode_off".to_string(),
-        model_name: "gpt-4o-mini-azure".into(),
-        model_provider_name: "azure".into(),
-        credentials: HashMap::new(),
-    }];
+    let json_mode_off_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure_json_mode_off".to_string(),
+            model_name: "gpt-5-mini-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "azure-kimi_json_mode_off".to_string(),
+            model_name: "kimi-k2.5-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let embedding_providers = vec![EmbeddingTestProvider {
         model_name: "azure-text-embedding-3-small".into(),
@@ -88,7 +134,7 @@ async fn get_providers() -> E2ETestProviders {
     let input_audio_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "azure".to_string(),
-        model_name: "azure-gpt-4o-audio-preview".into(),
+        model_name: "azure-gpt-audio-mini".into(),
         model_provider_name: "azure".into(),
         credentials: HashMap::new(),
     }];
@@ -96,16 +142,30 @@ async fn get_providers() -> E2ETestProviders {
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "azure".to_string(),
         model_info: HashMap::from([
-            (
-                "deployment_id".to_string(),
-                "gpt4o-mini-20240718".to_string(),
-            ),
+            ("deployment_id".to_string(), "gpt-5-mini".to_string()),
             (
                 "endpoint".to_string(),
-                "https://t0-azure-openai-east.openai.azure.com".to_string(),
+                "https://t0-dev-eastus2-resource.services.ai.azure.com".to_string(),
             ),
         ]),
         use_modal_headers: false,
+    }];
+
+    // Kimi-K2.5 doesn't support allowed_tools tool_choice and produces unreliable tool use results
+    let gpt5_only_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "azure".to_string(),
+        model_name: "gpt-5-mini-azure".into(),
+        model_provider_name: "azure".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "azure-gpt-5-mini".to_string(),
+        model_name: "gpt-5-mini-azure".into(),
+        model_provider_name: "azure".into(),
+        credentials: HashMap::new(),
     }];
 
     E2ETestProviders {
@@ -113,17 +173,19 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
+        reasoning_usage_inference: reasoning_providers,
+        cache_input_tokens_inference: standard_providers.clone(),
         embeddings: embedding_providers,
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: provider_type_default_credentials_providers,
         provider_type_default_credentials_shorthand: vec![],
-        tool_use_inference: standard_providers.clone(),
-        tool_multi_turn_inference: standard_providers.clone(),
-        dynamic_tool_use_inference: standard_providers.clone(),
+        tool_use_inference: gpt5_only_providers.clone(),
+        tool_multi_turn_inference: gpt5_only_providers.clone(),
+        dynamic_tool_use_inference: gpt5_only_providers,
         parallel_tool_use_inference: vec![],
-        json_mode_inference: json_providers.clone(),
-        json_mode_off_inference: json_mode_off_providers.clone(),
+        json_mode_inference: json_providers,
+        json_mode_off_inference: json_mode_off_providers,
         image_inference: vec![],
         pdf_inference: vec![],
         input_audio: input_audio_providers,

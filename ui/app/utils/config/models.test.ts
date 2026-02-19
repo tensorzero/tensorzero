@@ -21,6 +21,7 @@ describe("dump_optimizer_output", () => {
               },
               streaming: {
                 ttft_ms: null,
+                total_ms: null,
               },
             },
           },
@@ -31,6 +32,7 @@ describe("dump_optimizer_output", () => {
           },
           streaming: {
             ttft_ms: null,
+            total_ms: null,
           },
         },
         skip_relay: false,
@@ -51,7 +53,6 @@ describe("dump_optimizer_output", () => {
           "gpt-4o": {
             type: "openai",
             model_name: "gpt-4o",
-            api_base: null,
             api_key_location: null,
             discard_unknown_chunks: false,
             include_encrypted_reasoning: false,
@@ -66,6 +67,7 @@ describe("dump_optimizer_output", () => {
           },
           streaming: {
             ttft_ms: null,
+            total_ms: null,
           },
         },
         skip_relay: false,

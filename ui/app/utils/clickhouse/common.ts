@@ -38,7 +38,7 @@ export type ZodLegacyTextInput = z.infer<typeof legacyTextSchema>;
 export const templateSchema = z.object({
   type: z.literal("template"),
   name: z.string(),
-  arguments: z.record(ZodJsonValueSchema.optional()),
+  arguments: z.record(ZodJsonValueSchema),
 });
 export type ZodTemplate = z.infer<typeof templateSchema>;
 
@@ -54,7 +54,7 @@ export type ZodDisplayTextInput = z.infer<typeof displayTextInputSchema>;
 export const displayTemplateSchema = z.object({
   type: z.literal("template"),
   name: z.string(),
-  arguments: z.record(ZodJsonValueSchema.optional()),
+  arguments: z.record(ZodJsonValueSchema),
 });
 export type ZodDisplayTemplate = z.infer<typeof displayTemplateSchema>;
 

@@ -10,12 +10,13 @@ use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::datasets::v1::delete_dataset;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
-    Arguments, ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedContentBlock,
-    ResolvedRequestMessage, Role, StoredInput, StoredInputMessage, StoredInputMessageContent,
-    System, Template, Text,
+    Arguments, ContentBlockChatOutput, FunctionType, JsonInferenceOutput, ModelInput,
+    ResolvedContentBlock, ResolvedRequestMessage, Role, StoredInput, StoredInputMessage,
+    StoredInputMessageContent, System, Template, Text,
 };
 use tensorzero_core::optimization::gepa::GEPAConfig;
 use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
@@ -59,6 +60,7 @@ pub fn create_test_chat_rendered_sample(input: &str, output: &str) -> RenderedSa
     })];
     RenderedSample {
         function_name: "basic_test".to_string(),
+        function_type: FunctionType::Chat,
         input: ModelInput {
             system: None,
             messages: vec![ResolvedRequestMessage {
@@ -107,6 +109,7 @@ pub fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSa
 
     RenderedSample {
         function_name: "json_success".to_string(),
+        function_type: FunctionType::Json,
         input: ModelInput {
             system: Some("JSON system prompt".to_string()),
             messages: vec![ResolvedRequestMessage {
@@ -175,6 +178,8 @@ pub async fn build_gateway_client(
         config,
         clickhouse_connection_info: clickhouse,
         postgres_connection_info: PostgresConnectionInfo::Disabled,
+        valkey_connection_info: ValkeyConnectionInfo::Disabled,
+        valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
         http_client,
         timeout: Some(Duration::from_secs(timeout_secs)),
     })

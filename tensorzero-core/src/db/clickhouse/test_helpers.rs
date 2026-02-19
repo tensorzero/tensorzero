@@ -4,21 +4,42 @@
     clippy::print_stdout,
     clippy::unwrap_used
 )]
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
 use crate::config::BatchWritesConfig;
 use crate::db::stored_datapoint::StoredChatInferenceDatapoint;
+#[cfg(feature = "e2e_tests")]
+use crate::db::test_helpers::TestDatabaseHelpers;
 use crate::endpoints::datasets::JsonInferenceDatapoint;
-use crate::endpoints::workflow_evaluation_run::{
-    WorkflowEvaluationRunEpisodeRow, WorkflowEvaluationRunRow,
-};
 
 use super::ClickHouseConnectionInfo;
+
+/// Database row type for workflow evaluation run (used in test helpers).
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkflowEvaluationRunRow {
+    pub run_id: Uuid,
+    pub variant_pins: HashMap<String, String>,
+    pub tags: HashMap<String, String>,
+    pub project_name: Option<String>,
+    pub run_display_name: Option<String>,
+}
+
+/// Database row type for workflow evaluation run episode (used in test helpers).
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkflowEvaluationRunEpisodeRow {
+    pub run_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_pins: HashMap<String, String>,
+    pub task_name: Option<String>,
+    pub tags: HashMap<String, String>,
+}
 #[cfg(feature = "e2e_tests")]
 use super::escape_string_for_clickhouse_literal;
 #[cfg(feature = "e2e_tests")]
-use crate::endpoints::feedback::human_feedback::StaticEvaluationHumanFeedback;
+use crate::db::feedback::StaticEvaluationHumanFeedbackInsert;
 use serde_json::Value;
-#[cfg(feature = "e2e_tests")]
-use std::collections::HashMap;
 use std::sync::LazyLock;
 use uuid::Uuid;
 
@@ -52,22 +73,12 @@ pub async fn get_clickhouse_replica() -> Option<ClickHouseConnectionInfo> {
     Some(res)
 }
 
-#[cfg(feature = "e2e_tests")]
-pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
-    if let Err(e) = clickhouse
-        .run_query_synchronous_no_params("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string())
-        .await
-    {
-        tracing::warn!("Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}", e);
-    }
-}
-
 pub async fn select_chat_datapoint_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Value> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT
@@ -111,7 +122,7 @@ pub async fn select_json_datapoint_clickhouse(
     inference_id: Uuid,
 ) -> Option<Value> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT * FROM JsonInferenceDatapoint FINAL WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
@@ -130,7 +141,7 @@ pub async fn select_chat_dataset_clickhouse(
     dataset_name: &str,
 ) -> Option<Vec<StoredChatInferenceDatapoint>> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT
@@ -178,7 +189,7 @@ pub async fn select_json_dataset_clickhouse(
     dataset_name: &str,
 ) -> Option<Vec<JsonInferenceDatapoint>> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT
@@ -221,7 +232,7 @@ pub async fn select_chat_inferences_clickhouse(
     episode_id: Uuid,
 ) -> Option<Vec<Value>> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query =
         format!("SELECT * FROM ChatInference WHERE episode_id = '{episode_id}' FORMAT JSONEachRow");
@@ -248,7 +259,7 @@ pub async fn select_chat_inference_clickhouse(
     inference_id: Uuid,
 ) -> Option<Value> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT * FROM ChatInference WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
@@ -267,7 +278,7 @@ pub async fn select_json_inference_clickhouse(
     inference_id: Uuid,
 ) -> Option<Value> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
@@ -287,7 +298,7 @@ pub async fn select_model_inference_clickhouse(
     inference_id: Uuid,
 ) -> Option<Value> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
@@ -307,7 +318,7 @@ pub async fn select_all_model_inferences_by_chat_episode_id_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
 ) -> Option<Vec<Value>> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT * FROM ModelInference WHERE inference_id IN (SELECT id FROM ChatInference WHERE episode_id = '{episode_id}') FORMAT JSONEachRow"
@@ -335,7 +346,7 @@ pub async fn select_model_inferences_clickhouse(
     inference_id: Uuid,
 ) -> Option<Vec<Value>> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT * FROM ModelInference WHERE inference_id = '{inference_id}' FORMAT JSONEachRow"
@@ -366,7 +377,7 @@ pub async fn select_inference_tags_clickhouse(
     inference_id: Uuid,
 ) -> Option<Value> {
     #[cfg(feature = "e2e_tests")]
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT * FROM InferenceTag WHERE function_name = '{function_name}' AND key = '{tag_key}' AND value = '{tag_value}' AND inference_id = '{inference_id}' FORMAT JSONEachRow"
@@ -447,7 +458,7 @@ pub async fn select_feedback_clickhouse(
     table_name: &str,
     feedback_id: Uuid,
 ) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!("SELECT * FROM {table_name} WHERE id = '{feedback_id}' FORMAT JSONEachRow");
 
@@ -532,7 +543,7 @@ pub async fn select_feedback_tags_clickhouse(
     tag_key: &str,
     tag_value: &str,
 ) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT * FROM FeedbackTag WHERE metric_name = '{metric_name}' AND key = '{tag_key}' AND value = '{tag_value}' FORMAT JSONEachRow"
@@ -554,7 +565,7 @@ pub async fn select_feedback_tags_clickhouse_with_feedback_id(
     tag_key: &str,
     tag_value: &str,
 ) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    clickhouse_connection_info.flush_pending_writes().await;
 
     let query = format!(
         "SELECT * FROM FeedbackTag WHERE feedback_id = '{feedback_id}' AND metric_name = '{metric_name}' AND key = '{tag_key}' AND value = '{tag_value}' FORMAT JSONEachRow"
@@ -575,7 +586,7 @@ pub async fn select_inference_evaluation_human_feedback_clickhouse(
     metric_name: &str,
     datapoint_id: Uuid,
     output: &str,
-) -> Option<StaticEvaluationHumanFeedback> {
+) -> Option<StaticEvaluationHumanFeedbackInsert> {
     let datapoint_id_str = datapoint_id.to_string();
     let escaped_output = escape_string_for_clickhouse_literal(output);
     let params = HashMap::from([
@@ -600,7 +611,8 @@ pub async fn select_inference_evaluation_human_feedback_clickhouse(
         None
     } else {
         // Panic if the query fails to parse or multiple rows are returned
-        let json: StaticEvaluationHumanFeedback = serde_json::from_str(&text.response).unwrap();
+        let json: StaticEvaluationHumanFeedbackInsert =
+            serde_json::from_str(&text.response).unwrap();
         Some(json)
     }
 }

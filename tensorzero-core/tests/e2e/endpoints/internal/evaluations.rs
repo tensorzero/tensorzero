@@ -4,13 +4,22 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{Value, json};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
+use serde_json::{Map, Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+use tensorzero_core::endpoints::datasets::v1::types::{
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
+    CreateDatapointsResponse,
+};
 use tensorzero_core::endpoints::internal::evaluations::types::GetEvaluationStatisticsResponse;
 use tensorzero_core::endpoints::internal::evaluations::{
     GetEvaluationResultsResponse, GetEvaluationRunInfosResponse,
 };
+use tensorzero_core::inference::types::{
+    Arguments, ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Role, System, Text,
+};
+use tensorzero_core::tool::DynamicToolParams;
 use tokio::time::sleep;
 use uuid::Uuid;
 
@@ -217,7 +226,7 @@ async fn test_get_evaluation_run_infos_for_datapoint_chat_function() {
         run_info.evaluation_run_id,
         Uuid::parse_str("0196374b-04a3-7013-9049-e59ed5fe3f74").unwrap()
     );
-    assert_eq!(run_info.variant_name, "better_prompt_haiku_3_5");
+    assert_eq!(run_info.variant_name, "better_prompt_haiku_4_5");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -451,8 +460,11 @@ async fn test_get_evaluation_results_haiku() {
     // Verify all results belong to the correct evaluation run
     let expected_run_id = Uuid::parse_str(evaluation_run_id).unwrap();
     for result in &response.results {
-        assert_eq!(result.evaluation_run_id, expected_run_id);
-        assert_eq!(result.variant_name, "better_prompt_haiku_3_5");
+        let EvaluationResultRow::Chat(row) = result else {
+            panic!("Expected Chat result, got {result:?}");
+        };
+        assert_eq!(row.evaluation_run_id, expected_run_id);
+        assert_eq!(row.variant_name, "better_prompt_haiku_4_5");
     }
 }
 
@@ -484,12 +496,11 @@ async fn test_get_evaluation_results_entity_extraction() {
         "Expected 4 results (2 datapoints * 2 metrics)"
     );
 
-    // Verify JSON function output structure
+    // Verify results are JSON type
     for result in &response.results {
-        assert!(
-            result.generated_output.contains("\"raw\""),
-            "Generated output should have 'raw' field for JSON function"
-        );
+        let EvaluationResultRow::Json(_) = result else {
+            panic!("Expected Json result, got {result:?}");
+        };
     }
 }
 
@@ -526,7 +537,7 @@ async fn test_get_evaluation_results_multiple_runs() {
     let eval_run_ids: std::collections::HashSet<_> = response
         .results
         .iter()
-        .map(|r| r.evaluation_run_id)
+        .map(EvaluationResultRow::evaluation_run_id)
         .collect();
     assert_eq!(
         eval_run_ids.len(),
@@ -576,10 +587,16 @@ async fn test_get_evaluation_results_pagination() {
     );
 
     // Verify no overlap between pages
-    let page1_datapoints: std::collections::HashSet<_> =
-        page1.results.iter().map(|r| r.datapoint_id).collect();
-    let page2_datapoints: std::collections::HashSet<_> =
-        page2.results.iter().map(|r| r.datapoint_id).collect();
+    let page1_datapoints: std::collections::HashSet<_> = page1
+        .results
+        .iter()
+        .map(EvaluationResultRow::datapoint_id)
+        .collect();
+    let page2_datapoints: std::collections::HashSet<_> = page2
+        .results
+        .iter()
+        .map(EvaluationResultRow::datapoint_id)
+        .collect();
 
     let overlap: Vec<_> = page1_datapoints.intersection(&page2_datapoints).collect();
     assert!(
@@ -674,28 +691,42 @@ async fn test_get_evaluation_results_default_pagination() {
 // run_evaluation SSE streaming endpoint tests
 // ============================================================================
 
-/// Helper function to create a chat datapoint for testing evaluations
-async fn create_test_chat_datapoint(
-    client: &Client,
-    dataset_name: &str,
-    datapoint_id: Uuid,
-) -> Value {
-    let resp = client
-        .put(get_gateway_endpoint(&format!(
-            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
-        )))
-        .json(&json!({
-            "function_name": "basic_test",
-            "input": {
-                "system": { "assistant_name": "TestBot" },
-                "messages": [{
-                    "role": "user",
-                    "content": [{ "type": "text", "text": "Hello, write me a haiku" }]
-                }]
+/// Helper function to create a chat datapoint for testing evaluations.
+/// Returns the ID of the created datapoint.
+async fn create_test_chat_datapoint(client: &Client, dataset_name: &str) -> Uuid {
+    let mut system_args = Map::new();
+    system_args.insert(
+        "assistant_name".to_string(),
+        Value::String("TestBot".to_string()),
+    );
+
+    let payload = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+            function_name: "basic_test".to_string(),
+            episode_id: None,
+            input: Input {
+                system: Some(System::Template(Arguments(system_args))),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Hello, write me a haiku".to_string(),
+                    })],
+                }],
             },
-            "output": [{ "type": "text", "text": "Test output response" }],
-            "is_custom": true,
-        }))
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Test output response".to_string(),
+            })]),
+            dynamic_tool_params: DynamicToolParams::default(),
+            tags: None,
+            name: None,
+        })],
+    };
+
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&payload)
         .send()
         .await
         .unwrap();
@@ -706,7 +737,13 @@ async fn create_test_chat_datapoint(
         resp.status()
     );
 
-    resp.json().await.unwrap()
+    let body: CreateDatapointsResponse = resp.json().await.unwrap();
+    assert_eq!(
+        body.ids.len(),
+        1,
+        "Expected exactly one datapoint to be created"
+    );
+    body.ids[0]
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -716,12 +753,10 @@ async fn test_run_evaluation_streaming_success() {
 
     // Create a unique dataset with test datapoints
     let dataset_name = format!("test-eval-dataset-{}", Uuid::now_v7());
-    let datapoint_id1 = Uuid::now_v7();
-    let datapoint_id2 = Uuid::now_v7();
 
     // Create test datapoints
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id1).await;
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
+    create_test_chat_datapoint(&http_client, &dataset_name).await;
+    create_test_chat_datapoint(&http_client, &dataset_name).await;
 
     // Wait for data to be available in ClickHouse
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -751,6 +786,7 @@ async fn test_run_evaluation_streaming_success() {
         .post(get_gateway_endpoint("/internal/evaluations/run"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut events: Vec<Value> = Vec::new();
@@ -816,7 +852,6 @@ async fn test_run_evaluation_streaming_success() {
 
                 events.push(event);
             }
-            Err(reqwest_eventsource::Error::StreamEnded) => break,
             Err(e) => panic!("SSE stream error: {e:?}"),
         }
     }
@@ -893,6 +928,7 @@ async fn test_run_evaluation_streaming_nonexistent_dataset() {
         .post(get_gateway_endpoint("/internal/evaluations/run"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut found_error_or_empty = false;
@@ -925,7 +961,6 @@ async fn test_run_evaluation_streaming_nonexistent_dataset() {
                     _ => {}
                 }
             }
-            Err(reqwest_eventsource::Error::StreamEnded) => break,
             Err(_) => {
                 found_error_or_empty = true;
                 break;
@@ -946,14 +981,11 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
 
     // Create a unique dataset with test datapoints
     let dataset_name = format!("test-eval-ids-dataset-{}", Uuid::now_v7());
-    let datapoint_id1 = Uuid::now_v7();
-    let datapoint_id2 = Uuid::now_v7();
-    let datapoint_id3 = Uuid::now_v7();
 
     // Create test datapoints
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id1).await;
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id2).await;
-    create_test_chat_datapoint(&http_client, &dataset_name, datapoint_id3).await;
+    let datapoint_id1 = create_test_chat_datapoint(&http_client, &dataset_name).await;
+    let datapoint_id2 = create_test_chat_datapoint(&http_client, &dataset_name).await;
+    let _datapoint_id3 = create_test_chat_datapoint(&http_client, &dataset_name).await;
 
     // Wait for data to be available
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -981,6 +1013,7 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
         .post(get_gateway_endpoint("/internal/evaluations/run"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut num_datapoints_reported = None;
@@ -1010,7 +1043,6 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
                     _ => {}
                 }
             }
-            Err(reqwest_eventsource::Error::StreamEnded) => break,
             Err(e) => panic!("SSE stream error: {e:?}"),
         }
     }

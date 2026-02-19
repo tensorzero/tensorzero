@@ -1,18 +1,15 @@
-use async_trait::async_trait;
+use chrono::Utc;
 use futures::future::try_join_all;
-use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    cache::CacheOptions,
+    cache::{CacheManager, CacheOptions},
     config::{Config, UninitializedVariantConfig, provider_types::ProviderTypesConfig},
     db::{
-        clickhouse::{
-            ClickHouseConnectionInfo, ExternalDataInfo, clickhouse_client::ClickHouseClientType,
-        },
-        postgres::PostgresConnectionInfo,
+        DICLQueries, StoredDICLExample, clickhouse::ClickHouseConnectionInfo,
+        delegating_connection::DelegatingDatabaseQueries, postgres::PostgresConnectionInfo,
     },
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceCredentials},
@@ -23,16 +20,15 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
         OptimizationJobInfo, OptimizerOutput,
-        dicl::{DiclOptimizationConfig, DiclOptimizationJobHandle},
+        dicl::{DEPRECATED_DEFAULT_MODEL, DiclOptimizationConfig, DiclOptimizationJobHandle},
     },
-    rate_limiting::ScopeInfo,
+    rate_limiting::{RateLimitingManager, ScopeInfo},
     stored_inference::RenderedSample,
     variant::dicl::UninitializedDiclConfig,
 };
 
 use crate::{JobHandle, Optimizer};
 
-#[async_trait]
 impl Optimizer for DiclOptimizationConfig {
     type Handle = DiclOptimizationJobHandle;
 
@@ -42,23 +38,25 @@ impl Optimizer for DiclOptimizationConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo,
+        db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
+        // Warn if using deprecated default model
+        if self.model.as_ref() == DEPRECATED_DEFAULT_MODEL {
+            tracing::warn!(
+                "DICL optimization is using the deprecated default model `{}`. \
+                 Please specify the `model` field explicitly. \
+                 This field will be required in a future release. (#5616)",
+                DEPRECATED_DEFAULT_MODEL
+            );
+        }
+
         // Validate training examples
         validate_train_examples(&train_examples)?;
 
         // Warn if val_examples is provided (not used in DICL)
         if val_examples.is_some() {
             tracing::warn!("val_examples provided for DICL optimization but will be ignored");
-        }
-
-        // Check if ClickHouse is available (required for DICL)
-        if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
-            return Err(Error::new(ErrorDetails::AppState {
-                message: "DICL optimization requires ClickHouse to be enabled to store examples"
-                    .to_string(),
-            }));
         }
 
         // 1. Check that the function exists in the config
@@ -76,12 +74,9 @@ impl Optimizer for DiclOptimizationConfig {
 
         // 3. Check if DICL examples already exist in the database for this variant (unless appending is enabled)
         if !self.append_to_existing_variants
-            && dicl_examples_exist(
-                clickhouse_connection_info,
-                &self.function_name,
-                &self.variant_name,
-            )
-            .await?
+            && db
+                .has_dicl_examples(&self.function_name, &self.variant_name)
+                .await?
         {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
@@ -137,7 +132,7 @@ impl Optimizer for DiclOptimizationConfig {
         tracing::info!("Phase transition: Embedding → ClickHouse storage");
 
         insert_dicl_examples_with_batching(
-            clickhouse_connection_info,
+            db.as_ref(),
             examples_with_embeddings,
             &self.function_name,
             &self.variant_name,
@@ -173,7 +168,6 @@ impl Optimizer for DiclOptimizationConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for DiclOptimizationJobHandle {
     async fn poll(
         &self,
@@ -346,14 +340,22 @@ async fn process_embedding_batch(
 
     // Create InferenceClients context for the embedding model
     let deferred_tasks = tokio_util::task::TaskTracker::new();
+    let rate_limiting_config = Arc::new(config.rate_limiting.clone());
+    let postgres_connection_info = PostgresConnectionInfo::Disabled;
+    let rate_limiting_manager = Arc::new(RateLimitingManager::new(
+        rate_limiting_config.clone(),
+        Arc::new(postgres_connection_info.clone()),
+    ));
+    let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
     let clients = InferenceClients {
         http_client: client.clone(),
         credentials: Arc::new(credentials.clone()),
-        clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        clickhouse_connection_info: clickhouse_connection_info.clone(),
+        postgres_connection_info,
         cache_options: CacheOptions::default(),
+        cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info)),
         tags: tags.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        rate_limiting_manager,
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: Default::default(),
         deferred_tasks: deferred_tasks.clone(),
@@ -361,6 +363,8 @@ async fn process_embedding_batch(
         scope_info: ScopeInfo::new(tags.clone(), None),
         relay: None,
         include_raw_usage: false,
+        include_raw_response: false,
+        include_aggregated_response: false,
     };
 
     let response = embedding_model_config
@@ -470,9 +474,9 @@ async fn process_embeddings_with_batching(
     Ok(all_embeddings)
 }
 
-/// Inserts DICL examples into ClickHouse using ExternalDataInfo pattern
+/// Inserts DICL examples into the database via the DICLQueries trait.
 pub async fn insert_dicl_examples_with_batching(
-    clickhouse: &ClickHouseConnectionInfo,
+    db: &(dyn DICLQueries + Sync),
     examples: Vec<(RenderedSample, Vec<f64>)>,
     function_name: &str,
     variant_name: &str,
@@ -482,17 +486,14 @@ pub async fn insert_dicl_examples_with_batching(
     let total_batches = total_examples.div_ceil(batch_size);
 
     tracing::info!(
-        "Starting ClickHouse insertion: {} examples → {} batches (size: {})",
-        total_examples,
-        total_batches,
-        batch_size
+        "Starting DICL insertion: {total_examples} examples → {total_batches} batches (size: {batch_size})"
     );
 
     let mut inserted_examples = 0;
 
-    // Process all examples in batches using ExternalDataInfo
+    // Process all examples in batches
     for (batch_index, batch) in examples.chunks(batch_size).enumerate() {
-        let serialized_rows: Result<Vec<String>, Error> = batch
+        let stored_examples: Vec<StoredDICLExample> = batch
             .iter()
             .map(|(sample, embedding)| {
                 let output = sample
@@ -505,110 +506,35 @@ pub async fn insert_dicl_examples_with_batching(
 
                 let input_text = serde_json::to_string(&sample.stored_input)?;
 
-                let row = json!({
-                    "id": Uuid::now_v7(),
-                    "function_name": function_name,
-                    "variant_name": variant_name,
-                    "namespace": "",
-                    "input": input_text,
-                    "output": output,
-                    "embedding": embedding,
-                });
-
-                serde_json::to_string(&row).map_err(|e| {
-                    Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to serialize DICL example: {e}"),
-                    })
+                Ok(StoredDICLExample {
+                    id: Uuid::now_v7(),
+                    function_name: function_name.to_string(),
+                    variant_name: variant_name.to_string(),
+                    namespace: String::new(),
+                    input: input_text,
+                    output,
+                    embedding: embedding.iter().map(|&v| v as f32).collect(),
+                    created_at: Utc::now(),
                 })
             })
-            .collect();
-
-        let rows = serialized_rows?;
-
-        // Use ExternalDataInfo for efficient bulk insertion
-        let query = r"
-        INSERT INTO DynamicInContextLearningExample
-            (
-                id,
-                function_name,
-                variant_name,
-                namespace,
-                input,
-                output,
-                embedding
-            )
-            SELECT
-                new_data.id,
-                new_data.function_name,
-                new_data.variant_name,
-                new_data.namespace,
-                new_data.input,
-                new_data.output,
-                new_data.embedding
-            FROM new_data
-        ";
-
-        let external_data = ExternalDataInfo {
-            external_data_name: "new_data".to_string(),
-            structure: "id UUID, function_name LowCardinality(String), variant_name LowCardinality(String), namespace String, input String, output String, embedding Array(Float32)".to_string(),
-            format: "JSONEachRow".to_string(),
-            data: rows.join("\n"),
-        };
-
-        let result = clickhouse
-            .run_query_with_external_data(external_data, query.to_string())
-            .await?;
+            .collect::<Result<Vec<StoredDICLExample>, Error>>()?;
+        let rows_inserted = db.insert_dicl_examples(&stored_examples).await?;
 
         inserted_examples += batch.len();
         let progress_pct =
             (inserted_examples as f64 / total_examples as f64 * 100.0).round() as u32;
 
         tracing::info!(
-            "ClickHouse insertion progress: {}/{} batches completed ({}%) - {}/{} examples inserted (wrote {} rows)",
+            "DICL insertion progress: {}/{total_batches} batches completed ({progress_pct}%) - {inserted_examples}/{total_examples} examples inserted (wrote {rows_inserted} rows)",
             batch_index + 1,
-            total_batches,
-            progress_pct,
-            inserted_examples,
-            total_examples,
-            result.metadata.written_rows
         );
     }
 
     tracing::info!(
-        "ClickHouse insertion complete: {} examples successfully stored for function '{}' variant '{}'",
-        inserted_examples,
-        function_name,
-        variant_name
+        "DICL insertion complete: {inserted_examples} examples successfully stored for function `{function_name}` variant `{variant_name}`"
     );
 
     Ok(())
-}
-
-/// Checks if DICL examples exist in ClickHouse for a given function and variant
-pub async fn dicl_examples_exist(
-    clickhouse: &ClickHouseConnectionInfo,
-    function_name: &str,
-    variant_name: &str,
-) -> Result<bool, Error> {
-    let query = r"
-        SELECT 1
-        FROM DynamicInContextLearningExample
-        WHERE function_name = {function_name:String}
-        AND variant_name = {variant_name:String}
-        LIMIT 1
-    ";
-
-    let params = HashMap::from([
-        ("function_name", function_name),
-        ("variant_name", variant_name),
-    ]);
-
-    let result = clickhouse
-        .run_query_synchronous(query.to_string(), &params)
-        .await?;
-
-    // If the query returns "1", examples exist; if empty, they don't
-    Ok(result.response.trim() == "1")
 }
 
 #[cfg(test)]
@@ -626,14 +552,15 @@ mod tests {
             EmbeddingProviderInfo,
         },
         endpoints::inference::InferenceCredentials,
-        experimentation::ExperimentationConfig,
+        experimentation::ExperimentationConfigWithNamespaces,
         function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
-            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            ContentBlockChatOutput, FunctionType, ModelInput, ResolvedContentBlock,
+            ResolvedRequestMessage, Role, StoredInput, StoredInputMessage,
+            StoredInputMessageContent, System, Text,
         },
-        jsonschema_util::StaticJSONSchema,
+        jsonschema_util::JSONSchema,
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
@@ -667,6 +594,7 @@ mod tests {
                     timeout_ms: None,
                     provider_name: Arc::from("dummy"),
                     extra_body: None,
+                    extra_headers: None,
                 },
             );
             let embedding_model_config = EmbeddingModelConfig {
@@ -830,6 +758,7 @@ mod tests {
     fn create_test_rendered_sample() -> RenderedSample {
         RenderedSample {
             function_name: "test_function".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("Test system".to_string()),
                 messages: vec![ResolvedRequestMessage {
@@ -1057,7 +986,7 @@ mod tests {
             description: None,
 
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         })
     }
 
@@ -1070,12 +999,12 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         })
     }
 
     fn create_test_json_function_config() -> FunctionConfig {
-        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let output_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}
@@ -1093,12 +1022,12 @@ mod tests {
             json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         })
     }
 
     fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
-        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+        let output_schema = JSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}
@@ -1117,7 +1046,7 @@ mod tests {
             json_mode_tool_call_config: invalid_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            experimentation: ExperimentationConfigWithNamespaces::default(),
         })
     }
 

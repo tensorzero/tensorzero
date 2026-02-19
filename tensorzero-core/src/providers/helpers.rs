@@ -15,6 +15,7 @@ use crate::{
         extra_body::{DynamicExtraBody, ExtraBodyReplacementKind, FullExtraBodyConfig},
         extra_headers::{DynamicExtraHeader, ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig},
         resolved_input::{FileUrl, LazyFile},
+        usage::ApiType,
     },
     model::{ModelProviderRequestInfo, fully_qualified_name},
 };
@@ -29,44 +30,77 @@ pub struct JsonlBatchFileInfo {
 pub async fn convert_stream_error(
     raw_request: String,
     provider_type: String,
-    e: reqwest_eventsource::Error,
+    api_type: ApiType,
+    e: reqwest_sse_stream::ReqwestSseStreamError,
     request_id: Option<&str>,
 ) -> Error {
     let base_message = e.to_string();
-    let message = match request_id {
-        Some(id) => format!("{base_message} [request_id: {id}]"),
-        None => base_message,
-    };
     // If we get an invalid status code, content type, or generic transport error,
     // then we assume that we're never going to be able to read more chunks from the stream,
     // The `wrap_provider_stream` function will bail out when it sees this error,
     // to avoid holding open a broken stream (which will delay gateway shutdown when we
     // wait on the parent `Span` to finish)
     match e {
-        reqwest_eventsource::Error::InvalidStatusCode(_, resp)
-        | reqwest_eventsource::Error::InvalidContentType(_, resp) => {
+        reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(_, resp)
+        | reqwest_sse_stream::ReqwestSseStreamError::InvalidContentType(_, resp) => {
+            let raw_response = resp.text().await.ok();
+            let message = match (&raw_response, request_id) {
+                (Some(body), Some(id)) => format!("{base_message}: {body} [request_id: {id}]"),
+                (Some(body), None) => format!("{base_message}: {body}"),
+                (None, Some(id)) => format!("{base_message} [request_id: {id}]"),
+                (None, None) => base_message,
+            };
             ErrorDetails::FatalStreamError {
                 message,
                 provider_type,
+                api_type,
                 raw_request: Some(raw_request),
-                raw_response: resp.text().await.ok(),
+                raw_response,
             }
             .into()
         }
-        reqwest_eventsource::Error::Transport(_) => ErrorDetails::FatalStreamError {
-            message,
-            provider_type,
-            raw_request: Some(raw_request),
-            raw_response: None,
+        reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(inner) => {
+            // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
+            // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
+            // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
+            let message = if inner.is_timeout() {
+                match request_id {
+                    Some(id) => format!(
+                        "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({base_message}) [request_id: {id}]"
+                    ),
+                    None => format!(
+                        "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({base_message})"
+                    ),
+                }
+            } else {
+                match request_id {
+                    Some(id) => format!("{base_message} [request_id: {id}]"),
+                    None => base_message,
+                }
+            };
+            ErrorDetails::FatalStreamError {
+                message,
+                provider_type,
+                api_type,
+                raw_request: Some(raw_request),
+                raw_response: None,
+            }
+            .into()
         }
-        .into(),
-        _ => ErrorDetails::InferenceServer {
-            message,
-            raw_request: Some(raw_request),
-            raw_response: None,
-            provider_type,
+        reqwest_sse_stream::ReqwestSseStreamError::SseError(_) => {
+            let message = match request_id {
+                Some(id) => format!("{base_message} [request_id: {id}]"),
+                None => base_message,
+            };
+            ErrorDetails::InferenceServer {
+                message,
+                raw_request: Some(raw_request),
+                raw_response: None,
+                provider_type,
+                api_type,
+            }
+            .into()
         }
-        .into(),
     }
 }
 
@@ -107,6 +141,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
         raw_response,
         file_id,
     }: JsonlBatchFileInfo,
+    api_type: ApiType,
     mut make_output: impl FnMut(T) -> Result<ProviderBatchInferenceOutput, Error>,
 ) -> Result<ProviderBatchInferenceResponse, Error> {
     let bytes = bytes.map_err(|e| {
@@ -118,6 +153,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
             raw_request: None,
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type,
         })
     })?;
     let mut elements: HashMap<Uuid, ProviderBatchInferenceOutput> = HashMap::new();
@@ -130,6 +166,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
             raw_request: None,
             raw_response: None,
             provider_type: provider_type.to_string(),
+            api_type,
         })
     })?;
     for line in text.lines() {
@@ -145,6 +182,7 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
                     raw_request: None,
                     raw_response: Some(line.to_string()),
                     provider_type: provider_type.to_string(),
+                    api_type,
                 });
                 continue;
             }
@@ -169,8 +207,10 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
 /// Injects extra headers/body fields into a request builder, and sends the request.
 /// This is used when implementing non-streaming inference for a model provider,
 /// and is responsible for actually submitting the HTTP request.
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send(
     provider_type: &str,
+    api_type: ApiType,
     config: &FullExtraBodyConfig,
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
@@ -184,6 +224,7 @@ pub async fn inject_extra_request_data_and_send(
         ..
     } = inject_extra_request_data_and_send_with_headers(
         provider_type,
+        api_type,
         config,
         extra_headers_config,
         model_provider_data,
@@ -198,8 +239,10 @@ pub async fn inject_extra_request_data_and_send(
 
 /// Like `inject_extra_request_data_and_send`, but for streaming requests
 /// Produces an `EventSource` instead of a `Response`.
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send_eventsource(
     provider_type: &str,
+    api_type: ApiType,
     config: &FullExtraBodyConfig,
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
@@ -213,6 +256,7 @@ pub async fn inject_extra_request_data_and_send_eventsource(
         ..
     } = inject_extra_request_data_and_send_eventsource_with_headers(
         provider_type,
+        api_type,
         config,
         extra_headers_config,
         model_provider_data,
@@ -231,8 +275,10 @@ pub struct InjectedResponse<T> {
     pub headers: http::HeaderMap,
 }
 
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send_with_headers(
     provider_type: &str,
+    api_type: ApiType,
     config: &FullExtraBodyConfig,
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
@@ -256,11 +302,24 @@ pub async fn inject_extra_request_data_and_send_with_headers(
         .send()
         .await
         .map_err(|e| {
+            let status_code = e.status();
+            // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
+            // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
+            // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
+            let message = if e.is_timeout() {
+                format!(
+                    "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({})",
+                    DisplayOrDebugGateway::new(&e)
+                )
+            } else {
+                format!("Error sending request: {}", DisplayOrDebugGateway::new(&e))
+            };
             (
                 Error::new(ErrorDetails::InferenceClient {
-                    status_code: e.status(),
-                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
+                    status_code,
+                    message,
                     provider_type: provider_type.to_string(),
+                    api_type,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 }),
@@ -275,8 +334,10 @@ pub async fn inject_extra_request_data_and_send_with_headers(
     })
 }
 
+#[expect(clippy::too_many_arguments)]
 pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
     provider_type: &str,
+    api_type: ApiType,
     config: &FullExtraBodyConfig,
     extra_headers_config: &FullExtraHeadersConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
@@ -304,34 +365,56 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
         Err((e, headers)) => {
             // Extract status code first (by borrowing), then consume Response to read body
             let (message, raw_response) = match e {
-                reqwest_eventsource::Error::InvalidStatusCode(status, resp) => {
+                reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(status, resp) => {
                     let body = resp.text().await.ok();
-                    (
-                        format!("Error sending request: InvalidStatusCode({status})"),
-                        body,
-                    )
+                    let message = match &body {
+                        Some(b) => {
+                            format!("Error sending request: InvalidStatusCode({status}): {b}")
+                        }
+                        None => format!("Error sending request: InvalidStatusCode({status})"),
+                    };
+                    (message, body)
                 }
-                reqwest_eventsource::Error::InvalidContentType(content_type, resp) => {
+                reqwest_sse_stream::ReqwestSseStreamError::InvalidContentType(
+                    content_type,
+                    resp,
+                ) => {
                     let body = resp.text().await.ok();
-                    (
-                        format!(
+                    let message = match &body {
+                        Some(b) => format!(
+                            "Error sending request: InvalidContentType({}): {b}",
+                            content_type.to_str().unwrap_or("<invalid>")
+                        ),
+                        None => format!(
                             "Error sending request: InvalidContentType({})",
                             content_type.to_str().unwrap_or("<invalid>")
                         ),
-                        body,
-                    )
+                    };
+                    (message, body)
                 }
-                other => (
-                    format!(
-                        "Error sending request: {}",
-                        DisplayOrDebugGateway::new(other)
-                    ),
-                    None,
-                ),
+                other => {
+                    // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
+                    // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
+                    // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
+                    let is_timeout = matches!(&other, reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_timeout());
+                    let message = if is_timeout {
+                        format!(
+                            "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({})",
+                            DisplayOrDebugGateway::new(&other)
+                        )
+                    } else {
+                        format!(
+                            "Error sending request: {}",
+                            DisplayOrDebugGateway::new(other)
+                        )
+                    };
+                    (message, None)
+                }
             };
             let error = Error::new(ErrorDetails::FatalStreamError {
                 message,
                 provider_type: provider_type.to_string(),
+                api_type,
                 raw_request: Some(raw_request),
                 raw_response,
             });
@@ -747,6 +830,13 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                             }
                         }
                         None => {
+                            if token == "-" {
+                                return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
+                                    message: "Cannot delete using array append operator `-`"
+                                        .to_string(),
+                                    pointer: pointer.to_string(),
+                                }));
+                            }
                             tracing::warn!(
                                 "Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`"
                             );
@@ -783,6 +873,13 @@ fn delete_json_pointer(mut value: &mut serde_json::Value, pointer: &str) -> Resu
                         }
                     }
                     None => {
+                        if token == "-" {
+                            return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
+                                message: "Cannot delete using array append operator `-`"
+                                    .to_string(),
+                                pointer: pointer.to_string(),
+                            }));
+                        }
                         tracing::warn!(
                             "Skipping deletion of extra_body pointer `{pointer}` - non-numeric array index `{token}`"
                         );
@@ -827,11 +924,13 @@ fn write_json_pointer_with_parent_creation(
         }));
     }
 
-    let components = pointer
+    let mut components = pointer
         .split('/')
         .skip(1)
-        .map(|x| x.replace("~1", "/").replace("~0", "~"));
-    for token in components {
+        .map(|x| x.replace("~1", "/").replace("~0", "~"))
+        .peekable();
+    while let Some(token) = components.next() {
+        let is_last = components.peek().is_none();
         match value {
             Value::Object(map) => match map.entry(token.clone()) {
                 // Move inside an object if the current pointer component is a valid key
@@ -860,6 +959,20 @@ fn write_json_pointer_with_parent_creation(
                 }
             },
             Value::Array(list) => {
+                // Handle "-" for array append (following JSON Patch RFC 6902 convention)
+                if token == "-" {
+                    if is_last {
+                        list.push(target_value);
+                        return Ok(());
+                    } else {
+                        return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
+                            message:
+                                "Array append operator `-` can only be used at the end of a pointer"
+                                    .to_string(),
+                            pointer: pointer.to_string(),
+                        }));
+                    }
+                }
                 let len = list.len();
                 value = parse_index(&token)
                     .and_then(move |x| list.get_mut(x))
@@ -891,6 +1004,7 @@ pub async fn peek_first_chunk<
     stream: &'a mut Peekable<Pin<Box<T>>>,
     raw_request: &str,
     provider_type: &str,
+    api_type: ApiType,
 ) -> Result<&'a mut ProviderInferenceResponseChunk, Error> {
     // If the next stream item is an error, consume and return it
     if let Some(err) = Pin::new(&mut *stream).next_if(Result::is_err).await {
@@ -915,6 +1029,7 @@ pub async fn peek_first_chunk<
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: "Stream ended before first chunk".to_string(),
                 provider_type: provider_type.to_string(),
+                api_type,
                 raw_request: Some(raw_request.to_string()),
                 raw_response: None,
             }))
@@ -995,7 +1110,7 @@ mod tests {
     #[tokio::test]
     async fn test_peek_empty() {
         let mut stream = Box::pin(stream::empty()).peekable();
-        let err = peek_first_chunk(&mut stream, "test", "test")
+        let err = peek_first_chunk(&mut stream, "test", "test", ApiType::ChatCompletions)
             .await
             .expect_err("Peeking empty stream should fail");
         let err_msg = err.to_string();
@@ -1013,7 +1128,7 @@ mod tests {
             },
         ))]))
         .peekable();
-        let err = peek_first_chunk(&mut stream, "test", "test")
+        let err = peek_first_chunk(&mut stream, "test", "test", ApiType::ChatCompletions)
             .await
             .expect_err("Peeking errored stream should fail");
         assert_eq!(
@@ -1031,11 +1146,10 @@ mod tests {
                 id: "0".to_string(),
                 text: "Hello, world!".to_string(),
             })],
-            created: 0,
             usage: None,
             raw_usage: None,
             raw_response: "My raw response".to_string(),
-            latency: Duration::from_secs(0),
+            provider_latency: Duration::from_secs(0),
             finish_reason: None,
         };
         let mut stream = Box::pin(stream::iter([
@@ -1046,7 +1160,7 @@ mod tests {
         ]))
         .peekable();
         let peeked_chunk: &mut ProviderInferenceResponseChunk =
-            peek_first_chunk(&mut stream, "test", "test")
+            peek_first_chunk(&mut stream, "test", "test", ApiType::ChatCompletions)
                 .await
                 .expect("Peeking stream should succeed");
         assert_eq!(&chunk, peeked_chunk);
@@ -1061,7 +1175,7 @@ mod tests {
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
-                extra_headers: None,
+                extra_headers: Default::default(),
             },
             "dummy_model",
             &mut body,
@@ -1097,7 +1211,7 @@ mod tests {
                 },
             },
             ModelProviderRequestInfo {
-                extra_headers: None,
+                extra_headers: Default::default(),
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
             },
@@ -1117,7 +1231,7 @@ mod tests {
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
-                extra_headers: None,
+                extra_headers: Default::default(),
             },
             "dummy_model",
             &mut "test".into(),
@@ -1259,7 +1373,7 @@ mod tests {
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
-                extra_headers: None,
+                extra_headers: Default::default(),
             },
             "dummy_model",
             &mut body,
@@ -1555,6 +1669,123 @@ mod tests {
     }
 
     #[test]
+    fn test_json_pointer_array_append_with_dash() {
+        // Test appending to an existing array with elements
+        let mut val = serde_json::json!({"items": ["a", "b"]});
+        write_json_pointer_with_parent_creation(&mut val, "/items/-", serde_json::json!("c"))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"items": ["a", "b", "c"]}),
+            "Expected append to add element at end of array"
+        );
+
+        // Test appending to an empty array
+        let mut val = serde_json::json!({"items": []});
+        write_json_pointer_with_parent_creation(&mut val, "/items/-", serde_json::json!("first"))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"items": ["first"]}),
+            "Expected append to work on empty array"
+        );
+
+        // Test appending complex value
+        let mut val = serde_json::json!({"messages": [{"role": "user"}]});
+        write_json_pointer_with_parent_creation(
+            &mut val,
+            "/messages/-",
+            serde_json::json!({"role": "assistant", "content": "Hello"}),
+        )
+        .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"messages": [{"role": "user"}, {"role": "assistant", "content": "Hello"}]}),
+            "Expected append to work with complex objects"
+        );
+
+        // Test that "-" on an object is treated as a literal key (per JSON Pointer spec)
+        let mut val = serde_json::json!({"obj": {}});
+        write_json_pointer_with_parent_creation(&mut val, "/obj/-", serde_json::json!("value"))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"obj": {"-": "value"}}),
+            "Expected `-` on object to be treated as literal key"
+        );
+
+        // Test appending to nested array
+        let mut val = serde_json::json!({"outer": {"inner": [1, 2]}});
+        write_json_pointer_with_parent_creation(&mut val, "/outer/inner/-", serde_json::json!(3))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"outer": {"inner": [1, 2, 3]}}),
+            "Expected append to work on nested arrays"
+        );
+    }
+
+    #[test]
+    fn test_json_pointer_array_append_errors() {
+        // Test "-" in middle of path (not at leaf) should error
+        let mut val = serde_json::json!({"items": [{"a": 1}]});
+        let err =
+            write_json_pointer_with_parent_creation(&mut val, "/items/-/a", serde_json::json!("x"))
+                .unwrap_err()
+                .to_string();
+        assert!(
+            err.contains("Array append operator `-` can only be used at the end of a pointer"),
+            "Unexpected error message: {err:?}"
+        );
+
+        // Test "-" on non-existent path creates an object with key "-" (since "-" is non-numeric)
+        // This is because when "missing" doesn't exist, we create an empty object for it,
+        // and then "-" on an object is treated as a literal key
+        let mut val = serde_json::json!({});
+        write_json_pointer_with_parent_creation(&mut val, "/missing/-", serde_json::json!("x"))
+            .unwrap();
+        assert_eq!(
+            val,
+            serde_json::json!({"missing": {"-": "x"}}),
+            "Expected `-` on newly created object to be treated as literal key"
+        );
+
+        // Test "-" on non-container type should error
+        let mut val = serde_json::json!({"str": "hello"});
+        let err =
+            write_json_pointer_with_parent_creation(&mut val, "/str/-", serde_json::json!("x"))
+                .unwrap_err()
+                .to_string();
+        assert!(
+            err.contains("Can only index into object or array"),
+            "Unexpected error message: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_delete_json_pointer_dash_errors() {
+        // Test that delete with "-" as final index returns an error
+        let mut val = serde_json::json!({"items": ["a", "b"]});
+        let err = delete_json_pointer(&mut val, "/items/-")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Cannot delete using array append operator `-`"),
+            "Unexpected error message: {err:?}"
+        );
+
+        // Test that delete with "-" in intermediate path returns an error
+        let mut val = serde_json::json!({"items": [{"a": 1}]});
+        let err = delete_json_pointer(&mut val, "/items/-/a")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Cannot delete using array append operator `-`"),
+            "Unexpected error message: {err:?}"
+        );
+    }
+
+    #[test]
     fn test_delete_json_pointer_simple() {
         let mut obj = serde_json::json!({
             "object1": "value1",
@@ -1723,7 +1954,7 @@ mod tests {
             extra_body: None,
             inference_extra_body: FilteredInferenceExtraBody {
                 data: vec![DynamicExtraBody::ModelProvider {
-                    model_name: "anthropic::claude-3".to_string(), // Wrong prefix
+                    model_name: "anthropic::claude-4".to_string(), // Wrong prefix
                     provider_name: Some("openai".to_string()),
                     pointer: "/test_wrong".to_string(),
                     value: json!(1),

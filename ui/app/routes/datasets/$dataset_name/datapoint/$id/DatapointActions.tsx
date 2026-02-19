@@ -1,5 +1,6 @@
 import { ActionBar } from "~/components/layout/ActionBar";
-import { TryWithButton } from "~/components/inference/TryWithButton";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
+import { TryWithSelect } from "~/components/inference/TryWithSelect";
 import { EditButton } from "~/components/utils/EditButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { SaveButton } from "~/components/utils/SaveButton";
@@ -60,7 +61,7 @@ export function DatapointActions({
 
   return (
     <ActionBar>
-      <TryWithButton
+      <TryWithSelect
         options={options}
         onSelect={isDefault ? onModelSelect : onVariantSelect}
         isLoading={variantInferenceIsLoading}
@@ -100,6 +101,9 @@ export function DatapointActions({
               ? "You can't delete a stale datapoint."
               : "Delete"
         }
+      />
+      <AskAutopilotButton
+        message={`Datapoint ID: ${datapoint.id}\nDataset: ${datapoint.dataset_name}\n\n`}
       />
     </ActionBar>
   );

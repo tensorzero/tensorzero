@@ -20,8 +20,8 @@ use crate::endpoints::openai_compatible::types::embeddings::{
 use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
 use crate::inference::types::{
-    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    TextChunk, Usage,
+    ApiType, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponseChunk, TextChunk, Usage,
 };
 use crate::model::Credential;
 use crate::{
@@ -150,6 +150,7 @@ impl TensorzeroRelay {
             tensorzero_dryrun: None,
             tensorzero_credentials: params.credentials,
             tensorzero_cache_options: None,
+            tensorzero_include_raw_response: params.include_raw_response,
         };
 
         let api_key = self
@@ -168,12 +169,18 @@ impl TensorzeroRelay {
                     message: e.to_string(),
                     status_code: None,
                     provider_type: "tensorzero_relay".to_string(),
+                    api_type: ApiType::Embeddings,
                     raw_request: None,
                     raw_response: None,
                 })
             })?;
         match res.response {
-            OpenAIEmbeddingResponse::List { data, model, usage } => Ok(EmbeddingResponse {
+            OpenAIEmbeddingResponse::List {
+                data,
+                model,
+                usage,
+                tensorzero_raw_response,
+            } => Ok(EmbeddingResponse {
                 embeddings: data
                     .into_iter()
                     .map(|embedding| match embedding {
@@ -193,6 +200,7 @@ impl TensorzeroRelay {
                     })
                     .unwrap_or_default(),
                 model,
+                tensorzero_raw_response,
             }),
         }
     }
@@ -302,6 +310,8 @@ impl TensorzeroRelay {
         let finish_reason = non_streaming.finish_reason();
         // Extract raw_usage from downstream response for passthrough
         let raw_usage_entries = non_streaming.raw_usage().cloned();
+        // Extract relay_raw_response entries from downstream response for passthrough
+        let relay_raw_response = non_streaming.raw_response().cloned();
 
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
@@ -339,7 +349,8 @@ impl TensorzeroRelay {
                 raw_response: http_data.raw_response.unwrap_or_default(),
                 usage,
                 raw_usage: raw_usage_entries,
-                latency,
+                relay_raw_response,
+                provider_latency: latency,
                 finish_reason,
                 id: Uuid::now_v7(),
             },
@@ -514,6 +525,7 @@ impl TensorzeroRelay {
             },
             internal_dynamic_variant_config: None,
             episode_id: None,
+            namespace: None,
             dryrun: None,
             // Filter out internal tags (those starting with "tensorzero::") before forwarding
             // to the downstream gateway, as they will be rejected by tag validation
@@ -527,7 +539,9 @@ impl TensorzeroRelay {
             otlp_traces_extra_attributes: HashMap::new(),
             otlp_traces_extra_resources: HashMap::new(),
             include_original_response: false,
+            include_raw_response: clients.include_raw_response,
             include_raw_usage: clients.include_raw_usage,
+            include_aggregated_response: clients.include_aggregated_response,
             api_key,
         };
         Ok(res)

@@ -399,12 +399,17 @@ func TestBasicInference(t *testing.T) {
 			openai.UserMessage("Hello"),
 		}
 
-		// First request (non-cached)
+		// First request (write_only to populate cache)
 		req := &openai.ChatCompletionNewParams{
 			Model:       "tensorzero::function_name::basic_test",
 			Messages:    messages,
 			Temperature: openai.Float(0.4),
 		}
+		req.SetExtraFields(map[string]any{
+			"tensorzero::cache_options": map[string]any{
+				"enabled": "write_only",
+			},
+		})
 
 		resp, err := client.Chat.Completions.New(ctx, *req)
 		require.NoError(t, err, "Unexpected error while getting completion")
@@ -849,22 +854,19 @@ func TestStreamingInference(t *testing.T) {
 		assert.Greater(t, lastChunkDuration.Seconds(), firstChunkDuration.Seconds()+0.1,
 			"Last chunk duration should be greater than first chunk duration")
 
-		// Validate the stop chunk
-		require.GreaterOrEqual(t, len(allChunks), 2, "Expected at least two chunks, but got fewer")
-		stopChunk := allChunks[len(allChunks)-2]
-		assert.Empty(t, stopChunk.Choices[0].Delta.Content)
-		assert.Equal(t, stopChunk.Choices[0].FinishReason, "stop")
-
-		// Validate the Completion chunk
-		completionChunk := allChunks[len(allChunks)-1]
-		assert.Equal(t, int64(10), completionChunk.Usage.PromptTokens)
-		assert.Equal(t, int64(16), completionChunk.Usage.CompletionTokens)
-		assert.Equal(t, int64(26), completionChunk.Usage.TotalTokens)
+		// Validate the final chunk (contains finish_reason and usage)
+		require.GreaterOrEqual(t, len(allChunks), 1, "Expected at least one chunk, but got fewer")
+		finalChunk := allChunks[len(allChunks)-1]
+		assert.Empty(t, finalChunk.Choices[0].Delta.Content)
+		assert.Equal(t, finalChunk.Choices[0].FinishReason, "stop")
+		assert.Equal(t, int64(10), finalChunk.Usage.PromptTokens)
+		assert.Equal(t, int64(16), finalChunk.Usage.CompletionTokens)
+		assert.Equal(t, int64(26), finalChunk.Usage.TotalTokens)
 
 		var previousInferenceID, previousEpisodeID string
 		textIndex := 0
 		// Validate the chunk Content
-		for i := range len(allChunks) - 2 {
+		for i := range len(allChunks) - 1 {
 			chunk := allChunks[i]
 			if len(chunk.Choices) == 0 {
 				continue
@@ -927,7 +929,7 @@ func TestStreamingInference(t *testing.T) {
 			" pizza.",
 		}
 
-		// First request without cache to populate the cache
+		// First request with write_only cache to populate the cache
 		req := &openai.ChatCompletionNewParams{
 			Model:    "tensorzero::function_name::basic_test",
 			Messages: messages,
@@ -937,6 +939,11 @@ func TestStreamingInference(t *testing.T) {
 			},
 		}
 		addEpisodeIDToRequest(t, req, episodeID)
+		req.SetExtraFields(map[string]any{
+			"tensorzero::cache_options": map[string]any{
+				"enabled": "write_only",
+			},
+		})
 
 		stream := client.Chat.Completions.NewStreaming(ctx, *req)
 		require.NotNil(t, stream, "Streaming response should not be nil")
@@ -958,11 +965,9 @@ func TestStreamingInference(t *testing.T) {
 			}
 		}
 
-		// Check second-to-last chunk has correct finish reason
-		stopChunk := chunks[len(chunks)-2]
-		require.Equal(t, "stop", stopChunk.Choices[0].FinishReason)
-
+		// Check final chunk has correct finish reason and usage
 		finalChunk := chunks[len(chunks)-1]
+		require.Equal(t, "stop", finalChunk.Choices[0].FinishReason)
 		require.Equal(t, int64(10), finalChunk.Usage.PromptTokens)
 		require.Equal(t, int64(16), finalChunk.Usage.CompletionTokens)
 
@@ -999,11 +1004,9 @@ func TestStreamingInference(t *testing.T) {
 		}
 		require.Equal(t, content, cachedContent)
 
-		// Check second-to-last chunk has the correct finish reason
-		finishChunk := cachedChunks[len(cachedChunks)-2]
-		require.Equal(t, "stop", finishChunk.Choices[0].FinishReason)
-		// Verify zero usage
+		// Check final cached chunk has correct finish reason and zero usage
 		finalCachedChunk := cachedChunks[len(cachedChunks)-1]
+		require.Equal(t, "stop", finalCachedChunk.Choices[0].FinishReason)
 		require.Equal(t, int64(0), finalCachedChunk.Usage.PromptTokens)
 		require.Equal(t, int64(0), finalCachedChunk.Usage.CompletionTokens)
 		require.Equal(t, int64(0), finalCachedChunk.Usage.TotalTokens)
@@ -1032,7 +1035,8 @@ func TestStreamingInference(t *testing.T) {
 		var apiErr *openai.Error
 		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError") // ErrorAs assign err to apiErr
 		assert.Equal(t, 404, apiErr.StatusCode, "Expected status code 404")
-		assert.Contains(t, err.Error(), "404 Not Found \"Unknown function: does_not_exist\"", "Error should indicate 404 Not Found")
+		assert.Contains(t, err.Error(), "404 Not Found", "Error should indicate 404 Not Found")
+		assert.Contains(t, err.Error(), "Unknown function: does_not_exist", "Error should indicate unknown function")
 	})
 
 	t.Run("it should handle streaming inference with a missing function", func(t *testing.T) {
@@ -1082,7 +1086,8 @@ func TestStreamingInference(t *testing.T) {
 		var apiErr *openai.Error
 		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
 		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
-		assert.Contains(t, apiErr.Error(), "400 Bad Request \"Invalid request to OpenAI-compatible endpoint", "Error should indicate invalid request to OpenAI compartible endpoint")
+		assert.Contains(t, apiErr.Error(), "400 Bad Request", "Error should indicate 400 Bad Request")
+		assert.Contains(t, apiErr.Error(), "Invalid request to OpenAI-compatible endpoint", "Error should indicate invalid request to OpenAI compatible endpoint")
 	})
 
 	t.Run("it should handle streaming inference with a missing model", func(t *testing.T) {
@@ -1382,23 +1387,20 @@ func TestToolCallingInference(t *testing.T) {
 			`"}`,
 		}
 
-		// Validate the stop chunk
-		require.GreaterOrEqual(t, len(allChunks), 2, "Expected at least two chunks, but got fewer")
-		stopChunk := allChunks[len(allChunks)-2]
-		assert.Empty(t, stopChunk.Choices[0].Delta.Content)
-		assert.Empty(t, stopChunk.Choices[0].Delta.ToolCalls)
-		assert.Equal(t, stopChunk.Choices[0].FinishReason, "tool_calls")
-
-		// Validate the Completion chunk
-		completionChunk := allChunks[len(allChunks)-1]
-		assert.Equal(t, int64(10), completionChunk.Usage.PromptTokens)
-		assert.Equal(t, int64(5), completionChunk.Usage.CompletionTokens)
-		assert.Equal(t, int64(15), completionChunk.Usage.TotalTokens)
+		// Validate the final chunk (contains finish_reason and usage)
+		require.GreaterOrEqual(t, len(allChunks), 1, "Expected at least one chunk, but got fewer")
+		finalChunk := allChunks[len(allChunks)-1]
+		assert.Empty(t, finalChunk.Choices[0].Delta.Content)
+		assert.Empty(t, finalChunk.Choices[0].Delta.ToolCalls)
+		assert.Equal(t, finalChunk.Choices[0].FinishReason, "tool_calls")
+		assert.Equal(t, int64(10), finalChunk.Usage.PromptTokens)
+		assert.Equal(t, int64(5), finalChunk.Usage.CompletionTokens)
+		assert.Equal(t, int64(15), finalChunk.Usage.TotalTokens)
 
 		var previousInferenceID, previousEpisodeID string
 		nameSeen := false
 		//Test for intermediate chunks
-		for i := range len(allChunks) - 2 {
+		for i := range len(allChunks) - 1 {
 			chunk := allChunks[i]
 			if len(chunk.Choices) == 0 {
 				continue

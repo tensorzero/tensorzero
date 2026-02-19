@@ -1,13 +1,13 @@
-[models.claude_3_5_haiku_20241022]
+[models.claude_haiku_4_5]
 routing = ["anthropic"]
 
-[models.claude_3_5_haiku_20241022.providers.anthropic]
+[models.claude_haiku_4_5.providers.anthropic]
 type = "anthropic"
-model_name = "claude-3-5-haiku-20241022"
+model_name = "claude-haiku-4-5"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "claude_3_5_haiku_20241022"
+model = "claude_haiku_4_5"

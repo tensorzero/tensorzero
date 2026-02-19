@@ -108,7 +108,7 @@ async fn get_providers() -> E2ETestProviders {
     let input_audio_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "openrouter".to_string(),
-        model_name: "openai/gpt-4o-audio-preview".into(),
+        model_name: "openai/gpt-audio-mini".into(),
         model_provider_name: "openrouter".into(),
         credentials: HashMap::new(),
     }];
@@ -124,11 +124,32 @@ async fn get_providers() -> E2ETestProviders {
         dimensions: 3072,
     }];
 
+    // Reasoning providers for OpenRouter
+    // Grok 3 Mini uses `reasoning_effort`-based reasoning, Claude Haiku 4.5 uses `thinking_budget_tokens`-based reasoning
+    let reasoning_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openrouter-grok-reasoning".to_string(),
+            model_name: "grok-code-fast-1-openrouter".into(),
+            model_provider_name: "openrouter".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openrouter-claude-reasoning".to_string(),
+            model_name: "claude-haiku-4-5-openrouter".into(),
+            model_provider_name: "openrouter".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
+        reasoning_inference: reasoning_providers.clone(),
+        reasoning_usage_inference: reasoning_providers,
+        cache_input_tokens_inference: standard_providers.clone(),
         embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,

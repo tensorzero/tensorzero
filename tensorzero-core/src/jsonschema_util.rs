@@ -1,5 +1,4 @@
 use jsonschema::Validator;
-use once_cell::sync::OnceCell as SyncOnceCell;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -10,65 +9,102 @@ use crate::config::path::ResolvedTomlPathData;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::spawn_ignoring_shutdown;
 
-#[derive(Debug, Serialize)]
-pub enum JsonSchemaRef<'a> {
-    Static(&'a StaticJSONSchema),
-    Dynamic(&'a DynamicJSONSchema),
-}
-
-impl<'a> JsonSchemaRef<'a> {
-    pub async fn validate(&self, instance: &Value) -> Result<(), Error> {
-        match self {
-            JsonSchemaRef::Static(schema) => schema.validate(instance),
-            JsonSchemaRef::Dynamic(schema) => schema.validate(instance).await,
-        }
-    }
-
-    pub fn value(&'a self) -> &'a Value {
-        match self {
-            JsonSchemaRef::Static(schema) => &schema.value,
-            JsonSchemaRef::Dynamic(schema) => &schema.value,
-        }
-    }
-}
-
 /// A JSON schema with a lazily-compiled validator.
 ///
-/// The validator is compiled when constructed from a config from disk, or on first access (via
-/// `validate()` or `compiled()`) if not compiled. If it's deserialized from JSON, it's not compiled.
+/// The validator is compiled asynchronously on first access (via `validate()` or `ensure_valid()`).
+/// Compilation is kicked off in the background when the schema is created via `compile_background()`,
+/// so it should typically be ready by the time validation is needed.
 ///
-/// TODO(#5016): remove the distinction between Static and Dynamic JSONSchemas
-#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct StaticJSONSchema {
-    /// Lazily-compiled validator. Use `compiled()` method to access.
+/// When created via `compile()`, `from_path()`, or `from_value()`, the schema is compiled
+/// synchronously and the compiled validator is stored immediately.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct JSONSchema {
+    pub value: Value,
     #[serde(skip)]
-    compiled: SyncOnceCell<Arc<Validator>>,
-    pub value: serde_json::Value,
+    compiled: Arc<OnceCell<Validator>>,
 }
 
-impl PartialEq for StaticJSONSchema {
+impl PartialEq for JSONSchema {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
 
-impl Default for StaticJSONSchema {
+impl Default for JSONSchema {
     fn default() -> Self {
+        // Create an empty schema that accepts any object
         Self {
-            compiled: SyncOnceCell::new(),
             value: serde_json::json!({}),
+            compiled: Arc::new(OnceCell::new()),
         }
     }
 }
 
-impl StaticJSONSchema {
-    /// Creates a StaticJSONSchema from a file path, eagerly compiling the schema.
+impl JSONSchema {
+    /// Creates a new JSONSchema with a pre-compiled validator.
+    fn new_with_compiled(value: Value, validator: Validator) -> Result<Self, Error> {
+        let compiled = Arc::new(OnceCell::new());
+        compiled.set(validator).map_err(|e| {
+            Error::new(ErrorDetails::JsonSchema {
+                message: format!("Failed to set validator in OnceCell: {e}"),
+            })
+        })?;
+        Ok(Self { value, compiled })
+    }
+
+    /// Creates a new JSONSchema with lazy compilation (no pre-compiled validator).
+    fn new_lazy(schema: Value) -> Self {
+        Self {
+            value: schema,
+            compiled: Arc::new(OnceCell::new()),
+        }
+    }
+
+    /// Compiles a JSON schema synchronously.
+    ///
+    /// This is the preferred method for config loading where no tokio runtime is available.
+    /// The schema is compiled immediately and the compiled validator is stored for reuse.
+    /// Returns an error if the schema fails to compile.
+    pub fn compile(schema: Value) -> Result<Self, Error> {
+        let validator = jsonschema::validator_for(&schema).map_err(|e| {
+            Error::new(ErrorDetails::JsonSchema {
+                message: format!("Failed to compile JSON Schema: {e}"),
+            })
+        })?;
+        Self::new_with_compiled(schema, validator)
+    }
+
+    /// Compiles a JSON schema asynchronously in the background.
+    ///
+    /// This is the preferred method for runtime-created schemas (e.g., during inference).
+    /// Kicks off compilation in a background task so it should typically be ready
+    /// by the time validation is needed.
+    ///
+    /// **Note**: This must be called from within a tokio runtime context.
+    pub fn compile_background(schema: Value) -> Self {
+        let this = Self::new_lazy(schema);
+        let this_clone = this.clone();
+        // Kick off the schema compilation in the background.
+        // The first call to `validate` will either get the compiled schema (if the task finished),
+        // or wait on the task to complete via the `OnceCell`
+        spawn_ignoring_shutdown(async move {
+            // If this errors, then we'll just get the error when we call 'validate'
+            let _ = this_clone.get_or_init_compiled().await;
+        });
+        this
+    }
+
+    /// Creates a JSONSchema from a file path.
+    ///
+    /// Parses the JSON and compiles the schema synchronously.
     /// Returns an error if the JSON is invalid or the schema fails to compile.
+    /// Safe to call outside of a tokio runtime.
     pub fn from_path(path: ResolvedTomlPathData) -> Result<Self, Error> {
         let content = path.data();
 
-        let schema: serde_json::Value = serde_json::from_str(content).map_err(|e| {
+        let schema: Value = serde_json::from_str(content).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!(
                     "Failed to parse JSON Schema `{}`: {}",
@@ -77,7 +113,8 @@ impl StaticJSONSchema {
                 ),
             })
         })?;
-        let compiled_schema = jsonschema::validator_for(&schema).map_err(|e| {
+
+        let validator = jsonschema::validator_for(&schema).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!(
                     "Failed to compile JSON Schema `{}`: {}",
@@ -86,111 +123,24 @@ impl StaticJSONSchema {
                 ),
             })
         })?;
-        let compiled = SyncOnceCell::new();
-        // Eagerly initialize since we just compiled it
-        let _ = compiled.set(Arc::new(compiled_schema));
-        Ok(Self {
-            compiled,
-            value: schema,
-        })
+
+        Self::new_with_compiled(schema, validator)
     }
 
-    /// Creates a StaticJSONSchema from a JSON value, eagerly compiling the schema.
+    /// Creates a JSONSchema from a JSON value.
+    ///
+    /// Compiles the schema synchronously. This is an alias for `compile()`.
     /// Returns an error if the schema fails to compile.
-    pub fn from_value(value: serde_json::Value) -> Result<Self, Error> {
-        let compiled_schema = jsonschema::validator_for(&value).map_err(|e| {
-            Error::new(ErrorDetails::JsonSchema {
-                message: format!("Failed to compile JSON Schema: {e}"),
-            })
-        })?;
-        let compiled = SyncOnceCell::new();
-        // Eagerly initialize since we just compiled it
-        let _ = compiled.set(Arc::new(compiled_schema));
-        Ok(Self { compiled, value })
-    }
-
-    /// Gets the compiled validator, compiling lazily if needed.
-    /// Returns an error if the schema is invalid.
-    fn compiled(&self) -> Result<&Validator, Error> {
-        self.compiled
-            .get_or_try_init(|| {
-                let validator = jsonschema::validator_for(&self.value).map_err(|e| {
-                    Error::new(ErrorDetails::JsonSchema {
-                        message: format!("Failed to compile JSON Schema: {e}"),
-                    })
-                })?;
-                Ok(Arc::new(validator))
-            })
-            .map(|arc| arc.as_ref())
+    /// Safe to call outside of a tokio runtime.
+    pub fn from_value(value: Value) -> Result<Self, Error> {
+        Self::compile(value)
     }
 
     /// Validates an instance against this schema.
-    /// The schema is compiled lazily on first validation if it hasn't been compiled yet.
-    pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {
-        self.compiled()?.validate(instance).map_err(|e| {
-            Error::new(ErrorDetails::JsonSchemaValidation {
-                messages: vec![e.to_string()],
-                data: Box::new(instance.clone()),
-                schema: Box::new(self.value.clone()),
-            })
-        })
-    }
-}
-
-/// Wraps a schema with metadata indicating whether it was defined using legacy syntax
-/// (e.g., `user_schema`, `assistant_schema`, `system_schema`) or new syntax (e.g., `schemas.<name>`).
-/// This is used to determine whether to show a "Legacy" badge in the UI.
-#[derive(Clone, Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
-pub struct SchemaWithMetadata {
-    pub schema: StaticJSONSchema,
-    pub legacy_definition: bool,
-}
-
-/// This is a JSONSchema that is compiled on the fly.
-/// This is useful for schemas that are not known at compile time, in particular, for dynamic tool definitions.
-/// In order to avoid blocking the inference, we compile the schema asynchronously as the inference runs.
-/// We use a tokio::sync::OnceCell to ensure that the schema is compiled only once
-///
-/// The public API of this struct should look very normal except validation is `async`
-/// There are just `new` and `validate` methods.
-///
-/// TODO(#5016): remove the distinction between Static and Dynamic JSONSchemas
-#[derive(Debug, Serialize, Clone, ts_rs::TS)]
-#[ts(export)]
-pub struct DynamicJSONSchema {
-    pub value: Value,
-    #[serde(skip)]
-    compiled_schema: Arc<OnceCell<Validator>>,
-}
-
-impl PartialEq for DynamicJSONSchema {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-    }
-}
-
-impl DynamicJSONSchema {
-    pub fn new(schema: Value) -> Self {
-        let compiled_schema = Arc::new(OnceCell::new());
-        let this = Self {
-            value: schema,
-            compiled_schema,
-        };
-        let this_clone = this.clone();
-        // Kick off the schema compilation in the background.
-        // The first call to `validate` will either get the compiled schema (if the task finished),
-        // or wait on the task to complete via the `OnceCell`
-        spawn_ignoring_shutdown(async move {
-            // If this errors, then we'll just get the error when we call 'validate'
-            let _ = this_clone.get_or_init_compiled_schema().await;
-        });
-        this
-    }
-
+    ///
+    /// If the schema hasn't been compiled yet, it will be compiled asynchronously first.
     pub async fn validate(&self, instance: &Value) -> Result<(), Error> {
-        // This will block until the schema is compiled
-        self.get_or_init_compiled_schema()
+        self.get_or_init_compiled()
             .await?
             .validate(instance)
             .map_err(|e| {
@@ -203,15 +153,16 @@ impl DynamicJSONSchema {
     }
 
     /// Ensures that the schema is valid by forcing compilation.
+    ///
     /// This is useful when you want to validate the schema itself without validating any instance.
     /// Returns an error if the schema is invalid.
     pub async fn ensure_valid(&self) -> Result<(), Error> {
-        self.get_or_init_compiled_schema().await?;
+        self.get_or_init_compiled().await?;
         Ok(())
     }
 
-    async fn get_or_init_compiled_schema(&self) -> Result<&Validator, Error> {
-        self.compiled_schema
+    async fn get_or_init_compiled(&self) -> Result<&Validator, Error> {
+        self.compiled
             .get_or_try_init(|| {
                 let schema = self.value.clone();
                 async {
@@ -226,7 +177,7 @@ impl DynamicJSONSchema {
                     .await
                     .map_err(|e| {
                         Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Task join error in DynamicJSONSchema: {e}"),
+                            message: format!("Task join error in JSONSchema: {e}"),
                         })
                     })?
                 }
@@ -241,8 +192,19 @@ impl DynamicJSONSchema {
                 message: e.to_string(),
             })
         })?;
-        Ok(Self::new(schema))
+        Ok(Self::compile_background(schema))
     }
+}
+
+/// Wraps a schema with metadata indicating whether it was defined using legacy syntax
+/// (e.g., `user_schema`, `assistant_schema`, `system_schema`) or new syntax (e.g., `schemas.<name>`).
+/// This is used to determine whether to show a "Legacy" badge in the UI.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct SchemaWithMetadata {
+    pub schema: JSONSchema,
+    pub legacy_definition: bool,
 }
 
 #[cfg(test)]
@@ -251,8 +213,8 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    #[test]
-    fn test_valid_schema() {
+    #[tokio::test]
+    async fn test_valid_schema() {
         let schema = r#"
         {
             "type": "object",
@@ -268,7 +230,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
+        let schema = JSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ))
@@ -277,28 +239,28 @@ mod tests {
         let instance = serde_json::json!({
             "name": "John Doe",
         });
-        assert!(schema.validate(&instance).is_ok());
+        assert!(schema.validate(&instance).await.is_ok());
 
         let instance = serde_json::json!({
             "name": "John Doe",
             "age": 30,
         });
-        assert!(schema.validate(&instance).is_ok());
+        assert!(schema.validate(&instance).await.is_ok());
 
         let instance = serde_json::json!({
             "name": "John Doe",
             "age": 30,
             "role": "admin"
         });
-        assert!(schema.validate(&instance).is_err());
+        assert!(schema.validate(&instance).await.is_err());
 
         let instance = serde_json::json!({
             "age": "not a number"
         });
-        assert!(schema.validate(&instance).is_err());
+        assert!(schema.validate(&instance).await.is_err());
 
         let instance = serde_json::json!({});
-        assert!(schema.validate(&instance).is_err());
+        assert!(schema.validate(&instance).await.is_err());
     }
 
     #[test]
@@ -316,7 +278,7 @@ mod tests {
         write!(temp_file, "{invalid_schema}")
             .expect("Failed to write invalid schema to temporary file");
 
-        let result = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
+        let result = JSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ));
@@ -333,7 +295,7 @@ mod tests {
     fn test_invalid_json_content() {
         // With eager loading, file contents are loaded during config parsing.
         // This test verifies that invalid JSON content produces the right error.
-        let result = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
+        let result = JSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             "invalid_file.json".into(),
             Some("not valid json".to_string()),
         ));
@@ -344,7 +306,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dynamic_schema() {
+    async fn test_compile_background() {
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -352,10 +314,107 @@ mod tests {
             }
         });
 
-        let dynamic_schema = DynamicJSONSchema::new(schema);
+        let dynamic_schema = JSONSchema::compile_background(schema);
         let instance = serde_json::json!({
             "name": "John Doe",
         });
         assert!(dynamic_schema.validate(&instance).await.is_ok());
+    }
+
+    #[test]
+    fn test_compile_sync() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        // compile() should work without a tokio runtime
+        let compiled_schema = JSONSchema::compile(schema).expect("Failed to compile schema");
+        // The schema should be pre-compiled
+        assert!(compiled_schema.compiled.get().is_some());
+    }
+
+    #[test]
+    fn test_compile_invalid_schema() {
+        let invalid_schema = serde_json::json!({
+            "type": "invalid_type"
+        });
+
+        let result = JSONSchema::compile(invalid_schema);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_ensure_valid() {
+        let valid_schema = JSONSchema::compile_background(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        }));
+        assert!(valid_schema.ensure_valid().await.is_ok());
+
+        let invalid_schema = JSONSchema::compile_background(serde_json::json!({
+            "type": "invalid_type"
+        }));
+        assert!(invalid_schema.ensure_valid().await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_parse_from_str() {
+        let schema_str = r#"{"type": "object", "properties": {"name": {"type": "string"}}}"#;
+        let schema = JSONSchema::parse_from_str(schema_str).expect("Failed to parse schema");
+
+        let instance = serde_json::json!({"name": "test"});
+        assert!(schema.validate(&instance).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_default_schema() {
+        let schema = JSONSchema::default();
+        // Default schema should accept any object
+        let instance = serde_json::json!({"anything": "goes"});
+        assert!(schema.validate(&instance).await.is_ok());
+        // The default schema should be pre-compiled
+        assert!(schema.compiled.get().is_some());
+    }
+
+    #[test]
+    fn test_from_value_reuses_compiled() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let compiled_schema = JSONSchema::from_value(schema).expect("Failed to compile schema");
+        // The schema should be pre-compiled (not lazy)
+        assert!(
+            compiled_schema.compiled.get().is_some(),
+            "from_value should store the compiled validator"
+        );
+    }
+
+    #[test]
+    fn test_from_path_reuses_compiled() {
+        let schema_json = r#"{"type": "object", "properties": {"name": {"type": "string"}}}"#;
+
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        write!(temp_file, "{schema_json}").expect("Failed to write schema to temporary file");
+
+        let compiled_schema = JSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
+            temp_file.path().to_owned(),
+            None,
+        ))
+        .expect("Failed to load schema");
+
+        // The schema should be pre-compiled (not lazy)
+        assert!(
+            compiled_schema.compiled.get().is_some(),
+            "from_path should store the compiled validator"
+        );
     }
 }

@@ -92,6 +92,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let reasoning_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "mistral-reasoning".to_string(),
+        model_name: "magistral-small-latest".into(),
+        model_provider_name: "mistral".into(),
+        credentials: HashMap::new(),
+    }];
+
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "mistral".to_string(),
         model_info: HashMap::from([(
@@ -105,7 +113,9 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: vec![],
+        reasoning_inference: reasoning_providers,
+        reasoning_usage_inference: vec![],
+        cache_input_tokens_inference: providers.clone(),
         embeddings: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,

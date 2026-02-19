@@ -3,14 +3,17 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
 use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
+use schemars::{JsonSchema, Schema, schema_for};
+use serde::{Deserialize, Serialize};
 
 use crate::error::AutopilotToolError;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use crate::fix_strict_tool_schema::fix_strict_tool_schema;
 
 /// Parameters for the flaky tool (visible to LLM).
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
 pub struct FlakyToolParams {
     /// Fail when attempt_number % fail_on_attempt == 0.
     pub fail_on_attempt: u32,
@@ -35,15 +38,19 @@ pub struct FlakyToolOutput {
 pub struct FlakyTool;
 
 impl ToolMetadata for FlakyTool {
-    type SideInfo = ();
+    type SideInfo = AutopilotSideInfo;
     type Output = FlakyToolOutput;
     type LlmParams = FlakyToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("flaky")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
+        Ok(fix_strict_tool_schema(schema_for!(FlakyToolParams)))
+    }
+
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Fails when attempt_number % fail_on_attempt == 0. Used for testing deterministic failures.",
         )
@@ -52,7 +59,9 @@ impl ToolMetadata for FlakyTool {
 
 #[async_trait]
 impl TaskTool for FlakyTool {
+    type ExtraState = ();
     async fn execute(
+        &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,

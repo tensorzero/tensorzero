@@ -41,7 +41,7 @@ insert_event() {
   local session_id="$2"
   local payload="$3"
 
-  # Use dollar-quoting ($$...$$) to avoid single-quote escaping issues in PostgreSQL
+  # Use dollar-quoting ($$...$$) to avoid single-quote escaping issues in Postgres
   psql "$POSTGRES_URL" -q -c "INSERT INTO autopilot.events (id, payload, session_id) VALUES ('$event_id', \$json\$$payload\$json\$::jsonb, '$session_id')"
 }
 

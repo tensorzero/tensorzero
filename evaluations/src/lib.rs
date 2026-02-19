@@ -13,8 +13,12 @@ pub use stats::{
     EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate, EvaluatorStats,
     PerEvaluatorStats,
 };
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::postgres::batching::PostgresBatchSender;
 pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
 pub use tensorzero_core::statistics_util::{mean, std_deviation};
+use tensorzero_core::utils::gateway::AppStateData;
 pub use types::*;
 
 use tensorzero_core::cache::CacheEnabledMode;
@@ -31,9 +35,11 @@ use tensorzero_core::endpoints::datasets::v1::{
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::inference::types::InputExt;
+use tensorzero_core::utils::gateway::setup_postgres;
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
-    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
+    config::Config, db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries, endpoints::datasets::Datapoint,
 };
 use tokio::{
     sync::{Semaphore, mpsc},
@@ -42,22 +48,40 @@ use tokio::{
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
-pub mod betting_confidence_sequences;
 pub mod cli;
 pub mod evaluators;
 pub mod helpers;
 pub mod stats;
 pub mod stopping;
-pub mod topk;
 pub mod types;
 
 /// Buffer size for the mpsc channel used to stream evaluation updates.
 /// This provides backpressure if the consumer can't keep up with the producer.
 const EVALUATION_CHANNEL_BUFFER_SIZE: usize = 128;
 
+/// Merge external tags with internal tags, with internal tags taking precedence.
+/// Returns an error if any external tags would be overridden by internal tags.
+pub(crate) fn merge_tags(
+    external_tags: &HashMap<String, String>,
+    internal_tags: HashMap<String, String>,
+) -> Result<HashMap<String, String>> {
+    let mut merged = external_tags.clone();
+    for (key, value) in internal_tags {
+        if merged.contains_key(&key) {
+            return Err(anyhow!(
+                "Tag collision: external tag '{key}' conflicts with internal evaluation tag. \
+                Reserved tag prefixes include 'tensorzero::evaluation', 'tensorzero::datapoint', \
+                'tensorzero::dataset'"
+            ));
+        }
+        merged.insert(key, value);
+    }
+    Ok(merged)
+}
+
 pub struct Clients {
     pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
-    pub clickhouse_client: ClickHouseConnectionInfo,
+    pub db: Arc<dyn DelegatingDatabaseQueries>,
 }
 
 /// High-level wrapper function for running evaluations called from the CLI.
@@ -124,17 +148,23 @@ pub async fn run_evaluation(
         );
     }
 
+    // TODO(#5754): Extract environment variable reading to a centralized location
     info!("Initializing evaluation environment");
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
     debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
     if let Some(postgres_url) = postgres_url.as_ref() {
-        debug!(postgres_url = %postgres_url, "PostgreSQL URL resolved");
+        debug!(postgres_url = %postgres_url, "Postgres URL resolved");
     } else {
-        debug!("PostgreSQL URL not provided");
+        debug!("Postgres URL not provided");
     }
-
+    let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
+    if let Some(valkey_url) = valkey_url.as_ref() {
+        debug!(valkey_url = %valkey_url, "Valkey URL resolved");
+    } else {
+        debug!("Valkey URL not provided");
+    }
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
@@ -143,6 +173,7 @@ pub async fn run_evaluation(
         false,
     )
     .await?;
+
     let clickhouse_client = ClickHouseConnectionInfo::new(
         &clickhouse_url,
         unwritten_config.gateway.observability.batch_writes.clone(),
@@ -151,6 +182,10 @@ pub async fn run_evaluation(
     let config = Box::pin(unwritten_config.into_config(&clickhouse_client)).await?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
+
+    let postgres_connection = setup_postgres(&config, postgres_url.as_deref()).await?;
+    let database =
+        DelegatingDatabaseConnection::new(clickhouse_client.clone(), postgres_connection.clone());
 
     // Look up evaluation config from the loaded config
     let evaluation_config = config
@@ -175,6 +210,7 @@ pub async fn run_evaluation(
             config_file: Some(args.config_file),
             postgres_config: postgres_url.map(PostgresConfig::Url),
             clickhouse_url: Some(clickhouse_url.clone()),
+            valkey_url,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -189,7 +225,7 @@ pub async fn run_evaluation(
 
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client: clickhouse_client.clone(),
+        db: Arc::new(database),
         evaluation_config,
         function_configs,
         dataset_name: args.dataset_name,
@@ -199,6 +235,7 @@ pub async fn run_evaluation(
         evaluation_run_id,
         inference_cache: args.inference_cache,
         concurrency: args.concurrency,
+        tags: HashMap::new(), // CLI doesn't have autopilot context
     };
 
     // Convert Vec<(String, f32)> to HashMap<String, f32> for precision_targets
@@ -266,13 +303,14 @@ pub async fn run_evaluation(
     // (since Tokio will wait for the `spawn_blocking` task to finish before shutting down the runtime).
     // We explicitly wait here for the batch writer to finish, so that `run_evaluation` can be called
     // from other places in the codebase (e.g. e2e tests), and subsequently query ClickHouse for the evaluation results.
-    if let Some(handle) = clickhouse_client.batcher_join_handle() {
-        drop(clickhouse_client);
-        tracing::info!("Waiting for evaluations ClickHouse batch writer to finish");
-        handle
-            .await
-            .map_err(|e| anyhow!("Error waiting for ClickHouse batch writer: {e}"))?;
-        tracing::info!("Evaluations ClickHouse batch writer finished");
+    if !result.batcher_join_handles.is_empty() {
+        tracing::info!("Waiting for evaluations batch writers to finish");
+        for handle in result.batcher_join_handles {
+            handle
+                .await
+                .map_err(|e| anyhow!("Error waiting for batch writer: {e}"))?;
+        }
+        tracing::info!("Evaluations batch writers finished");
     }
 
     Ok(())
@@ -300,15 +338,32 @@ pub async fn run_evaluation(
 /// - `evaluation_config`: The evaluation configuration
 #[instrument(skip_all, fields(evaluation_name = %params.evaluation_name, dataset_name = ?params.dataset_name, variant = ?params.variant, concurrency = %params.concurrency))]
 pub async fn run_evaluation_with_app_state(
-    app_state: tensorzero_core::utils::gateway::AppStateData,
+    app_state: AppStateData,
     params: RunEvaluationWithAppStateParams,
 ) -> Result<EvaluationStreamResult> {
-    // Create a fresh ClickHouse client for the evaluation (with independent batch writer)
+    // Create fresh ClickHouse and Postgres clients for the evaluation (with independent batch writers)
+    // so that evaluation writes don't interfere with the gateway's batch writers.
     let clickhouse_client = app_state
         .clickhouse_connection_info
         .recreate()
         .await
         .map_err(|e| anyhow!("Failed to create ClickHouse client for evaluation: {e}"))?;
+    let batch_writes_config = &app_state.config.gateway.observability.batch_writes;
+    let postgres_client = match app_state.postgres_connection_info.get_pool() {
+        Some(pool) if batch_writes_config.enabled => {
+            let batch_sender = Arc::new(
+                PostgresBatchSender::new(pool.clone(), batch_writes_config.clone()).map_err(
+                    |e| anyhow!("Failed to create Postgres batch sender for evaluation: {e}"),
+                )?,
+            );
+            PostgresConnectionInfo::new_with_pool_and_batcher(pool.clone(), batch_sender)
+        }
+        Some(pool) => PostgresConnectionInfo::new_with_pool(pool.clone()),
+        None => PostgresConnectionInfo::new_disabled(),
+    };
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(
+        DelegatingDatabaseConnection::new(clickhouse_client, postgres_client),
+    );
 
     // Create AppStateInferenceExecutor to call handlers directly without HTTP overhead
     let inference_executor = Arc::new(AppStateInferenceExecutor::new(app_state));
@@ -328,7 +383,7 @@ pub async fn run_evaluation_with_app_state(
     // Build the core args
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        clickhouse_client,
+        db,
         evaluation_config: Arc::new(params.evaluation_config),
         function_configs,
         dataset_name: params.dataset_name,
@@ -338,6 +393,7 @@ pub async fn run_evaluation_with_app_state(
         evaluation_run_id,
         inference_cache: params.cache_mode,
         concurrency: params.concurrency,
+        tags: params.tags,
     };
 
     // Run the evaluation
@@ -418,11 +474,14 @@ pub async fn run_evaluation_core_streaming(
 
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
+    // Extract batch writer handles before moving args.db into Clients
+    let batcher_join_handles = args.db.batcher_join_handles();
+
     // Build the semaphore and clients
     let semaphore = Arc::new(Semaphore::new(args.concurrency));
     let clients = Arc::new(Clients {
         inference_executor: args.inference_executor,
-        clickhouse_client: args.clickhouse_client,
+        db: args.db,
     });
 
     // Use the pre-resolved evaluation configuration
@@ -464,7 +523,7 @@ pub async fn run_evaluation_core_streaming(
             offset: Some(0),
             ..Default::default()
         };
-        list_datapoints(&clients.clickhouse_client, dataset_name.clone(), request)
+        list_datapoints(clients.db.as_ref(), dataset_name.clone(), request)
             .await?
             .datapoints
     } else {
@@ -472,13 +531,9 @@ pub async fn run_evaluation_core_streaming(
         let request = GetDatapointsRequest {
             ids: datapoint_ids.clone(),
         };
-        get_datapoints(
-            &clients.clickhouse_client,
-            /*dataset_name=*/ None,
-            request,
-        )
-        .await?
-        .datapoints
+        get_datapoints(clients.db.as_ref(), /*dataset_name=*/ None, request)
+            .await?
+            .datapoints
     };
     info!(
         dataset_size = dataset.len(),
@@ -515,9 +570,6 @@ pub async fn run_evaluation_core_streaming(
     // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
     let cancellation_tokens_arc = Arc::new(stopping_manager.get_tokens().clone());
 
-    // Save batcher_join_handle before moving clients into batch_params
-    let batcher_join_handle = clients.clickhouse_client.batcher_join_handle();
-
     // Build batch processing params
     let batch_params = ProcessBatchParams {
         clients,
@@ -529,6 +581,7 @@ pub async fn run_evaluation_core_streaming(
         inference_cache: args.inference_cache,
         semaphore,
         cancellation_tokens: cancellation_tokens_arc,
+        external_tags: Arc::new(args.tags),
     };
 
     // Process all datapoints across all variants
@@ -589,7 +642,7 @@ pub async fn run_evaluation_core_streaming(
         receiver,
         run_info,
         evaluation_config: evaluators,
-        batcher_join_handle,
+        batcher_join_handles,
     })
 }
 
@@ -646,6 +699,7 @@ struct InferDatapointParams<'a> {
     evaluation_name: &'a str,
     function_config: &'a EvaluationFunctionConfig,
     inference_cache: CacheEnabledMode,
+    external_tags: &'a HashMap<String, String>,
 }
 
 #[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name))]
@@ -661,6 +715,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         function_config,
         input,
         inference_cache,
+        external_tags,
     } = params;
 
     // Extract variant_name, internal_dynamic_variant_config, and dryrun from the variant enum
@@ -710,39 +765,48 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
             None
         }
     };
+    // Create internal tags for this evaluation inference
+    let internal_tags = HashMap::from([
+        (
+            "tensorzero::evaluation_run_id".to_string(),
+            evaluation_run_id.to_string(),
+        ),
+        (
+            "tensorzero::datapoint_id".to_string(),
+            datapoint.id().to_string(),
+        ),
+        (
+            "tensorzero::evaluation_name".to_string(),
+            evaluation_name.to_string(),
+        ),
+        (
+            "tensorzero::dataset_name".to_string(),
+            dataset_name.to_string(),
+        ),
+    ]);
+
+    // Merge external and internal tags, erroring on collision
+    let tags = merge_tags(external_tags, internal_tags)?;
+
     let params = ClientInferenceParams {
         function_name: Some(function_name.to_string()),
         variant_name,
         input: input.clone(),
-        tags: HashMap::from([
-            (
-                "tensorzero::evaluation_run_id".to_string(),
-                evaluation_run_id.to_string(),
-            ),
-            (
-                "tensorzero::datapoint_id".to_string(),
-                datapoint.id().to_string(),
-            ),
-            (
-                "tensorzero::evaluation_name".to_string(),
-                evaluation_name.to_string(),
-            ),
-            (
-                "tensorzero::dataset_name".to_string(),
-                dataset_name.to_string(),
-            ),
-        ]),
+        tags,
         dynamic_tool_params,
         output_schema: output_schema.cloned(),
         credentials: HashMap::new(),
         cache_options: get_cache_options(inference_cache),
         dryrun: Some(dryrun),
         episode_id: None,
+        namespace: None,
         model_name: None,
         stream: Some(false),
         params: InferenceParams::default(),
         include_original_response: false,
+        include_raw_response: false,
         include_raw_usage: false,
+        include_aggregated_response: false,
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
@@ -790,6 +854,8 @@ pub struct ProcessBatchParams {
     pub semaphore: Arc<Semaphore>,
     /// Cancellation tokens for evaluators (empty if no adaptive stopping)
     pub cancellation_tokens: Arc<stopping::CancellationTokens>,
+    /// External tags to apply to all inferences
+    pub external_tags: Arc<HashMap<String, String>>,
 }
 
 /// Result of processing a single (datapoint, variant) pair.
@@ -893,6 +959,7 @@ pub async fn process_batch(
             let inference_cache = params.inference_cache;
             let semaphore = params.semaphore.clone();
             let cancellation_tokens = params.cancellation_tokens.clone();
+            let external_tags = params.external_tags.clone();
             let variant = variant.clone();
             let variant_for_map = variant.clone(); // Clone before moving into async block
             let datapoint = datapoint.clone();
@@ -924,6 +991,7 @@ pub async fn process_batch(
                         function_config,
                         input: &input,
                         inference_cache,
+                        external_tags: &external_tags,
                     })
                     .await
                     .map_err(|e| {
@@ -942,6 +1010,7 @@ pub async fn process_batch(
                         clients: clients.clone(),
                         evaluation_run_id,
                         inference_cache,
+                        external_tags: external_tags.clone(),
                         send_feedback,
                     },
                     cancellation_tokens.as_ref(),
@@ -1107,5 +1176,172 @@ mod tests {
 
         // Check that evaluator3 is not in the failures list since it has no cutoff
         assert!(!failures.iter().any(|(name, _, _)| name == "evaluator3"));
+    }
+
+    #[test]
+    fn test_merge_tags_no_collision() {
+        let external_tags = HashMap::from([
+            (
+                "tensorzero::autopilot::session_id".to_string(),
+                "session-123".to_string(),
+            ),
+            (
+                "tensorzero::autopilot::tool_call_event_id".to_string(),
+                "event-456".to_string(),
+            ),
+            ("custom_tag".to_string(), "custom_value".to_string()),
+        ]);
+
+        let internal_tags = HashMap::from([
+            (
+                "tensorzero::evaluation_run_id".to_string(),
+                "eval-789".to_string(),
+            ),
+            ("tensorzero::datapoint_id".to_string(), "dp-001".to_string()),
+        ]);
+
+        let result = merge_tags(&external_tags, internal_tags);
+        assert!(result.is_ok());
+
+        let merged = result.unwrap();
+        assert_eq!(merged.len(), 5);
+        assert_eq!(
+            merged.get("tensorzero::autopilot::session_id"),
+            Some(&"session-123".to_string())
+        );
+        assert_eq!(
+            merged.get("tensorzero::evaluation_run_id"),
+            Some(&"eval-789".to_string())
+        );
+        assert_eq!(merged.get("custom_tag"), Some(&"custom_value".to_string()));
+    }
+
+    #[test]
+    fn test_merge_tags_with_collision_evaluation_run_id() {
+        let external_tags = HashMap::from([
+            (
+                "tensorzero::evaluation_run_id".to_string(),
+                "external-eval-id".to_string(),
+            ),
+            ("custom_tag".to_string(), "custom_value".to_string()),
+        ]);
+
+        let internal_tags = HashMap::from([(
+            "tensorzero::evaluation_run_id".to_string(),
+            "internal-eval-id".to_string(),
+        )]);
+
+        let result = merge_tags(&external_tags, internal_tags);
+        assert!(result.is_err());
+
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Tag collision"));
+        assert!(error_msg.contains("tensorzero::evaluation_run_id"));
+    }
+
+    #[test]
+    fn test_merge_tags_with_collision_datapoint_id() {
+        let external_tags = HashMap::from([
+            (
+                "tensorzero::datapoint_id".to_string(),
+                "external-dp-id".to_string(),
+            ),
+            ("tensorzero::autopilot".to_string(), "true".to_string()),
+        ]);
+
+        let internal_tags = HashMap::from([
+            (
+                "tensorzero::datapoint_id".to_string(),
+                "internal-dp-id".to_string(),
+            ),
+            (
+                "tensorzero::evaluation_name".to_string(),
+                "test-eval".to_string(),
+            ),
+        ]);
+
+        let result = merge_tags(&external_tags, internal_tags);
+        assert!(result.is_err());
+
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Tag collision"));
+        assert!(error_msg.contains("tensorzero::datapoint_id"));
+        assert!(error_msg.contains("Reserved tag prefixes"));
+    }
+
+    #[test]
+    fn test_merge_tags_empty_external() {
+        let external_tags = HashMap::new();
+
+        let internal_tags = HashMap::from([
+            (
+                "tensorzero::evaluation_run_id".to_string(),
+                "eval-123".to_string(),
+            ),
+            ("tensorzero::datapoint_id".to_string(), "dp-456".to_string()),
+        ]);
+
+        let result = merge_tags(&external_tags, internal_tags);
+        assert!(result.is_ok());
+
+        let merged = result.unwrap();
+        assert_eq!(merged.len(), 2);
+        assert_eq!(
+            merged.get("tensorzero::evaluation_run_id"),
+            Some(&"eval-123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_tags_empty_internal() {
+        let external_tags = HashMap::from([
+            (
+                "tensorzero::autopilot::session_id".to_string(),
+                "session-123".to_string(),
+            ),
+            ("custom_tag".to_string(), "value".to_string()),
+        ]);
+
+        let internal_tags = HashMap::new();
+
+        let result = merge_tags(&external_tags, internal_tags);
+        assert!(result.is_ok());
+
+        let merged = result.unwrap();
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged, external_tags);
+    }
+
+    #[test]
+    fn test_merge_tags_multiple_collisions() {
+        let external_tags = HashMap::from([
+            (
+                "tensorzero::evaluation_run_id".to_string(),
+                "external-eval".to_string(),
+            ),
+            (
+                "tensorzero::datapoint_id".to_string(),
+                "external-dp".to_string(),
+            ),
+            ("safe_tag".to_string(), "safe_value".to_string()),
+        ]);
+
+        let internal_tags = HashMap::from([
+            (
+                "tensorzero::evaluation_run_id".to_string(),
+                "internal-eval".to_string(),
+            ),
+            (
+                "tensorzero::datapoint_id".to_string(),
+                "internal-dp".to_string(),
+            ),
+        ]);
+
+        let result = merge_tags(&external_tags, internal_tags);
+        assert!(result.is_err());
+
+        // It should error on the first collision it encounters
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Tag collision"));
     }
 }

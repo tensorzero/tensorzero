@@ -5,6 +5,6 @@ export type FloatMetricFeedbackRow = {
   target_id: string;
   metric_name: string;
   value: number;
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
   timestamp: string;
 };

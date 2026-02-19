@@ -11,6 +11,7 @@ pub mod endpoints; // API endpoints
 pub mod error; // error handling
 pub mod evaluations; // evaluation
 pub mod experimentation;
+pub mod feature_flags;
 pub mod function; // types and methods for working with TensorZero functions
 pub mod howdy;
 pub mod http;
@@ -29,7 +30,6 @@ pub mod statistics_util; // statistical utilities (confidence intervals, etc.)
 pub mod stored_inference; // types and methods for working with stored inferences
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers; // e2e test utilities for external crates
-mod testing; // unit test utilities for tensorzero-core
 pub mod tool; // types and methods for working with TensorZero tools
 pub mod utils;
 pub mod variant; // types and methods for working with TensorZero variants

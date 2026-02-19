@@ -13,16 +13,12 @@ use std::{
 use tracing::Span;
 use tracing_futures::Instrument;
 
-use eventsource_stream::Eventsource;
 use futures::{Stream, StreamExt};
 use http::{HeaderMap, HeaderName, HeaderValue};
 use pin_project::pin_project;
-use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use reqwest::{Body, Response, StatusCode};
 use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
-use reqwest_eventsource::{
-    CannotCloneRequestError, Error as ReqwestEventSourceError, Event, RequestBuilderExt,
-};
+use reqwest_sse_stream::{Event, RequestBuilderExt, ReqwestSseStreamError};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::endpoints::status::TENSORZERO_VERSION;
@@ -30,6 +26,7 @@ use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    inference::types::usage::ApiType,
     model_table::CowNoClone,
 };
 
@@ -305,7 +302,7 @@ pub struct TensorzeroRequestBuilder<'a> {
 #[pin_project]
 pub struct TensorZeroEventSource {
     #[pin]
-    stream: Pin<Box<dyn Stream<Item = Result<Event, ReqwestEventSourceError>> + Send>>,
+    stream: Pin<Box<dyn Stream<Item = Result<Event, Box<ReqwestSseStreamError>>> + Send>>,
     ticket: LimitedClientTicket<'static>,
     span: Span,
     // We deliberately hold this span across the entire lifetime of the event source stream,
@@ -314,7 +311,7 @@ pub struct TensorZeroEventSource {
 }
 
 impl Stream for TensorZeroEventSource {
-    type Item = Result<Event, reqwest_eventsource::Error>;
+    type Item = Result<Event, Box<ReqwestSseStreamError>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -373,6 +370,24 @@ impl http_body::Body for TensorzeroBodyWrapper {
     }
 }
 
+#[pin_project]
+/// A wrapper over a bytes stream that holds on to a `LimitedClientTicket`
+/// We use this to extend the lifetime of our ticket until the stream is fully consumed
+pub struct TensorzeroBytesStream {
+    #[pin]
+    inner: std::pin::Pin<Box<dyn Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>>,
+    /// Held to keep the ticket alive until the stream is dropped
+    ticket: LimitedClientTicket<'static>,
+}
+
+impl Stream for TensorzeroBytesStream {
+    type Item = Result<bytes::Bytes, reqwest::Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.project().inner.poll_next(cx)
+    }
+}
+
 impl TensorzeroResponseWrapper {
     pub fn status(&self) -> StatusCode {
         self.response.status()
@@ -399,6 +414,14 @@ impl TensorzeroResponseWrapper {
 
     pub async fn bytes(self) -> Result<bytes::Bytes, reqwest::Error> {
         self.response.bytes().await
+    }
+
+    /// Returns a stream of bytes, preserving our `LimitedClientTicket` until the stream is fully consumed
+    pub fn bytes_stream(self) -> TensorzeroBytesStream {
+        TensorzeroBytesStream {
+            inner: Box::pin(self.response.bytes_stream()),
+            ticket: self.ticket,
+        }
     }
 
     /// Converts this `TensorzeroResponseWrapper` into an `http::Response<TensorzeroBodyWrapper>`.
@@ -517,11 +540,11 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         self
     }
 
-    pub fn eventsource(mut self) -> Result<TensorZeroEventSource, CannotCloneRequestError> {
+    pub async fn eventsource(mut self) -> Result<TensorZeroEventSource, ReqwestSseStreamError> {
         self = self.with_otlp_headers();
-        let event_source = self.builder.eventsource()?;
+        let event_source = self.builder.eventsource().await?;
         Ok(TensorZeroEventSource {
-            stream: Box::pin(event_source),
+            stream: Box::pin(event_source.map(|r| r.map_err(Box::new))),
             ticket: self.ticket.into_owned(),
             span: tensorzero_h2_workaround_span(),
             tensorzero_external_span: tracing::debug_span!(
@@ -535,27 +558,12 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         mut self,
     ) -> Result<
         (TensorZeroEventSource, http::HeaderMap),
-        (ReqwestEventSourceError, Option<http::HeaderMap>),
+        (ReqwestSseStreamError, Option<http::HeaderMap>),
     > {
         self = self.with_otlp_headers();
         let ticket = self.ticket.into_owned();
-        let builder = self.builder.header(ACCEPT, "text/event-stream");
-        let response = builder
-            .send()
-            .instrument(tensorzero_h2_workaround_span())
-            .await
-            .map_err(|e| (ReqwestEventSourceError::Transport(e), None))?;
-
-        let headers = response.headers().clone();
-        let response =
-            validate_event_stream_response(response).map_err(|e| (e, Some(headers.clone())))?;
-        let stream = response.bytes_stream().eventsource().map(|event| {
-            event
-                .map(Event::Message)
-                .map_err(ReqwestEventSourceError::from)
-        });
-        // Emit an initial Open event to mirror `reqwest_eventsource::EventSource` behavior.
-        let stream = futures::stream::once(async { Ok(Event::Open) }).chain(stream);
+        let (event_stream, headers) = self.builder.eventsource_with_headers().await?;
+        let stream = event_stream.map(|r| r.map_err(Box::new));
 
         Ok((
             TensorZeroEventSource {
@@ -590,6 +598,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
     pub async fn send_and_parse_json<T: DeserializeOwned>(
         mut self,
         provider_type: &str,
+        api_type: ApiType,
     ) -> Result<T, Error> {
         self = self.with_otlp_headers();
         let (client, request) = self.builder.build_split();
@@ -598,6 +607,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 status_code: None,
                 message: format!("Error building request: {}", DisplayOrDebugGateway::new(e)),
                 provider_type: provider_type.to_string(),
+                api_type,
                 raw_request: None,
                 raw_response: None,
             })
@@ -619,6 +629,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: provider_type.to_string(),
+                    api_type,
                     raw_request: raw_body.clone(),
                     raw_response: None,
                 })
@@ -639,6 +650,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: provider_type.to_string(),
+                    api_type,
                     raw_request: raw_body.clone(),
                     raw_response: None,
                 })
@@ -649,6 +661,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 status_code: Some(status_code),
                 message: format!("Non-successful status code for url `{url}`",),
                 provider_type: provider_type.to_string(),
+                api_type,
                 raw_request: raw_body.clone(),
                 raw_response: Some(raw_response.clone()),
             }));
@@ -663,6 +676,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
                 raw_request: raw_body.clone(),
                 raw_response: Some(raw_response.clone()),
                 provider_type: provider_type.to_string(),
+                api_type,
             })
         })?;
         Ok(res)
@@ -671,9 +685,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 
 // This is set high enough that it should never be hit for a normal model response.
 // Users can customize it via `gateway.global_outbound_http_timeout_ms` in the config file.
-pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(5 * 60);
-pub const DEFAULT_HTTP_CLIENT_TIMEOUT_STD: std::time::Duration =
-    std::time::Duration::from_secs(5 * 60);
+pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(15 * 60);
 
 fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error> {
     let mut http_client_builder = Client::builder()
@@ -710,40 +722,6 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
             message: format!("Failed to build HTTP client: {e}"),
         })
     })
-}
-
-#[expect(clippy::result_large_err)]
-fn validate_event_stream_response(response: Response) -> Result<Response, ReqwestEventSourceError> {
-    match response.status() {
-        StatusCode::OK => {}
-        status => {
-            return Err(ReqwestEventSourceError::InvalidStatusCode(status, response));
-        }
-    }
-    let content_type = if let Some(content_type) = response.headers().get(&CONTENT_TYPE) {
-        content_type
-    } else {
-        return Err(ReqwestEventSourceError::InvalidContentType(
-            HeaderValue::from_static(""),
-            response,
-        ));
-    };
-    // Check if the media type (ignoring parameters like charset) is text/event-stream
-    if content_type
-        .to_str()
-        .map(|value| {
-            let media_type = value.split(';').next().unwrap_or("").trim();
-            media_type.eq_ignore_ascii_case("text/event-stream")
-        })
-        .unwrap_or(false)
-    {
-        Ok(response)
-    } else {
-        Err(ReqwestEventSourceError::InvalidContentType(
-            content_type.clone(),
-            response,
-        ))
-    }
 }
 
 #[cfg(test)]
@@ -800,9 +778,6 @@ mod tests {
             match event {
                 Ok(_) => {}
                 Err(e) => {
-                    if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                        break;
-                    }
                     panic!("Error in streaming response: {e:?}");
                 }
             }
@@ -856,6 +831,7 @@ mod tests {
         let mut event_source = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
         process_stream(&mut event_source).await;
         drop(event_source);
@@ -895,6 +871,7 @@ mod tests {
                     let mut stream = client
                         .get(format!("http://{addr}/hello-stream"))
                         .eventsource()
+                        .await
                         .unwrap();
                     process_stream(&mut stream).await;
                 });
@@ -947,6 +924,7 @@ mod tests {
         let mut stream = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
         process_stream(&mut stream).await;
         drop(stream);
@@ -994,6 +972,7 @@ mod tests {
                     let mut stream = client
                         .get(format!("http://{addr}/hello-stream"))
                         .eventsource()
+                        .await
                         .unwrap();
                     process_stream(&mut stream).await;
                 });
@@ -1011,6 +990,7 @@ mod tests {
         let mut stream = client
             .get(format!("http://{addr}/hello-stream"))
             .eventsource()
+            .await
             .unwrap();
 
         process_stream(&mut stream).await;

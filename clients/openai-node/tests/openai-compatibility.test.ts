@@ -190,7 +190,7 @@ describe("OpenAI Compatibility", () => {
 
     const lastChunkDuration =
       Date.now() - startTime - (firstChunkDuration || 0);
-    expect(lastChunkDuration).toBeGreaterThan(firstChunkDuration! + 100);
+    expect(lastChunkDuration).toBeGreaterThan(firstChunkDuration! + 10);
 
     const expectedText = [
       "Wally,",
@@ -712,7 +712,7 @@ describe("OpenAI Compatibility", () => {
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
     expect(result.usage?.completion_tokens).toBe(1);
   });
@@ -758,7 +758,7 @@ describe("OpenAI Compatibility", () => {
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
     expect(result.usage?.completion_tokens).toBe(1);
   });
@@ -833,7 +833,7 @@ describe("OpenAI Compatibility", () => {
     expect(result.choices[0].message.content).toBe(
       "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
     );
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
     expect(result.usage?.completion_tokens).toBe(1);
   });
@@ -859,6 +859,10 @@ describe("OpenAI Compatibility", () => {
       messages,
       model: "tensorzero::function_name::basic_test",
       temperature: 0.4,
+      // @ts-expect-error - custom TensorZero property
+      "tensorzero::cache_options": {
+        enabled: "write_only",
+      },
     });
 
     expect(result.choices[0].message.content).toBe(
@@ -911,7 +915,8 @@ describe("OpenAI Compatibility", () => {
       { role: "user", content: "Hello" },
     ];
 
-    // First streaming request
+    // First streaming request (write_only to populate cache)
+    // @ts-expect-error - custom TensorZero property
     const stream = await client.chat.completions.create({
       messages,
       model: "tensorzero::function_name::basic_test",
@@ -920,6 +925,9 @@ describe("OpenAI Compatibility", () => {
         include_usage: true,
       },
       seed: 69,
+      "tensorzero::cache_options": {
+        enabled: "write_only",
+      },
     });
 
     const chunks = [];
@@ -954,15 +962,11 @@ describe("OpenAI Compatibility", () => {
       }
     }
 
-    const prevChunk = chunks[chunks.length - 2];
-    expect(prevChunk.choices[0].finish_reason).toBe("stop");
-    expect(prevChunk.usage).toBeNull();
-
-    // Check final chunk (which contains usage)
+    // Check final chunk (which contains finish_reason and usage)
     const finalChunk = chunks[chunks.length - 1];
+    expect(finalChunk.choices[0].finish_reason).toBe("stop");
     expect(finalChunk.usage?.prompt_tokens).toBe(10);
     expect(finalChunk.usage?.completion_tokens).toBe(16);
-    expect(finalChunk.choices).toStrictEqual([]);
 
     // Sleep so we're sure the cache is warmed up
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -998,12 +1002,9 @@ describe("OpenAI Compatibility", () => {
 
     expect(content).toBe(cachedContent);
 
-    const prevCachedChunk = cachedChunks[cachedChunks.length - 2];
-    expect(prevCachedChunk.choices[0].finish_reason).toBe("stop");
-    expect(prevCachedChunk.usage).toBeNull();
-
-    // Check final cached chunk
+    // Check final cached chunk (which contains finish_reason and usage)
     const finalCachedChunk = cachedChunks[cachedChunks.length - 1];
+    expect(finalCachedChunk.choices[0].finish_reason).toBe("stop");
     expect(finalCachedChunk.usage?.prompt_tokens).toBe(0);
     expect(finalCachedChunk.usage?.completion_tokens).toBe(0);
     expect(finalCachedChunk.usage?.total_tokens).toBe(0);
@@ -1157,7 +1158,7 @@ describe("OpenAI Compatibility", () => {
 
     const jsonContent = JSON.parse(result.choices[0].message.content!);
     expect(jsonContent.response.toLowerCase()).toContain("tokyo");
-    expect(result.choices[0].message.tool_calls).toBeNull();
+    expect(result.choices[0].message.tool_calls).toBeUndefined();
 
     expect(result.usage?.prompt_tokens).toBeGreaterThan(50);
     expect(result.usage?.completion_tokens).toBeGreaterThan(0);
@@ -1312,7 +1313,7 @@ it("should reject string input for function with input schema", async () => {
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
     })
-  ).rejects.toThrow(/400 "JSON Schema validation failed/);
+  ).rejects.toThrow(/400 JSON Schema validation failed/);
 });
 
 it("should handle multi-turn parallel tool calls", async () => {

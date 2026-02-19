@@ -300,11 +300,7 @@ export function prepareInferenceActionRequest(
 ): ClientInferenceParams {
   // Create base ClientInferenceParams with default values
   const baseParams: ClientInferenceParams = {
-    function_name: null,
-    model_name: null,
-    episode_id: null,
     input: { system: undefined, messages: [] },
-    stream: null,
     params: {
       chat_completion: {
         temperature: null,
@@ -317,9 +313,7 @@ export function prepareInferenceActionRequest(
         stop_sequences: null,
       },
     },
-    variant_name: null,
     provider_tools: [],
-    dryrun: null,
     internal: true,
     tags: {
       "tensorzero::ui": "true",
@@ -328,11 +322,12 @@ export function prepareInferenceActionRequest(
     credentials: new Map(),
     cache_options: {
       max_age_s: null,
-      enabled: "on",
+      enabled: "off",
     },
-    include_original_response: false,
+    include_original_response: false, // deprecated
+    include_raw_response: false,
     include_raw_usage: false,
-    internal_dynamic_variant_config: null,
+    include_aggregated_response: false,
   };
 
   // Prepare request based on source and function type
@@ -347,13 +342,13 @@ export function prepareInferenceActionRequest(
     // Handle datapoints from tensorzero-node (with StoredInput)
     const dynamicVariantInfo = args.editedVariantInfo
       ? variantInfoToUninitializedVariantInfo(args.editedVariantInfo)
-      : null;
+      : undefined;
 
     // Handle default function: use model_name instead of variant_name
     if (args.resource.function_name === DEFAULT_FUNCTION) {
       return {
         ...baseParams,
-        model_name: args.model_name || null,
+        model_name: args.model_name || undefined,
         input: args.resource.input,
         internal_dynamic_variant_config: dynamicVariantInfo,
       };
@@ -363,7 +358,7 @@ export function prepareInferenceActionRequest(
       ...baseParams,
       function_name: args.resource.function_name,
       input: args.resource.input,
-      variant_name: args.variant || null,
+      variant_name: args.variant || undefined,
       internal_dynamic_variant_config: dynamicVariantInfo,
     };
   } else {
@@ -434,6 +429,35 @@ export type VariantResponseInfo =
       output?: JsonInferenceOutput;
       usage?: InferenceUsage;
     };
+
+/**
+ * Extracts the demonstration value from inference output.
+ * For JSON inferences, returns the parsed output.
+ * For chat inferences, returns the raw output array.
+ */
+export function extractDemonstrationValue(
+  output: ContentBlockChatOutput[] | JsonInferenceOutput,
+) {
+  // JSON output has 'parsed' property, chat output is an array
+  if ("parsed" in output) {
+    return output.parsed;
+  }
+  return output;
+}
+
+/**
+ * Prepares demonstration feedback value from variant output.
+ * Returns the parsed output for JSON inferences, or the raw output for chat inferences.
+ */
+export function prepareDemonstrationFromVariantOutput(
+  variantOutput: VariantResponseInfo,
+) {
+  const output = variantOutput.output;
+  if (output === undefined) {
+    return undefined;
+  }
+  return extractDemonstrationValue(output);
+}
 
 function convertTemplate(
   template: PathWithContents | null,

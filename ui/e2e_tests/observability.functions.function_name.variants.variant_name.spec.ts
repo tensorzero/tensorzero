@@ -21,7 +21,7 @@ test("should show the default function variant detail page", async ({
   );
 
   // Verify the page loaded with expected content
-  await expect(page.getByText("Variant").first()).toBeVisible();
+  await expect(page.getByText("Variants").first()).toBeVisible();
   await expect(page.getByText("openai::gpt-4o-mini").first()).toBeVisible();
 
   // Assert that "error" is not in the page

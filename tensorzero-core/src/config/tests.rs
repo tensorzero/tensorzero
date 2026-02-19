@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 use std::{io::Write, path::PathBuf};
 use tempfile::NamedTempFile;
 use toml::de::DeTable;
@@ -116,7 +117,7 @@ async fn test_config_from_toml_table_valid() {
         .await
         .expect("Error getting embedding model")
         .unwrap();
-    assert_eq!(embedding_model.routing, vec!["openai".into()]);
+    assert_eq!(embedding_model.routing, vec![Arc::<str>::from("openai")]);
     assert_eq!(embedding_model.providers.len(), 1);
     let provider = embedding_model.providers.get("openai").unwrap();
     assert!(matches!(provider.inner, EmbeddingProviderConfig::OpenAI(_)));
@@ -131,7 +132,10 @@ async fn test_config_from_toml_table_valid() {
             assert_eq!(json_config.variants.len(), 7);
             match &json_config.variants["anthropic_promptA"].inner {
                 VariantConfig::ChatCompletion(chat_config) => {
-                    assert_eq!(chat_config.model(), &"anthropic::claude-3.5-sonnet".into());
+                    assert_eq!(
+                        chat_config.model(),
+                        &Arc::<str>::from("anthropic::claude-sonnet-4-5")
+                    );
                     assert_eq!(chat_config.weight(), Some(1.0));
                     assert_eq!(
                         chat_config
@@ -330,7 +334,7 @@ async fn test_config_from_toml_table_missing_models() {
             .await
             .unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "Model name 'gpt-4.1-mini' not found in model table".to_string()
+            message: "Model name 'gpt-5-mini' not found in model table".to_string()
         })
     );
 }
@@ -339,9 +343,9 @@ async fn test_config_from_toml_table_missing_models() {
 #[tokio::test]
 async fn test_config_from_toml_table_missing_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["claude-3-haiku-20240307"]
+    config["models"]["claude-haiku-4-5"]
         .as_table_mut()
-        .expect("Failed to get `models.claude-3-haiku-20240307` section")
+        .expect("Failed to get `models.claude-haiku-4-5` section")
         .remove("providers")
         .expect("Failed to remove `[providers]` section");
 
@@ -349,7 +353,7 @@ async fn test_config_from_toml_table_missing_providers() {
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "models.claude-3-haiku-20240307: missing field `providers`".to_string()
+            message: "models.claude-haiku-4-5: missing field `providers`".to_string()
         })
     );
 }
@@ -500,9 +504,9 @@ async fn test_config_from_toml_table_extra_variables_root() {
 #[tokio::test]
 async fn test_config_from_toml_table_extra_variables_models() {
     let mut config = get_sample_valid_config();
-    config["models"]["claude-3-haiku-20240307"]
+    config["models"]["claude-haiku-4-5"]
         .as_table_mut()
-        .expect("Failed to get `models.claude-3-haiku-20240307` section")
+        .expect("Failed to get `models.claude-haiku-4-5` section")
         .insert("enable_agi".into(), true.into());
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
@@ -522,18 +526,18 @@ async fn test_config_from_toml_table_blacklisted_models() {
     let claude_config = config["models"]
         .as_table_mut()
         .expect("Failed to get `models` section")
-        .remove("claude-3-haiku-20240307")
+        .remove("claude-haiku-4-5")
         .expect("Failed to remove claude config");
     config["models"]
         .as_table_mut()
         .expect("Failed to get `models` section")
-        .insert("anthropic::claude-3-haiku-20240307".into(), claude_config);
+        .insert("anthropic::claude-haiku-4-5".into(), claude_config);
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err().to_string();
     assert!(
         error.contains(
-            "models: Model name 'anthropic::claude-3-haiku-20240307' contains a reserved prefix"
+            "models: Model name 'anthropic::claude-haiku-4-5' contains a reserved prefix"
         ),
         "Unexpected error: {error}"
     );
@@ -543,9 +547,9 @@ async fn test_config_from_toml_table_blacklisted_models() {
 #[tokio::test]
 async fn test_config_from_toml_table_extra_variables_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["claude-3-haiku-20240307"]["providers"]["anthropic"]
+    config["models"]["claude-haiku-4-5"]["providers"]["anthropic"]
         .as_table_mut()
-        .expect("Failed to get `models.claude-3-haiku-20240307.providers.anthropic` section")
+        .expect("Failed to get `models.claude-haiku-4-5.providers.anthropic` section")
         .insert("enable_agi".into(), true.into());
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
@@ -591,7 +595,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
         FunctionConfig::Json(json_config) => &json_config.output_schema,
         FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     };
-    assert_eq!(output_schema, &StaticJSONSchema::default());
+    assert_eq!(output_schema, &JSONSchema::default());
     assert_eq!(output_schema.value, serde_json::json!({}));
 }
 
@@ -635,14 +639,14 @@ async fn test_config_from_toml_table_extra_variables_metrics() {
 #[tokio::test]
 async fn test_config_validate_model_empty_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec![]);
+    config["models"]["gpt-5-mini"]["routing"] = toml::Value::Array(vec![]);
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err();
     assert!(
         error
             .to_string()
-            .contains("`models.gpt-4.1-mini`: `routing` must not be empty")
+            .contains("`models.gpt-5-mini`: `routing` must not be empty")
     );
 }
 
@@ -650,20 +654,20 @@ async fn test_config_validate_model_empty_providers() {
 #[tokio::test]
 async fn test_config_validate_model_duplicate_routing_entry() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-4.1-mini"]["routing"] =
+    config["models"]["gpt-5-mini"]["routing"] =
         toml::Value::Array(vec!["openai".into(), "openai".into()]);
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err().to_string();
-    assert!(error.contains("`models.gpt-4.1-mini.routing`: duplicate entry `openai`"));
+    assert!(error.contains("`models.gpt-5-mini.routing`: duplicate entry `openai`"));
 }
 
 /// Ensure that the config validation fails when a routing entry does not exist in providers
 #[tokio::test]
 async fn test_config_validate_model_routing_entry_not_in_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
+    config["models"]["gpt-5-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-5-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
 }
 
 /// Ensure that the config loading fails when the system schema does not exist
@@ -1128,8 +1132,8 @@ async fn test_config_validate_model_name_tensorzero_prefix() {
     let old_model_entry = config["models"]
         .as_table_mut()
         .unwrap()
-        .remove("gpt-4.1-mini")
-        .expect("Did not find model `gpt-4.1-mini`");
+        .remove("gpt-5-mini")
+        .expect("Did not find model `gpt-5-mini`");
     config["models"]
         .as_table_mut()
         .unwrap()
@@ -1255,18 +1259,18 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
     let mut config = get_sample_valid_config();
 
     // Rename an existing provider to start with `tensorzero::`
-    let old_openai_provider = config["models"]["gpt-4.1-mini"]["providers"]
+    let old_openai_provider = config["models"]["gpt-5-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .remove("openai")
-        .expect("Did not find provider `openai` under `gpt-4.1-mini`");
-    config["models"]["gpt-4.1-mini"]["providers"]
+        .expect("Did not find provider `openai` under `gpt-5-mini`");
+    config["models"]["gpt-5-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .insert("tensorzero::openai".to_string(), old_openai_provider);
 
     // Update the routing entry to match the new provider name
-    let routing = config["models"]["gpt-4.1-mini"]["routing"]
+    let routing = config["models"]["gpt-5-mini"]["routing"]
         .as_array_mut()
         .expect("Expected routing to be an array");
     for entry in routing.iter_mut() {
@@ -1277,7 +1281,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
 
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-5-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
 }
 
 /// Ensure that get_templates returns the correct templates
@@ -1488,7 +1492,7 @@ async fn test_load_bad_extra_body_delete() {
 
         [functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
         type = "chat_completion"
-        model = "anthropic::claude-sonnet-4-5-20250929"
+        model = "anthropic::claude-sonnet-4-5"
         max_tokens = 2048
         extra_body = [{ pointer = "/invalid-field-should-be-deleted", delete = false }]
         "#;
@@ -1512,7 +1516,7 @@ type = "chat"
 
 [functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929]
 type = "chat_completion"
-model = "anthropic::claude-sonnet-4-5-20250929"
+model = "anthropic::claude-sonnet-4-5"
 max_tokens = 2048
 
 [functions.bash_assistant.variants.anthropic_claude_4_5_sonnet_20250929.extra_body]
@@ -1555,7 +1559,7 @@ async fn test_config_load_shorthand_models_only() {
         [functions.generate_draft.variants.openai_promptA]
         type = "chat_completion"
         weight = 0.9
-        model = "openai::gpt-4.1-mini"
+        model = "openai::gpt-5-mini"
         "#
             .as_bytes(),
         )
@@ -1678,7 +1682,7 @@ async fn test_bedrock_err_no_auto_detect_region() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
@@ -1687,7 +1691,7 @@ async fn test_bedrock_err_no_auto_detect_region() {
         .expect_err("Failed to load bedrock");
     let err_msg = err.to_string();
     assert!(
-        err_msg.contains("requires a region to be provided, or `allow_auto_detect_region = true`"),
+        err_msg.contains("aws_bedrock provider requires a region"),
         "Unexpected error message: {err_msg}"
     );
 }
@@ -1708,17 +1712,17 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-        allow_auto_detect_region = true
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "sdk"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
-        .expect_err("Failed to load bedrock");
+        .expect_err("Expected error when SDK cannot determine region");
     let err_msg = err.to_string();
     assert!(
-        err_msg.contains("Failed to determine AWS region."),
+        err_msg.contains("Failed to determine AWS region"),
         "Unexpected error message: {err_msg}"
     );
 }
@@ -1742,16 +1746,218 @@ async fn test_bedrock_region_and_allow_auto() {
 
         [models.my-model.providers.aws-bedrock]
         type = "aws_bedrock"
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
-        allow_auto_detect_region = true
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
         region = "us-east-2"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
-        .expect("Failed to construct config with valid AWS bedrock provider");
+        .expect("Failed to construct config with valid AWS Bedrock provider");
 }
+// ===== AWS Dynamic Credentials Config Parsing Tests =====
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_dynamic_region_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "dynamic::aws_region"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - dynamic region is valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Dynamic region should be valid config");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_env_region_missing_var_errors() {
+    // Use a unique env var name that won't exist
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "env::TENSORZERO_TEST_NONEXISTENT_REGION_VAR"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Should error when env var doesn't exist");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("TENSORZERO_TEST_NONEXISTENT_REGION_VAR"),
+        "Error should mention the missing env var: {err_msg}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_dynamic_credentials_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        secret_access_key = "dynamic::aws_secret_key"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - dynamic credentials are valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Dynamic credentials should be valid config");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_dynamic_credentials_with_session_token_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        secret_access_key = "dynamic::aws_secret_key"
+        session_token = "dynamic::aws_session_token"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - dynamic credentials with session token are valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Dynamic credentials with session token should be valid config");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_mixed_credential_sources_errors() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        secret_access_key = "env::AWS_SECRET_ACCESS_KEY"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Mixed credential sources should error");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("same source type"),
+        "Error should mention same source type requirement: {err_msg}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_access_key_without_secret_errors() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("access_key without secret should error");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("secret_access_key"),
+        "Error should mention secret_access_key: {err_msg}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_session_token_mismatch_errors() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "us-east-1"
+        access_key_id = "dynamic::aws_access_key"
+        secret_access_key = "dynamic::aws_secret_key"
+        session_token = "env::AWS_SESSION_TOKEN"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Session token source mismatch should error");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("session_token"),
+        "Error should mention session_token: {err_msg}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_dynamic_endpoint_url_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "us-east-1"
+        endpoint_url = "dynamic::aws_endpoint"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - dynamic endpoint is valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Dynamic endpoint_url should be valid config");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bedrock_static_endpoint_url_parses() {
+    let config_str = r#"
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-haiku-4-5-v1:0"
+        region = "us-east-1"
+        endpoint_url = "https://bedrock-runtime.us-east-1.amazonaws.com"
+        "#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    // Should parse successfully - static endpoint is valid
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Static endpoint_url should be valid config");
+}
+
 #[tokio::test]
 async fn test_config_load_no_config_file() {
     let err = &ConfigFileGlob::new_from_path(Path::new("nonexistent.toml"))
@@ -2219,7 +2425,7 @@ async fn test_gcp_no_endpoint_and_model() {
         type = "gcp_vertex_gemini"
         location = "us-central1"
         project_id = "test-project"
-        model_id = "gemini-2.0-flash-001"
+        model_id = "gemini-2.5-flash"
         endpoint_id = "4094940393049"
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
@@ -2411,7 +2617,7 @@ async fn deny_timeout_with_default_global_timeout() {
 
     assert_eq!(
         err.to_string(),
-        "The `timeouts.non_streaming.total_ms` value `99999999` is greater than `gateway.global_outbound_http_timeout_ms`: `300000`"
+        "The `timeouts.non_streaming.total_ms` value `99999999` is greater than `gateway.global_outbound_http_timeout_ms`: `900000`"
     );
 }
 
@@ -2638,7 +2844,7 @@ async fn deny_bad_timeouts_streaming_field() {
 
     assert_eq!(
         err.to_string(),
-        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
+        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms` or `total_ms`"
     );
 }
 
@@ -3252,4 +3458,112 @@ async fn test_nested_skip_credential_validation() {
     })
     .await;
     assert!(!skip_credential_validation());
+}
+
+#[tokio::test]
+async fn test_experimentation_with_namespaces_valid() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "uniform"
+
+        [functions.test_function.experimentation.namespaces.mobile]
+        type = "static_weights"
+        candidate_variants = {"variant_a" = 1.0}
+
+        [functions.test_function.experimentation.namespaces.web]
+        type = "uniform"
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse TOML config");
+    let loaded = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Config with valid namespace experimentation should load successfully");
+
+    let func = loaded
+        .functions
+        .get("test_function")
+        .expect("test_function should exist");
+    let exp = func.experimentation_with_namespaces();
+    assert!(
+        exp.has_namespace_config("mobile"),
+        "Should have a `mobile` namespace config"
+    );
+    assert!(
+        exp.has_namespace_config("web"),
+        "Should have a `web` namespace config"
+    );
+}
+
+// TODO: implement track-and-stop for namespaces, delete
+#[tokio::test]
+async fn test_experimentation_namespace_track_and_stop_rejected() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [metrics.test_metric]
+        type = "boolean"
+        optimize = "max"
+        level = "inference"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "uniform"
+
+        [functions.test_function.experimentation.namespaces.mobile]
+        type = "track_and_stop"
+        metric = "test_metric"
+        candidate_variants = ["variant_a", "variant_b"]
+        min_samples_per_variant = 10
+        delta = 0.05
+        epsilon = 0.1
+        update_period_s = 60
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse TOML config");
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Namespace with track_and_stop should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("track_and_stop"),
+        "Error should mention `track_and_stop`: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("mobile"),
+        "Error should mention the namespace name: {err_msg}"
+    );
 }

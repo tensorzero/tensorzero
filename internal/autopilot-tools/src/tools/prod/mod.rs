@@ -3,6 +3,7 @@
 //! This module contains production-ready tools that can be used by autopilot
 //! to perform actions like inference, feedback, and other operations.
 
+mod auto_reject_tool_call;
 mod create_datapoints;
 mod create_datapoints_from_inferences;
 mod delete_datapoints;
@@ -10,15 +11,19 @@ mod feedback;
 mod get_config;
 mod get_datapoints;
 mod get_feedback_by_variant;
+mod get_inferences;
 mod get_latest_feedback_by_metric;
 mod inference;
 mod launch_optimization_workflow;
 mod list_datapoints;
+mod list_datasets;
 mod list_inferences;
 mod run_evaluation;
 mod update_datapoints;
+mod upload_dataset;
 mod write_config;
 
+pub use auto_reject_tool_call::AutoRejectToolCallTool;
 pub use create_datapoints::{CreateDatapointsTool, CreateDatapointsToolParams};
 pub use create_datapoints_from_inferences::{
     CreateDatapointsFromInferencesTool, CreateDatapointsFromInferencesToolParams,
@@ -28,6 +33,7 @@ pub use feedback::{FeedbackTool, FeedbackToolParams};
 pub use get_config::{GetConfigTool, GetConfigToolParams};
 pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
 pub use get_feedback_by_variant::{GetFeedbackByVariantTool, GetFeedbackByVariantToolParams};
+pub use get_inferences::{GetInferencesTool, GetInferencesToolParams};
 pub use get_latest_feedback_by_metric::{
     GetLatestFeedbackByMetricTool, GetLatestFeedbackByMetricToolParams,
 };
@@ -37,7 +43,14 @@ pub use launch_optimization_workflow::{
     LaunchOptimizationWorkflowToolParams,
 };
 pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
+pub use list_datasets::{ListDatasetsTool, ListDatasetsToolParams};
 pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};
 pub use run_evaluation::{RunEvaluationTool, RunEvaluationToolParams};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};
-pub use write_config::{WriteConfigTool, WriteConfigToolParams};
+pub use upload_dataset::{
+    UploadDatasetTool, UploadDatasetToolOutput, UploadDatasetToolParams, upload_dataset_parquet,
+};
+pub use write_config::{
+    EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
+    UpsertVariantPayload, WriteConfigTool, WriteConfigToolParams,
+};

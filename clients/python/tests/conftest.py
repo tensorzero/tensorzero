@@ -1,11 +1,10 @@
-# pyright: reportDeprecated=false
 import inspect
 import json
 import os
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Union, cast
+from typing import Any, Dict, Iterator, List, Optional
 
 import pytest
 import pytest_asyncio
@@ -14,11 +13,17 @@ from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatCompletionInferenceParams,
-    ChatDatapointInsert,
+    ContentBlockChatOutput,
     ContentBlockChatOutputText,
+    CreateDatapointRequestChat,
+    CreateDatapointRequestJson,
     FunctionTool,
     InferenceParams,
-    JsonDatapointInsert,
+    Input,
+    InputMessage,
+    InputMessageContentTemplate,
+    InputMessageContentText,
+    JsonDatapointOutputUpdate,
     JsonInferenceOutput,
     RenderedSample,
     StoredInferenceChat,
@@ -44,6 +49,7 @@ TEST_CONFIG_FILE = os.path.join(
 )
 
 CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
+POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests"
 
 
 class ClientType(Enum):
@@ -58,6 +64,30 @@ def embedded_sync_client():
         clickhouse_url=CLICKHOUSE_URL,
     ) as client:
         yield client
+
+
+@pytest.fixture
+def embedded_sync_client_using_postgres():
+    original_enable_postgres_read_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ", None)
+    original_enable_postgres_write_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE", None)
+
+    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ"] = "1"
+    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE"] = "1"
+
+    with TensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url=CLICKHOUSE_URL,
+        postgres_url=POSTGRES_URL,
+    ) as client:
+        yield client
+
+    # Reset flags
+    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ", None)
+    if original_enable_postgres_read_flag:
+        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ"] = original_enable_postgres_read_flag
+    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE", None)
+    if original_enable_postgres_write_flag:
+        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE"] = original_enable_postgres_write_flag
 
 
 @pytest_asyncio.fixture
@@ -278,38 +308,60 @@ async def async_openai_client(request: FixtureRequest):
             yield client
 
 
-def _load_json_datapoints_from_fixture(fixture_path: Path, dataset_filter: str) -> List[JsonDatapointInsert]:
+def _parse_input_message_content(content_dict: Dict[str, Any]) -> Any:
+    """Parse a raw content dict into the appropriate InputMessageContent type."""
+    content_type = content_dict.get("type")
+    if content_type == "text":
+        return InputMessageContentText(text=content_dict["text"])
+    elif content_type == "template":
+        return InputMessageContentTemplate(
+            name=content_dict.get("name", ""),
+            arguments=content_dict.get("arguments", {}),
+        )
+    else:
+        return InputMessageContentText(text=str(content_dict))
+
+
+def _parse_input(input_data: Dict[str, Any]) -> Input:
+    """Parse a raw input dict into an Input object."""
+    messages: Optional[List[InputMessage]] = None
+    if "messages" in input_data:
+        messages = []
+        for msg in input_data["messages"]:
+            content = [_parse_input_message_content(c) for c in msg.get("content", [])]
+            messages.append(InputMessage(role=msg["role"], content=content))
+    return Input(system=input_data.get("system"), messages=messages)
+
+
+def _load_json_datapoints_from_fixture(fixture_path: Path, dataset_filter: str) -> List[CreateDatapointRequestJson]:
     """Load JSON datapoints from a JSONL fixture file."""
-    datapoints: List[JsonDatapointInsert] = []
+    datapoints: List[CreateDatapointRequestJson] = []
     with open(fixture_path) as f:
         for line in f:
             if not line.strip():
                 continue
             data: Dict[str, Any] = json.loads(line)
-            # Only load datapoints for the specified dataset
             if data.get("dataset_name") != dataset_filter:
                 continue
 
-            # Parse the JSON strings in the fixture
-            input_data: Any = json.loads(data["input"])
+            input_data: Dict[str, Any] = json.loads(data["input"])
 
-            # Handle output - it may be in {"raw": "...", "parsed": {...}} format
-            output_data: Optional[Any] = None
+            # Handle output - convert to JsonDatapointOutputUpdate(raw=...)
+            output: Optional[JsonDatapointOutputUpdate] = None
             if data.get("output"):
                 parsed_output: Any = json.loads(data["output"])
-                # If output has "parsed" field, extract it; otherwise use as-is
                 if isinstance(parsed_output, dict) and "parsed" in parsed_output:
-                    output_data = cast(Any, parsed_output["parsed"])
+                    output = JsonDatapointOutputUpdate(raw=json.dumps(parsed_output["parsed"]))
                 else:
-                    output_data = cast(Any, parsed_output)
+                    output = JsonDatapointOutputUpdate(raw=json.dumps(parsed_output))
 
             output_schema: Optional[Any] = json.loads(data["output_schema"]) if data.get("output_schema") else None
 
             datapoints.append(
-                JsonDatapointInsert(
+                CreateDatapointRequestJson(
                     function_name=data["function_name"],
-                    input=input_data,
-                    output=output_data,
+                    input=_parse_input(input_data),
+                    output=output,
                     output_schema=output_schema,
                     tags=data.get("tags"),
                 )
@@ -317,27 +369,34 @@ def _load_json_datapoints_from_fixture(fixture_path: Path, dataset_filter: str) 
     return datapoints
 
 
-def _load_chat_datapoints_from_fixture(fixture_path: Path, dataset_filter: str) -> List[ChatDatapointInsert]:
+def _load_chat_datapoints_from_fixture(fixture_path: Path, dataset_filter: str) -> List[CreateDatapointRequestChat]:
     """Load Chat datapoints from a JSONL fixture file."""
-    datapoints: List[ChatDatapointInsert] = []
+    datapoints: List[CreateDatapointRequestChat] = []
     with open(fixture_path) as f:
         for line in f:
             if not line.strip():
                 continue
             data: Dict[str, Any] = json.loads(line)
-            # Only load datapoints for the specified dataset
             if data.get("dataset_name") != dataset_filter:
                 continue
 
-            # Parse the JSON strings in the fixture
-            input_data: Any = json.loads(data["input"])
-            output_data: Optional[Any] = json.loads(data["output"]) if data.get("output") else None
+            input_data: Dict[str, Any] = json.loads(data["input"])
+
+            # Handle output - convert to list of ContentBlockChatOutput
+            output: Optional[List[ContentBlockChatOutput]] = None
+            if data.get("output"):
+                raw_output: List[Dict[str, Any]] = json.loads(data["output"])
+                output = [
+                    ContentBlockChatOutputText(text=block.get("text", ""))
+                    for block in raw_output
+                    if block.get("type") == "text"
+                ]
 
             datapoints.append(
-                ChatDatapointInsert(
+                CreateDatapointRequestChat(
                     function_name=data["function_name"],
-                    input=input_data,
-                    output=output_data,
+                    input=_parse_input(input_data),
+                    output=output,
                     tags=data.get("tags"),
                 )
             )
@@ -366,24 +425,18 @@ def evaluation_datasets(
     json_fixture_path = fixtures_dir / "json_datapoint_fixture.jsonl"
     json_datapoints = _load_json_datapoints_from_fixture(json_fixture_path, "extract_entities_0.8")
     if json_datapoints:
-        embedded_sync_client.create_datapoints_legacy(
+        embedded_sync_client.create_datapoints(
             dataset_name=dataset_mapping["extract_entities_0.8"],
-            datapoints=cast(
-                Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
-                json_datapoints,
-            ),
+            requests=json_datapoints,
         )
 
     # Load and insert Chat datapoints (for haiku evaluation)
     chat_fixture_path = fixtures_dir / "chat_datapoint_fixture.jsonl"
     chat_datapoints = _load_chat_datapoints_from_fixture(chat_fixture_path, "good-haikus-no-output")
     if chat_datapoints:
-        embedded_sync_client.create_datapoints_legacy(
+        embedded_sync_client.create_datapoints(
             dataset_name=dataset_mapping["good-haikus-no-output"],
-            datapoints=cast(
-                Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
-                chat_datapoints,
-            ),
+            requests=chat_datapoints,
         )
 
     yield dataset_mapping

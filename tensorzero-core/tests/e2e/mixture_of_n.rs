@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::inference::types::{
     Role, StoredContentBlock, StoredRequestMessage, Text, Unknown, Usage,
@@ -14,22 +14,22 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_non_stream() {
+async fn test_mixture_of_n_dummy_candidates_dummy_judge_non_stream() {
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
-    e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
-    e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, true, false).await;
+    test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
+    test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, true, false).await;
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_streaming() {
+async fn test_mixture_of_n_dummy_candidates_dummy_judge_streaming() {
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
-    e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
-    e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, true, true).await;
+    test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
+    test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, true, true).await;
 }
 
-async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
+async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
     random_input: Uuid,
     should_be_cached: bool,
     stream: bool,
@@ -58,7 +58,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload);
     let (inference_id, output_usage) = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = builder.eventsource().await.unwrap();
         let mut first_inference_id = None;
         let mut last_chunk = None;
         while let Some(chunk) = chunks.next().await {
@@ -212,7 +212,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             }
         );
     } else {
-        // Each model uses 1 token
+        // Non-streaming: dummy provider returns 1 output token per model (content.len() = 1 Vec element)
         assert_eq!(
             usage_sum,
             Usage {
@@ -249,20 +249,20 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_non_stream() {
-    e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(false).await;
+async fn test_mixture_of_n_dummy_candidates_real_judge_non_stream() {
+    test_mixture_of_n_dummy_candidates_real_judge_inner(false).await;
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_streaming() {
-    e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(true).await;
+async fn test_mixture_of_n_dummy_candidates_real_judge_streaming() {
+    test_mixture_of_n_dummy_candidates_real_judge_inner(true).await;
 }
 
 /// This test calls a function which currently uses mixture of n.
 /// We call 2 models that each give a different response, and then use GPT4o-mini to fuse them.
 /// Besides checking that the response is well-formed and everything is stored correctly,
 /// we also check that the input to GPT4o-mini is correct (as this is the most critical part).
-async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
+async fn test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -288,7 +288,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
         .json(&payload);
 
     let (content, inference_id) = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = builder.eventsource().await.unwrap();
         let mut first_inference_id = None;
         while let Some(chunk) = chunks.next().await {
             println!("chunk: {chunk:?}");
@@ -562,7 +562,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]
-async fn e2e_test_mixture_of_n_json_real_judge() {
+async fn test_mixture_of_n_json_real_judge() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -782,7 +782,7 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_extra_body() {
+async fn test_mixture_of_n_extra_body() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -917,7 +917,7 @@ async fn e2e_test_mixture_of_n_extra_body() {
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
+async fn test_mixture_of_n_bad_fuser_streaming() {
     let episode_id = Uuid::now_v7();
     let payload = json!({
         "function_name": "mixture_of_n",
@@ -940,7 +940,7 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
         .post(get_gateway_endpoint("/inference"))
         .json(&payload);
 
-    let mut chunks = builder.eventsource().unwrap();
+    let mut chunks = builder.eventsource().await.unwrap();
     let mut first_inference_id = None;
     let mut chunk_data = vec![];
     while let Some(chunk) = chunks.next().await {
@@ -962,7 +962,7 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
         chunk_data.push(chunk_json);
     }
     assert_eq!(chunk_data.len(), 2);
-    // Content and initial usage data are in the same chunk in the fake stream
+    // First chunk contains content only (usage/finish_reason are in the final chunk)
     assert_eq!(
         chunk_data[0],
         serde_json::json!({
@@ -970,14 +970,9 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
             "episode_id": episode_id.to_string(),
             "variant_name":"mixture_of_n_variant_bad_fuser",
             "content":[{"type": "text", "id": "0", "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."}],
-            // Usage data only includes information from the chosen candidate
-            // The remaining usage information is added in the second chunk
-            "usage":{"input_tokens":10,"output_tokens":1},
-            "finish_reason": "stop"
         })
     );
-    // We create a new chunk with 'extra_usage' information, since we didn't have any chunks
-    // with both usage information and empty content.
+    // Final chunk contains usage (accumulated from all candidates) and finish_reason
     assert_eq!(
         chunk_data[1],
         serde_json::json!({
@@ -985,7 +980,9 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
             "episode_id": episode_id.to_string(),
             "variant_name":"mixture_of_n_variant_bad_fuser",
             "content":[],
-            "usage":{"input_tokens":10,"output_tokens":1},
+            // Usage is accumulated from all 2 candidates (10+10 input tokens, 1+1 output tokens)
+            "usage":{"input_tokens":20,"output_tokens":2},
+            "finish_reason": "stop"
         }),
     );
 
@@ -1037,6 +1034,7 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
         .unwrap();
     assert!(snapshot_hash.is_string());
 
+    // Each model inference should have its INDIVIDUAL usage, not aggregated
     assert_eq!(
         first_result,
         serde_json::json!({
@@ -1047,10 +1045,10 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
           "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}",
           "model_name": "test",
           "model_provider_name": "good",
-          "input_tokens": 20,
-          "output_tokens": 2,
-          "response_time_ms": 0,
-          "ttft_ms": 0,
+          "input_tokens": 10,
+          "output_tokens": 1,
+          "response_time_ms": 100,
+          "ttft_ms": 100,
           "system": "You are a helpful and friendly assistant named AskJeeves",
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
@@ -1091,9 +1089,9 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
 }
 
 #[tokio::test]
-async fn e2e_test_mixture_of_n_single_candidate_streaming() {
+async fn test_mixture_of_n_single_candidate_streaming() {
     let episode_id = Uuid::now_v7();
-    e2e_test_mixture_of_n_single_candidate_inner(true, episode_id, json!({
+    test_mixture_of_n_single_candidate_inner(true, episode_id, json!({
         "function_name": "mixture_of_n_single_candidate",
         "variant_name": "mixture_of_n_variant",
         "episode_id": episode_id,
@@ -1111,16 +1109,12 @@ async fn e2e_test_mixture_of_n_single_candidate_streaming() {
     })).await;
 }
 
-async fn e2e_test_mixture_of_n_single_candidate_inner(
-    stream: bool,
-    episode_id: Uuid,
-    payload: Value,
-) {
+async fn test_mixture_of_n_single_candidate_inner(stream: bool, episode_id: Uuid, payload: Value) {
     let builder = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload);
     let inference_id = if stream {
-        let mut chunks = builder.eventsource().unwrap();
+        let mut chunks = builder.eventsource().await.unwrap();
         let mut first_inference_id = None;
         let mut chunk_data = vec![];
         while let Some(chunk) = chunks.next().await {
@@ -1141,8 +1135,8 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
             }
             chunk_data.push(chunk_json);
         }
-        assert_eq!(chunk_data.len(), 1);
-        // Content and usage data are in the same chunk in the fake stream
+        assert_eq!(chunk_data.len(), 2);
+        // First chunk contains content only
         assert_eq!(
             chunk_data[0],
             serde_json::json!({
@@ -1150,6 +1144,16 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
                 "episode_id": episode_id.to_string(),
                 "variant_name":"mixture_of_n_variant",
                 "content":[{"type": "text", "id": "0", "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."}],
+            })
+        );
+        // Final chunk contains usage and finish_reason
+        assert_eq!(
+            chunk_data[1],
+            serde_json::json!({
+                "inference_id": first_inference_id.unwrap().to_string(),
+                "episode_id": episode_id.to_string(),
+                "variant_name":"mixture_of_n_variant",
+                "content":[],
                 "usage":{"input_tokens":10,"output_tokens":1},
                 "finish_reason": "stop"
             })
@@ -1226,8 +1230,8 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
           "model_provider_name": "good",
           "input_tokens": 10,
           "output_tokens": 1,
-          "response_time_ms": 0,
-          "ttft_ms": 0,
+          "response_time_ms": 100,
+          "ttft_ms": 100,
           "system": "You are a helpful and friendly assistant named AskJeeves",
           "input_messages": "[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Please write me a sentence about Megumin making an explosion\"}]}]",
           "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",

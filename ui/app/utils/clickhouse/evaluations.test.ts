@@ -3,7 +3,7 @@ import {
   getEvaluationsForDatapoint,
   getEvaluationResults,
 } from "./evaluations.server";
-import type { ChatEvaluationResultWithVariant } from "./evaluations";
+import type { ChatEvaluationResultRow } from "~/types/tensorzero";
 import { fail } from "assert";
 
 // These tests still provide value since they validate the parsed results; we will remove them once we start returning
@@ -13,7 +13,6 @@ describe("getEvaluationResults", () => {
     const evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
     const results = await getEvaluationResults(
       "haiku",
-      "write_haiku",
       [evaluation_run_id],
       5,
       0,
@@ -61,7 +60,6 @@ describe("getEvaluationResults", () => {
     const evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
     const results = await getEvaluationResults(
       "entity_extraction",
-      "extract_entities",
       [evaluation_run_id],
       2,
       0,
@@ -89,7 +87,6 @@ describe("getEvaluationResults", () => {
     const evaluation_run_id2 = "01963691-9d3c-7793-a8be-3937ebb849c1";
     const results = await getEvaluationResults(
       "haiku",
-      "write_haiku",
       [evaluation_run_id1, evaluation_run_id2],
       5,
       0,
@@ -159,16 +156,17 @@ describe("getEvaluationsForDatapoint", () => {
     expect(evaluations.length).toBe(2);
 
     // Check first evaluation result
-    const first_evaluation = evaluations[0] as ChatEvaluationResultWithVariant;
+    const first_evaluation = evaluations[0] as ChatEvaluationResultRow;
     expect(first_evaluation.datapoint_id).toBe(datapoint_id);
     expect(first_evaluation.evaluation_run_id).toBe(evaluation_run_id);
-    expect(first_evaluation.variant_name).toBe("better_prompt_haiku_3_5");
+    expect(first_evaluation.variant_name).toBe("better_prompt_haiku_4_5");
     expect(first_evaluation.metric_name).toBe(
       "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
     );
     expect(first_evaluation.metric_value).toBe("false");
+    expect(first_evaluation.generated_output).toBeDefined();
     expect(first_evaluation.generated_output).toHaveLength(1);
-    const first_evaluation_output = first_evaluation.generated_output[0];
+    const first_evaluation_output = first_evaluation.generated_output![0];
     if (first_evaluation_output.type === "text") {
       expect(first_evaluation_output.text).toContain("Swallowing moonlight");
     } else {
@@ -176,15 +174,16 @@ describe("getEvaluationsForDatapoint", () => {
     }
 
     // Check second evaluation result
-    const second_evaluation = evaluations[1] as ChatEvaluationResultWithVariant;
+    const second_evaluation = evaluations[1] as ChatEvaluationResultRow;
     expect(second_evaluation.datapoint_id).toBe(datapoint_id);
     expect(second_evaluation.evaluation_run_id).toBe(evaluation_run_id);
     expect(second_evaluation.metric_name).toBe(
       "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
     );
     expect(second_evaluation.metric_value).toBe("true");
-    expect(second_evaluation.input.messages).toHaveLength(1);
-    const second_evaluation_input = second_evaluation.input;
+    expect(second_evaluation.input).toBeDefined();
+    expect(second_evaluation.input!.messages).toHaveLength(1);
+    const second_evaluation_input = second_evaluation.input!;
     if (second_evaluation_input.messages[0].content[0].type === "template") {
       expect(
         second_evaluation_input.messages[0].content[0].arguments,
@@ -208,7 +207,7 @@ describe("getEvaluationsForDatapoint", () => {
 
     // Sort evaluations by metric name to ensure consistent order
     const sortedEvaluations = [...evaluations].sort((a, b) =>
-      a.metric_name.localeCompare(b.metric_name),
+      (a.metric_name ?? "").localeCompare(b.metric_name ?? ""),
     );
 
     // Check first evaluation result

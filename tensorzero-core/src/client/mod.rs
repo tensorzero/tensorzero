@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config::ConfigFileGlob;
@@ -18,11 +19,12 @@ use crate::{
     config::Config,
     db::clickhouse::ClickHouseConnectionInfo,
     db::postgres::PostgresConnectionInfo,
+    db::valkey::ValkeyConnectionInfo,
     error::{Error, ErrorDetails},
-    utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres},
+    utils::gateway::{GatewayHandle, setup_clickhouse, setup_postgres, setup_valkey},
 };
 use reqwest::header::HeaderMap;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use std::fmt::Debug;
 use tokio::time::error::Elapsed;
@@ -203,15 +205,29 @@ impl HTTPGateway {
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<InferenceStream, TensorZeroError> {
-        let event_source =
-            self.customize_builder(builder)
-                .eventsource()
-                .map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::JsonRequest {
-                        message: format!("Error constructing event stream: {e:?}"),
+        let event_source = match self.customize_builder(builder).eventsource().await {
+            Ok(es) => es,
+            Err(e) => {
+                let err_str = format!("Error in streaming response: {e:?}");
+                let inner_err = Error::new(ErrorDetails::StreamError {
+                    source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
+                });
+                if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = e
+                {
+                    return Err(TensorZeroError::Http {
+                        status_code: code.as_u16(),
+                        text: resp.text().await.ok(),
+                        source: inner_err.into(),
+                    });
+                }
+                return Err(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::StreamError {
+                        source: Box::new(inner_err),
                     })
                     .into(),
-                })?;
+                });
+            }
+        };
 
         let mut event_source = event_source.peekable();
         let first = event_source.peek().await;
@@ -226,7 +242,7 @@ impl HTTPGateway {
             let inner_err = Error::new(ErrorDetails::StreamError {
                 source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
             });
-            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = e {
+            if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = *e {
                 return Err(TensorZeroError::Http {
                     status_code: code.as_u16(),
                     text: resp.text().await.ok(),
@@ -245,9 +261,6 @@ impl HTTPGateway {
             while let Some(ev) = event_source.next().await {
                 match ev {
                     Err(e) => {
-                        if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                            break;
-                        }
                         yield Err(Error::new(ErrorDetails::StreamError {
                             source: Box::new(Error::new(ErrorDetails::Serialization {
                                 message: format!("Error in streaming response: {}", DisplayOrDebug {
@@ -332,7 +345,6 @@ pub enum TensorZeroError {
         source: TensorZeroInternalError,
     },
     RequestTimeout,
-    #[cfg(feature = "git")]
     Git {
         #[source]
         source: git2::Error,
@@ -355,7 +367,6 @@ impl Display for TensorZeroError {
             }
             TensorZeroError::Other { source } => write!(f, "{source}"),
             TensorZeroError::RequestTimeout => write!(f, "HTTP Error: request timed out"),
-            #[cfg(feature = "git")]
             TensorZeroError::Git { source } => write!(f, "Failed to get git info: {source}"),
         }
     }
@@ -380,7 +391,7 @@ pub enum ClientBuilderError {
     NotHTTPGateway,
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
-    #[error("Failed to configure PostgreSQL: {0}")]
+    #[error("Failed to configure Postgres: {0}")]
     Postgres(TensorZeroError),
     #[error("Authentication is not supported in embedded gateway mode: {0}")]
     AuthNotSupportedInEmbeddedMode(TensorZeroError),
@@ -433,13 +444,14 @@ pub enum ClientBuilderMode {
         config_file: Option<PathBuf>,
         clickhouse_url: Option<String>,
         postgres_config: Option<PostgresConfig>,
+        valkey_url: Option<String>,
         /// A timeout for all TensorZero gateway processing.
         /// If this timeout is hit, any in-progress LLM requests may be aborted.
         timeout: Option<std::time::Duration>,
         verify_credentials: bool,
-        // Allow turning on batch writes - used in e2e tests.
-        // We don't expose this through the Python client, since we're having deadlock issues
-        // there.
+        /// Allow turning on batch writes - used in e2e tests.
+        /// We don't expose this through the Python client, since we're having deadlock issues
+        /// there.
         allow_batch_writes: bool,
     },
     /// Construct a client from already-initialized components.
@@ -456,6 +468,10 @@ pub enum ClientBuilderMode {
         clickhouse_connection_info: ClickHouseConnectionInfo,
         /// Already-initialized Postgres connection
         postgres_connection_info: PostgresConnectionInfo,
+        /// Already-initialized Valkey connection
+        valkey_connection_info: ValkeyConnectionInfo,
+        /// Already-initialized Valkey connection for caching (may be same as `valkey_connection_info`)
+        valkey_cache_connection_info: ValkeyConnectionInfo,
         /// Pre-configured HTTP client for model inference
         http_client: TensorzeroHttpClient,
         /// A timeout for all TensorZero gateway processing.
@@ -534,6 +550,7 @@ impl ClientBuilder {
                 config_file,
                 clickhouse_url,
                 postgres_config,
+                valkey_url,
                 timeout,
                 verify_credentials,
                 allow_batch_writes,
@@ -582,7 +599,7 @@ impl ClientBuilder {
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = match postgres_config {
                     Some(PostgresConfig::Url(url)) => {
-                        setup_postgres(&config, Some(url.clone())).await.map_err(|e| {
+                        setup_postgres(&config, Some(url)).await.map_err(|e| {
                             ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
                         })?
                     }
@@ -591,6 +608,16 @@ impl ClientBuilder {
                         ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
                     })?
                 };
+
+                // Set up Valkey connection from explicit URL.
+                // Embedded gateways use the same Valkey instance for both rate limiting and caching.
+                // TODO: support a dedicated cache Valkey URL for embedded gateways.
+                let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
+                    ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
+                        source: e.into(),
+                    })
+                })?;
+                let valkey_cache_connection_info = valkey_connection_info.clone();
 
                 let http_client = if self.http_client.is_some() {
                     return Err(ClientBuilderError::HTTPClientBuild(
@@ -611,8 +638,11 @@ impl ClientBuilder {
                                 config,
                                 clickhouse_connection_info,
                                 postgres_connection_info,
+                                valkey_connection_info,
+                                valkey_cache_connection_info,
                                 http_client,
                                 self.drop_wrapper,
+                                HashSet::new(), // available_tools not needed for embedded client
                             )
                             .await
                             .map_err(|e| {
@@ -630,6 +660,8 @@ impl ClientBuilder {
                 config,
                 clickhouse_connection_info,
                 postgres_connection_info,
+                valkey_connection_info,
+                valkey_cache_connection_info,
                 http_client,
                 timeout,
             } => {
@@ -654,8 +686,11 @@ impl ClientBuilder {
                                     })
                                 })?,
                                 postgres_connection_info.clone(),
+                                valkey_connection_info.clone(),
+                                valkey_cache_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
+                                HashSet::new(), // available_tools not needed for embedded client
                             )
                             .await
                             .map_err(|e| {
@@ -707,7 +742,8 @@ impl ClientBuilder {
         snapshot: ConfigSnapshot,
         live_config: &Config,
         clickhouse_url: Option<String>,
-        postgres_config: Option<String>,
+        postgres_url: Option<String>,
+        valkey_url: Option<String>,
         verify_credentials: bool,
         timeout: Option<Duration>,
     ) -> Result<Client, ClientBuilderError> {
@@ -748,12 +784,18 @@ impl ClientBuilder {
         Self::validate_embedded_gateway_config(&config, false)?;
 
         // Setup Postgres with runtime URL
-        let postgres_connection_info =
-            setup_postgres(&config, postgres_config)
-                .await
-                .map_err(|e| {
-                    ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
-                })?;
+        let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref())
+            .await
+            .map_err(|e| {
+                ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        // Setup Valkey with runtime URL.
+        // Config snapshot clients use the same Valkey instance for both rate limiting and caching.
+        let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
+            ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other { source: e.into() })
+        })?;
+        let valkey_cache_connection_info = valkey_connection_info.clone();
 
         // Use HTTP client from config (now overlaid from live_config)
         let http_client = config.http_client.clone();
@@ -763,6 +805,8 @@ impl ClientBuilder {
             config,
             clickhouse_connection_info,
             postgres_connection_info,
+            valkey_connection_info,
+            valkey_cache_connection_info,
             http_client,
             timeout,
         });
@@ -1115,7 +1159,9 @@ impl Client {
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         gateway.handle.app_state.postgres_connection_info.clone(),
+                        gateway.handle.app_state.cache_manager.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
+                        gateway.handle.app_state.rate_limiting_manager.clone(),
                         params.try_into().map_err(err_to_http)?,
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
@@ -1239,6 +1285,7 @@ pub use crate::observability;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::feature_flags;
     use tempfile::NamedTempFile;
     #[tokio::test]
     async fn test_missing_clickhouse() {
@@ -1247,6 +1294,7 @@ mod tests {
             config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
             clickhouse_url: None,
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1275,6 +1323,7 @@ mod tests {
             config_file: Some(tmp_config.path().to_owned()),
             clickhouse_url: None,
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: false, // Skip credential verification
             allow_batch_writes: false,
@@ -1320,6 +1369,8 @@ mod tests {
             config,
             clickhouse_connection_info,
             postgres_connection_info,
+            valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             http_client,
             timeout: None,
         })
@@ -1371,6 +1422,8 @@ mod tests {
             config,
             clickhouse_connection_info,
             postgres_connection_info,
+            valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             http_client,
             timeout: None,
         })
@@ -1396,11 +1449,10 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(PathBuf::from(
-                "../examples/haiku-hidden-preferences/config/tensorzero.toml",
-            )),
+            config_file: Some(PathBuf::from("tests/e2e/config/tensorzero.models.toml")),
             clickhouse_url: None,
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1423,6 +1475,7 @@ mod tests {
             config_file: None,
             clickhouse_url: None,
             postgres_config: None,
+            valkey_url: None,
             timeout: None,
             verify_credentials: true,
             allow_batch_writes: true,
@@ -1439,5 +1492,26 @@ mod tests {
         assert!(logs_contain(
             "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
         ));
+    }
+
+    #[tokio::test]
+    async fn test_feature_flags_are_initialized() {
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: None,
+            clickhouse_url: None,
+            postgres_config: None,
+            valkey_url: None,
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .expect("Failed to build client");
+
+        assert!(
+            !feature_flags::TEST_FLAG.get(),
+            "Should be able to get TEST_FLAG value without panic"
+        );
     }
 }

@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// Controls the priority and latency characteristics of the request.
 /// Different providers map these values differently to their own service tiers.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceTier {
     #[default]

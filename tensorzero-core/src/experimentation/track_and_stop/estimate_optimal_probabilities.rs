@@ -362,7 +362,7 @@ pub fn estimate_optimal_probabilities(
 mod tests {
     use super::*;
     use rand::rngs::StdRng;
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
 
     // Helper function to create FeedbackByVariant for tests
     fn make_feedback(

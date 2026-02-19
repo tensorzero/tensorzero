@@ -25,19 +25,20 @@ impl ToolMetadata for GetConfigTool {
     type Output = GetConfigResponse;
     type LlmParams = GetConfigToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("get_config")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Get the live config snapshot or a historical snapshot by hash.")
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Get the config snapshot. No parameters required.",
-            "properties": {}
+            "properties": {},
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
@@ -58,7 +59,7 @@ impl SimpleTool for GetConfigTool {
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         ctx.client()
-            .get_config_snapshot(side_info.config_snapshot_hash)
+            .get_config_snapshot(Some(side_info.config_snapshot_hash))
             .await
             .map_err(|e| AutopilotToolError::client_error("get_config", e).into())
     }

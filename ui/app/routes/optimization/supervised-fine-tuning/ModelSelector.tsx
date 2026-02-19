@@ -211,6 +211,9 @@ export function ModelSelector({
         const selectedIsCustom = isCustomModel(field.value, predefinedModels);
         const inputValue = searchValue ?? field.value?.displayName ?? "";
 
+        // Show mono font only when showing a selected value, not when editing/typing
+        const showMonoFont = searchValue === null && Boolean(field.value);
+
         const handleSelect = (model: ModelOption) => {
           field.onChange(model);
           closeDropdown();
@@ -261,7 +264,8 @@ export function ModelSelector({
                         onKeyDown={(e) => handleKeyDown(e, field.onChange)}
                         style={{ paddingRight: rightPadding }}
                         className={clsx(
-                          "border-border placeholder:text-fg-secondary hover:border-border-accent hover:bg-bg-primary focus-visible:border-border-accent font-mono focus-visible:ring-0",
+                          "border-border placeholder:text-fg-secondary hover:border-border-accent hover:bg-bg-primary focus-visible:border-border-accent focus-visible:ring-0",
+                          showMonoFont && "font-mono",
                           open && "border-border-accent",
                         )}
                       />

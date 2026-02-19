@@ -8,6 +8,7 @@ use uuid::Uuid;
 use super::types::{
     EvaluationStatistics, GetEvaluationStatisticsParams, GetEvaluationStatisticsResponse,
 };
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
@@ -23,8 +24,12 @@ pub async fn get_evaluation_statistics_handler(
     State(app_state): AppState,
     Query(params): Query<GetEvaluationStatisticsParams>,
 ) -> Result<Json<GetEvaluationStatisticsResponse>, Error> {
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = get_evaluation_statistics_internal(
-        &app_state.clickhouse_connection_info,
+        &database,
         params.function_name,
         params.function_type,
         params.metric_names,

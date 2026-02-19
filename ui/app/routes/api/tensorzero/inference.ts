@@ -5,7 +5,7 @@ import {
 import { isErrorLike, JSONParseError } from "~/utils/common";
 import type { Route } from "./+types/inference";
 import type { ClientInferenceParams } from "~/types/tensorzero";
-import { getExtraInferenceOptions } from "~/utils/feature_flags";
+import { getExtraInferenceOptions } from "~/utils/feature_flags.server";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
@@ -18,20 +18,7 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     }
     const parsed = JSON.parse(data) as ClientInferenceParams;
     const extraOptions = getExtraInferenceOptions();
-    let request = { ...parsed, ...extraOptions } as ClientInferenceParams;
-
-    if (
-      parsed.cache_options?.enabled === "write_only" &&
-      request.cache_options
-    ) {
-      request = {
-        ...request,
-        cache_options: {
-          ...request.cache_options,
-          enabled: "write_only",
-        },
-      };
-    }
+    const request = { ...parsed, ...extraOptions } as ClientInferenceParams;
     const tensorZeroClient = getTensorZeroClient();
     const inference = await tensorZeroClient
       .inference(request)

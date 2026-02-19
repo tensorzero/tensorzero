@@ -43,6 +43,7 @@ pub fn build_axum_router(
             auth_cache: app_state.auth_cache.clone(),
             pool: app_state.postgres_connection_info.get_pool().cloned(),
             error_json: app_state.config.gateway.unstable_error_json,
+            base_path: (!base_path.is_empty()).then(|| base_path.to_string()),
         });
         router = router.layer(middleware::from_fn_with_state(
             state,
@@ -74,7 +75,7 @@ pub fn build_axum_router(
 /// We apply authentication to all routes *except* these ones, to make it difficult
 /// to accidentally skip running authentication on a route, especially if we later refactor
 /// how we build up our router.
-const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health"];
+const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health", "/internal/autopilot/status"];
 
 async fn add_version_header(request: Request, next: Next) -> Response {
     #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]

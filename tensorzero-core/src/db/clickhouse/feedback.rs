@@ -9,19 +9,23 @@ use crate::{
     db::{
         FeedbackQueries, TableBounds, TimeWindow,
         feedback::{
-            BooleanMetricFeedbackRow, CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint,
+            BooleanMetricFeedbackInsert, BooleanMetricFeedbackRow, CommentFeedbackInsert,
+            CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint, DemonstrationFeedbackInsert,
             DemonstrationFeedbackRow, FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant,
-            FeedbackRow, FloatMetricFeedbackRow, GetVariantPerformanceParams, LatestFeedbackRow,
-            MetricType, MetricWithFeedback, VariantPerformanceRow,
+            FeedbackRow, FloatMetricFeedbackInsert, FloatMetricFeedbackRow,
+            GetVariantPerformanceParams, LatestFeedbackRow, MetricType, MetricWithFeedback,
+            StaticEvaluationHumanFeedbackInsert, VariantPerformanceRow,
         },
     },
     error::{Error, ErrorDetails},
     experimentation::asymptotic_confidence_sequences::asymp_cs,
+    function::FunctionConfig,
 };
 
 use super::{
-    ClickHouseConnectionInfo, escape_string_for_clickhouse_literal,
-    select_queries::{build_pagination_clause, parse_count, parse_json_rows},
+    ClickHouseConnectionInfo,
+    episode_queries::{build_pagination_clause, parse_count, parse_json_rows},
+    escape_string_for_clickhouse_literal,
 };
 
 /// Raw database result for metrics with feedback (without metric_type)
@@ -1097,9 +1101,10 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
     async fn query_metrics_with_feedback(
         &self,
         function_name: &str,
-        inference_table: &str,
+        function_config: &FunctionConfig,
         variant_name: Option<&str>,
     ) -> Result<Vec<MetricWithFeedback>, Error> {
+        let inference_table = function_config.table_name();
         let (query, params_owned) =
             build_metrics_with_feedback_query(function_name, inference_table, variant_name);
 
@@ -1176,6 +1181,42 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
 
         Ok(result)
     }
+
+    // ===== Write methods =====
+
+    async fn insert_boolean_feedback(
+        &self,
+        row: &BooleanMetricFeedbackInsert,
+    ) -> Result<(), Error> {
+        self.write_batched(&[row], super::TableName::BooleanMetricFeedback)
+            .await
+    }
+
+    async fn insert_float_feedback(&self, row: &FloatMetricFeedbackInsert) -> Result<(), Error> {
+        self.write_batched(&[row], super::TableName::FloatMetricFeedback)
+            .await
+    }
+
+    async fn insert_comment_feedback(&self, row: &CommentFeedbackInsert) -> Result<(), Error> {
+        self.write_batched(&[row], super::TableName::CommentFeedback)
+            .await
+    }
+
+    async fn insert_demonstration_feedback(
+        &self,
+        row: &DemonstrationFeedbackInsert,
+    ) -> Result<(), Error> {
+        self.write_batched(&[row], super::TableName::DemonstrationFeedback)
+            .await
+    }
+
+    async fn insert_static_eval_feedback(
+        &self,
+        row: &StaticEvaluationHumanFeedbackInsert,
+    ) -> Result<(), Error> {
+        self.write_batched(&[row], super::TableName::StaticEvaluationHumanFeedback)
+            .await
+    }
 }
 
 fn parse_table_bounds(response: &str) -> Result<TableBounds, Error> {
@@ -1196,12 +1237,15 @@ fn parse_table_bounds(response: &str) -> Result<TableBounds, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use Uuid;
     use std::sync::Arc;
 
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::config::snapshot::SnapshotHash;
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
     use crate::db::clickhouse::{ClickHouseResponse, ClickHouseResponseMetadata};
+    use crate::db::feedback::CommentTargetType;
 
     /// Normalize whitespace and newlines in a query for comparison
     fn normalize_whitespace(s: &str) -> String {
@@ -1602,7 +1646,7 @@ mod tests {
         // CommentTargetType is an enum, so we need to compare it properly
         assert!(matches!(
             result[0].target_type,
-            crate::db::feedback::CommentTargetType::Inference
+            CommentTargetType::Inference
         ));
     }
 
@@ -2202,6 +2246,7 @@ mod tests {
             r#type: MetricConfigType::Float,
             optimize: MetricConfigOptimize::Max,
             level: MetricConfigLevel::Inference,
+            description: None,
         }
     }
 
@@ -2210,6 +2255,7 @@ mod tests {
             r#type: MetricConfigType::Float,
             optimize: MetricConfigOptimize::Max,
             level: MetricConfigLevel::Episode,
+            description: None,
         }
     }
 
@@ -2218,6 +2264,7 @@ mod tests {
             r#type: MetricConfigType::Boolean,
             optimize: MetricConfigOptimize::Max,
             level: MetricConfigLevel::Inference,
+            description: None,
         }
     }
 
@@ -2523,5 +2570,248 @@ mod tests {
         assert_eq!(result[0].count, 1);
         assert!(result[0].stdev.is_none());
         assert!(result[0].ci_error.is_none());
+    }
+
+    // ===== Write method tests =====
+
+    #[tokio::test]
+    async fn test_insert_boolean_feedback() {
+        let feedback_id = Uuid::now_v7();
+        let target_id = Uuid::now_v7();
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_write_batched_internal()
+            .withf(move |rows, table| {
+                assert_eq!(*table, super::super::TableName::BooleanMetricFeedback);
+                assert_eq!(rows.len(), 1);
+                let row: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+                assert_eq!(row["id"], feedback_id.to_string());
+                assert_eq!(row["target_id"], target_id.to_string());
+                assert_eq!(row["metric_name"], "test_metric");
+                assert_eq!(row["value"], true);
+                true
+            })
+            .returning(|_, _| Ok(()));
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let insert = BooleanMetricFeedbackInsert {
+            id: feedback_id,
+            target_id,
+            metric_name: "test_metric".to_string(),
+            value: true,
+            tags: HashMap::new(),
+            snapshot_hash: SnapshotHash::new_test(),
+        };
+
+        conn.insert_boolean_feedback(&insert).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_insert_float_feedback() {
+        let feedback_id = Uuid::now_v7();
+        let target_id = Uuid::now_v7();
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_write_batched_internal()
+            .withf(move |rows, table| {
+                assert_eq!(*table, super::super::TableName::FloatMetricFeedback);
+                assert_eq!(rows.len(), 1);
+                let row: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+                assert_eq!(row["id"], feedback_id.to_string());
+                assert_eq!(row["target_id"], target_id.to_string());
+                assert_eq!(row["metric_name"], "accuracy");
+                assert!((row["value"].as_f64().unwrap() - 0.95).abs() < 0.001);
+                true
+            })
+            .returning(|_, _| Ok(()));
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let insert = FloatMetricFeedbackInsert {
+            id: feedback_id,
+            target_id,
+            metric_name: "accuracy".to_string(),
+            value: 0.95,
+            tags: HashMap::new(),
+            snapshot_hash: SnapshotHash::new_test(),
+        };
+
+        conn.insert_float_feedback(&insert).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_insert_comment_feedback() {
+        let feedback_id = Uuid::now_v7();
+        let target_id = Uuid::now_v7();
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_write_batched_internal()
+            .withf(move |rows, table| {
+                assert_eq!(*table, super::super::TableName::CommentFeedback);
+                assert_eq!(rows.len(), 1);
+                let row: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+                assert_eq!(row["id"], feedback_id.to_string());
+                assert_eq!(row["target_id"], target_id.to_string());
+                assert_eq!(row["target_type"], "inference");
+                assert_eq!(row["value"], "Great response!");
+                true
+            })
+            .returning(|_, _| Ok(()));
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let insert = CommentFeedbackInsert {
+            id: feedback_id,
+            target_id,
+            target_type: CommentTargetType::Inference,
+            value: "Great response!".to_string(),
+            tags: HashMap::new(),
+            snapshot_hash: SnapshotHash::new_test(),
+        };
+
+        conn.insert_comment_feedback(&insert).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_insert_comment_feedback_episode_level() {
+        let feedback_id = Uuid::now_v7();
+        let target_id = Uuid::now_v7();
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_write_batched_internal()
+            .withf(move |rows, table| {
+                assert_eq!(*table, super::super::TableName::CommentFeedback);
+                assert_eq!(rows.len(), 1);
+                let row: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+                assert_eq!(row["target_type"], "episode");
+                true
+            })
+            .returning(|_, _| Ok(()));
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let insert = CommentFeedbackInsert {
+            id: feedback_id,
+            target_id,
+            target_type: CommentTargetType::Episode,
+            value: "Episode feedback".to_string(),
+            tags: HashMap::new(),
+            snapshot_hash: SnapshotHash::new_test(),
+        };
+
+        conn.insert_comment_feedback(&insert).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_insert_demonstration_feedback() {
+        let feedback_id = Uuid::now_v7();
+        let inference_id = Uuid::now_v7();
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_write_batched_internal()
+            .withf(move |rows, table| {
+                assert_eq!(*table, super::super::TableName::DemonstrationFeedback);
+                assert_eq!(rows.len(), 1);
+                let row: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+                assert_eq!(row["id"], feedback_id.to_string());
+                assert_eq!(row["inference_id"], inference_id.to_string());
+                assert_eq!(row["value"], r#"{"content":"Hello"}"#);
+                true
+            })
+            .returning(|_, _| Ok(()));
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let insert = DemonstrationFeedbackInsert {
+            id: feedback_id,
+            inference_id,
+            value: r#"{"content":"Hello"}"#.to_string(),
+            tags: HashMap::new(),
+            snapshot_hash: SnapshotHash::new_test(),
+        };
+
+        conn.insert_demonstration_feedback(&insert).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_insert_static_eval_feedback() {
+        let feedback_id = Uuid::now_v7();
+        let datapoint_id = Uuid::now_v7();
+        let evaluator_inference_id = Uuid::now_v7();
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_write_batched_internal()
+            .withf(move |rows, table| {
+                assert_eq!(
+                    *table,
+                    super::super::TableName::StaticEvaluationHumanFeedback
+                );
+                assert_eq!(rows.len(), 1);
+                let row: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+                assert_eq!(row["feedback_id"], feedback_id.to_string());
+                assert_eq!(row["metric_name"], "quality");
+                assert_eq!(row["datapoint_id"], datapoint_id.to_string());
+                assert_eq!(row["output"], "test output");
+                assert_eq!(row["value"], "0.9");
+                assert_eq!(
+                    row["evaluator_inference_id"],
+                    evaluator_inference_id.to_string()
+                );
+                true
+            })
+            .returning(|_, _| Ok(()));
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let insert = StaticEvaluationHumanFeedbackInsert {
+            feedback_id,
+            metric_name: "quality".to_string(),
+            datapoint_id,
+            output: "test output".to_string(),
+            value: "0.9".to_string(),
+            evaluator_inference_id: Some(evaluator_inference_id),
+        };
+
+        conn.insert_static_eval_feedback(&insert).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_insert_feedback_with_tags() {
+        let feedback_id = Uuid::now_v7();
+        let target_id = Uuid::now_v7();
+
+        let mut tags = HashMap::new();
+        tags.insert("user_id".to_string(), "user_123".to_string());
+        tags.insert("session".to_string(), "abc".to_string());
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_write_batched_internal()
+            .withf(move |rows, _table| {
+                let row: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+                let row_tags = row["tags"].as_object().unwrap();
+                assert_eq!(row_tags.get("user_id").unwrap(), "user_123");
+                assert_eq!(row_tags.get("session").unwrap(), "abc");
+                true
+            })
+            .returning(|_, _| Ok(()));
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let insert = BooleanMetricFeedbackInsert {
+            id: feedback_id,
+            target_id,
+            metric_name: "liked".to_string(),
+            value: true,
+            tags: {
+                let mut t = HashMap::new();
+                t.insert("user_id".to_string(), "user_123".to_string());
+                t.insert("session".to_string(), "abc".to_string());
+                t
+            },
+            snapshot_hash: SnapshotHash::new_test(),
+        };
+
+        conn.insert_boolean_feedback(&insert).await.unwrap();
     }
 }

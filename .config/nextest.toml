@@ -12,13 +12,8 @@ slow-timeout = { period = "10s", terminate-after = 3 }
 default-filter = "not (test(no_aws_credentials) | test(export_bindings_) | test(export_schema_))"
 
 [[profile.default.overrides]]
-filter = 'test(evaluations)'
-slow-timeout = { period = "20s", terminate-after = 3 }
-
-[[profile.default.overrides]]
-# Top-k evaluation integration tests involve durable task execution with multiple batches
-filter = 'binary(topk) and test(test_topk)'
-slow-timeout = { period = "60s", terminate-after = 3 }
+filter = 'test(evaluations) | package(evaluations)'
+slow-timeout = { period = "20s", terminate-after = 5 }
 
 # Profiles config
 # We use these profiles to define our major test groups.
@@ -29,18 +24,19 @@ slow-timeout = { period = "60s", terminate-after = 3 }
 # which would prevent us from excluding more tests
 # The profile can be set with '--profile <profile-name>' when using 'cargo nextest run',
 # We also define cargo aliases for common use-cases (e.g. `cargo test-e2e`)
+
+# E2E test should be a catch-all, only excluding a few things:
+# - batch tests
+# - clickhouse tests
+# - optimization mock tests run separately in mock-optimization-tests with the mock gateway config
+# - binding generation
 [profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
-# optimization-mock tests are run separately in mock-optimization-tests with the mock gateway config
-default-filter = "not (test(batch) | test(test_dummy_only) | test(clickhouse) | test(db::) | test(export_bindings_) | test(export_schema_) | binary(optimization-mock))"
-junit.path = "junit.xml"
-
-[[profile.e2e.overrides]]
-# E2E GEPA tests - integration tests with API calls and evaluation
-filter = 'binary(e2e_gepa)'
-# Analysis or mutation using gpt-4.1-nano occasionally fails to generate a properly formatted output, so we add retries
-retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 slow-timeout = { period = "30s", terminate-after = 2 }
+default-filter = '''
+not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !test(postgres) & !test(valkey)) | test(export_bindings_) | test(export_schema_) | binary(optimization-mock) | package(tensorzero-derive))
+'''
+junit.path = "junit.xml"
 
 [profile.live-batch]
 default-filter = 'test(batch) and not test(mock)'
@@ -48,9 +44,25 @@ default-filter = 'test(batch) and not test(mock)'
 [profile.mock-batch]
 default-filter = 'test(batch) and test(mock)'
 
+# ClickHouse-only tests are running across multiple Clickhouse versions and setups, so this is limited to only Clickhouse-specific tests:
+# - test_dummy_only: basic sanity check
+# - test(clickhouse::): tests with "clickhouse" in its module hierarchy
+#   This excludes some endpoint tests with _clickhouse in the name
+# - db::...: database test module excluding postgres/valkey specific tests
+#   Some of the database tests are dynamically generated with _clickhouse and _postgres variants, and this only runs
+#   the correct ones in the clickhouse test matrix.
+#
+# Note: all tests under db:: without postgres/valkey in the name/hierarchy are run in the clickhouse test matrix.
 [profile.clickhouse]
-default-filter = 'test(test_dummy_only) | test(clickhouse) | test(db::)'
+default-filter = 'test(test_dummy_only) | test(clickhouse::) | (test(db::) & !test(postgres) & !test(valkey))'
 junit.path = "junit.xml"
+
+# Run only endpoint e2e tests (tests under tests/e2e/endpoints/)
+# These run against both ClickHouse and Postgres-backed TensorZero gateway.
+[profile.endpoints]
+default-filter = 'binary(e2e) and test(endpoints::)'
+junit.path = "junit.xml"
+retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 
 [profile.optimization]
 default-filter = 'binary(optimization-live)'
@@ -92,7 +104,7 @@ slow-timeout = { period = "60s", terminate-after = 4 }
 retries = 0
 
 [[profile.default.overrides]]
-filter = 'test(e2e_test_variant_failover)'
+filter = 'test(test_variant_failover)'
 # This test makes lots of requests, so give it extra time for the slower Github runners.
 slow-timeout = { period = "60s", terminate-after = 2 }
 
@@ -134,19 +146,20 @@ filter = 'package(gateway)'
 slow-timeout = { period = "20s", terminate-after = 2 }
 
 # The proc-macro tests use `trybuild`, which runs compilation
-# for various crates as part of the test
+# for various crates as part of the test. This can be slow on CI runners
+# without a warm cache, so we give it a longer timeout.
 [[profile.default.overrides]]
 filter = 'package(tensorzero-derive)'
-slow-timeout = { period = "20s", terminate-after = 2 }
+slow-timeout = { period = "30s", terminate-after = 3 }
 
 [[profile.default.overrides]]
 # Web search is very slow
-filter = 'test(websearch)'
+filter = 'test(web_search)'
 slow-timeout = { period = "120s", terminate-after = 2 }
 
-# Image inference seems to be slow on GCP Vertex Gemini, so we give it a longer timeout
+# Image inference seems to be slow on many providers, so we give it a longer timeout
 [[profile.default.overrides]]
-filter = 'test(providers::gcp_vertex_gemini::test_image_inference)'
+filter = 'test(test_image_inference)'
 slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
@@ -174,7 +187,7 @@ slow-timeout = { period = "900s", terminate-after = 1 }
 [[profile.default.overrides]]
 filter = 'test(test_concurrent_requests)'
 # This test creates and uses lots of `reqwest::Client`s, which can be slow
-slow-timeout = { period = "60s", terminate-after = 2 }
+slow-timeout = { period = "60s", terminate-after = 3 }
 
 [[profile.default.overrides]]
 # Settings for running mock optimization tests
@@ -191,3 +204,8 @@ slow-timeout = { period = "10s", terminate-after = 2 }
 [[profile.default.overrides]]
 filter = 'binary(e2e) and (test(providers::aws_bedrock::) or test(providers::aws_sagemaker))'
 retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+
+[[profile.default.overrides]]
+# xAI reasoning multi-turn tests are slow due to reasoning model response times
+filter = 'binary(e2e) and test(test_reasoning_multi_turn_)'
+slow-timeout = { period = "60s", terminate-after = 2 }

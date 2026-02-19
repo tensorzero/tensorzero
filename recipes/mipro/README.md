@@ -26,7 +26,7 @@ The judge is configurable to fit your problem by describing the task and metric 
   <img src="visualization.svg" alt="Metrics by Variant" />
 </p>
 
-Though &mdash; unsurprisingly &mdash; it doesn't outperform DICL (see `recipes/dicl`) and supervised fine-tuning (see `recipes/supervised_fine_tuning`), it materially outperforms a naive initial prompt.
+Though &mdash; unsurprisingly &mdash; it doesn't outperform DICL and supervised fine-tuning, it materially outperforms a naive initial prompt.
 
 > [!TIP]
 >
@@ -34,19 +34,10 @@ Though &mdash; unsurprisingly &mdash; it doesn't outperform DICL (see `recipes/d
 
 ## Getting Started
 
-### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
+We recommend using [`uv`](https://github.com/astral-sh/uv).
 
 ```bash
-uv venv  # Create a new virtual environment
-uv pip sync requirements.txt  # Install the dependencies
-```
-
-### Using `pip`
-
-We recommend using Python 3.10+ and a virtual environment.
-
-```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### Setup

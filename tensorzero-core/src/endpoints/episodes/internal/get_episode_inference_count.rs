@@ -1,6 +1,8 @@
 use crate::{
-    db::inference_count::InferenceCountQueries,
+    config::Config,
+    db::inferences::{CountInferencesParams, InferenceQueries},
     error::Error,
+    feature_flags::ENABLE_POSTGRES_READ,
     utils::gateway::{AppState, AppStateData},
 };
 use axum::{
@@ -11,8 +13,9 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetEpisodeInferenceCountResponse {
     pub inference_count: u64,
 }
@@ -30,17 +33,35 @@ pub async fn get_episode_inference_count_handler(
     State(app_state): AppState,
     Path(episode_id): Path<Uuid>,
 ) -> Result<Json<GetEpisodeInferenceCountResponse>, Error> {
-    let stats =
-        get_episode_inference_count(&app_state.clickhouse_connection_info, episode_id).await?;
+    let stats = if ENABLE_POSTGRES_READ.get() {
+        get_episode_inference_count(
+            &app_state.config,
+            &app_state.postgres_connection_info,
+            episode_id,
+        )
+        .await?
+    } else {
+        get_episode_inference_count(
+            &app_state.config,
+            &app_state.clickhouse_connection_info,
+            episode_id,
+        )
+        .await?
+    };
     Ok(Json(stats))
 }
 
 /// Core business logic for getting episode inference counts
 pub async fn get_episode_inference_count(
-    clickhouse: &impl InferenceCountQueries,
+    config: &Config,
+    database: &impl InferenceQueries,
     episode_id: Uuid,
 ) -> Result<GetEpisodeInferenceCountResponse, Error> {
-    let inference_count = clickhouse.count_inferences_for_episode(episode_id).await?;
+    let count_params = CountInferencesParams {
+        episode_id: Some(&episode_id),
+        ..Default::default()
+    };
+    let inference_count = database.count_inferences(config, &count_params).await?;
 
     Ok(GetEpisodeInferenceCountResponse { inference_count })
 }
@@ -48,22 +69,24 @@ pub async fn get_episode_inference_count(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::inference_count::MockInferenceCountQueries;
+    use crate::db::inferences::MockInferenceQueries;
+    use std::sync::Arc;
 
     #[tokio::test]
-    async fn test_get_episode_inference_count_calls_clickhouse() {
-        let mut mock_clickhouse = MockInferenceCountQueries::new();
+    async fn test_get_episode_inference_count_calls_database() {
+        let mut mock_database = MockInferenceQueries::new();
+        let config = Arc::new(Config::default());
 
         let episode_id = Uuid::now_v7();
         let expected_count = 42;
 
-        mock_clickhouse
-            .expect_count_inferences_for_episode()
-            .withf(move |id| *id == episode_id)
+        mock_database
+            .expect_count_inferences()
+            .withf(move |_, params| params.episode_id == Some(&episode_id))
             .times(1)
-            .returning(move |_| Box::pin(async move { Ok(expected_count) }));
+            .returning(move |_, _| Box::pin(async move { Ok(expected_count) }));
 
-        let result = get_episode_inference_count(&mock_clickhouse, episode_id)
+        let result = get_episode_inference_count(&config, &mock_database, episode_id)
             .await
             .unwrap();
 

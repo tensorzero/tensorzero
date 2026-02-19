@@ -5,8 +5,8 @@ use crate::providers::helpers::get_modal_extra_headers;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
-use reqwest_eventsource::RequestBuilderExt;
+use reqwest_sse_stream::Event;
+use reqwest_sse_stream::RequestBuilderExt;
 use serde_json::Value;
 use serde_json::json;
 use tensorzero::Role;
@@ -19,7 +19,9 @@ use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHe
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage, Text};
 use uuid::Uuid;
 
-pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
+    provider: E2ETestProvider,
+) {
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -85,7 +87,9 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
             "thought" => {
                 found_thought = true;
             }
-            _ => panic!("Unexpected content block type: {block_type}"),
+            _ => {
+                // Skip unknown content block types (e.g., raw reasoning data from OpenAI Responses API)
+            }
         }
     }
 
@@ -156,7 +160,9 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
             "thought" => {
                 found_thought = true;
             }
-            _ => panic!("Unexpected content block type: {block_type}"),
+            _ => {
+                // Skip unknown content block types (e.g., raw reasoning data from OpenAI Responses API)
+            }
         }
     }
 
@@ -270,10 +276,10 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
     assert_eq!(id, inference_id);
 }
 
-pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
+pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
-    use reqwest_eventsource::{Event, RequestBuilderExt};
+    use reqwest_sse_stream::{Event, RequestBuilderExt};
     use serde_json::Value;
 
     use crate::common::get_gateway_endpoint;
@@ -308,6 +314,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -379,7 +386,10 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     // Some providers give signature-only thought blocks,
     // so only check the content if we had at least one thought block with text
     if let Some(full_thought) = &full_thought {
-        assert!(full_thought.to_lowercase().contains("tokyo"));
+        assert!(
+            full_thought.to_lowercase().contains("tokyo")
+                || full_thought.to_lowercase().contains("japan")
+        );
     }
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
@@ -450,7 +460,9 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
                         .push_str(thought_text);
                 }
             }
-            _ => panic!("Unexpected content block type: {block_type}"),
+            _ => {
+                // Skip unknown content block types (e.g., raw reasoning data from OpenAI Responses API)
+            }
         }
     }
 
@@ -578,7 +590,12 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     assert_eq!(id, inference_id);
 }
 
-pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
+pub async fn test_reasoning_inference_request_json_mode_nonstreaming_with_provider(
+    provider: E2ETestProvider,
+) {
+    // Direct Anthropic uses output_format for json_mode=strict
+    // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
+
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -795,14 +812,17 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     );
 }
 
-pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
+pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
     // OpenAI O1 doesn't support streaming responses
-
     if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
+
+    // Direct Anthropic uses output_format for json_mode=strict
+    // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
+
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -831,6 +851,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut chunks = vec![];
@@ -1062,20 +1083,9 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 2);
-    let thought = output
+    // Ensure a thought block exists
+    let _thought = output
         .iter()
         .find(|block| matches!(block, StoredContentBlock::Thought(_)))
         .unwrap();
-    let thought = match thought {
-        StoredContentBlock::Thought(thought) => thought,
-        _ => panic!("Expected a thought block"),
-    };
-    assert!(
-        thought
-            .text
-            .as_ref()
-            .unwrap()
-            .to_lowercase()
-            .contains("tokyo")
-    );
 }

@@ -4,6 +4,7 @@ use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
 use url::Url;
 
 // Default functions for hyperparameters
@@ -31,16 +32,18 @@ fn default_weight_decay() -> f64 {
     0.0
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(rename_all = "lowercase")]
 pub enum TogetherBatchSizeDescription {
     Max,
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(untagged)]
 pub enum TogetherBatchSize {
@@ -57,8 +60,9 @@ impl Default for TogetherBatchSize {
 /// Initialized Together SFT Config (per-job settings only).
 /// Provider-level settings (credentials, wandb, hf_api_token) come from
 /// `provider_types.together` in the gateway config.
-#[derive(ts_rs::TS, Debug, Clone, Serialize)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct TogetherSFTConfig {
     pub model: String,
     // Hyperparameters
@@ -88,8 +92,9 @@ pub struct TogetherSFTConfig {
 
 /// Minimal job handle for Together SFT.
 /// All configuration needed for polling comes from provider_types at poll time.
-#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct TogetherSFTJobHandle {
     pub job_id: String,
@@ -107,8 +112,9 @@ impl std::fmt::Display for TogetherSFTJobHandle {
 /// Uninitialized Together SFT Config (per-job settings only).
 /// Provider-level settings (credentials, wandb, hf_api_token) come from
 /// `provider_types.together` in the gateway config.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "TogetherSFTConfig"))]
 pub struct UninitializedTogetherSFTConfig {
     pub model: String,
@@ -334,10 +340,12 @@ impl UninitializedTogetherSFTConfig {
 }
 
 // Nested configuration structs that match Together's API format
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[serde(tag = "lr_scheduler_type", rename_all = "snake_case")]
+#[serde(tag = "lr_scheduler_type")]
+#[serde(rename_all = "snake_case")]
 pub enum TogetherLRScheduler {
     Linear {
         #[serde(default)]
@@ -357,8 +365,9 @@ impl Default for TogetherLRScheduler {
     }
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "type")]
 pub enum TogetherTrainingType {
@@ -386,10 +395,12 @@ impl Default for TogetherTrainingType {
     }
 }
 
-#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[serde(tag = "method", rename_all = "snake_case")]
+#[serde(tag = "method")]
+#[serde(rename_all = "snake_case")]
 pub enum TogetherTrainingMethod {
     #[serde(rename = "sft")]
     Sft {

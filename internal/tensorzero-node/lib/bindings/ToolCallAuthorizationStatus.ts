@@ -2,4 +2,5 @@
 
 export type ToolCallAuthorizationStatus =
   | { type: "approved" }
-  | { type: "rejected"; reason: string };
+  | { type: "rejected"; reason: string }
+  | { type: "not_available" };

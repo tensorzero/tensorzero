@@ -8,5 +8,5 @@ export type GetVariantSamplingProbabilitiesResponse = {
    * Map of variant names to their sampling probabilities (0.0 to 1.0)
    * Probabilities sum to 1.0
    */
-  probabilities: { [key in string]?: number };
+  probabilities: { [key in string]: number };
 };

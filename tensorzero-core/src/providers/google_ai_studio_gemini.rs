@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use futures::{StreamExt, future::try_join_all};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,8 +15,6 @@ use super::helpers::check_new_tool_call_name;
 use super::helpers::inject_extra_request_data_and_send_eventsource;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::error::warn_discarded_thought_block;
 use crate::error::warn_discarded_unknown_chunk;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
@@ -28,18 +26,21 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency,
-    ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
-    ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown,
-    UnknownChunk,
+    ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, TextChunk, Thought,
+    ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::types::{
-    ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage,
-    batch::StartBatchProviderInferenceResponse, serialize_or_log,
+    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, Usage, batch::StartBatchProviderInferenceResponse,
+    serialize_or_log,
 };
 use crate::model::{Credential, ModelProvider};
+use crate::providers::gcp_vertex_gemini::GCPVertexGeminiContent;
+use crate::providers::gcp_vertex_gemini::GCPVertexGeminiContentPart;
+use crate::providers::gcp_vertex_gemini::GCPVertexGeminiPartData;
+use crate::providers::gcp_vertex_gemini::GCPVertexGeminiRole;
 use crate::tool::FunctionToolConfig;
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
@@ -53,8 +54,9 @@ pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GoogleAIStudioGeminiProvider {
     model_name: String,
     request_url: Url,
@@ -200,6 +202,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .header("x-goog-api-key", api_key.expose_secret());
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -219,6 +222,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -231,6 +235,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -255,11 +260,12 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
-            handle_google_ai_studio_error(response_code, error_body)
+            handle_google_ai_studio_error(response_code, error_body, ApiType::ChatCompletions)
         }
     }
 
@@ -297,6 +303,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             .header("x-goog-api-key", api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -364,10 +371,7 @@ fn stream_google_ai_studio_gemini(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                        break;
-                    }
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -376,6 +380,7 @@ fn stream_google_ai_studio_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                             })
@@ -410,261 +415,6 @@ fn stream_google_ai_studio_gemini(
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-#[serde(rename_all = "lowercase")]
-enum GeminiRole {
-    User,
-    Model,
-}
-
-impl From<Role> for GeminiRole {
-    fn from(role: Role) -> Self {
-        match role {
-            Role::User => GeminiRole::User,
-            Role::Assistant => GeminiRole::Model,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Serialize)]
-struct GeminiFunctionCall<'a> {
-    name: &'a str,
-    args: Value,
-}
-
-#[derive(Debug, PartialEq, Serialize)]
-struct GeminiFunctionResponse<'a> {
-    name: &'a str,
-    response: Value,
-}
-
-#[derive(Debug, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct GeminiContentPart<'a> {
-    #[serde(default)]
-    thought: bool,
-    #[serde(default)]
-    thought_signature: Option<String>,
-    #[serde(flatten)]
-    #[serde(default)]
-    data: FlattenUnknown<'a, GeminiPartData<'a>>,
-}
-
-#[derive(Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase", untagged)]
-enum GeminiPartData<'a> {
-    Text {
-        text: &'a str,
-    },
-    InlineData {
-        #[serde(rename = "inline_data")]
-        inline_data: GeminiInlineData,
-    },
-    // TODO (if needed): FileData { file_data: FileData },
-    FunctionCall {
-        function_call: GeminiFunctionCall<'a>,
-    },
-    FunctionResponse {
-        function_response: GeminiFunctionResponse<'a>,
-    },
-    // TODO (if needed): ExecutableCode [docs](https://ai.google.dev/api/caching#ExecutableCode)
-    // TODO (if needed): ExecutableCodeResult [docs](https://ai.google.dev/api/caching#CodeExecutionResult)
-}
-
-#[derive(Debug, PartialEq, Serialize)]
-struct GeminiInlineData {
-    mime_type: String,
-    data: String,
-}
-
-#[derive(Debug, PartialEq, Serialize)]
-struct GeminiContent<'a> {
-    role: GeminiRole,
-    parts: Vec<GeminiContentPart<'a>>,
-}
-
-impl<'a> GeminiContent<'a> {
-    async fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
-        let role = GeminiRole::from(message.role);
-        let mut output = Vec::with_capacity(message.content.len());
-        let mut iter = message.content.iter();
-        while let Some(block) = iter.next() {
-            match block {
-                ContentBlock::Thought(
-                    thought @ Thought {
-                        text,
-                        signature,
-                        summary: _,
-                        provider_type: _,
-                    },
-                ) => {
-                    // Gemini never produces 'thought: true' at the moment, and there's no documentation
-                    // on whether or not they should be passed back in.
-                    // As a result, we don't attempt to feed `Thought.text` back to Gemini, as this would
-                    // require us to set 'thought: true' in the request.
-                    // Instead, we just warn and discard the content block.
-                    if text.is_some() {
-                        warn_discarded_thought_block(PROVIDER_TYPE, thought);
-                    } else if let Some(signature) = signature {
-                        let next_block = iter.next();
-                        match next_block {
-                            None => {
-                                return Err(Error::new(ErrorDetails::InferenceServer {
-                                    message: "Thought block with signature must be followed by a content block in Gemini".to_string(),
-                                    provider_type: PROVIDER_TYPE.to_string(),
-                                    raw_request: None,
-                                    raw_response: None,
-                                }));
-                            }
-                            Some(ContentBlock::Thought(Thought { .. })) => {
-                                return Err(Error::new(ErrorDetails::InferenceServer {
-                                    message: "Thought block with signature cannot be followed by another thought block in Gemini".to_string(),
-                                    provider_type: PROVIDER_TYPE.to_string(),
-                                    raw_request: None,
-                                    raw_response: None,
-                                }));
-                            }
-                            Some(ContentBlock::Unknown(_)) => {
-                                return Err(Error::new(ErrorDetails::InferenceServer {
-                                    message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
-                                    provider_type: PROVIDER_TYPE.to_string(),
-                                    raw_request: None,
-                                    raw_response: None,
-                                }));
-                            }
-                            Some(next_block) => {
-                                let gemini_part =
-                                    convert_non_thought_content_block(next_block).await?;
-                                match gemini_part {
-                                    FlattenUnknown::Normal(part) => {
-                                        output.push(GeminiContentPart {
-                                            thought: false,
-                                            thought_signature: Some(signature.clone()),
-                                            data: FlattenUnknown::Normal(part),
-                                        });
-                                    }
-                                    // We should have handled this case above with `Some(ContentBlock::Unknown(_))`
-                                    FlattenUnknown::Unknown(_) => {
-                                        return Err(Error::new(ErrorDetails::InternalError {
-                                            message: format!(
-                                                "Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"
-                                            ),
-                                        }));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    let part = convert_non_thought_content_block(block).await?;
-                    match part {
-                        FlattenUnknown::Normal(part) => {
-                            output.push(GeminiContentPart {
-                                thought: false,
-                                thought_signature: None,
-                                data: FlattenUnknown::Normal(part),
-                            });
-                        }
-                        FlattenUnknown::Unknown(data) => {
-                            output.push(GeminiContentPart {
-                                thought: false,
-                                thought_signature: None,
-                                data: FlattenUnknown::Unknown(data),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        Ok(GeminiContent {
-            role,
-            parts: output,
-        })
-    }
-}
-
-/// Handles all `ContentBlock`s other than `ContentBlock::Thought` (which needs special handling
-/// to merge the signature with the next block).
-async fn convert_non_thought_content_block(
-    block: &ContentBlock,
-) -> Result<FlattenUnknown<'_, GeminiPartData<'_>>, Error> {
-    match block {
-        ContentBlock::Text(Text { text }) => {
-            Ok(FlattenUnknown::Normal(GeminiPartData::Text { text }))
-        }
-        ContentBlock::ToolResult(tool_result) => {
-            // Gemini expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
-            let response = serde_json::json!({
-                "name": tool_result.name,
-                "content": tool_result.result,
-            });
-            Ok(FlattenUnknown::Normal(GeminiPartData::FunctionResponse {
-                function_response: GeminiFunctionResponse {
-                    name: &tool_result.name,
-                    response,
-                },
-            }))
-        }
-        ContentBlock::ToolCall(tool_call) => {
-            // Convert the tool call arguments from String to JSON Value (Gemini expects an object)
-            let args: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
-                Error::new(ErrorDetails::InferenceClient {
-                    status_code: Some(StatusCode::BAD_REQUEST),
-                    message: format!(
-                        "Error parsing tool call arguments as JSON Value: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: None,
-                    raw_response: Some(tool_call.arguments.clone()),
-                })
-            })?;
-
-            if !args.is_object() {
-                return Err(ErrorDetails::InferenceClient {
-                    status_code: Some(StatusCode::BAD_REQUEST),
-                    message: "Tool call arguments must be a JSON object".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: None,
-                    raw_response: Some(tool_call.arguments.clone()),
-                }
-                .into());
-            }
-
-            Ok(FlattenUnknown::Normal(GeminiPartData::FunctionCall {
-                function_call: GeminiFunctionCall {
-                    name: &tool_call.name,
-                    args,
-                },
-            }))
-        }
-        ContentBlock::File(file) => {
-            let resolved_file = file.resolve().await?;
-            let ObjectStorageFile { file, data } = &*resolved_file;
-            if file.detail.is_some() {
-                tracing::warn!(
-                    "The image detail parameter is not supported by Google AI Studio Gemini. The `detail` field will be ignored."
-                );
-            }
-            Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
-                inline_data: GeminiInlineData {
-                    mime_type: file.mime_type.to_string(),
-                    data: data.to_string(),
-                },
-            }))
-        }
-        ContentBlock::Thought(_) => Err(Error::new(ErrorDetails::InternalError {
-            message: format!(
-                "Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"
-            ),
-        })),
-        ContentBlock::Unknown(Unknown { data, .. }) => {
-            Ok(FlattenUnknown::Unknown(Cow::Borrowed(data)))
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Serialize)]
 struct GeminiFunctionDeclaration<'a> {
     name: &'a str,
     description: &'a str,
@@ -680,11 +430,7 @@ struct GeminiTool<'a> {
 
 impl<'a> GeminiFunctionDeclaration<'a> {
     fn from_tool_config(tool: &'a FunctionToolConfig) -> Self {
-        let mut parameters = tool.parameters().clone();
-        if let Some(obj) = parameters.as_object_mut() {
-            obj.remove("additionalProperties");
-            obj.remove("$schema");
-        }
+        let parameters = process_jsonschema_for_gcp_vertex_gemini(tool.parameters());
 
         GeminiFunctionDeclaration {
             name: tool.name(),
@@ -770,7 +516,10 @@ enum GeminiResponseMimeType {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiThinkingConfig {
-    thinking_budget: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_budget: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_level: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -801,14 +550,14 @@ struct GeminiGenerationConfig<'a> {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiRequest<'a> {
-    contents: Vec<GeminiContent<'a>>,
+    contents: Vec<GCPVertexGeminiContent<'a>>,
     tools: Option<Vec<GeminiTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_config: Option<GoogleAIStudioGeminiToolConfig<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     generation_config: Option<GeminiGenerationConfig<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system_instruction: Option<GeminiContent<'a>>,
+    system_instruction: Option<GCPVertexGeminiContent<'a>>,
 }
 
 fn apply_inference_params(
@@ -822,26 +571,18 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
-        );
-    }
-
-    if let Some(budget_tokens) = thinking_budget_tokens {
+    if reasoning_effort.is_some() || thinking_budget_tokens.is_some() {
+        let thinking_config = GeminiThinkingConfig {
+            thinking_budget: *thinking_budget_tokens,
+            thinking_level: reasoning_effort.clone(),
+        };
         if let Some(gen_config) = &mut request.generation_config {
-            gen_config.thinking_config = Some(GeminiThinkingConfig {
-                thinking_budget: *budget_tokens,
-            });
+            gen_config.thinking_config = Some(thinking_config);
         } else {
             request.generation_config = Some(GeminiGenerationConfig {
                 stop_sequences: None,
                 temperature: None,
-                thinking_config: Some(GeminiThinkingConfig {
-                    thinking_budget: *budget_tokens,
-                }),
+                thinking_config: Some(thinking_config),
                 top_p: None,
                 presence_penalty: None,
                 frequency_penalty: None,
@@ -870,24 +611,29 @@ impl<'a> GeminiRequest<'a> {
             }
             .into());
         }
+
         let system_instruction =
             request
                 .system
                 .as_ref()
-                .map(|system_instruction| GeminiPartData::Text {
-                    text: system_instruction,
+                .map(|system_instruction| GCPVertexGeminiContentPart {
+                    thought: false,
+                    thought_signature: None,
+                    data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                        text: Cow::Borrowed(system_instruction),
+                    }),
                 });
-        let all_contents: Vec<GeminiContent> = try_join_all(
+        let contents: Vec<GCPVertexGeminiContent> = try_join_all(
             request
                 .messages
                 .iter()
-                .map(GeminiContent::from_request_message),
+                .map(|m| GCPVertexGeminiContent::from_request_message(m, PROVIDER_TYPE)),
         )
-        .await?;
-        let contents: Vec<GeminiContent> = all_contents
-            .into_iter()
-            .filter(|m| !m.parts.is_empty())
-            .collect();
+        .await?
+        .into_iter()
+        .filter(|m| !m.parts.is_empty())
+        .collect();
+
         let (tools, tool_config) = prepare_tools(request)?;
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
@@ -913,18 +659,15 @@ impl<'a> GeminiRequest<'a> {
             response_mime_type,
             response_schema,
         });
+
         let mut gemini_request = GeminiRequest {
             contents,
             tools,
             tool_config,
             generation_config,
-            system_instruction: system_instruction.map(|content| GeminiContent {
-                role: GeminiRole::Model,
-                parts: vec![GeminiContentPart {
-                    thought: false,
-                    thought_signature: None,
-                    data: FlattenUnknown::Normal(content),
-                }],
+            system_instruction: system_instruction.map(|content| GCPVertexGeminiContent {
+                role: GCPVertexGeminiRole::Model,
+                parts: vec![content],
             }),
         };
 
@@ -1015,6 +758,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -1029,6 +773,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_id: None,
                     summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             _ => {
@@ -1037,6 +782,7 @@ fn content_part_to_tensorzero_chunk(
                         "Thought part in Google AI Studio Gemini response must be a text block: {part:?}"
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
                 }));
@@ -1063,6 +809,7 @@ fn content_part_to_tensorzero_chunk(
             summary_text: None,
             signature: Some(thought_signature),
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
 
@@ -1129,6 +876,7 @@ fn convert_part_to_output(
                     text: Some(text),
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             // Handle 'thought' with no other fields
@@ -1140,6 +888,7 @@ fn convert_part_to_output(
                     text: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             _ => {
@@ -1170,6 +919,7 @@ fn convert_part_to_output(
             text: None,
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
     match part.data {
@@ -1259,13 +1009,25 @@ struct GeminiUsageMetadata {
     // Gemini doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thoughts_token_count: Option<u32>,
 }
 
 impl From<GeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GeminiUsageMetadata) -> Self {
+        // Sum candidates + thoughts tokens for output_tokens
+        let output_tokens = match (
+            usage_metadata.candidates_token_count,
+            usage_metadata.thoughts_token_count,
+        ) {
+            (Some(c), Some(t)) => Some(c + t),
+            (Some(c), None) => Some(c),
+            (None, Some(t)) => Some(t),
+            (None, None) => None,
+        };
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count,
+            output_tokens,
         }
     }
 }
@@ -1311,6 +1073,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -1333,6 +1096,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
         let raw_usage = google_ai_studio_usage_from_raw_response(&raw_response).map(|usage| {
@@ -1355,7 +1119,8 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
-                latency,
+                relay_raw_response: None,
+                provider_latency: latency,
                 finish_reason: first_candidate.finish_reason.map(Into::into),
                 id: model_inference_id,
             },
@@ -1399,6 +1164,7 @@ fn convert_stream_response_with_metadata_to_chunk(
             raw_request: None,
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -1470,6 +1236,7 @@ fn google_ai_studio_usage_from_raw_response(raw_response: &str) -> Option<Value>
 fn handle_google_ai_studio_error(
     response_code: StatusCode,
     response_body: String,
+    api_type: ApiType,
 ) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
@@ -1481,6 +1248,7 @@ fn handle_google_ai_studio_error(
             raw_request: None,
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
@@ -1490,6 +1258,7 @@ fn handle_google_ai_studio_error(
             raw_request: None,
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
         }
         .into()),
     }
@@ -1499,20 +1268,14 @@ fn handle_google_ai_studio_error(
 mod tests {
     use std::borrow::Cow;
 
-    use base64::Engine;
-    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
     use serde_json::json;
 
     use super::*;
-    use crate::inference::types::file::Detail;
-    use crate::inference::types::resolved_input::LazyFile;
-    use crate::inference::types::storage::{StorageKind, StoragePath};
     use crate::inference::types::{
-        ContentBlock, FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode,
-        ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
+        FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role, Text,
     };
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{ToolCallConfig, ToolResult};
+    use crate::tool::ToolCallConfig;
     use crate::utils::testing::capture_logs;
 
     #[test]
@@ -1537,6 +1300,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
 
@@ -1564,110 +1328,6 @@ mod tests {
         assert!(
             logs_contain("Discarding unknown chunk in google_ai_studio_gemini response"),
             "Missing warning in logs"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_google_ai_studio_gemini_content_try_from() {
-        let message = RequestMessage {
-            role: Role::User,
-            content: vec!["Hello, world!".to_string().into()],
-        };
-        let content = GeminiContent::from_request_message(&message).await.unwrap();
-        assert_eq!(content.role, GeminiRole::User);
-        assert_eq!(content.parts.len(), 1);
-        assert_eq!(
-            content.parts[0],
-            GeminiContentPart {
-                thought: false,
-                thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::Text {
-                    text: "Hello, world!"
-                }),
-            }
-        );
-
-        let message = RequestMessage {
-            role: Role::Assistant,
-            content: vec!["Hello, world!".to_string().into()],
-        };
-        let content = GeminiContent::from_request_message(&message).await.unwrap();
-        assert_eq!(content.role, GeminiRole::Model);
-        assert_eq!(content.parts.len(), 1);
-        assert_eq!(
-            content.parts[0],
-            GeminiContentPart {
-                thought: false,
-                thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::Text {
-                    text: "Hello, world!"
-                }),
-            }
-        );
-        let message = RequestMessage {
-            role: Role::Assistant,
-            content: vec![
-                "Here's the result of the function call:".to_string().into(),
-                ContentBlock::ToolCall(ToolCall {
-                    id: "call_1".to_string(),
-                    name: "get_temperature".to_string(),
-                    arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
-                }),
-            ],
-        };
-        let content = GeminiContent::from_request_message(&message).await.unwrap();
-        assert_eq!(content.role, GeminiRole::Model);
-        assert_eq!(content.parts.len(), 2);
-        assert_eq!(
-            content.parts[0],
-            GeminiContentPart {
-                thought: false,
-                thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::Text {
-                    text: "Here's the result of the function call:",
-                }),
-            }
-        );
-        assert_eq!(
-            content.parts[1],
-            GeminiContentPart {
-                thought: false,
-                thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::FunctionCall {
-                    function_call: GeminiFunctionCall {
-                        name: "get_temperature",
-                        args: json!({"location": "New York", "unit": "celsius"}),
-                    }
-                }),
-            }
-        );
-
-        let message = RequestMessage {
-            role: Role::User,
-            content: vec![ContentBlock::ToolResult(ToolResult {
-                id: "call_1".to_string(),
-                name: "get_temperature".to_string(),
-                result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
-            })],
-        };
-        let content = GeminiContent::from_request_message(&message).await.unwrap();
-        assert_eq!(content.role, GeminiRole::User);
-        assert_eq!(content.parts.len(), 1);
-        assert_eq!(
-            content.parts[0],
-            GeminiContentPart {
-                thought: false,
-                thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::FunctionResponse {
-                    function_response: GeminiFunctionResponse {
-                        name: "get_temperature",
-                        response: json!({
-                            "name": "get_temperature",
-                            "content": r#"{"temperature": 25, "conditions": "sunny"}"#
-                        }),
-                    }
-                }),
-            }
         );
     }
 
@@ -1902,24 +1562,26 @@ mod tests {
         let result = GeminiRequest::new(&inference_request).await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 2);
-        assert_eq!(request.contents[0].role, GeminiRole::User);
+        assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
         assert_eq!(
             request.contents[0].parts[0],
-            GeminiContentPart {
+            GCPVertexGeminiContentPart {
                 thought: false,
                 thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::Text { text: "test_user" }),
+                data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                    text: Cow::Borrowed("test_user")
+                }),
             }
         );
-        assert_eq!(request.contents[1].role, GeminiRole::Model);
+        assert_eq!(request.contents[1].role, GCPVertexGeminiRole::Model);
         assert_eq!(request.contents[1].parts.len(), 1);
         assert_eq!(
             request.contents[1].parts[0],
-            GeminiContentPart {
+            GCPVertexGeminiContentPart {
                 thought: false,
                 thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::Text {
-                    text: "test_assistant"
+                data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                    text: Cow::Borrowed("test_assistant")
                 }),
             }
         );
@@ -1962,35 +1624,39 @@ mod tests {
         let result = GeminiRequest::new(&inference_request).await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
-        assert_eq!(request.contents[0].role, GeminiRole::User);
-        assert_eq!(request.contents[1].role, GeminiRole::User);
-        assert_eq!(request.contents[2].role, GeminiRole::Model);
+        assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
+        assert_eq!(request.contents[1].role, GCPVertexGeminiRole::User);
+        assert_eq!(request.contents[2].role, GCPVertexGeminiRole::Model);
         assert_eq!(request.contents[0].parts.len(), 1);
         assert_eq!(request.contents[1].parts.len(), 1);
         assert_eq!(request.contents[2].parts.len(), 1);
         assert_eq!(
             request.contents[0].parts[0],
-            GeminiContentPart {
+            GCPVertexGeminiContentPart {
                 thought: false,
                 thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::Text { text: "test_user" }),
+                data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                    text: Cow::Borrowed("test_user")
+                }),
             }
         );
         assert_eq!(
             request.contents[1].parts[0],
-            GeminiContentPart {
+            GCPVertexGeminiContentPart {
                 thought: false,
                 thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::Text { text: "test_user2" }),
+                data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                    text: Cow::Borrowed("test_user2")
+                }),
             }
         );
         assert_eq!(
             request.contents[2].parts[0],
-            GeminiContentPart {
+            GCPVertexGeminiContentPart {
                 thought: false,
                 thought_signature: None,
-                data: FlattenUnknown::Normal(GeminiPartData::Text {
-                    text: "test_assistant"
+                data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                    text: Cow::Borrowed("test_assistant")
                 }),
             }
         );
@@ -2053,6 +1719,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2111,7 +1778,7 @@ mod tests {
                 output_tokens: Some(10),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(
@@ -2156,6 +1823,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2225,7 +1893,7 @@ mod tests {
                 output_tokens: Some(20),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(
             model_inference_response.finish_reason,
             Some(FinishReason::Stop)
@@ -2291,6 +1959,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2352,7 +2021,7 @@ mod tests {
                 output_tokens: Some(40),
             }
         );
-        assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.provider_latency, latency);
         assert_eq!(
             model_inference_response.system,
             Some("test_system".to_string())
@@ -2600,6 +2269,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2666,6 +2336,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(15),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2736,6 +2407,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(3),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2796,6 +2468,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2853,6 +2526,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(8),
                 candidates_token_count: None, // No output tokens when blocked
+                thoughts_token_count: None,
             }),
         };
 
@@ -2901,6 +2575,7 @@ mod tests {
             usage_metadata: Some(GeminiUsageMetadata {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(0),
+                thoughts_token_count: None,
             }),
         };
 
@@ -2981,6 +2656,7 @@ mod tests {
                 usage_metadata: Some(GeminiUsageMetadata {
                     prompt_token_count: Some(1),
                     candidates_token_count: Some(1),
+                    thoughts_token_count: None,
                 }),
             };
 
@@ -3031,54 +2707,24 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
-        // Test that reasoning_effort warns with tip about thinking_budget_tokens
-        assert!(logs_contain(
-            "Google AI Studio Gemini does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
-        ));
-
-        // Test that thinking_budget_tokens is applied correctly in generation_config
-        assert!(request.generation_config.is_some());
+        // Test that thinking_budget_tokens and reasoning_effort are applied correctly in generation_config
+        assert!(
+            request.generation_config.is_some(),
+            "generation_config should be set when thinking params are provided"
+        );
         let gen_config = request.generation_config.unwrap();
         assert_eq!(
             gen_config.thinking_config,
             Some(GeminiThinkingConfig {
-                thinking_budget: 1024,
-            })
+                thinking_budget: Some(1024),
+                thinking_level: Some("high".to_string()),
+            }),
+            "thinking_config should contain both thinking_budget and thinking_level"
         );
 
         // Test that verbosity warns
         assert!(logs_contain(
             "Google AI Studio Gemini does not support the inference parameter `verbosity`"
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_gemini_warns_on_detail() {
-        let logs_contain = capture_logs();
-
-        // Test with resolved file with detail
-        let dummy_storage_path = StoragePath {
-            kind: StorageKind::Disabled,
-            path: object_store::path::Path::parse("dummy-path").unwrap(),
-        };
-        let content_block = ContentBlock::File(Box::new(LazyFile::Base64(PendingObjectStoreFile(
-            ObjectStorageFile {
-                file: ObjectStoragePointer {
-                    source_url: None,
-                    mime_type: mime::IMAGE_PNG,
-                    storage_path: dummy_storage_path,
-                    detail: Some(Detail::Auto),
-                    filename: None,
-                },
-                data: BASE64_STANDARD.encode(b"fake image data"),
-            },
-        ))));
-
-        let _result = convert_non_thought_content_block(&content_block).await;
-
-        // Should log a warning about detail not being supported
-        assert!(logs_contain(
-            "The image detail parameter is not supported by Google AI Studio Gemini"
         ));
     }
 }

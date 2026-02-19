@@ -15,14 +15,26 @@ use tensorzero_core::config::UninitializedConfig;
 
 use autopilot_client::AutopilotSideInfo;
 
+// Re-export EditPayload types from config-applier
+pub use config_applier::{
+    EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
+    UpsertVariantPayload,
+};
+
 /// Parameters for the write_config tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct WriteConfigToolParams {
     /// The config to write as a JSON object.
     pub config: Value,
     /// Templates that should be stored with the config.
     #[serde(default)]
     pub extra_templates: HashMap<String, String>,
+    /// We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
+    /// Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub edit: Option<Vec<EditPayload>>,
 }
 
 /// Tool for writing config snapshots.
@@ -34,18 +46,22 @@ impl ToolMetadata for WriteConfigTool {
     type Output = WriteConfigResponse;
     type LlmParams = WriteConfigToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("write_config")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Write a config snapshot to storage and return its hash. \
              Autopilot tags are automatically merged into the provided tags.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn strict(&self) -> bool {
+        false // Config objects have arbitrary nested structures (tools, gateway)
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Write a config snapshot to storage.",
@@ -70,7 +86,8 @@ impl ToolMetadata for WriteConfigTool {
                                         "type": "object",
                                         "description": "Map of variant names to variant configurations."
                                     }
-                                }
+                                },
+                                "additionalProperties": false
                             }
                         },
                         "metrics": {
@@ -94,7 +111,8 @@ impl ToolMetadata for WriteConfigTool {
                                         "enum": ["inference", "episode"],
                                         "description": "Whether metric applies to individual inferences or episodes."
                                     }
-                                }
+                                },
+                                "additionalProperties": false
                             }
                         },
                         "tools": {
@@ -105,7 +123,8 @@ impl ToolMetadata for WriteConfigTool {
                             "type": "object",
                             "description": "Gateway configuration settings."
                         }
-                    }
+                    },
+                    "additionalProperties": false
                 },
                 "extra_templates": {
                     "type": "object",
@@ -113,7 +132,8 @@ impl ToolMetadata for WriteConfigTool {
                     "additionalProperties": { "type": "string" }
                 }
             },
-            "required": ["config"]
+            "required": ["config"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
-use rand::{
-    SeedableRng,
-    distr::{Alphanumeric, SampleString},
-    rngs::StdRng,
-};
+use rand::distr::{Alphanumeric, SampleString};
 use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::postgres::KeyInfo;
 
 /// A parsed TensorZero API key, with the long key hashed.
 /// This does not contain the original long key
@@ -26,7 +24,7 @@ const LONG_KEY_LENGTH: usize = 48;
 /// The `crate::postgres::create_key` function will use this to generate a fresh API key and insert it into the database.
 pub(crate) fn secure_fresh_api_key() -> SecretString {
     // Use a cryptographically secure RNG, seeded from the OS
-    let mut rng = StdRng::from_os_rng();
+    let mut rng = rand::rng();
     let short_key = Alphanumeric.sample_string(&mut rng, PUBLIC_ID_LENGTH);
     let long_key = Alphanumeric.sample_string(&mut rng, LONG_KEY_LENGTH);
     let key = format!("{SK_PREFIX}-{T0_PREFIX}-{short_key}-{long_key}");
@@ -127,7 +125,10 @@ pub enum TensorZeroAuthError {
     #[error("Migration error: {message}")]
     Migration { message: String },
     #[error("Error performing authentication: {message}")]
-    Middleware { message: String },
+    Middleware {
+        message: String,
+        key_info: Option<Box<KeyInfo>>,
+    },
 }
 
 impl From<sqlx::Error> for TensorZeroAuthError {

@@ -1,17 +1,18 @@
 //! Tool for running evaluations on datasets.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
+use std::{borrow::Cow, time::Duration};
 
 use async_trait::async_trait;
 use durable_tools::{
-    CacheEnabledMode, NonControlToolError, RunEvaluationParams, RunEvaluationResponse, SimpleTool,
-    SimpleToolContext, ToolMetadata, ToolResult,
+    ActionInput, ActionResponse, CacheEnabledMode, NonControlToolError, RunEvaluationParams,
+    RunEvaluationResponse, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult,
 };
 
 use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
+use tensorzero_core::config::snapshot::SnapshotHash;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
@@ -47,6 +48,11 @@ pub struct RunEvaluationToolParams {
     /// Defaults to On (caching enabled) to match the evaluations CLI behavior.
     #[serde(default = "default_inference_cache")]
     pub inference_cache: CacheEnabledMode,
+    /// Include per-datapoint results in the response.
+    /// When true, the response will include individual results for each datapoint.
+    /// Default is false to avoid response bloat for large evaluations.
+    #[serde(default)]
+    pub include_datapoint_results: bool,
 }
 
 fn default_concurrency() -> usize {
@@ -70,11 +76,11 @@ impl ToolMetadata for RunEvaluationTool {
     type Output = RunEvaluationResponse;
     type LlmParams = RunEvaluationToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("run_evaluation")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Run an evaluation on a dataset. This runs inference on each datapoint using the \
              specified variant, then runs the configured evaluators. Returns statistics \
@@ -82,7 +88,11 @@ impl ToolMetadata for RunEvaluationTool {
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn strict(&self) -> bool {
+        false // precision_targets uses additionalProperties: {type: number} not supported in strict mode
+    }
+
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Run an evaluation on a dataset using configured evaluators.",
@@ -121,9 +131,14 @@ impl ToolMetadata for RunEvaluationTool {
                     "type": "string",
                     "enum": ["on", "off", "read_only"],
                     "description": "Cache configuration for inference requests (default: 'on')."
+                },
+                "include_datapoint_results": {
+                    "type": "boolean",
+                    "description": "Include per-datapoint results in the response (default: false)."
                 }
             },
-            "required": ["evaluation_name", "variant_name"]
+            "required": ["evaluation_name", "variant_name"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
@@ -133,13 +148,17 @@ impl ToolMetadata for RunEvaluationTool {
             .into()
         })
     }
+
+    fn timeout(&self) -> Duration {
+        Duration::from_secs(30 * 60)
+    }
 }
 
 #[async_trait]
 impl SimpleTool for RunEvaluationTool {
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
-        _side_info: <Self as ToolMetadata>::SideInfo,
+        side_info: <Self as ToolMetadata>::SideInfo,
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
@@ -152,11 +171,36 @@ impl SimpleTool for RunEvaluationTool {
             inference_cache: llm_params.inference_cache,
             max_datapoints: llm_params.max_datapoints,
             precision_targets: llm_params.precision_targets,
+            include_datapoint_results: llm_params.include_datapoint_results,
+            tags: side_info.to_tags(),
         };
 
-        ctx.client()
-            .run_evaluation(params)
+        // Since autopilot sessions always have a config snapshot hash set, we use the action
+        // endpoint to ensure evaluations run against the historical config snapshot.
+        // If this assumption changes (e.g., we want to run against current config), use this instead:
+        //
+        // ctx.client()
+        //     .run_evaluation(params)
+        //     .await
+        //     .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
+
+        let snapshot_hash: SnapshotHash = side_info
+            .config_snapshot_hash
+            .parse()
+            .map_err(|_| AutopilotToolError::validation("Invalid snapshot hash"))?;
+
+        let response = ctx
+            .client()
+            .action(snapshot_hash, ActionInput::RunEvaluation(Box::new(params)))
             .await
-            .map_err(|e| AutopilotToolError::client_error("run_evaluation", e).into())
+            .map_err(|e| AutopilotToolError::client_error("run_evaluation", e))?;
+
+        match response {
+            ActionResponse::RunEvaluation(eval_response) => Ok(eval_response),
+            _ => Err(AutopilotToolError::validation(
+                "Unexpected response type from action endpoint",
+            )
+            .into()),
+        }
     }
 }

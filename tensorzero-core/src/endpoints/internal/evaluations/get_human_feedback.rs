@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::{EvaluationQueries, InferenceEvaluationHumanFeedbackRow};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -20,8 +21,9 @@ pub struct GetHumanFeedbackRequest {
 }
 
 /// Response for the check human feedback endpoint.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct GetHumanFeedbackResponse {
     /// The human feedback result, if it exists.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -39,8 +41,12 @@ pub async fn get_human_feedback_handler(
     Path(datapoint_id): Path<Uuid>,
     Json(request): Json<GetHumanFeedbackRequest>,
 ) -> Result<Json<GetHumanFeedbackResponse>, Error> {
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = get_human_feedback(
-        &app_state.clickhouse_connection_info,
+        &database,
         &request.metric_name,
         &datapoint_id,
         &request.output,

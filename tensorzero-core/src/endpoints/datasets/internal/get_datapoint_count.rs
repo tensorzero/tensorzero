@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::db::datasets::DatasetQueries;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -17,8 +18,9 @@ pub struct GetDatapointCountQueryParams {
 }
 
 /// Response containing datapoint counts
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetDatapointCountResponse {
     /// The count of datapoints for the dataset
     pub datapoint_count: u64,
@@ -26,11 +28,11 @@ pub struct GetDatapointCountResponse {
 
 /// Gets datapoint counts for a dataset
 pub async fn get_datapoint_count(
-    clickhouse: &impl DatasetQueries,
+    database: &(dyn DatasetQueries + Sync),
     dataset_name: &str,
     function_name: Option<&str>,
 ) -> Result<GetDatapointCountResponse, Error> {
-    let datapoint_count = clickhouse
+    let datapoint_count = database
         .count_datapoints_for_dataset(dataset_name, function_name)
         .await?;
 
@@ -51,12 +53,12 @@ pub async fn get_datapoint_count_handler(
     Path(dataset_name): Path<String>,
     Query(params): Query<GetDatapointCountQueryParams>,
 ) -> Result<Json<GetDatapointCountResponse>, Error> {
-    let response = get_datapoint_count(
-        &app_state.clickhouse_connection_info,
-        &dataset_name,
-        params.function_name.as_deref(),
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response =
+        get_datapoint_count(&database, &dataset_name, params.function_name.as_deref()).await?;
 
     Ok(Json(response))
 }

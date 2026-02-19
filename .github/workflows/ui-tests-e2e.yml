@@ -22,6 +22,14 @@ on:
         required: true
       GCP_JWT_KEY:
         required: true
+      R2_ACCESS_KEY_ID:
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        required: true
+      ANTHROPIC_API_KEY:
+        required: false
+      TOGETHER_API_KEY:
+        required: false
     inputs:
       is_merge_group:
         required: true
@@ -38,12 +46,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-{gateway,ui,mock-provider-api}-container
+          pattern: build-{gateway,ui,mock-provider-api,fixtures}-container
           merge-multiple: true
 
       - name: Load container images
@@ -51,22 +59,20 @@ jobs:
           docker load < gateway-container.tar
           docker load < ui-container.tar
           docker load < mock-provider-api-container.tar
-
-      # This allows us to use 'no-build' on subsequent steps
-      - name: Build needed docker images
-        working-directory: ui
-        run: |
-          touch fixtures/.env-gateway
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml build fixtures
+          docker load < fixtures-container.tar
 
       - name: Start docker containers without external network access
         working-directory: ui
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           # Environment variables shared by the gateway and ui containers
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_CONFIG=/app/config/empty.toml" >> fixtures/.env
 
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
@@ -91,7 +97,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Setup `pnpm`
         run: |
@@ -105,18 +111,27 @@ jobs:
             fi
             sleep $((10 * attempt))
           done
-        shell: bash
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Setup Playwright
-        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Playwright after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-{gateway,ui,mock-provider-api}-container
+          pattern: build-{gateway,ui,mock-provider-api,fixtures}-container
           merge-multiple: true
 
       - name: Load container images
@@ -124,16 +139,15 @@ jobs:
           docker load < gateway-container.tar
           docker load < ui-container.tar
           docker load < mock-provider-api-container.tar
-
-      # This allows us to use 'no-build' on subsequent steps
-      - name: Build needed docker images
-        working-directory: ui
-        run: |
-          touch fixtures/.env-gateway
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml build fixtures
+          docker load < fixtures-container.tar
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          # Fall back to HTTP download for fork PRs (secrets unavailable)
+          TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS: ${{ github.event.pull_request.head.repo.full_name != github.repository && '1' || '' }}
         run: |
           # We set all of the environment variables for both the gateway and ui containers here
           # The 'ui-tests-e2e' job tests that the UI container starts without some of these variables set,
@@ -148,6 +162,7 @@ jobs:
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
@@ -186,106 +201,9 @@ jobs:
             ui/test-results/
           retention-days: 7
 
-  ui-tests-e2e-credentials:
-    runs-on: ubuntu-latest
-    # We currently only run this job when we have secrets available, since we need to use an S3 object_store
-    # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
-    # For now, it just runs in the merge queue and on prs from the main repo
-    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group }}
-    steps:
-      # TODO - investigate why using the Namespace checkout action causes
-      # 'tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT' to be `None`
-      - name: Check out the repo
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Setup GCP credentials
-        env:
-          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
-        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
-
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: "24.12.0"
-
-      - name: Setup `pnpm`
-        run: |
-          for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Failed to install pnpm after 3 attempts"
-              exit 1
-            fi
-            sleep $((10 * attempt))
-          done
-        shell: bash
-
-      - name: Install `pnpm` dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Setup Playwright
-        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
-
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          pattern: build-{gateway,ui}-container
-          merge-multiple: true
-
-      - name: Load container images
-        run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-
-      - name: Set common fixture environment variables
-        working-directory: ui
-        run: |
-          # Environment variables shared by the gateway and ui containers
-          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
-          echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env-gateway
-          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> fixtures/.env-gateway
-          echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env
-
-      - name: Start docker containers
-        run: |
-          export TENSORZERO_SKIP_LARGE_FIXTURES=1
-          # Explicitly start services without mock-provider-api (TENSORZERO_INTERNAL_MOCK_PROVIDER_API is not set)
-          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml up clickhouse postgres gateway-postgres-migrations gateway fixtures ui -d
-          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml wait fixtures
-
-      - name: Run UI E2E tests that require credentials
-        id: e2e_tests_credentials
-        env:
-          TENSORZERO_CI: 1
-          TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
-          TENSORZERO_GATEWAY_URL: "http://gateway:3000"
-        run: pnpm ui:test:e2e --grep "@credentials"
-
-      - name: Print docker compose logs
-        if: always()
-        run: |
-          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml logs -t
-
-      - name: Upload Playwright artifacts
-        if: failure()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        with:
-          name: playwright-report-e2e-credentials
-          path: |
-            ui/playwright-report/
-            ui/test-results/
-          retention-days: 7
-
   ui-tests-e2e-mock:
     runs-on: ubuntu-latest
-    # Same conditions as ui-tests-e2e-credentials
+    # Same conditions as ui-tests-e2e-main
     if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group }}
     steps:
       - name: Check out the repo
@@ -294,7 +212,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "24.12.0"
+          node-version: "24.13.0"
 
       - name: Setup `pnpm`
         run: |
@@ -308,18 +226,27 @@ jobs:
             fi
             sleep $((10 * attempt))
           done
-        shell: bash
 
       - name: Install `pnpm` dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Setup Playwright
-        run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Playwright after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-{gateway,ui,mock-provider-api}-container
+          pattern: build-{gateway,ui,mock-provider-api,fixtures}-container
           merge-multiple: true
 
       - name: Load container images
@@ -327,6 +254,7 @@ jobs:
           docker load < gateway-container.tar
           docker load < ui-container.tar
           docker load < mock-provider-api-container.tar
+          docker load < fixtures-container.tar
 
       - name: Set common fixture environment variables
         working-directory: ui
@@ -337,6 +265,7 @@ jobs:
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
           # S3 credentials are required - gateway validates object store at startup
           echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
@@ -348,9 +277,12 @@ jobs:
           echo "TOGETHER_API_KEY=not_used" >> fixtures/.env-gateway
 
       - name: Start docker containers
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
-          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml up -d
+          docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml up --no-build -d
           docker compose -f ui/fixtures/docker-compose.e2e.yml -f ui/fixtures/docker-compose.ui.yml wait fixtures
 
       - name: Run UI E2E tests that use the mock server
@@ -376,13 +308,220 @@ jobs:
             ui/test-results/
           retention-days: 7
 
-  # Test that the ui e2e tests pass with model inference cache included in this commit
-  # and no model provider secrets set.
-  ui-tests-e2e-existing-model-inference-cache:
-    uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
-    with:
-      regen_cache: false
-      is_merge_group: ${{ inputs.is_merge_group }}
-    secrets:
-      S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  # Main E2E test job - uses provider-proxy for HTTP-level caching of provider API calls.
+  # Replaces the previous ui-tests-e2e-credentials and ui-tests-e2e-existing-model-inference-cache jobs.
+  ui-tests-e2e-main:
+    name: ui-tests-e2e-main (auth=${{ matrix.auth_enabled }})
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'tensorzero/tensorzero' && ((github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group) }}
+
+    strategy:
+      matrix:
+        auth_enabled: ${{ inputs.is_merge_group && fromJSON('[true, false]') || fromJSON('[false]') }}
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Cleanup disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+
+      - name: Setup GCP credentials
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.13.0"
+
+      - name: Setup `pnpm`
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+
+      - name: Install `pnpm` dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Playwright
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Playwright after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+
+      - name: Download container images
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          pattern: build-{gateway,gateway-e2e,ui,mock-provider-api,provider-proxy,fixtures}-container
+          merge-multiple: true
+
+      - name: Load container images
+        continue-on-error: true
+        run: |
+          docker load < gateway-container.tar
+          docker load < gateway-e2e-container.tar
+          docker load < ui-container.tar
+          docker load < mock-provider-api-container.tar
+          docker load < provider-proxy-container.tar
+          docker load < fixtures-container.tar
+
+      - name: Download provider-proxy cache from R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          PROVIDER_PROXY_CACHE_BUCKET: provider-proxy-cache-ui
+          PROVIDER_PROXY_CACHE_DIR: provider-proxy-cache-ui
+        run: ./ci/download-provider-proxy-cache.sh
+        continue-on-error: true
+
+      - name: Set common fixture environment variables
+        working-directory: ui
+        run: |
+          # Environment variables shared by the gateway and ui containers
+          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_E2E_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_PROVIDER_PROXY_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          # Real API keys for cache misses (forwarded through provider-proxy to real providers)
+          echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
+          echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env-gateway
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
+          echo "TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
+
+      - name: Enable authentication in config
+        if: matrix.auth_enabled == true
+        working-directory: ui
+        run: |
+          sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
+
+      - name: Generate API key
+        if: matrix.auth_enabled == true
+        working-directory: ui
+        run: |
+          echo "Starting postgres..."
+          docker compose -f fixtures/docker-compose.e2e.yml up postgres -d
+
+          echo "Waiting for postgres to be healthy (timeout: 2 minutes)..."
+          timeout 120 bash -c '
+            while true; do
+              STATUS=$(docker compose -f fixtures/docker-compose.e2e.yml ps postgres --format json | jq -r "if type == \"array\" then .[0].Health else .Health end")
+              echo "Postgres health status: $STATUS"
+              if [ "$STATUS" = "healthy" ]; then
+                echo "Postgres is healthy!"
+                break
+              fi
+              sleep 2
+            done
+          ' || {
+            echo "ERROR: Timeout waiting for postgres to become healthy"
+            docker compose -f fixtures/docker-compose.e2e.yml ps postgres
+            docker compose -f fixtures/docker-compose.e2e.yml logs postgres
+            exit 1
+          }
+
+          echo "Running gateway postgres migrations..."
+          docker run --rm \
+            --network fixtures_default \
+            -e TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures" \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            --run-postgres-migrations
+
+          echo "Generating API key..."
+          API_KEY=$(docker run --rm \
+            --network fixtures_default \
+            -e TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures" \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            --create-api-key)
+
+          echo "TENSORZERO_API_KEY=$API_KEY" >> fixtures/.env
+
+      # Free up disk space from multi-stage builder images
+      - name: Prune docker images to free up disk space
+        run: docker system prune -f
+
+      - name: Start docker containers and apply fixtures
+        working-directory: ui
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          export TENSORZERO_SKIP_LARGE_FIXTURES=1
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml up --no-build -d
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml wait fixtures
+
+      - name: Run UI E2E tests
+        id: e2e_tests
+        env:
+          TENSORZERO_CI: 1
+          TENSORZERO_POSTGRES_URL: "postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures"
+          TENSORZERO_GATEWAY_URL: "http://gateway:3000"
+        run: pnpm ui:test:e2e --grep-invert "@mock" -j 4
+
+      - name: Upload provider-proxy cache to R2
+        if: ${{ always() && (inputs.is_merge_group || github.event_name == 'schedule') }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          PROVIDER_PROXY_CACHE_BUCKET: provider-proxy-cache-ui
+          PROVIDER_PROXY_CACHE_DIR: provider-proxy-cache-ui
+        run: ./ci/upload-provider-proxy-cache.sh
+
+      - name: Print Docker Compose logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml logs -t
+
+      - name: Print container health checks
+        if: always()
+        working-directory: ui
+        run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml ps -q ui) | jq
+
+      - name: Make sure the current commit short hash is in the Docker Compose gateway logs
+        if: always()
+        working-directory: ui
+        run: |
+          SHORT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.proxy.yml logs gateway | grep "(commit: ${SHORT_HASH})" || {
+            echo "ERROR: Commit hash ${SHORT_HASH} not found in gateway logs"
+            exit 1
+          }
+
+      - name: Print ClickHouse error logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+
+      - name: Print ClickHouse trace logs
+        if: always()
+        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: playwright-report-e2e-main-auth-${{ matrix.auth_enabled }}
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7

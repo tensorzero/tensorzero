@@ -192,6 +192,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
         input=input,
         episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
         # because the gateway validates some of the properties needed
+        cache_options={"enabled": "write_only"},
     )
     assert isinstance(result, ChatInferenceResponse)
     assert input == input_copy, "Input should not be modified by the client"
@@ -1123,6 +1124,7 @@ def test_sync_inference_caching(sync_client: TensorZeroGateway):
             "messages": [{"role": "user", "content": "Hello"}],
         },
         tags={"key": "value"},
+        cache_options={"enabled": "write_only"},
     )
     assert isinstance(result, ChatInferenceResponse)
     assert result.variant_name == "test"
@@ -1174,6 +1176,7 @@ def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
             "messages": [{"role": "user", "content": "Hello"}],
         },
         stream=True,
+        cache_options={"enabled": "write_only"},
     )
     assert isinstance(stream, t.Iterator)
 
@@ -3387,7 +3390,7 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
 
     assert (
         str(exc_info.value)
-        == 'Failed to deserialize JSON to tensorzero_types::message::Input: messages[0].content[0]: invalid type: string "Invalid", expected internally tagged enum InputMessageContent at line 1 column 54'
+        == 'Failed to deserialize JSON to tensorzero_types::message::Input: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
     )
 
 

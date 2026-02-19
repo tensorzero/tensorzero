@@ -226,6 +226,7 @@ pub fn convert_to_optimizer_status(
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
                     timeouts: TimeoutsConfig::default(),
                     skip_relay: None,
+                    namespace: None,
                 }),
             }
         }
@@ -260,8 +261,9 @@ impl Display for GCPVertexGeminiFineTuningJobStatus {
 mod tests {
     use crate::{
         inference::types::{
-            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            ContentBlockChatOutput, FunctionType, ModelInput, ResolvedContentBlock,
+            ResolvedRequestMessage, Role, StoredInput, StoredInputMessage,
+            StoredInputMessageContent, System, Text,
         },
         stored_inference::{RenderedSample, StoredOutput},
         tool::DynamicToolParams,
@@ -277,6 +279,7 @@ mod tests {
         })]);
         let inference = RenderedSample {
             function_name: "test".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![ResolvedRequestMessage {
@@ -376,7 +379,7 @@ mod tests {
             "state": "JOB_STATE_SUCCEEDED",
             "createTime": "1620000000",
             "tunedModel": {
-                "model": "projects/test-project/locations/us-central1/models/gemini-1.5-flash-001-tuned-12345",
+                "model": "projects/test-project/locations/us-central1/models/gemini-2.5-flash-tuned-12345",
                 "endpoint": "projects/test-project/locations/us-central1/endpoints/67890"
             },
             "tuning_data_statistics": {
@@ -402,7 +405,7 @@ mod tests {
             "state": "JOB_STATE_SUCCEEDED",
             "createTime": "1620000000",
             "tunedModel": {
-                "model": "projects/test-project/locations/us-central1/models/gemini-1.5-flash-001-tuned-12345"
+                "model": "projects/test-project/locations/us-central1/models/gemini-2.5-flash-tuned-12345"
                 // No endpoint field
             },
             "tuning_data_statistics": {
@@ -502,7 +505,7 @@ mod tests {
             "state": "JOB_STATE_PENDING",
             "createTime": "1620000000",
             "tunedModel": {
-                "model": "projects/test-project/locations/us-central1/models/gemini-1.5-flash-001-tuned-12345"
+                "model": "projects/test-project/locations/us-central1/models/gemini-2.5-flash-tuned-12345"
                 // No endpoint field - this is the key part of the test
             },
             "tuning_data_statistics": {

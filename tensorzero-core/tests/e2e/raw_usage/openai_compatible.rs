@@ -5,7 +5,7 @@
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -221,7 +221,7 @@ async fn test_openai_compatible_raw_usage_streaming_error_without_include_usage(
     );
 
     let error_body: Value = response.json().await.unwrap();
-    let error_message = error_body["error"].as_str().unwrap_or("");
+    let error_message = error_body["error"]["message"].as_str().unwrap_or("");
     assert!(
         error_message.contains("include_usage"),
         "Error message should mention include_usage requirement. Got: {error_message}"
@@ -229,6 +229,7 @@ async fn test_openai_compatible_raw_usage_streaming_error_without_include_usage(
 }
 
 /// Test that tensorzero::include_raw_usage returns tensorzero_raw_usage in streaming response
+/// and that raw_usage is NOT buffered (appears as chunks stream, not only at the end)
 #[tokio::test]
 async fn test_openai_compatible_raw_usage_streaming() {
     let client = Client::new();
@@ -257,11 +258,12 @@ async fn test_openai_compatible_raw_usage_streaming() {
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
-    let mut found_raw_usage = false;
-    let mut last_chunk_with_usage: Option<Value> = None;
     let mut all_chunks: Vec<Value> = Vec::new();
+    // Track which chunk indices have raw_usage
+    let mut chunks_with_raw_usage: Vec<usize> = Vec::new();
 
     while let Some(event) = response.next().await {
         let event = event.expect("Failed to receive event");
@@ -274,12 +276,12 @@ async fn test_openai_compatible_raw_usage_streaming() {
 
         let chunk_json: Value =
             serde_json::from_str(&message.data).expect("Failed to parse chunk as JSON");
+        let chunk_index = all_chunks.len();
         all_chunks.push(chunk_json.clone());
 
-        // Check if this chunk has tensorzero_raw_usage at chunk level (sibling to usage)
+        // Check if this chunk has tensorzero_raw_usage at chunk level
         if let Some(raw_usage) = chunk_json.get("tensorzero_raw_usage") {
-            found_raw_usage = true;
-            last_chunk_with_usage = Some(chunk_json.clone());
+            chunks_with_raw_usage.push(chunk_index);
             assert!(
                 raw_usage.is_array(),
                 "tensorzero_raw_usage should be an array"
@@ -306,17 +308,21 @@ async fn test_openai_compatible_raw_usage_streaming() {
     }
 
     assert!(
-        found_raw_usage,
-        "Streaming response should include tensorzero_raw_usage in final chunk.\n\
+        !chunks_with_raw_usage.is_empty(),
+        "Streaming response should include tensorzero_raw_usage.\n\
         Total chunks received: {}\n\
         Last few chunks:\n{:#?}",
         all_chunks.len(),
         all_chunks.iter().rev().take(3).collect::<Vec<_>>()
     );
 
-    let final_chunk = last_chunk_with_usage
-        .expect("No chunk with tensorzero_raw_usage found despite found_raw_usage being true");
-    let raw_usage = final_chunk
+    // Verify that raw_usage is NOT buffered to the end.
+    // It should appear on chunks as they stream, not only on the final chunk.
+    // Since create_stream passes through raw_usage on the final chunk (which has usage),
+    // we expect the chunk with raw_usage to also be the chunk with usage.
+    // The key point is that raw_usage is NOT accumulated across chunks anymore.
+    let raw_usage_chunk = &all_chunks[chunks_with_raw_usage[0]];
+    let raw_usage = raw_usage_chunk
         .get("tensorzero_raw_usage")
         .expect("tensorzero_raw_usage field missing from chunk");
     assert!(
@@ -331,4 +337,172 @@ async fn test_openai_compatible_raw_usage_streaming() {
         "Streaming response should include at least one tensorzero_raw_usage entry"
     );
     assert_openai_chat_usage_details(&raw_usage_array[0]);
+}
+
+/// Test that usage only appears in the final chunk for OpenAI-compatible streaming
+#[tokio::test]
+async fn test_openai_compatible_streaming_usage_only_in_last_chunk() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model": "tensorzero::model_name::openai::gpt-5-nano",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hello"
+            }
+        ],
+        "params": {
+            "chat_completion": {
+                "reasoning_effort": "minimal"
+            }
+        },
+        "stream": true,
+        "stream_options": {
+            "include_usage": true
+        },
+        "tensorzero::episode_id": episode_id.to_string()
+    });
+
+    let mut response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut all_chunks: Vec<Value> = Vec::new();
+    // Track which chunk indices have usage populated (not null)
+    let mut chunks_with_usage: Vec<usize> = Vec::new();
+
+    while let Some(event) = response.next().await {
+        let event = event.expect("Failed to receive event");
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value =
+            serde_json::from_str(&message.data).expect("Failed to parse chunk as JSON");
+        let chunk_index = all_chunks.len();
+        all_chunks.push(chunk_json.clone());
+
+        // Check if this chunk has non-null usage
+        if let Some(usage) = chunk_json.get("usage")
+            && !usage.is_null()
+        {
+            chunks_with_usage.push(chunk_index);
+        }
+    }
+
+    assert!(
+        all_chunks.len() >= 2,
+        "Expected at least 2 chunks (content + usage), got {}",
+        all_chunks.len()
+    );
+
+    assert_eq!(
+        chunks_with_usage.len(),
+        1,
+        "Usage should appear in exactly one chunk (the final one). \
+        Found usage in {} chunks at indices: {:?}.\n\
+        All chunks:\n{:#?}",
+        chunks_with_usage.len(),
+        chunks_with_usage,
+        all_chunks
+    );
+
+    // Verify the chunk with usage is the last chunk
+    let last_chunk_index = all_chunks.len() - 1;
+    assert_eq!(
+        chunks_with_usage[0], last_chunk_index,
+        "Usage should appear only in the last chunk (index {}), but found at index {}",
+        last_chunk_index, chunks_with_usage[0]
+    );
+
+    // Verify the usage data is valid
+    let final_chunk = &all_chunks[last_chunk_index];
+    let usage = final_chunk
+        .get("usage")
+        .expect("Final chunk should have usage field");
+    assert!(
+        usage.get("prompt_tokens").is_some(),
+        "usage should have prompt_tokens"
+    );
+    assert!(
+        usage.get("completion_tokens").is_some(),
+        "usage should have completion_tokens"
+    );
+}
+
+/// Test that no usage appears when stream_options.include_usage is false (or omitted)
+#[tokio::test]
+async fn test_openai_compatible_streaming_no_usage_when_disabled() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // Omit stream_options entirely (OpenAI default is no usage)
+    let payload = json!({
+        "model": "tensorzero::model_name::openai::gpt-5-nano",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hello"
+            }
+        ],
+        "params": {
+            "chat_completion": {
+                "reasoning_effort": "minimal"
+            }
+        },
+        "stream": true,
+        "tensorzero::episode_id": episode_id.to_string()
+    });
+
+    let mut response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut all_chunks: Vec<Value> = Vec::new();
+    let mut chunks_with_usage: Vec<usize> = Vec::new();
+
+    while let Some(event) = response.next().await {
+        let event = event.expect("Failed to receive event");
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk_json: Value =
+            serde_json::from_str(&message.data).expect("Failed to parse chunk as JSON");
+        let chunk_index = all_chunks.len();
+        all_chunks.push(chunk_json.clone());
+
+        // Check if this chunk has non-null usage
+        if let Some(usage) = chunk_json.get("usage")
+            && !usage.is_null()
+        {
+            chunks_with_usage.push(chunk_index);
+        }
+    }
+
+    assert!(!all_chunks.is_empty(), "Should receive at least one chunk");
+
+    assert!(
+        chunks_with_usage.is_empty(),
+        "No chunks should have usage when stream_options.include_usage is not set.\n\
+        Found usage in {} chunks at indices: {:?}.\n\
+        All chunks:\n{:#?}",
+        chunks_with_usage.len(),
+        chunks_with_usage,
+        all_chunks
+    );
 }

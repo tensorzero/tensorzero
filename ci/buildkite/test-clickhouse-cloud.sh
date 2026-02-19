@@ -15,7 +15,9 @@ export R2_SECRET_ACCESS_KEY=$(buildkite-agent secret get R2_SECRET_ACCESS_KEY)
 # We concatenate our clickhouse instance prefix, along with our chosen clickhouse id (e.g. 'dev-tensorzero-e2e-tests-instance-' and '0'), to form the instance name
 # Then, we look up the instance url for this name, and add basic-auth credentials to the url to get our full TENSORZERO_CLICKHOUSE_URL
 # The 'export' statements go on separate lines to prevent the return code from the $() command from being ignored
-CURL_OUTPUT=$(curl --retry 3 --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services)
+CURL_OUTPUT=$(curl \
+    --retry 10 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 30 \
+    --user "$CLICKHOUSE_API_KEY:$CLICKHOUSE_KEY_SECRET" https://api.clickhouse.cloud/v1/organizations/b55f1935-803f-4931-90b3-4d26089004d4/services)
 echo "ClickHouse API response: $CURL_OUTPUT"
 TENSORZERO_CLICKHOUSE_URL=$(echo "$CURL_OUTPUT" | jq -r ".result[] | select(.name == \"${CLICKHOUSE_PREFIX}${CLICKHOUSE_ID}\") | .endpoints[] | select(.protocol == \"https\") | \"https://$CLICKHOUSE_USERNAME:$CLICKHOUSE_PASSWORD@\" + .host + \":\" + (.port | tostring)")
 export TENSORZERO_CLICKHOUSE_URL
@@ -33,6 +35,12 @@ TENSORZERO_CLICKHOUSE_URL="${TENSORZERO_CLICKHOUSE_URL%/}/${DATABASE_NAME}"
 export TENSORZERO_CLICKHOUSE_URL
 echo "Updated ClickHouse URL with database: $TENSORZERO_CLICKHOUSE_URL"
 
+# Fire off a background request to wake up the ClickHouse Cloud instance
+# (idle instances take ~4-5 min to wake up, so start this early while we install dependencies)
+echo "Starting background ClickHouse wake-up..."
+curl --retry 20 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
+    "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SELECT 1' > /dev/null 2>&1 &
+
 # Set up cleanup function to run on exit
 cleanup_database() {
     if [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
@@ -42,7 +50,9 @@ cleanup_database() {
             echo "Cleaning up database: $DB_NAME"
             # Remove the database path from URL for the cleanup call
             BASE_URL=$(echo "$TENSORZERO_CLICKHOUSE_URL" | sed 's|/[^/]*$||')
-            curl -X POST "${BASE_URL%/}/?param_target=$DB_NAME" \
+            curl -X POST \
+                --retry 10 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 30 \
+                "${BASE_URL%/}/?param_target=$DB_NAME" \
                 --data-binary "DROP DATABASE IF EXISTS {target:Identifier}" || true
             echo "Cleanup completed for database: $DB_NAME"
         fi
@@ -74,26 +84,30 @@ echo "deb https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/s
 sudo apt-get update
 sudo apt-get install -y clickhouse-client
 
-curl "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  -s -- -y
+curl \
+    --retry 20 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
+    "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SHOW DATABASES'
+curl --proto '=https' --tlsv1.2 -sSf --retry 3 --retry-delay 5 --retry-all-errors https://sh.rustup.rs | sh -s -- -y
 . "$HOME/.cargo/env"
-curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
+curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://astral.sh/uv/0.9.27/install.sh | sh
 source $HOME/.local/bin/env
-curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
+curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
 uv run ./ui/fixtures/download-large-fixtures.py
 uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
 
 # Start postgres service for migrations
+# `cargo test-clickhouse` should not include any Postgres tests, but we're including it here to be safe.
 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres
 export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 
 SQLX_OFFLINE=1 cargo build-e2e
 cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
+
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
-    max_attempts=90
+    max_attempts=180
     while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
         echo "Waiting for gateway to be healthy..."
         sleep 1
@@ -106,13 +120,34 @@ cargo run-e2e > e2e_logs.txt 2>&1 &
     done
     export GATEWAY_PID=$!
 
-export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
-export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
+# Start test compilation in background while we load fixtures
+echo "Starting background test compilation..."
+SQLX_OFFLINE=1 cargo test-clickhouse --no-run &
+TEST_BUILD_PID=$!
+
+export CLICKHOUSE_USER=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
+export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
+export CLICKHOUSE_SECURE=1
 export SQLX_OFFLINE=1
 cd ui/fixtures
-./load_fixtures.sh $DATABASE_NAME
+max_retries=3
+for attempt in $(seq 1 $max_retries); do
+    if ./load_fixtures.sh $DATABASE_NAME; then
+        break
+    fi
+    if [ $attempt -eq $max_retries ]; then
+        echo "load_fixtures.sh failed after $max_retries attempts"
+        exit 1
+    fi
+    echo "load_fixtures.sh failed (attempt $attempt/$max_retries), retrying..."
+    sleep 5
+done
 cd ../..
 sleep 2
+
+# Wait for background test compilation to finish
+echo "Waiting for test compilation to complete..."
+wait $TEST_BUILD_PID
 
 cargo test-clickhouse --no-fail-fast -- --skip test_concurrent_clickhouse_migrations
 cat e2e_logs.txt
