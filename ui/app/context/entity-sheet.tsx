@@ -14,7 +14,6 @@ const SHEET_ID_PARAM = "sheetId";
 type EntitySheetState = { type: "inference"; id: string } | null;
 
 function parseSheetStateFromUrl(): EntitySheetState {
-  if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.search);
   const type = params.get(SHEET_PARAM);
   const id = params.get(SHEET_ID_PARAM);
