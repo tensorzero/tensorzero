@@ -12,6 +12,8 @@ import {
 } from "./UuidHoverCard";
 
 const MOCK_UUID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+const MOCK_TIMESTAMP = "2026-01-15T14:30:00Z";
+const MOCK_TIMESTAMP_OLD = "2026-01-15T13:30:00Z";
 
 interface HoverCardShellProps {
   type: ResolvedObject["type"];
@@ -169,7 +171,7 @@ export const InferenceDefault: Story = {
       functionType="json"
       variantName="gpt4o_v1"
       variantType="chat_completion"
-      preview={{ timestamp: new Date().toISOString() }}
+      preview={{ timestamp: MOCK_TIMESTAMP }}
       isLoading={false}
     />
   ),
@@ -182,9 +184,7 @@ export const InferenceChatFunction: Story = {
       functionType="chat"
       variantName="claude_sonnet"
       variantType="chat_completion"
-      preview={{
-        timestamp: new Date(Date.now() - 3600 * 1000).toISOString(),
-      }}
+      preview={{ timestamp: MOCK_TIMESTAMP_OLD }}
       isLoading={false}
     />
   ),
@@ -197,7 +197,7 @@ export const InferenceLongFunctionName: Story = {
       functionType="json"
       variantName="gpt4o_v1"
       variantType="chat_completion"
-      preview={{ timestamp: new Date().toISOString() }}
+      preview={{ timestamp: MOCK_TIMESTAMP }}
       isLoading={false}
     />
   ),
@@ -210,7 +210,7 @@ export const InferenceLongVariantName: Story = {
       functionType="chat"
       variantName="claude_3_5_sonnet_20241022_with_custom_system_prompt_and_fewshot_examples_v3"
       variantType="chat_completion"
-      preview={{ timestamp: new Date().toISOString() }}
+      preview={{ timestamp: MOCK_TIMESTAMP }}
       isLoading={false}
     />
   ),
@@ -223,7 +223,7 @@ export const InferenceLongFunctionAndVariant: Story = {
       functionType="json"
       variantName="claude_3_5_sonnet_20241022_with_custom_system_prompt_and_fewshot_examples_v3"
       variantType="chat_completion"
-      preview={{ timestamp: new Date().toISOString() }}
+      preview={{ timestamp: MOCK_TIMESTAMP }}
       isLoading={false}
     />
   ),
@@ -236,7 +236,7 @@ export const InferenceNoVariantType: Story = {
       functionType="chat"
       variantName="default"
       variantType={null}
-      preview={{ timestamp: new Date().toISOString() }}
+      preview={{ timestamp: MOCK_TIMESTAMP }}
       isLoading={false}
     />
   ),
@@ -337,7 +337,7 @@ export const AllTypes: Story = {
         functionType="json"
         variantName="gpt4o_v1"
         variantType="chat_completion"
-        preview={{ timestamp: new Date().toISOString() }}
+        preview={{ timestamp: MOCK_TIMESTAMP }}
         isLoading={false}
       />
       <EpisodeHoverCard inferenceCount={5} isLoading={false} />
@@ -363,7 +363,7 @@ export const AllTypesLongNames: Story = {
         functionType="json"
         variantName="claude_3_5_sonnet_20241022_with_custom_system_prompt_and_fewshot_examples_v3"
         variantType="chat_completion"
-        preview={{ timestamp: new Date().toISOString() }}
+        preview={{ timestamp: MOCK_TIMESTAMP }}
         isLoading={false}
       />
       <EpisodeHoverCard inferenceCount={12847} isLoading={false} />
