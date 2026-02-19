@@ -32,6 +32,9 @@ vi.mock("../logger", () => ({
 // Import after mocks are set up
 import {
   getConfig,
+  resolveConfigEntry,
+  resolveFunctionConfig,
+  resolveEvaluationConfig,
   _resetForTesting,
   _checkConfigHashForTesting,
   _getConfigCacheForTesting,
@@ -188,6 +191,168 @@ describe("config cache and hash polling", () => {
       const config2 = await getConfig();
       expect(config2.config_hash).toBe("hash_v2");
       expect(mockGetUiConfig).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("resolveConfigEntry", () => {
+    test("should return value on cache hit without refetching", async () => {
+      const mockConfig: UiConfig = {
+        ...createMockConfig("hash1"),
+        functions: {
+          "my-function": {
+            type: "chat",
+            variants: {},
+            schemas: {},
+            tools: [],
+            tool_choice: "auto",
+            parallel_tool_calls: null,
+            description: "",
+            experimentation: { base: { type: "uniform" }, namespaces: {} },
+          },
+        },
+      };
+      mockGetUiConfig.mockResolvedValueOnce(mockConfig);
+
+      const result = await resolveConfigEntry(
+        // eslint-disable-next-line no-restricted-syntax
+        (cfg) => cfg.functions["my-function"],
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.value.type).toBe("chat");
+      expect(result!.config).toBe(await getConfig());
+      // Only one fetch — no retry needed
+      expect(mockGetUiConfig).toHaveBeenCalledTimes(1);
+    });
+
+    test("should retry and succeed when entry appears in fresh config", async () => {
+      // First config: missing the function
+      const staleConfig = createMockConfig("hash_old");
+      mockGetUiConfig.mockResolvedValueOnce(staleConfig);
+
+      // Pre-populate cache with stale config
+      await getConfig();
+      expect(mockGetUiConfig).toHaveBeenCalledTimes(1);
+
+      // Second config: has the function (autopilot just created it)
+      const freshConfig: UiConfig = {
+        ...createMockConfig("hash_new"),
+        functions: {
+          "new-function": {
+            type: "chat",
+            variants: {},
+            schemas: {},
+            tools: [],
+            tool_choice: "auto",
+            parallel_tool_calls: null,
+            description: "",
+            experimentation: { base: { type: "uniform" }, namespaces: {} },
+          },
+        },
+      };
+      mockGetUiConfig.mockResolvedValueOnce(freshConfig);
+
+      const result = await resolveConfigEntry(
+        // eslint-disable-next-line no-restricted-syntax
+        (cfg) => cfg.functions["new-function"],
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.value.type).toBe("json");
+      expect(result!.config.config_hash).toBe("hash_new");
+      // Two fetches: initial + retry
+      expect(mockGetUiConfig).toHaveBeenCalledTimes(2);
+    });
+
+    test("should return null when entry not found even after retry", async () => {
+      const config1 = createMockConfig("hash1");
+      const config2 = createMockConfig("hash2");
+      mockGetUiConfig.mockResolvedValueOnce(config1);
+
+      // Pre-populate cache
+      await getConfig();
+
+      mockGetUiConfig.mockResolvedValueOnce(config2);
+
+      const result = await resolveConfigEntry(
+        // eslint-disable-next-line no-restricted-syntax
+        (cfg) => cfg.functions["nonexistent"],
+      );
+
+      expect(result).toBeNull();
+      // Two fetches: initial cache hit (miss) + retry
+      expect(mockGetUiConfig).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("resolveFunctionConfig", () => {
+    test("should resolve existing function config", async () => {
+      const mockConfig: UiConfig = {
+        ...createMockConfig("hash1"),
+        functions: {
+          "test-fn": {
+            type: "chat",
+            variants: {},
+            schemas: {},
+            tools: [],
+            tool_choice: "auto",
+            parallel_tool_calls: null,
+            description: "",
+            experimentation: { base: { type: "uniform" }, namespaces: {} },
+          },
+        },
+      };
+      mockGetUiConfig.mockResolvedValueOnce(mockConfig);
+
+      const result = await resolveFunctionConfig("test-fn");
+
+      expect(result).not.toBeNull();
+      expect(result!.value.type).toBe("chat");
+    });
+
+    test("should return null for missing function after retry", async () => {
+      const config1 = createMockConfig("hash1");
+      const config2 = createMockConfig("hash2");
+      mockGetUiConfig
+        .mockResolvedValueOnce(config1)
+        .mockResolvedValueOnce(config2);
+
+      const result = await resolveFunctionConfig("nonexistent");
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("resolveEvaluationConfig", () => {
+    test("should resolve existing evaluation config", async () => {
+      const mockConfig: UiConfig = {
+        ...createMockConfig("hash1"),
+        evaluations: {
+          "test-eval": {
+            type: "inference",
+            function_name: "test-fn",
+            evaluators: {},
+          },
+        },
+      };
+      mockGetUiConfig.mockResolvedValueOnce(mockConfig);
+
+      const result = await resolveEvaluationConfig("test-eval");
+
+      expect(result).not.toBeNull();
+      expect(result!.value.function_name).toBe("test-fn");
+    });
+
+    test("should return null for missing evaluation after retry", async () => {
+      const config1 = createMockConfig("hash1");
+      const config2 = createMockConfig("hash2");
+      mockGetUiConfig
+        .mockResolvedValueOnce(config1)
+        .mockResolvedValueOnce(config2);
+
+      const result = await resolveEvaluationConfig("nonexistent");
+
+      expect(result).toBeNull();
     });
   });
 });

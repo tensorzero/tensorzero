@@ -8,7 +8,11 @@
  * browser clients.
  */
 
-import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
+import type {
+  EvaluationConfig,
+  FunctionConfig,
+  UiConfig,
+} from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { DEFAULT_FUNCTION } from "../constants";
 import { logger } from "../logger";
@@ -169,6 +173,58 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
   const cfg = config || (await getConfig());
 
   return cfg.functions;
+}
+
+interface ResolvedConfigEntry<T> {
+  value: T;
+  config: UiConfig;
+}
+
+/**
+ * Resolves a config entry with automatic retry on cache miss.
+ *
+ * When autopilot (or manual config changes) creates new entities, the UI's
+ * cached config may not include them yet. This function tries the cached config
+ * first, and if the accessor returns null/undefined, invalidates the cache,
+ * refetches from the gateway, and retries once.
+ *
+ * @param accessor - Function that extracts the desired entry from a UiConfig
+ * @returns The resolved entry and the config it came from, or null if not found even after retry
+ */
+export async function resolveConfigEntry<T>(
+  accessor: (config: UiConfig) => T | null | undefined,
+): Promise<ResolvedConfigEntry<T> | null> {
+  const config = await getConfig();
+  const value = accessor(config);
+  if (value != null) return { value, config };
+
+  // Cache miss — invalidate and retry once with fresh config from gateway
+  logger.debug("Config entry not found in cache, retrying with fresh config");
+  configCache = undefined;
+  const freshConfig = await getConfig();
+  const freshValue = accessor(freshConfig);
+  if (freshValue != null) return { value: freshValue, config: freshConfig };
+
+  return null;
+}
+
+/**
+ * Resolves a function config by name with retry on cache miss.
+ */
+export async function resolveFunctionConfig(
+  functionName: string,
+): Promise<ResolvedConfigEntry<FunctionConfig> | null> {
+  // eslint-disable-next-line no-restricted-syntax
+  return resolveConfigEntry((cfg) => cfg.functions[functionName]);
+}
+
+/**
+ * Resolves an evaluation config by name with retry on cache miss.
+ */
+export async function resolveEvaluationConfig(
+  evaluationName: string,
+): Promise<ResolvedConfigEntry<EvaluationConfig> | null> {
+  return resolveConfigEntry((cfg) => cfg.evaluations[evaluationName]);
 }
 
 // ============================================================================

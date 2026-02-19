@@ -16,10 +16,10 @@ import VariantTemplate from "./VariantTemplate";
 import { useFunctionConfig } from "~/context/config";
 import PageButtons from "~/components/utils/PageButtons";
 import VariantInferenceTable from "./VariantInferenceTable";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { resolveFunctionConfig } from "~/utils/config/index.server";
 import { countInferencesForVariant } from "~/utils/clickhouse/inference.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import type { TimeWindow } from "~/types/tensorzero";
+import type { TimeWindow, UiConfig } from "~/types/tensorzero";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import type { Route } from "./+types/route";
@@ -74,7 +74,7 @@ async function fetchVariantPerformance(
   variant_name: string,
   metric_name: string | undefined,
   time_granularity: string,
-  config: Awaited<ReturnType<typeof getConfig>>,
+  config: UiConfig,
 ): Promise<VariantPerformanceData> {
   if (!metric_name || !config.metrics[metric_name]) {
     return undefined;
@@ -127,7 +127,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     return redirect("/observability/functions");
   }
 
-  const config = await getConfig();
+  const result = await resolveFunctionConfig(function_name);
+  if (!result) {
+    throw data(`Function ${function_name} not found`, { status: 404 });
+  }
+  const { config } = result;
+
   const url = new URL(request.url);
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
@@ -137,11 +142,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
-  }
-
-  const function_config = await getFunctionConfig(function_name, config);
-  if (!function_config) {
-    throw data(`Function ${function_name} not found`, { status: 404 });
   }
 
   // Return granular promises for independent streaming

@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import type { Route } from "./+types/route";
 import type { EvaluationResultRow } from "~/types/tensorzero";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { resolveEvaluationConfig } from "~/utils/config/index.server";
 import {
   getEvaluationResults,
   pollForEvaluationResults,
@@ -142,16 +142,17 @@ async function fetchEvaluationData(
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const config = await getConfig();
-  const evaluationConfig = config.evaluations[params.evaluation_name];
-  if (!evaluationConfig) {
+  const evalResult = await resolveEvaluationConfig(params.evaluation_name);
+  if (!evalResult) {
     throw data(
       `Evaluation config not found for evaluation ${params.evaluation_name}`,
       { status: 404 },
     );
   }
+  const { value: evaluationConfig, config } = evalResult;
   const function_name = evaluationConfig.function_name;
-  const functionConfig = await getFunctionConfig(function_name, config);
+  // eslint-disable-next-line no-restricted-syntax
+  const functionConfig = config.functions[function_name];
   const function_type = functionConfig?.type;
   if (!function_type) {
     throw data(`Function config not found for function ${function_name}`, {

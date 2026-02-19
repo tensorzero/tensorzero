@@ -27,7 +27,7 @@ import {
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
 import { useToast } from "~/hooks/use-toast";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { resolveFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
 import { loadFileDataForInput } from "~/utils/resolve.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
@@ -277,10 +277,9 @@ async function handleUpdateAction(
 > {
   let functionConfig;
   try {
-    const config = await getConfig();
-    functionConfig = await getFunctionConfig(actionData.function_name, config);
+    const result = await resolveFunctionConfig(actionData.function_name);
 
-    if (!functionConfig) {
+    if (!result) {
       return data(
         {
           success: false,
@@ -289,6 +288,7 @@ async function handleUpdateAction(
         { status: 400 },
       );
     }
+    functionConfig = result.value;
   } catch (error) {
     logger.error("Error fetching function config:", error);
     return data(

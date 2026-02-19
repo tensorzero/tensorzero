@@ -10,7 +10,7 @@ import {
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
 import PageButtons from "~/components/utils/PageButtons";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { resolveFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
@@ -176,7 +176,12 @@ async function fetchFunctionDetailData(params: FetchParams) {
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
-  const config = await getConfig();
+  const result = await resolveFunctionConfig(function_name);
+  if (!result) {
+    throw data(`Function ${function_name} not found`, { status: 404 });
+  }
+  const { value: function_config, config } = result;
+
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;
@@ -191,11 +196,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ) || "week") as TimeWindow;
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
-  }
-
-  const function_config = await getFunctionConfig(function_name, config);
-  if (!function_config) {
-    throw data(`Function ${function_name} not found`, { status: 404 });
   }
 
   return {

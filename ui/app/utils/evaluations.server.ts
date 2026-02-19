@@ -9,7 +9,7 @@ import type {
   FunctionConfig,
   EvaluationFunctionConfig,
 } from "~/types/tensorzero";
-import { getConfig } from "./config/index.server";
+import { resolveEvaluationConfig } from "./config/index.server";
 import { getTensorZeroClient } from "./tensorzero.server";
 
 /**
@@ -118,12 +118,12 @@ export async function runEvaluation(
   let evaluationRunId: string | null = null;
   let startResolved = false;
 
-  // Get config and look up evaluation and function configs
-  const config = await getConfig();
-  const evaluationConfig = config.evaluations[evaluationName];
-  if (!evaluationConfig) {
+  // Get config and look up evaluation and function configs (with retry on cache miss)
+  const evalResult = await resolveEvaluationConfig(evaluationName);
+  if (!evalResult) {
     throw new Error(`Evaluation '${evaluationName}' not found in config`);
   }
+  const { value: evaluationConfig, config } = evalResult;
   // eslint-disable-next-line no-restricted-syntax
   const functionConfig = config.functions[evaluationConfig.function_name];
   if (!functionConfig) {

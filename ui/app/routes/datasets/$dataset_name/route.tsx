@@ -15,7 +15,7 @@ import { ActionBar } from "~/components/layout/ActionBar";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { resolveFunctionConfig } from "~/utils/config/index.server";
 import { useReadOnly } from "~/context/read-only";
 import type { DatapointFilter } from "~/types/tensorzero";
 
@@ -109,12 +109,8 @@ export async function action({ request, params }: Route.ActionArgs) {
       });
     }
 
-    const config = await getConfig();
-    const functionConfig = await getFunctionConfig(
-      function_name as string,
-      config,
-    );
-    if (!functionConfig) {
+    const result = await resolveFunctionConfig(function_name as string);
+    if (!result) {
       throw data("Function configuration not found", { status: 404 });
     }
 

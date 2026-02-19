@@ -15,13 +15,18 @@ import {
   useAllFunctionConfigs,
   useConfig,
 } from "~/context/config";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { getConfig, resolveFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { datapointInputToZodInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
-import type { GetDatapointsResponse, Datapoint } from "~/types/tensorzero";
+import type {
+  FunctionConfig,
+  GetDatapointsResponse,
+  Datapoint,
+  UiConfig,
+} from "~/types/tensorzero";
 import { useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
@@ -135,20 +140,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   const limit = safeParseInt(searchParams.get("limit"), DEFAULT_LIMIT);
   const offset = safeParseInt(searchParams.get("offset"), 0);
 
-  let config;
-  try {
+  let functionConfig: FunctionConfig | undefined;
+  let config: UiConfig;
+  if (functionName) {
+    const result = await resolveFunctionConfig(functionName);
+    if (!result) {
+      throw data(`Function config not found for function ${functionName}`, {
+        status: 404,
+      });
+    }
+    functionConfig = result.value;
+    config = result.config;
+  } else {
     config = await getConfig();
-  } catch {
-    throw data("Failed to load configuration", { status: 500 });
-  }
-
-  const functionConfig = functionName
-    ? await getFunctionConfig(functionName, config)
-    : undefined;
-  if (functionName && !functionConfig) {
-    throw data(`Function config not found for function ${functionName}`, {
-      status: 404,
-    });
   }
   const datasetName = searchParams.get("datasetName");
 

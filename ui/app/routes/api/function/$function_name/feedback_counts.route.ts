@@ -1,5 +1,5 @@
 import { data, type LoaderFunctionArgs } from "react-router";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { resolveFunctionConfig } from "~/utils/config/index.server";
 import type { MetricsWithFeedbackResponse } from "~/types/tensorzero";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
@@ -17,18 +17,17 @@ export async function loader({
   }
 
   try {
-    const config = await getConfig();
-    const functionConfig = await getFunctionConfig(functionName, config);
-    if (!functionConfig) {
+    const result = await resolveFunctionConfig(functionName);
+    if (!result) {
       throw data(`Function ${functionName} not found in config`, {
         status: 404,
       });
     }
 
     const tensorZeroClient = getTensorZeroClient();
-    const result =
+    const response =
       await tensorZeroClient.getFunctionMetricsWithFeedback(functionName);
-    return Response.json(result);
+    return Response.json(response);
   } catch (error) {
     logger.error("Error fetching metrics with feedback:", error);
     throw new Response("Error fetching metrics with feedback", {

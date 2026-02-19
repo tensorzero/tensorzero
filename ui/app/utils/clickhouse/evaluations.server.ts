@@ -1,7 +1,7 @@
 import { logger } from "~/utils/logger";
 import type { EvaluationResultRow } from "~/types/tensorzero";
 
-import { getConfig } from "../config/index.server";
+import { resolveEvaluationConfig } from "../config/index.server";
 import { loadFileDataForInput } from "../resolve.server";
 import { getTensorZeroClient } from "../tensorzero.server";
 
@@ -56,9 +56,8 @@ export async function getEvaluationsForDatapoint(
   datapoint_id: string,
   evaluation_run_ids: string[],
 ): Promise<EvaluationResultRow[]> {
-  const config = await getConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
+  const evalResult = await resolveEvaluationConfig(evaluation_name);
+  if (!evalResult) {
     throw new Error(`Evaluation ${evaluation_name} not found in config`);
   }
 
