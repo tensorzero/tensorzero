@@ -1056,6 +1056,89 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_datapoint_ids_mixed_datasets() {
+    let http_client = Client::new();
+    let _clickhouse = get_clickhouse().await;
+
+    // Create datapoints in two different datasets
+    let dataset_a = format!("test-eval-mixed-a-{}", Uuid::now_v7());
+    let dataset_b = format!("test-eval-mixed-b-{}", Uuid::now_v7());
+
+    let datapoint_id_a = create_test_chat_datapoint(&http_client, &dataset_a).await;
+    let datapoint_id_b = create_test_chat_datapoint(&http_client, &dataset_b).await;
+
+    // Wait for data to be available
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Pass datapoint_ids from different datasets — should fail
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {
+                "exact_match_eval": {
+                    "type": "exact_match",
+                }
+            }
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation_mixed_datasets",
+        "datapoint_ids": [datapoint_id_a.to_string(), datapoint_id_b.to_string()],
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    let mut event_stream = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut found_fatal_error = false;
+    let mut error_message = String::new();
+
+    while let Some(event_result) = event_stream.next().await {
+        match event_result {
+            Ok(Event::Open) => continue,
+            Ok(Event::Message(message)) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+
+                let event: Value = serde_json::from_str(&message.data).unwrap();
+                let event_type = event.get("type").and_then(|t| t.as_str());
+
+                match event_type {
+                    Some("fatal_error") => {
+                        found_fatal_error = true;
+                        error_message = event
+                            .get("message")
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        break;
+                    }
+                    Some("complete") => break,
+                    _ => {}
+                }
+            }
+            Err(e) => panic!("SSE stream error: {e:?}"),
+        }
+    }
+
+    assert!(
+        found_fatal_error,
+        "Should receive fatal_error when datapoint_ids span multiple datasets"
+    );
+    assert!(
+        error_message.contains("All datapoints must belong to the same dataset"),
+        "Error message should mention the multi-dataset constraint, got: {error_message}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_conflicting_variant_config() {
     let http_client = Client::new();
 
