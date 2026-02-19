@@ -625,6 +625,18 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     return (await response.json()) as UiConfig;
   }
 
+  async getUiConfigByHash(hash: string): Promise<UiConfig> {
+    const response = await this.fetch(
+      `/internal/ui_config/${encodeURIComponent(hash)}`,
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as UiConfig;
+  }
+
   /**
    * Fetches inference count for a function, optionally filtered by variant or grouped by variant.
    * @param functionName - The name of the function to get count for

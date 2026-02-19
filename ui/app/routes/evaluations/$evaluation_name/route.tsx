@@ -1,8 +1,16 @@
 import { Suspense, useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import type { Route } from "./+types/route";
-import type { EvaluationResultRow } from "~/types/tensorzero";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import type {
+  EvaluationResultRow,
+  InferenceEvaluationConfig,
+  MetricConfig,
+} from "~/types/tensorzero";
+import {
+  getConfig,
+  getFunctionConfig,
+  getConfigForSnapshot,
+} from "~/utils/config/index.server";
 import {
   getEvaluationResults,
   pollForEvaluationResults,
@@ -30,7 +38,6 @@ import {
 } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
-import { useConfig } from "~/context/config";
 import { getRunningEvaluation } from "~/utils/evaluations.server";
 import {
   EvaluationErrorInfo,
@@ -143,15 +150,35 @@ async function fetchEvaluationData(
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
-  const evaluationConfig = config.evaluations[params.evaluation_name];
+  let evaluationConfig = config.evaluations[params.evaluation_name];
+  let effectiveConfig = config;
+
   if (!evaluationConfig) {
-    throw data(
-      `Evaluation config not found for evaluation ${params.evaluation_name}`,
-      { status: 404 },
+    // Evaluation not in current config — try to find it from a historical snapshot
+    const client = getTensorZeroClient();
+    const runs = await client.listEvaluationRuns(100, 0);
+    const matchingRun = runs.runs.find(
+      (r) => r.evaluation_name === params.evaluation_name,
     );
+
+    if (matchingRun?.snapshot_hash) {
+      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
+      evaluationConfig = effectiveConfig.evaluations[params.evaluation_name];
+    }
+
+    if (!evaluationConfig) {
+      throw data(
+        `Evaluation config not found for evaluation ${params.evaluation_name}`,
+        { status: 404 },
+      );
+    }
   }
+
   const function_name = evaluationConfig.function_name;
-  const functionConfig = await getFunctionConfig(function_name, config);
+  const functionConfig = await getFunctionConfig(
+    function_name,
+    effectiveConfig,
+  );
   const function_type = functionConfig?.type;
   if (!function_type) {
     throw data(`Function config not found for function ${function_name}`, {
@@ -176,6 +203,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const metric_names = evaluator_names.map((evaluatorName) =>
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
   );
+
+  // Build metrics config map for the relevant metrics
+  const metricsConfig: Record<string, MetricConfig> = {};
+  for (const metricName of metric_names) {
+    const metricConfig = effectiveConfig.metrics[metricName];
+    if (metricConfig) {
+      metricsConfig[metricName] = metricConfig;
+    }
+  }
 
   const any_evaluation_is_running = Object.values(
     selected_evaluation_run_ids_array,
@@ -215,6 +251,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     evaluation_name: params.evaluation_name,
+    evaluationConfig,
+    function_type,
+    metricsConfig,
     evaluationData: fetchEvaluationData(
       params.evaluation_name,
       function_name,
@@ -326,6 +365,8 @@ function ResultsError() {
 
 function ResultsContent({
   evaluation_name,
+  evaluationConfig,
+  metricsConfig,
   data,
   evaluator_names,
   any_evaluation_is_running,
@@ -336,6 +377,8 @@ function ResultsContent({
   setSelectedRows,
 }: {
   evaluation_name: string;
+  evaluationConfig: InferenceEvaluationConfig;
+  metricsConfig: Record<string, MetricConfig>;
   data: EvaluationData;
   evaluator_names: string[];
   any_evaluation_is_running: boolean;
@@ -381,6 +424,8 @@ function ResultsContent({
       </div>
       <EvaluationTable
         evaluation_name={evaluation_name}
+        evaluationConfig={evaluationConfig}
+        metricsConfig={metricsConfig}
         selected_evaluation_run_infos={selected_evaluation_run_infos}
         evaluation_results={evaluation_results}
         evaluation_statistics={evaluation_statistics}
@@ -406,6 +451,9 @@ function ResultsContent({
 export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const {
     evaluation_name,
+    evaluationConfig: evaluation_config,
+    function_type,
+    metricsConfig,
     evaluationData,
     has_selected_runs,
     offset,
@@ -426,14 +474,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   >(new Map());
   const [selectedDataset, setSelectedDataset] = useState<string>("");
 
-  const config = useConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
-    throw data(
-      `Evaluation config not found for evaluation ${evaluation_name}`,
-      { status: 404 },
-    );
-  }
   const function_name = evaluation_config.function_name;
 
   useAutoRefresh(any_evaluation_is_running);
@@ -486,7 +526,10 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
         }
         name={evaluation_name}
       >
-        <BasicInfo evaluation_config={evaluation_config} />
+        <BasicInfo
+          evaluation_config={evaluation_config}
+          functionType={function_type}
+        />
         <ActionBar>
           <DatasetSelect
             selected={selectedDataset}
@@ -517,6 +560,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
               {(resolvedData) => (
                 <ResultsContent
                   evaluation_name={evaluation_name}
+                  evaluationConfig={evaluation_config}
+                  metricsConfig={metricsConfig}
                   data={resolvedData}
                   evaluator_names={evaluator_names}
                   any_evaluation_is_running={any_evaluation_is_running}

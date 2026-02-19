@@ -1,4 +1,3 @@
-import { useFunctionConfig } from "~/context/config";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -26,6 +25,7 @@ import { useReadOnly } from "~/context/read-only";
 interface BasicInfoProps {
   evaluation_name: string;
   evaluation_config: InferenceEvaluationConfig;
+  functionType: "chat" | "json";
   dataset_name: string;
   datapoint_id: string;
   datapoint_name?: string;
@@ -36,6 +36,7 @@ interface BasicInfoProps {
 export default function BasicInfo({
   evaluation_name,
   evaluation_config,
+  functionType,
   dataset_name,
   datapoint_id,
   datapoint_name,
@@ -43,12 +44,8 @@ export default function BasicInfo({
   onRenameDatapoint,
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
-  const functionConfig = useFunctionConfig(functionName);
   const isReadOnly = useReadOnly();
-  const functionType = functionConfig?.type;
-  const functionIconConfig = functionType
-    ? getFunctionTypeIcon(functionType)
-    : null;
+  const functionIconConfig = getFunctionTypeIcon(functionType);
 
   return (
     <BasicInfoLayout>

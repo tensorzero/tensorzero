@@ -1,4 +1,3 @@
-import { useFunctionConfig } from "~/context/config";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -12,13 +11,15 @@ import type { InferenceEvaluationConfig } from "~/types/tensorzero";
 
 interface BasicInfoProps {
   evaluation_config: InferenceEvaluationConfig;
+  functionType: "chat" | "json";
 }
 
-export default function BasicInfo({ evaluation_config }: BasicInfoProps) {
+export default function BasicInfo({
+  evaluation_config,
+  functionType,
+}: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
-  const functionConfig = useFunctionConfig(functionName);
-  const functionType = functionConfig?.type;
-  const functionIconConfig = functionType && getFunctionTypeIcon(functionType);
+  const functionIconConfig = getFunctionTypeIcon(functionType);
 
   return (
     <BasicInfoLayout>

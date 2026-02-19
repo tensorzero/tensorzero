@@ -276,9 +276,19 @@ export function InferenceDetailContent({
   const options = isDefault ? models : variants;
   const onSelect = isDefault ? onModelSelect : onVariantSelect;
 
+  const variantType =
+    functionConfig?.variants[inference.variant_name]?.inner.type ??
+    (inference.function_name === "tensorzero::default"
+      ? "chat_completion"
+      : "unknown");
+
   // Build the header components
   const basicInfoElement = (
-    <BasicInfo inference={inference} modelInferences={model_inferences} />
+    <BasicInfo
+      inference={inference}
+      variantType={variantType}
+      modelInferences={model_inferences}
+    />
   );
 
   const actionBarElement = (

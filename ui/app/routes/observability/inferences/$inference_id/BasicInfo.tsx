@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { Await } from "react-router";
 import type { StoredInference } from "~/types/tensorzero";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
-import { useFunctionConfig } from "~/context/config";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   BasicInfoLayout,
@@ -28,12 +27,14 @@ import type { ModelInferencesData } from "./inference-data.server";
 
 interface BasicInfoStreamingProps {
   inference: StoredInference;
+  variantType: string;
   promise: Promise<ModelInferencesData>;
   locationKey: string;
 }
 
 export function BasicInfoStreaming({
   inference,
+  variantType,
   promise,
   locationKey,
 }: BasicInfoStreamingProps) {
@@ -46,7 +47,11 @@ export function BasicInfoStreaming({
         }
       >
         {(modelInferences) => (
-          <BasicInfo inference={inference} modelInferences={modelInferences} />
+          <BasicInfo
+            inference={inference}
+            variantType={variantType}
+            modelInferences={modelInferences}
+          />
         )}
       </Await>
     </Suspense>
@@ -55,17 +60,16 @@ export function BasicInfoStreaming({
 
 interface BasicInfoProps {
   inference: StoredInference;
+  variantType: string;
   modelInferences?: ParsedModelInferenceRow[];
 }
 
-export function BasicInfo({ inference, modelInferences = [] }: BasicInfoProps) {
+export function BasicInfo({
+  inference,
+  variantType,
+  modelInferences = [],
+}: BasicInfoProps) {
   const inferenceUsage = getTotalInferenceUsage(modelInferences);
-  const functionConfig = useFunctionConfig(inference.function_name);
-  const variantType =
-    functionConfig?.variants[inference.variant_name]?.inner.type ??
-    (inference.function_name === "tensorzero::default"
-      ? "chat_completion"
-      : "unknown");
 
   const functionIconConfig = getFunctionTypeIcon(inference.type);
   const hasCachedInferences = modelInferences.some((mi) => mi.cached);

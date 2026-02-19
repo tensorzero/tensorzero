@@ -172,6 +172,47 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
 }
 
 // ============================================================================
+// Snapshot config fetching
+// ============================================================================
+
+const snapshotConfigCache = new Map<string, UiConfig>();
+const MAX_SNAPSHOT_CACHE_SIZE = 50;
+
+/**
+ * Fetches the config for a given snapshot hash. If the hash matches the current
+ * config, returns that. Otherwise fetches the historical config from the gateway
+ * and caches it. Falls back to the current config on error.
+ */
+export async function getConfigForSnapshot(
+  snapshotHash: string | undefined | null,
+): Promise<UiConfig> {
+  if (!snapshotHash) return getConfig();
+
+  const currentConfig = await getConfig();
+  if (currentConfig.config_hash === snapshotHash) return currentConfig;
+
+  const cached = snapshotConfigCache.get(snapshotHash);
+  if (cached) return cached;
+
+  try {
+    const client = getTensorZeroClient();
+    const snapshotConfig = await client.getUiConfigByHash(snapshotHash);
+    // eslint-disable-next-line no-restricted-syntax
+    snapshotConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
+
+    if (snapshotConfigCache.size >= MAX_SNAPSHOT_CACHE_SIZE) {
+      const firstKey = snapshotConfigCache.keys().next().value;
+      if (firstKey) snapshotConfigCache.delete(firstKey);
+    }
+    snapshotConfigCache.set(snapshotHash, snapshotConfig);
+    return snapshotConfig;
+  } catch (error) {
+    logger.warn(`Failed to fetch config for snapshot ${snapshotHash}:`, error);
+    return currentConfig;
+  }
+}
+
+// ============================================================================
 // Testing utilities - exported for testing only
 // ============================================================================
 
@@ -183,6 +224,7 @@ export function _resetForTesting(): void {
   configCache = undefined;
   autopilotAvailableCache = undefined;
   pollingStarted = false;
+  snapshotConfigCache.clear();
 }
 
 /**
