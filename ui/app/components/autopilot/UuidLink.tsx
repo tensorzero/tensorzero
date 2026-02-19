@@ -13,7 +13,7 @@ import type { ResolvedObject } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 import { toResolvedObjectUrl } from "~/utils/urls";
 import { UuidHoverCard } from "./UuidHoverCard";
-import { useEntitySheet } from "~/components/entity-sheet/useEntitySheet";
+import { useEntitySheet } from "~/context/entity-sheet";
 
 const ICON_SIZE = 12;
 const ICON_CLASS = "mr-1 inline align-middle -translate-y-px";

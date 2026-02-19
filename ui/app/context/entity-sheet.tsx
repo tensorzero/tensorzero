@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { useLocation } from "react-router";
 
 const SHEET_PARAM = "sheet";
@@ -17,62 +24,36 @@ function parseSheetStateFromUrl(): EntitySheetState {
   return null;
 }
 
-// ── Module-level external store ──────────────────────────────────────────────
-// Shared across all useEntitySheet() instances so that when UuidLink calls
-// openInferenceSheet, EntitySheet's instance sees the update immediately.
-
-let sheetState: EntitySheetState = null;
-const listeners = new Set<() => void>();
-
-function getSnapshot(): EntitySheetState {
-  return sheetState;
+interface EntitySheetContextValue {
+  sheetState: EntitySheetState;
+  openInferenceSheet: (id: string) => void;
+  closeSheet: () => void;
 }
 
-function getServerSnapshot(): EntitySheetState {
-  return null;
-}
-
-function emitChange(next: EntitySheetState) {
-  sheetState = next;
-  listeners.forEach((l) => l());
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-// ── Hook ─────────────────────────────────────────────────────────────────────
+const EntitySheetContext = createContext<EntitySheetContextValue | null>(null);
 
 /**
- * Manages entity sheet state via URL search params using the History API.
+ * Provides entity sheet state via URL search params using the History API.
  *
  * Uses window.history.pushState/replaceState instead of React Router's
  * setSearchParams to avoid triggering loader revalidation, which would
  * reset streamed/paginated state (e.g., autopilot event streams).
- *
- * State is shared across all hook instances via useSyncExternalStore so
- * that opening the sheet from UuidLink is visible to EntitySheet.
  */
-export function useEntitySheet() {
+export function EntitySheetProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const currentState = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getServerSnapshot,
-  );
+  const [sheetState, setSheetState] = useState<EntitySheetState>(null);
 
   // Initialize from URL on first mount (handles deep links / page refresh)
   useEffect(() => {
     const urlState = parseSheetStateFromUrl();
     if (urlState) {
-      emitChange(urlState);
+      setSheetState(urlState);
     }
   }, []);
 
   // Sync state on browser back/forward
   useEffect(() => {
-    const handler = () => emitChange(parseSheetStateFromUrl());
+    const handler = () => setSheetState(parseSheetStateFromUrl());
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
   }, []);
@@ -80,7 +61,7 @@ export function useEntitySheet() {
   // Sync state on React Router navigations (which don't fire popstate).
   // When React Router navigates, it replaces the URL, clearing our sheet params.
   useEffect(() => {
-    emitChange(parseSheetStateFromUrl());
+    setSheetState(parseSheetStateFromUrl());
   }, [location.pathname, location.search]);
 
   const openInferenceSheet = useCallback((id: string) => {
@@ -88,7 +69,7 @@ export function useEntitySheet() {
     url.searchParams.set(SHEET_PARAM, "inference");
     url.searchParams.set(SHEET_ID_PARAM, id);
     window.history.pushState(null, "", url.toString());
-    emitChange({ type: "inference", id });
+    setSheetState({ type: "inference", id });
   }, []);
 
   // Use replaceState (not pushState) so that closing via X doesn't create
@@ -99,8 +80,22 @@ export function useEntitySheet() {
     url.searchParams.delete(SHEET_PARAM);
     url.searchParams.delete(SHEET_ID_PARAM);
     window.history.replaceState(null, "", url.toString());
-    emitChange(null);
+    setSheetState(null);
   }, []);
 
-  return { sheetState: currentState, openInferenceSheet, closeSheet };
+  return (
+    <EntitySheetContext.Provider
+      value={{ sheetState, openInferenceSheet, closeSheet }}
+    >
+      {children}
+    </EntitySheetContext.Provider>
+  );
+}
+
+export function useEntitySheet() {
+  const context = useContext(EntitySheetContext);
+  if (!context) {
+    throw new Error("useEntitySheet must be used within EntitySheetProvider");
+  }
+  return context;
 }

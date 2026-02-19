@@ -1,4 +1,4 @@
-import { useEntitySheet } from "./useEntitySheet";
+import { useEntitySheet } from "~/context/entity-sheet";
 import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSheet";
 
 export function EntitySheet() {

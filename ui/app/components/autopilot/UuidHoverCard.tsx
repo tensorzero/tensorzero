@@ -15,7 +15,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 import { toFunctionUrl, toResolvedObjectUrl, toVariantUrl } from "~/utils/urls";
-import { useEntitySheet } from "~/components/entity-sheet/useEntitySheet";
+import { useEntitySheet } from "~/context/entity-sheet";
 
 interface UuidHoverCardProps {
   uuid: string;
