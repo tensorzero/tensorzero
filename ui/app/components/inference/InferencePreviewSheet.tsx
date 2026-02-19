@@ -127,10 +127,15 @@ export function InferencePreviewSheet({
                   <TooltipContent>Open full page</TooltipContent>
                 </Tooltip>
               )}
-              <SheetClose className="text-fg-secondary cursor-pointer transition-colors hover:text-orange-600 focus:outline-hidden">
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </SheetClose>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SheetClose className="text-fg-secondary cursor-pointer transition-colors hover:text-orange-600 focus:outline-hidden">
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Close</span>
+                  </SheetClose>
+                </TooltipTrigger>
+                <TooltipContent>Close</TooltipContent>
+              </Tooltip>
             </div>
           </div>
           <SheetTitle className="font-mono text-2xl font-medium">
