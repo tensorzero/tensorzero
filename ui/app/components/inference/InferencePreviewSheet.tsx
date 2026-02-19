@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from "react";
 import { Link, useFetcher } from "react-router";
-import { X } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
 import {
   Sheet,
   SheetClose,
@@ -13,6 +13,11 @@ import {
   type InferenceDetailData,
 } from "~/components/inference/InferenceDetailContent";
 import { Breadcrumbs } from "~/components/layout/Breadcrumbs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { toInferenceUrl } from "~/utils/urls";
 import { useToast } from "~/hooks/use-toast";
 
@@ -107,14 +112,20 @@ export function InferencePreviewSheet({
                 { label: "Inferences", href: "/observability/inferences" },
               ]}
             />
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
               {showFullPageLink && inferenceData && (
-                <Link
-                  to={toInferenceUrl(inferenceData.inference.inference_id)}
-                  className="text-fg-secondary text-sm transition-colors hover:text-orange-600"
-                >
-                  Open full page
-                </Link>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={toInferenceUrl(inferenceData.inference.inference_id)}
+                      className="ring-offset-background focus:ring-ring cursor-pointer rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
+                      aria-label="Open full page"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent>Open full page</TooltipContent>
+                </Tooltip>
               )}
               <SheetClose className="ring-offset-background focus:ring-ring cursor-pointer rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden">
                 <X className="h-4 w-4" />
