@@ -55,6 +55,7 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u64>,
     pub ttft_ms: Option<u64>,
+    pub snapshot_hash: Option<String>,
 }
 
 impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredChatInferenceDatabase {
@@ -90,6 +91,7 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
             inference_params: Some(value.inference_params),
             processing_time_ms: value.processing_time_ms,
             ttft_ms: value.ttft_ms,
+            snapshot_hash: value.snapshot_hash,
         })
     }
 }
@@ -116,6 +118,7 @@ pub(super) struct ClickHouseStoredJsonInferenceWithDispreferredOutputs {
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u64>,
     pub ttft_ms: Option<u64>,
+    pub snapshot_hash: Option<String>,
 }
 
 impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJsonInference {
@@ -150,6 +153,7 @@ impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJso
             inference_params: Some(value.inference_params),
             processing_time_ms: value.processing_time_ms,
             ttft_ms: value.ttft_ms,
+            snapshot_hash: value.snapshot_hash,
         })
     }
 }
