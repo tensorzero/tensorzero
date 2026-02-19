@@ -43,14 +43,6 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [sheetState, setSheetState] = useState<EntitySheetState>(null);
 
-  // Initialize from URL on first mount (handles deep links / page refresh)
-  useEffect(() => {
-    const urlState = parseSheetStateFromUrl();
-    if (urlState) {
-      setSheetState(urlState);
-    }
-  }, []);
-
   // Sync state on browser back/forward
   useEffect(() => {
     const handler = () => setSheetState(parseSheetStateFromUrl());
