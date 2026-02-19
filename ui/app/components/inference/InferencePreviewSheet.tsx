@@ -106,7 +106,7 @@ export function InferencePreviewSheet({
             Open full page
           </Link>
         )}
-        <SheetHeader className="gap-3">
+        <SheetHeader className="space-y-3">
           <Breadcrumbs
             segments={[
               { label: "Inferences", href: "/observability/inferences" },
