@@ -640,11 +640,11 @@ pub struct ListSessionsParams {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
-    /// Field to sort by. Defaults to created_at.
+    /// Field to sort by. Defaults to `created_at`.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_by: Option<SessionSortField>,
-    /// Sort order. Defaults to desc.
+    /// Sort order. Defaults to `desc`.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_order: Option<SortOrder>,

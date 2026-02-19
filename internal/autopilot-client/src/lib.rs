@@ -61,8 +61,8 @@ pub use types::{
     GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
     GatewayToolCallAuthorizationStatus, ListConfigWritesParams, ListConfigWritesResponse,
     ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
-    ObjectStoragePointer, OptimizationWorkflowSideInfo, RawText, Role, Session, StatusUpdate,
-    StreamEventsParams, StreamUpdate, Template, Text, Thought, ToolCallAuthorizationStatus,
-    ToolCallDecisionSource, ToolCallWrapper, ToolOutcome, TopKEvaluationVisualization, Unknown,
-    UrlFile, VariantSummary, VisualizationType,
+    ObjectStoragePointer, OptimizationWorkflowSideInfo, RawText, Role, Session, SessionSortField,
+    SortOrder, StatusUpdate, StreamEventsParams, StreamUpdate, Template, Text, Thought,
+    ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper, ToolOutcome,
+    TopKEvaluationVisualization, Unknown, UrlFile, VariantSummary, VisualizationType,
 };
