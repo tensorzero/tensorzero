@@ -90,10 +90,6 @@ export function useQuestionCardState(
   const isStepComplete = (idx: number): boolean =>
     isStepAnswered(idx) || isStepSkipped(idx);
 
-  const allStepsComplete = payload.questions.every((_, idx) =>
-    isStepComplete(idx),
-  );
-
   const buildResponses = (
     skipped: Set<number>,
   ): Record<string, UserQuestionAnswer> => {
@@ -146,7 +142,13 @@ export function useQuestionCardState(
   };
 
   const handleSubmit = () => {
-    onSubmit(eventId, buildResponses(skippedSteps));
+    // Auto-skip any unanswered steps so the user doesn't get stuck
+    // when they've tab-jumped past intermediate questions.
+    const finalSkipped = new Set(skippedSteps);
+    payload.questions.forEach((_, idx) => {
+      if (!isStepAnswered(idx)) finalSkipped.add(idx);
+    });
+    onSubmit(eventId, buildResponses(finalSkipped));
   };
 
   const getStepData = (idx: number) => {
@@ -169,7 +171,6 @@ export function useQuestionCardState(
     isStepAnswered,
     isStepSkipped,
     isStepComplete,
-    allStepsComplete,
     handleSkipStep,
     handleSubmit,
     getStepData,
