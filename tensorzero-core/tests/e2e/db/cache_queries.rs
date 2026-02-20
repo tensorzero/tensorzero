@@ -161,7 +161,17 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
         .unwrap();
     assert!(result.is_none());
 }
-make_clickhouse_only_test!(test_cache_write_and_read);
+#[tokio::test]
+async fn test_cache_write_and_read_clickhouse() {
+    let conn = tensorzero_core::db::clickhouse::test_helpers::get_clickhouse().await;
+    test_cache_write_and_read(conn).await;
+}
+
+#[tokio::test]
+async fn test_cache_write_and_read_valkey() {
+    let conn = crate::db::get_test_valkey_cache().await;
+    test_cache_write_and_read(conn).await;
+}
 
 /// This test does a cache read then write then read again to ensure that
 /// the cache is working as expected.
@@ -315,4 +325,14 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
         .unwrap();
     assert!(result.is_none());
 }
-make_clickhouse_only_test!(test_cache_stream_write_and_read);
+#[tokio::test]
+async fn test_cache_stream_write_and_read_clickhouse() {
+    let conn = tensorzero_core::db::clickhouse::test_helpers::get_clickhouse().await;
+    test_cache_stream_write_and_read(conn).await;
+}
+
+#[tokio::test]
+async fn test_cache_stream_write_and_read_valkey() {
+    let conn = crate::db::get_test_valkey_cache().await;
+    test_cache_stream_write_and_read(conn).await;
+}
