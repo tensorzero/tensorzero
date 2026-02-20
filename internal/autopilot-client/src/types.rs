@@ -861,6 +861,9 @@ pub struct S3UploadResponse {
     pub bucket: String,
     pub key: String,
     pub region: String,
+    pub endpoint: Option<String>,
+    pub virtual_hosted_style_request: Option<bool>,
+    pub allow_http: Option<bool>,
     // Credentials can be null when running locally
     pub access_key_id: Option<String>,
     pub secret_access_key: Option<String>,
