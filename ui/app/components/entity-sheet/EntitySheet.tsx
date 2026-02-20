@@ -41,8 +41,8 @@ export function EntitySheet() {
     case "datapoint":
       return (
         <DatapointPreviewSheet
-          datapointId={sheetState.id}
-          isOpen
+          datapointId={activeState.id}
+          isOpen={isOpen}
           onClose={closeSheet}
         />
       );
