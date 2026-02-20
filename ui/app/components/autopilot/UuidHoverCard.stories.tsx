@@ -7,7 +7,7 @@ import {
   InfoItem,
   type InferencePreview,
   Timestamp,
-  TypeBadgeLink,
+  TypeHeaderLink,
   VariantItem,
 } from "./UuidHoverCard";
 
@@ -64,9 +64,9 @@ function InferenceHoverCard({
   return (
     <HoverCardShell type="inference">
       <div className="flex flex-col gap-4">
-        <TypeBadgeLink uuid={MOCK_UUID} obj={obj}>
+        <TypeHeaderLink uuid={MOCK_UUID} obj={obj}>
           Inference
-        </TypeBadgeLink>
+        </TypeHeaderLink>
         <FunctionItem functionName={functionName} functionType={functionType} />
         <VariantItem
           functionName={functionName}
@@ -98,9 +98,9 @@ function EpisodeHoverCard({
   return (
     <HoverCardShell type="episode">
       <div className="flex flex-col gap-4">
-        <TypeBadgeLink uuid={MOCK_UUID} obj={obj}>
+        <TypeHeaderLink uuid={MOCK_UUID} obj={obj}>
           Episode
-        </TypeBadgeLink>
+        </TypeHeaderLink>
         <InfoItem
           label="Inferences"
           value={inferenceCount !== null ? String(inferenceCount) : null}
@@ -139,9 +139,9 @@ function DatapointHoverCard({
   return (
     <HoverCardShell type={datapointType}>
       <div className="flex flex-col gap-4">
-        <TypeBadgeLink uuid={MOCK_UUID} obj={obj}>
+        <TypeHeaderLink uuid={MOCK_UUID} obj={obj}>
           {typeLabel}
-        </TypeBadgeLink>
+        </TypeHeaderLink>
         <InfoItem label="Dataset" value={datasetName} />
         <InfoItem label="Function" value={functionName} />
       </div>

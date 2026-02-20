@@ -134,7 +134,7 @@ export function PageErrorContainer({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-full items-center justify-center p-8 pb-20">
+    <div className="pb-page-bottom flex min-h-full items-center justify-center p-8">
       {children}
     </div>
   );

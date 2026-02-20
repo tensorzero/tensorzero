@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { HoverCard } from "radix-ui";
@@ -15,6 +15,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 import { toFunctionUrl, toResolvedObjectUrl, toVariantUrl } from "~/utils/urls";
+import { useEntitySheet } from "~/context/entity-sheet";
 
 interface UuidHoverCardProps {
   uuid: string;
@@ -126,9 +127,9 @@ function InferenceContent({ uuid, obj, isOpen }: InferenceContentProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <TypeBadgeLink uuid={uuid} obj={obj}>
+      <TypeHeaderLink uuid={uuid} obj={obj}>
         Inference
-      </TypeBadgeLink>
+      </TypeHeaderLink>
       <FunctionItem
         functionName={obj.function_name}
         functionType={obj.function_type}
@@ -162,9 +163,9 @@ function EpisodeContent({ uuid, obj, isOpen }: EpisodeContentProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <TypeBadgeLink uuid={uuid} obj={obj}>
+      <TypeHeaderLink uuid={uuid} obj={obj}>
         Episode
-      </TypeBadgeLink>
+      </TypeHeaderLink>
       <InfoItem
         label="Inferences"
         value={data ? String(data.inference_count) : null}
@@ -195,28 +196,42 @@ function DatapointContent({ uuid, obj }: DatapointContentProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <TypeBadgeLink uuid={uuid} obj={obj}>
+      <TypeHeaderLink uuid={uuid} obj={obj}>
         {typeLabel}
-      </TypeBadgeLink>
+      </TypeHeaderLink>
       <InfoItem label="Dataset" value={obj.dataset_name} />
       <InfoItem label="Function" value={obj.function_name} />
     </div>
   );
 }
 
-interface TypeBadgeLinkProps {
+interface TypeHeaderLinkProps {
   uuid: string;
   obj: ResolvedObject;
   children: React.ReactNode;
 }
 
-export function TypeBadgeLink({ uuid, obj, children }: TypeBadgeLinkProps) {
+export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
+  const { openInferenceSheet } = useEntitySheet();
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+      if (obj.type === "inference") {
+        e.preventDefault();
+        openInferenceSheet(uuid);
+      }
+    },
+    [obj.type, uuid, openInferenceSheet],
+  );
+
   if (!url) return null;
 
   return (
     <Link
       to={url}
+      onClick={handleClick}
       className="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
     >
       {children}

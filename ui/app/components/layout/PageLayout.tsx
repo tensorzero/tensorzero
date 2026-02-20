@@ -23,7 +23,7 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 }) => (
   <div
     className={cn(
-      "container mx-auto flex flex-col gap-12 px-8 pt-16 pb-20",
+      "pt-page-top pb-page-bottom container mx-auto flex flex-col gap-12 px-8",
       className,
     )}
     {...props}
