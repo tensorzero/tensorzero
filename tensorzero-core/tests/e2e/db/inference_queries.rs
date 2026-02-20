@@ -1094,6 +1094,94 @@ async fn test_list_inferences_order_by_multiple_criteria(conn: impl InferenceQue
 }
 make_db_test!(test_list_inferences_order_by_multiple_criteria);
 
+async fn test_list_inferences_order_by_search_relevance(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+
+    let order_by = vec![OrderBy {
+        term: OrderByTerm::SearchRelevance,
+        direction: OrderDirection::Desc,
+    }];
+
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                function_name: Some("answer_question"),
+                order_by: Some(&order_by),
+                output_source: InferenceOutputSource::Inference,
+                search_query_experimental: Some("canister"),
+                limit: 10,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        !inferences.is_empty(),
+        "Should return inferences when ordering by search relevance"
+    );
+
+    for inference in &inferences {
+        assert_eq!(
+            inference.function_name(),
+            "answer_question",
+            "All results should belong to the requested function"
+        );
+        let input_str = serde_json::to_string(inference.input().expect("input should be present"))
+            .unwrap()
+            .to_lowercase();
+        let output_str = serde_json::to_string(inference).unwrap().to_lowercase();
+        assert!(
+            input_str.contains("canister") || output_str.contains("canister"),
+            "Each result should contain the search term in input or output"
+        );
+    }
+}
+make_db_test!(test_list_inferences_order_by_search_relevance);
+
+async fn test_list_inferences_order_by_search_relevance_union(conn: impl InferenceQueries) {
+    let config = get_e2e_config().await;
+
+    let order_by = vec![OrderBy {
+        term: OrderByTerm::SearchRelevance,
+        direction: OrderDirection::Desc,
+    }];
+
+    // No function_name => UNION ALL query path
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                function_name: None,
+                order_by: Some(&order_by),
+                output_source: InferenceOutputSource::Inference,
+                search_query_experimental: Some("canister"),
+                limit: 10,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        !inferences.is_empty(),
+        "Should return inferences from UNION query when ordering by search relevance"
+    );
+
+    for inference in &inferences {
+        let input_str = serde_json::to_string(inference.input().expect("input should be present"))
+            .unwrap()
+            .to_lowercase();
+        let output_str = serde_json::to_string(inference).unwrap().to_lowercase();
+        assert!(
+            input_str.contains("canister") || output_str.contains("canister"),
+            "Each result should contain the search term in input or output"
+        );
+    }
+}
+make_db_test!(test_list_inferences_order_by_search_relevance_union);
+
 // ===== COUNT INFERENCES TESTS =====
 
 async fn test_count_inferences_chat_function(conn: impl InferenceQueries) {
