@@ -124,7 +124,23 @@ export function useQuestionCardState(
     return responses;
   };
 
+  const clearStepAnswers = (idx: number) => {
+    setSelections((prev) => {
+      if (!prev.has(idx)) return prev;
+      const next = new Map(prev);
+      next.delete(idx);
+      return next;
+    });
+    setFreeTexts((prev) => {
+      if (!prev.has(idx)) return prev;
+      const next = new Map(prev);
+      next.delete(idx);
+      return next;
+    });
+  };
+
   const handleSkipStep = () => {
+    clearStepAnswers(activeStep);
     const newSkipped = new Set(skippedSteps);
     newSkipped.add(activeStep);
 
