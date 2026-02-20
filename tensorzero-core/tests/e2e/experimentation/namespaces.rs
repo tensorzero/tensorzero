@@ -1089,17 +1089,17 @@ async fn verify_namespace_feedback_filtering(
     );
 }
 
-/// Test that the namespace-filtered `get_feedback_by_variant` query correctly
-/// returns only feedback for inferences tagged with the specified namespace.
+/// Shared logic for the namespace feedback query filter test.
 ///
-/// Verifies both ClickHouse and Postgres implementations.
-#[tokio::test(flavor = "multi_thread")]
-async fn test_namespace_feedback_query_filters_correctly() {
-    let config = make_namespace_track_and_stop_config();
-    let (client, clickhouse, postgres, _guard) =
-        Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
-    let client = Arc::new(client);
-
+/// Sends inferences + feedback through the embedded gateway, then verifies
+/// the namespace-filtered `get_feedback_by_variant` query against the provided connection.
+/// The connection should be the primary datastore (whichever database the gateway writes to).
+async fn run_namespace_feedback_query_filter_test(
+    client: Arc<Client>,
+    clickhouse: &ClickHouseConnectionInfo,
+    verify_conn: &impl FeedbackQueries,
+    db_name: &str,
+) {
     // Send inferences + feedback for namespace="mobile"
     let mobile_results = run_namespace_inference_batch(&client, 30, Some("mobile")).await;
     clickhouse.flush_pending_writes().await;
@@ -1147,11 +1147,43 @@ async fn test_namespace_feedback_query_filters_correctly() {
     let expected_mobile = mobile_results.len() as u64;
     let expected_total = (mobile_results.len() + base_results.len()) as u64;
 
-    // Verify ClickHouse
-    verify_namespace_feedback_filtering(&clickhouse, "ClickHouse", expected_mobile, expected_total)
+    verify_namespace_feedback_filtering(verify_conn, db_name, expected_mobile, expected_total)
         .await;
+}
 
-    // Verify Postgres
-    verify_namespace_feedback_filtering(&postgres, "Postgres", expected_mobile, expected_total)
+/// Test that the namespace-filtered `get_feedback_by_variant` query correctly
+/// returns only feedback for inferences tagged with the specified namespace (ClickHouse).
+#[tokio::test(flavor = "multi_thread")]
+async fn test_namespace_feedback_query_filters_correctly_clickhouse() {
+    let config = make_namespace_track_and_stop_config();
+    let (client, clickhouse, _postgres, _guard) =
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
+
+    run_namespace_feedback_query_filter_test(
+        Arc::new(client),
+        &clickhouse,
+        &clickhouse,
+        "ClickHouse",
+    )
+    .await;
+}
+
+/// Test that the namespace-filtered `get_feedback_by_variant` query correctly
+/// returns only feedback for inferences tagged with the specified namespace (Postgres).
+///
+/// Sets `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=true` so the embedded gateway writes to Postgres.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_namespace_feedback_query_filters_correctly_postgres() {
+    // Must be set before the first flag access (OnceLock caches on first read)
+    tensorzero_unsafe_helpers::set_env_var_tests_only(
+        "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE",
+        "true",
+    );
+
+    let config = make_namespace_track_and_stop_config();
+    let (client, clickhouse, postgres, _guard) =
+        Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
+
+    run_namespace_feedback_query_filter_test(Arc::new(client), &clickhouse, &postgres, "Postgres")
         .await;
 }
