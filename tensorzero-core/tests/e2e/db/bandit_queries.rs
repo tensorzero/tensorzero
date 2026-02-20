@@ -17,7 +17,7 @@ fn assert_float_eq(actual: f32, expected: f32, epsilon: Option<f32>) {
 
 async fn test_metrics_by_variant_singleton(conn: impl FeedbackQueries) {
     let metrics_by_variant = conn
-        .get_feedback_by_variant("haiku_score_episode", "write_haiku", None)
+        .get_feedback_by_variant("haiku_score_episode", "write_haiku", None, None, None)
         .await
         .unwrap();
     assert_eq!(metrics_by_variant.len(), 1);
@@ -38,6 +38,8 @@ async fn test_metrics_by_variant_filter_all(conn: impl FeedbackQueries) {
             "write_haiku",
             // nonexistent so there should be no results
             Some(&vec!["foo".to_string()]),
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -49,7 +51,7 @@ make_clickhouse_only_test!(test_metrics_by_variant_filter_all);
 
 async fn test_metrics_by_variant_many_results(conn: impl FeedbackQueries) {
     let metrics_by_variant = conn
-        .get_feedback_by_variant("exact_match", "extract_entities", None)
+        .get_feedback_by_variant("exact_match", "extract_entities", None, None, None)
         .await
         .unwrap();
     println!("metrics_by_variant: {metrics_by_variant:?}");
@@ -79,7 +81,7 @@ make_db_test!(test_metrics_by_variant_many_results);
 
 async fn test_metrics_by_variant_episode_boolean(conn: impl FeedbackQueries) {
     let metrics_by_variant = conn
-        .get_feedback_by_variant("solved", "ask_question", None)
+        .get_feedback_by_variant("solved", "ask_question", None, None, None)
         .await
         .unwrap();
     // Sort by count in descending order for deterministic results
@@ -111,7 +113,7 @@ make_clickhouse_only_test!(test_metrics_by_variant_episode_boolean);
 
 async fn test_metrics_by_variant_episode_float(conn: impl FeedbackQueries) {
     let metrics_by_variant = conn
-        .get_feedback_by_variant("elapsed_ms", "ask_question", None)
+        .get_feedback_by_variant("elapsed_ms", "ask_question", None, None, None)
         .await
         .unwrap();
     // Sort by count in descending order for deterministic results
