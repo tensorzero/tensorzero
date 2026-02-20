@@ -128,6 +128,11 @@ mock! {
             ids: Vec<Uuid>,
         ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 
+        async fn delete_dataset(
+            &self,
+            dataset_name: String,
+        ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
         async fn list_inferences(
             &self,
             request: ListInferencesRequest,
