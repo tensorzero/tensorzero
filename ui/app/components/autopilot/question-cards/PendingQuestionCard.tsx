@@ -152,7 +152,7 @@ export function PendingQuestionCard({
             {state.isSingleQuestion || state.isLastStep ? (
               <Button
                 size="xs"
-                disabled={!state.allStepsComplete || isLoading}
+                disabled={!state.isStepComplete(state.activeStep) || isLoading}
                 onClick={state.handleSubmit}
                 className="gap-1 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
               >
