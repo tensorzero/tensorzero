@@ -92,7 +92,7 @@ export function InferencePreviewSheet({
   const currentData = isDataCurrent ? fetcher.data : null;
   const hasError =
     fetcher.state === "idle" &&
-    !fetcher.data &&
+    !currentData &&
     inferenceId !== null &&
     lastFetchedInferenceIdRef.current === inferenceId;
   const showLoading = !currentData && inferenceId !== null && !hasError;

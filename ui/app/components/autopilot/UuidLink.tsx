@@ -93,6 +93,7 @@ export function UuidLink({ uuid }: UuidLinkProps) {
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
       if (obj?.type === "inference") {
         e.preventDefault();
         openInferenceSheet(uuid);
