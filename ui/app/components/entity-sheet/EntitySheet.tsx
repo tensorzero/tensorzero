@@ -41,8 +41,8 @@ export function EntitySheet() {
     case "feedback":
       return (
         <FeedbackPreviewSheet
-          feedbackId={sheetState.id}
-          isOpen
+          feedbackId={activeState.id}
+          isOpen={isOpen}
           onClose={closeSheet}
         />
       );
