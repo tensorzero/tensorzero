@@ -2121,6 +2121,29 @@ extra_body = [
 ]
 ```
 
+### `extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_headers` field allows you to set or overwrite the request headers that TensorZero sends to an embedding model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `name` (string): The name of the header to modify
+- One of the following:
+  - `value` (string): The value of the header
+  - `delete = true`: Deletes the header from the request, if present
+
+```toml title="tensorzero.toml"
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+type = "openai"
+extra_headers = [
+  { name = "X-Custom-Header", value = "custom-value" }
+]
+```
+
 ### `timeout_ms`
 
 - **Type:** integer
