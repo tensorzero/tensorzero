@@ -641,6 +641,7 @@ pub struct EventPayloadUserQuestionsAnswers {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UserQuestionAnswer {
     MultipleChoice(MultipleChoiceAnswer),
     FreeResponse(FreeResponseAnswer),
@@ -842,6 +843,32 @@ pub struct ApproveAllToolCallsResponse {
     pub event_ids: Vec<Uuid>,
     /// Event IDs of the tool calls that were approved.
     pub tool_call_event_ids: Vec<Uuid>,
+}
+
+// =============================================================================
+// S3 Upload Types
+// =============================================================================
+
+/// Request body for initiating an S3 upload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct S3UploadRequest {
+    pub tool_call_event_id: Uuid,
+}
+
+/// Response from initiating an S3 upload, containing temporary credentials.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct S3UploadResponse {
+    pub bucket: String,
+    pub key: String,
+    pub region: String,
+    pub endpoint: Option<String>,
+    pub virtual_hosted_style_request: Option<bool>,
+    pub allow_http: Option<bool>,
+    // Credentials can be null when running locally
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+    pub session_token: Option<String>,
+    pub credential_expiration: DateTime<Utc>,
 }
 
 // =============================================================================

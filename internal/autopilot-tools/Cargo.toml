@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
+default = []
 e2e_tests = []
 ts-bindings = [
     "dep:ts-rs",
@@ -23,6 +24,10 @@ autopilot-client = { path = "../autopilot-client" }
 tensorzero-core = { path = "../../tensorzero-core" }
 config-applier = { path = "../config-applier" }
 tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
+object_store = { workspace = true }
+arrow = { workspace = true }
+parquet = { workspace = true }
+serde_arrow = { workspace = true }
 anyhow.workspace = true
 async-trait.workspace = true
 schemars.workspace = true

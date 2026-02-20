@@ -14,6 +14,7 @@ pub mod feedback;
 pub mod functions;
 pub mod inference;
 pub mod internal;
+pub mod namespace;
 pub mod object_storage;
 pub mod openai_compatible;
 pub mod shared_types;

@@ -179,6 +179,7 @@ pub async fn build_gateway_client(
         clickhouse_connection_info: clickhouse,
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         valkey_connection_info: ValkeyConnectionInfo::Disabled,
+        valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
         http_client,
         timeout: Some(Duration::from_secs(timeout_secs)),
     })

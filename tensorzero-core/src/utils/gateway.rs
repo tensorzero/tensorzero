@@ -24,7 +24,6 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
-use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::postgres::batching::PostgresBatchSender;
 use crate::db::valkey::ValkeyConnectionInfo;
@@ -168,6 +167,10 @@ pub struct AppStateData {
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
     pub valkey_connection_info: ValkeyConnectionInfo,
+    /// Separate Valkey connection for model inference caching, allowing isolation from rate limiting keys.
+    /// When `TENSORZERO_VALKEY_CACHE_URL` is set, this points to a dedicated instance;
+    /// otherwise, it shares the same connection as `valkey_connection_info`.
+    pub valkey_cache_connection_info: ValkeyConnectionInfo,
     pub cache_manager: CacheManager,
     /// Holds any background tasks that we want to wait on during shutdown
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
@@ -224,11 +227,13 @@ impl GatewayHandle {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
         let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
+        let valkey_cache_url = std::env::var("TENSORZERO_VALKEY_CACHE_URL").ok();
         Box::pin(Self::new_with_databases(
             config,
             clickhouse_url,
             postgres_url,
             valkey_url,
+            valkey_cache_url,
             available_tools,
         ))
         .await
@@ -239,22 +244,26 @@ impl GatewayHandle {
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
         valkey_url: Option<String>,
+        valkey_cache_url: Option<String>,
         available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
-        let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
+        let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
         let db = DelegatingDatabaseConnection::new(
             clickhouse_connection_info.clone(),
             postgres_connection_info.clone(),
         );
         let config = Arc::new(Box::pin(config.into_config(&db)).await?);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
+        let valkey_cache_connection_info =
+            setup_valkey_cache(valkey_cache_url.as_deref(), &valkey_connection_info).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            valkey_cache_connection_info,
             http_client,
             None,
             available_tools,
@@ -294,6 +303,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info: ValkeyConnectionInfo::Disabled,
+                valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
                 cache_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
@@ -309,11 +319,13 @@ impl GatewayHandle {
         }
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub async fn new_with_database_and_http_client(
         config: Arc<Config>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
+        valkey_cache_connection_info: ValkeyConnectionInfo,
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
@@ -338,13 +350,16 @@ impl GatewayHandle {
                 .await
                 .ok();
 
+        let db = Arc::new(DelegatingDatabaseConnection::new(
+            clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
+        ));
         for (function_name, function_config) in &config.functions {
             let experimentation = function_config.experimentation_with_namespaces();
             experimentation
                 .base
                 .setup(
-                    Arc::new(clickhouse_connection_info.clone())
-                        as Arc<dyn FeedbackQueries + Send + Sync>,
+                    db.clone(),
                     function_name,
                     &postgres_connection_info,
                     cancel_token.clone(),
@@ -353,8 +368,7 @@ impl GatewayHandle {
             for (namespace, namespace_config) in &experimentation.namespaces {
                 namespace_config
                     .setup(
-                        Arc::new(clickhouse_connection_info.clone())
-                            as Arc<dyn FeedbackQueries + Send + Sync>,
+                        db.clone(),
                         &format!("{function_name} (namespace: {namespace})"),
                         &postgres_connection_info,
                         cancel_token.clone(),
@@ -380,7 +394,7 @@ impl GatewayHandle {
         .await?;
 
         let cache_manager = CacheManager::new_from_connections(
-            &valkey_connection_info,
+            &valkey_cache_connection_info,
             &clickhouse_connection_info,
             &config.gateway.cache,
         );
@@ -391,6 +405,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info,
+                valkey_cache_connection_info,
                 cache_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
@@ -408,15 +423,24 @@ impl GatewayHandle {
 }
 
 impl AppStateData {
+    pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
+        DelegatingDatabaseConnection::new(
+            self.clickhouse_connection_info.clone(),
+            self.postgres_connection_info.clone(),
+        )
+    }
+
     /// Create an AppStateData for use with a historical config snapshot.
     /// This version does not include auth_cache, config_snapshot_cache, autopilot_client,
     /// or deployment_id since those are specific to the live gateway.
+    #[expect(clippy::too_many_arguments)]
     pub fn new_for_snapshot(
         config: Arc<Config>,
         http_client: TensorzeroHttpClient,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
+        valkey_cache_connection_info: ValkeyConnectionInfo,
         deferred_tasks: TaskTracker,
         shutdown_token: CancellationToken,
     ) -> Result<Self, Error> {
@@ -426,7 +450,7 @@ impl AppStateData {
             &postgres_connection_info,
         )?);
         let cache_manager = CacheManager::new_from_connections(
-            &valkey_connection_info,
+            &valkey_cache_connection_info,
             &clickhouse_connection_info,
             &config.gateway.cache,
         );
@@ -436,6 +460,7 @@ impl AppStateData {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            valkey_cache_connection_info,
             cache_manager,
             deferred_tasks,
             auth_cache: None,
@@ -554,9 +579,9 @@ async fn create_postgres_connection(
 // but this is currently structured that's difficult to swap in a Mock.
 pub async fn setup_postgres(
     config: &Config,
-    postgres_url: Option<String>,
+    postgres_url: Option<&str>,
 ) -> Result<PostgresConnectionInfo, Error> {
-    let postgres_connection_info = match (config.postgres.enabled, postgres_url.as_deref()) {
+    let postgres_connection_info = match (config.postgres.enabled, postgres_url) {
         // Postgres disabled by config
         (Some(false), _) => {
             tracing::info!("Disabling Postgres: `postgres.enabled` is set to false in config.");
@@ -598,7 +623,10 @@ pub async fn setup_postgres(
 
     // Write retention config to Postgres (syncs tensorzero.toml -> database)
     postgres_connection_info
-        .write_retention_config(config.postgres.inference_retention_days)
+        .write_retention_config(
+            config.postgres.inference_metadata_retention_days,
+            config.postgres.inference_data_retention_days,
+        )
         .await?;
 
     Ok(postgres_connection_info)
@@ -617,6 +645,29 @@ pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionIn
             tracing::debug!("Disabling Valkey: `TENSORZERO_VALKEY_URL` is not set.");
             Ok(ValkeyConnectionInfo::Disabled)
         }
+    }
+}
+
+/// Sets up the Valkey connection for model inference caching.
+///
+/// If `valkey_cache_url` is provided, creates a dedicated connection for caching.
+/// Otherwise, falls back to the shared `valkey_connection_info`.
+///
+/// A dedicated caching Valkey instance allows operators to use eviction policies like
+/// `allkeys-lru` or `volatile-ttl` for cache entries while keeping the main instance
+/// configured with `noeviction` to protect rate limiting keys.
+pub async fn setup_valkey_cache(
+    valkey_cache_url: Option<&str>,
+    valkey_connection_info: &ValkeyConnectionInfo,
+) -> Result<ValkeyConnectionInfo, Error> {
+    match valkey_cache_url {
+        Some(url) => {
+            tracing::info!(
+                "Using dedicated Valkey instance for caching (`TENSORZERO_VALKEY_CACHE_URL` is set)."
+            );
+            ValkeyConnectionInfo::new_cache_only(url).await
+        }
+        None => Ok(valkey_connection_info.clone()),
     }
 }
 
@@ -796,6 +847,7 @@ pub async fn start_openai_compatible_gateway(
         clickhouse_url,
         postgres_url,
         valkey_url,
+        None, // Embedded gateways use the same Valkey instance for rate limiting and caching
         HashSet::new(), // available_tools
     ))
     .await?;
@@ -1069,12 +1121,10 @@ mod tests {
             ..Default::default()
         }));
 
-        let postgres_connection_info = setup_postgres(
-            config,
-            Some("postgresql://user:pass@localhost:5432/db".to_string()),
-        )
-        .await
-        .unwrap();
+        let postgres_connection_info =
+            setup_postgres(config, Some("postgresql://user:pass@localhost:5432/db"))
+                .await
+                .unwrap();
         assert!(matches!(
             postgres_connection_info,
             PostgresConnectionInfo::Disabled
@@ -1128,7 +1178,7 @@ mod tests {
             ..Default::default()
         }));
 
-        setup_postgres(config, Some("bad_url".to_string()))
+        setup_postgres(config, Some("bad_url"))
             .await
             .expect_err("Postgres setup should fail given a bad URL");
     }
@@ -1152,6 +1202,7 @@ mod tests {
             config_no_rules,
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,

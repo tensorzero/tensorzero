@@ -9,7 +9,9 @@ use tensorzero::{
 };
 use tensorzero_core::inference::types::StoredInput;
 
+mod test_configs;
 mod test_datasets;
+mod test_episodes;
 mod test_stored_inferences;
 
 lazy_static::lazy_static! {

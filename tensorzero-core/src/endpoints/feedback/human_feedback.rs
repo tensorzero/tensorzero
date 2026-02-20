@@ -1,7 +1,7 @@
+use super::FeedbackDatabaseQueries;
 use super::throttled_get_function_info;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
-use crate::db::feedback::{FeedbackQueries, StaticEvaluationHumanFeedbackInsert};
-use crate::db::inferences::{FunctionInfo, InferenceQueries};
+use crate::db::feedback::StaticEvaluationHumanFeedbackInsert;
+use crate::db::inferences::FunctionInfo;
 use crate::{
     config::MetricConfigLevel,
     error::{Error, ErrorDetails},
@@ -22,7 +22,7 @@ use uuid::Uuid;
 /// This is only necessary if: the feedback contains tags "tensorzero::human_feedback",
 /// "tensorzero::evaluator_inference_id", and "tensorzero::datapoint_id": "uuid"
 pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
-    database: &DelegatingDatabaseConnection,
+    database: &(dyn FeedbackDatabaseQueries + Sync),
     maybe_function_info: Option<FunctionInfo>,
     metric_name: &str,
     tags: &HashMap<String, String>,

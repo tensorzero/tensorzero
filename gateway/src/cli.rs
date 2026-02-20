@@ -4,6 +4,7 @@
 //! This constraint exists because CODEOWNERS requires specific review for CLI changes.
 
 use clap::{Args, Parser};
+use sqlx::types::chrono::{DateTime, Utc};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tensorzero_core::observability::LogFormat;
@@ -26,12 +27,16 @@ pub struct GatewayArgs {
     pub log_format: LogFormat,
 
     /// Sets the socket address the gateway will bind to (e.g., "127.0.0.1:8080").
-    #[arg(long)]
+    #[arg(long, env = "TENSORZERO_GATEWAY_BIND_ADDRESS")]
     pub bind_address: Option<SocketAddr>,
 
     /// These commands trigger some workflow then exit without launching the gateway.
     #[command(flatten)]
     pub early_exit_commands: EarlyExitCommands,
+
+    /// These arguments influence the execution of early exit "command" arguments.
+    #[command(flatten)]
+    pub early_exit_command_arguments: EarlyExitCommandArguments,
 
     /// Arguments that control the behavior of Postgres migrations.
     #[command(flatten)]
@@ -60,6 +65,14 @@ pub struct EarlyExitCommands {
     /// Validate the config file then exit.
     #[arg(long)]
     pub validate_and_exit: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct EarlyExitCommandArguments {
+    /// Specify the expiration date-time for the created API key. Requires --create-api-key to also
+    /// be set.
+    #[arg(long, requires = "create_api_key", value_name = "DATETIME")]
+    pub expiration: Option<DateTime<Utc>>,
 }
 
 #[derive(Args, Debug)]

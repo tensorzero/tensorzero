@@ -80,6 +80,7 @@ impl ToolMetadata for AutoRejectToolCallTool {
 
 #[async_trait]
 impl TaskTool for AutoRejectToolCallTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         _llm_params: <Self as ToolMetadata>::LlmParams,

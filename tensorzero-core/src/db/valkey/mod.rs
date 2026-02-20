@@ -48,6 +48,27 @@ impl ValkeyConnectionInfo {
         })
     }
 
+    /// Creates a new connection to Valkey for caching only.
+    /// Unlike `new()`, this does NOT load rate limiting Lua functions
+    /// or run key migrations, since the cache instance doesn't need them.
+    pub async fn new_cache_only(valkey_url: &str) -> Result<Self, Error> {
+        let client = Client::open(valkey_url).map_err(|e| {
+            Error::new(ErrorDetails::ValkeyConnection {
+                message: format!("Failed to create Valkey client: {e}"),
+            })
+        })?;
+
+        let connection = ConnectionManager::new(client).await.map_err(|e| {
+            Error::new(ErrorDetails::ValkeyConnection {
+                message: format!("Failed to connect to Valkey: {e}"),
+            })
+        })?;
+
+        Ok(Self::Enabled {
+            connection: Box::new(connection),
+        })
+    }
+
     pub fn new_disabled() -> Self {
         Self::Disabled
     }

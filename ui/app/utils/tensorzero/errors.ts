@@ -562,7 +562,7 @@ export class TensorZeroServerError extends Error {
       super(message, { status: HttpStatusCode.BAD_REQUEST });
     }
   };
-  static ModelProvidersExhausted = class ModelProvidersExhausted extends TensorZeroServerError {
+  static AllModelProvidersFailed = class AllModelProvidersFailed extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
     }

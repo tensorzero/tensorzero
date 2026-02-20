@@ -19,7 +19,6 @@ env:
   SQLX_OFFLINE: 1
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  RUST_MSRV: 1.88.0
 
 jobs:
   check-version-consistency:
@@ -35,25 +34,34 @@ jobs:
       - name: Check version consistency
         run: ./ci/check-version-consistency.sh
 
+      - name: Check Rust version consistency in Dockerfiles
+        run: ./ci/check-rust-version-consistency.sh
+
   # This checks for specific markers in the codebase that require multiple files to be edited together.
+  # Only runs on Pull Requests; merge queue jobs can't access the 'skip-if-edited-check' label so we
+  # always mark them as successful.
   check-if-edited-then-edit:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    # Should run on all PRs from forks as well, if the label is not present
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
 
       - name: Set up Python
+        if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
         uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
         with:
           python-version: "3.9"
 
       - name: Check coordinated edits
+        if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
         run: python3 ci/check_coordinated_edits.py
+
+      - name: Skip coordinated edits check
+        if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
+        run: echo "Skipping coordinated edits check."
 
   # Like `check-docker-compose-released`, but loads the freshly built `gateway` and `ui` container images first
   # This checks that all of our docker-compose files work with the changes in the PR
@@ -255,10 +263,10 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -330,15 +338,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -397,15 +405,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -465,15 +473,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -500,15 +508,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -538,15 +546,15 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust ${{ env.RUST_MSRV }}
+      # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              echo "Failed to install Rust toolchain after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -723,10 +731,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -939,10 +947,10 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1011,7 +1019,7 @@ jobs:
       id-token: write
     needs: [build-gateway-container, build-mock-provider-api-container]
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     strategy:
       fail-fast: false
       matrix:
@@ -1022,10 +1030,10 @@ jobs:
       - name: Cleanup disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1080,11 +1088,10 @@ jobs:
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
           echo "TENSORZERO_SKIP_LARGE_FIXTURES=1" >> $GITHUB_ENV
 
-      - name: Set Postgres read and write feature flags
+      - name: Set Postgres as primary datastore
         if: matrix.database == 'postgres'
         run: |
-          echo "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ=1" >> $GITHUB_ENV
-          echo "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE=1" >> $GITHUB_ENV
+          echo "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=1" >> $GITHUB_ENV
 
       - name: Launch dependency services
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
@@ -1140,10 +1147,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1223,7 +1230,6 @@ jobs:
 
   build-gateway-e2e-container:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
-    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -1235,7 +1241,6 @@ jobs:
 
   build-provider-proxy-container:
     uses: ./.github/workflows/build-provider-proxy-container.yml
-    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -1293,6 +1298,7 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   ui-tests:
+    if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
     permissions:
       contents: read
       actions: read
@@ -1317,6 +1323,8 @@ jobs:
         build-gateway-e2e-container,
         build-ui-container,
         build-mock-provider-api-container,
+        build-provider-proxy-container,
+        build-fixtures-container,
       ]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -1329,6 +1337,8 @@ jobs:
       GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
 
   check-production-deployment-docker-compose:
     needs: [build-gateway-container]
@@ -1376,33 +1386,6 @@ jobs:
         run: |
           docker compose -f examples/production-deployment/docker-compose.yml down
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
-
-  # Test that the ui e2e tests still pass after we regenerate the model inference cache
-  ui-tests-e2e-regen-model-inference-cache:
-    permissions:
-      contents: read
-      actions: write
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
-    uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
-    with:
-      regen_cache: true
-      is_merge_group: true
-      force_no_auth: true
-    needs:
-      [
-        build-gateway-container,
-        build-ui-container,
-        build-mock-provider-api-container,
-      ]
-    secrets:
-      S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
-      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
   run-merge-queue-checks:
     needs:
@@ -1472,7 +1455,6 @@ jobs:
       [
         check-version-consistency,
         check-production-deployment-docker-compose,
-        check-if-edited-then-edit,
         check-docker-compose-released,
         check-docker-compose-commit,
         check-python-client-build,
@@ -1499,7 +1481,6 @@ jobs:
         endpoint-tests,
         ui-tests,
         ui-tests-e2e,
-        ui-tests-e2e-regen-model-inference-cache,
         mock-optimization-tests,
         run-merge-queue-checks,
         autopilot-e2e,

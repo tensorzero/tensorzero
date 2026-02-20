@@ -1,9 +1,9 @@
-[models.gpt_4o_mini_2024_07_18]
+[models.gpt_5_mini]
 routing = ["azure"]
 
-[models.gpt_4o_mini_2024_07_18.providers.azure]
+[models.gpt_5_mini.providers.azure]
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
+deployment_id = "gpt-5-mini"
 endpoint = "https://your-azure-openai-endpoint.openai.azure.com"
 
 [functions.my_function_name]
@@ -11,4 +11,4 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "gpt_4o_mini_2024_07_18"
+model = "gpt_5_mini"

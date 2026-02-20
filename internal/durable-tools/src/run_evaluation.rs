@@ -268,11 +268,11 @@ async fn collect_results(
         None
     };
 
-    // Wait for ClickHouse writes to complete
-    if let Some(handle) = result.batcher_join_handle {
-        handle.await.map_err(|e| {
-            RunEvaluationError::Runtime(format!("ClickHouse batch writer failed: {e}"))
-        })?;
+    // Wait for batch writes to complete
+    for handle in result.batcher_join_handles {
+        handle
+            .await
+            .map_err(|e| RunEvaluationError::Runtime(format!("Batch writer failed: {e}")))?;
     }
 
     Ok(RunEvaluationResponse {

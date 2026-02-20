@@ -1,7 +1,7 @@
 #![expect(clippy::print_stdout)]
 
 use futures::StreamExt;
-use rand::Rng;
+use rand::RngExt;
 use reqwest::Client;
 use reqwest_sse_stream::Event;
 use reqwest_sse_stream::RequestBuilderExt;
@@ -63,8 +63,8 @@ macro_rules! make_cache_tests {
 
 /// Creates a gateway configured to use the specified cache backend.
 ///
-/// - `CacheBackend::Clickhouse`: default mode with `ENABLE_POSTGRES_WRITE=false`
-/// - `CacheBackend::Valkey`: sets `ENABLE_POSTGRES_WRITE=true` and `ENABLE_POSTGRES_READ=true`,
+/// - `CacheBackend::Clickhouse`: default mode (ClickHouse as primary datastore)
+/// - `CacheBackend::Valkey`: sets `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=true`,
 ///   uses Postgres + Valkey connections
 async fn make_cache_test_gateway(backend: CacheBackend, db_prefix: &str) -> tensorzero::Client {
     match backend {
@@ -72,11 +72,7 @@ async fn make_cache_test_gateway(backend: CacheBackend, db_prefix: &str) -> tens
         CacheBackend::Valkey => {
             // Must be set before the first flag access (OnceLock caches on first read)
             tensorzero_unsafe_helpers::set_env_var_tests_only(
-                "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE",
-                "true",
-            );
-            tensorzero_unsafe_helpers::set_env_var_tests_only(
-                "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ",
+                "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE",
                 "true",
             );
             make_embedded_gateway_e2e_with_unique_db_all_backends(db_prefix).await

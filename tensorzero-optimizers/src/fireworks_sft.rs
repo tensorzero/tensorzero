@@ -30,7 +30,7 @@ use tensorzero_core::{
         Config, TimeoutsConfig,
         provider_types::{FireworksSFTConfig as FireworksProviderSFTConfig, ProviderTypesConfig},
     },
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
@@ -75,7 +75,7 @@ impl Optimizer for FireworksSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Get provider-level configuration
@@ -310,6 +310,7 @@ impl JobHandle for FireworksSFTJobHandle {
                     )]),
                     timeouts: TimeoutsConfig::default(),
                     skip_relay: None,
+                    namespace: None,
                 }),
             };
             if !self.deploy_after_training {
