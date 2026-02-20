@@ -265,6 +265,15 @@ impl TaskTool for UploadDatasetTool {
                     if let Some(ref token) = creds.session_token {
                         builder = builder.with_token(token);
                     }
+                    if let Some(ref endpoint) = creds.endpoint {
+                        builder = builder.with_endpoint(endpoint);
+                    }
+                    if let Some(val) = creds.virtual_hosted_style_request {
+                        builder = builder.with_virtual_hosted_style_request(val);
+                    }
+                    if let Some(val) = creds.allow_http {
+                        builder = builder.with_allow_http(val);
+                    }
                     let s3: Arc<dyn ObjectStore> = Arc::new(builder.build().map_err(|e| {
                         anyhow::Error::msg(format!("Failed to build S3 client: {e}"))
                     })?);
