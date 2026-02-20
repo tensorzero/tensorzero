@@ -121,8 +121,10 @@ async fn test_query_episode_table_bounds(conn: impl EpisodeQueries) {
         "first_id should match the expected value from test fixtures"
     );
     // The end and count are ~guaranteed to be trampled here since other tests do inference.
-    // We just assert that we are returning something reasonable.
-    assert!(bounds.count > 0, "Should have a count greater than 0");
+    // Count is only returned by ClickHouse, not Postgres.
+    if let Some(count) = bounds.count {
+        assert!(count > 0, "Should have a count greater than 0");
+    }
     assert!(
         bounds.last_id.unwrap() > bounds.first_id.unwrap(),
         "Should have a last_id greater than first_id"

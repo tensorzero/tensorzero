@@ -305,10 +305,13 @@ async fn query_episode_table_impl(
 
 async fn query_episode_table_bounds_impl(pool: &PgPool) -> Result<TableBoundsWithCount, Error> {
     // Bounds: find the min/max episode_id across chat and json inferences.
-    // Count: pg_class.reltuples for an approximate total (updated by autovacuum/analyze).
-    //
-    // TODO(#6472): Implement accurate episode count.
-    sqlx::query_as(
+    #[derive(sqlx::FromRow)]
+    struct BoundsRow {
+        first_id: Option<Uuid>,
+        last_id: Option<Uuid>,
+    }
+
+    let row: BoundsRow = sqlx::query_as(
         r"
         SELECT
             (SELECT episode_id FROM (
@@ -320,17 +323,7 @@ async fn query_episode_table_bounds_impl(pool: &PgPool) -> Result<TableBoundsWit
                 (SELECT episode_id FROM tensorzero.chat_inferences ORDER BY episode_id DESC LIMIT 1)
                 UNION ALL
                 (SELECT episode_id FROM tensorzero.json_inferences ORDER BY episode_id DESC LIMIT 1)
-            ) t ORDER BY episode_id DESC LIMIT 1) as last_id,
-            COALESCE((
-                SELECT SUM(GREATEST(c.reltuples, 0))::BIGINT
-                FROM pg_class c
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-                JOIN pg_inherits i ON i.inhrelid = c.oid
-                JOIN pg_class parent ON parent.oid = i.inhparent
-                JOIN pg_namespace pn ON pn.oid = parent.relnamespace
-                WHERE pn.nspname = 'tensorzero'
-                AND parent.relname IN ('chat_inferences', 'json_inferences')
-            ), 0) as count
+            ) t ORDER BY episode_id DESC LIMIT 1) as last_id
         ",
     )
     .fetch_one(pool)
@@ -339,6 +332,12 @@ async fn query_episode_table_bounds_impl(pool: &PgPool) -> Result<TableBoundsWit
         Error::new(ErrorDetails::PostgresQuery {
             message: format!("Failed to query episode table bounds: {e}"),
         })
+    })?;
+
+    Ok(TableBoundsWithCount {
+        first_id: row.first_id,
+        last_id: row.last_id,
+        count: None,
     })
 }
 

@@ -150,14 +150,17 @@ pub struct EpisodeByIdRow {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct TableBoundsWithCount {
     pub first_id: Option<Uuid>,
     pub last_id: Option<Uuid>,
-    #[serde(deserialize_with = "deserialize_u64")]
-    #[sqlx(try_from = "i64")]
-    pub count: u64,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_option_u64",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub count: Option<u64>,
 }
 
 impl<T: EpisodeQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync>

@@ -289,7 +289,7 @@ mod tests {
                 Ok(TableBoundsWithCount {
                     first_id: Some(first_id),
                     last_id: Some(last_id),
-                    count: 100,
+                    count: Some(100),
                 })
             });
 
@@ -297,7 +297,7 @@ mod tests {
 
         assert_eq!(result.first_id, Some(first_id));
         assert_eq!(result.last_id, Some(last_id));
-        assert_eq!(result.count, 100);
+        assert_eq!(result.count, Some(100));
     }
 
     #[tokio::test]
@@ -311,7 +311,7 @@ mod tests {
                 Ok(TableBoundsWithCount {
                     first_id: None,
                     last_id: None,
-                    count: 0,
+                    count: None,
                 })
             });
 
@@ -319,7 +319,7 @@ mod tests {
 
         assert!(result.first_id.is_none());
         assert!(result.last_id.is_none());
-        assert_eq!(result.count, 0);
+        assert!(result.count.is_none());
     }
 
     #[tokio::test]

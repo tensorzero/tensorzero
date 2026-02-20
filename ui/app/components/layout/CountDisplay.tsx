@@ -12,7 +12,7 @@ import { Skeleton } from "~/components/ui/skeleton";
  * Count value type for page and section headers.
  * Supports both resolved values and promises for streaming data.
  */
-export type CountValue = number | bigint | Promise<number | bigint>;
+export type CountValue = number | bigint | Promise<number | bigint | undefined>;
 
 const CountVariant = {
   Page: "page",
@@ -89,7 +89,11 @@ export function PageCount({ count }: { count: CountValue }) {
           resolve={count}
           errorElement={<CountErrorTooltip variant={CountVariant.Page} />}
         >
-          {(resolvedCount) => <PageCountValue value={resolvedCount} />}
+          {(resolvedCount) =>
+            resolvedCount != null ? (
+              <PageCountValue value={resolvedCount} />
+            ) : null
+          }
         </Await>
       </Suspense>
     );
@@ -109,7 +113,11 @@ export function SectionCount({ count }: { count: CountValue }) {
           resolve={count}
           errorElement={<CountErrorTooltip variant={CountVariant.Section} />}
         >
-          {(resolvedCount) => <SectionCountValue value={resolvedCount} />}
+          {(resolvedCount) =>
+            resolvedCount != null ? (
+              <SectionCountValue value={resolvedCount} />
+            ) : null
+          }
         </Await>
       </Suspense>
     );
