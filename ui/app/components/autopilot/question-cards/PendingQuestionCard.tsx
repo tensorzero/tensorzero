@@ -62,6 +62,13 @@ export function PendingQuestionCard({
     }
   };
 
+  const getStepTabState = (idx: number) => {
+    if (idx === state.activeStep) return "active" as const;
+    if (state.isStepAnswered(idx)) return "completed" as const;
+    if (state.isStepSkipped(idx)) return "skipped" as const;
+    return "upcoming" as const;
+  };
+
   return (
     <div
       className={cn(
@@ -95,13 +102,7 @@ export function PendingQuestionCard({
               key={idx}
               index={idx}
               label={q.header}
-              state={
-                idx === state.activeStep
-                  ? "active"
-                  : state.isStepValid(idx)
-                    ? "completed"
-                    : "upcoming"
-              }
+              state={getStepTabState(idx)}
               onClick={() => state.setActiveStep(idx)}
             />
           ))}
@@ -123,7 +124,7 @@ export function PendingQuestionCard({
           </div>
         </div>
 
-        {/* Footer: Back / Next / Submit */}
+        {/* Footer: Back / Skip / Next / Submit */}
         <div className="flex items-center justify-between">
           <div>
             {!state.isSingleQuestion && !state.isFirstStep && (
@@ -138,11 +139,20 @@ export function PendingQuestionCard({
               </Button>
             )}
           </div>
-          <div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={isLoading}
+              onClick={state.handleSkipStep}
+              className="text-fg-muted"
+            >
+              Skip
+            </Button>
             {state.isSingleQuestion || state.isLastStep ? (
               <Button
                 size="xs"
-                disabled={!state.allStepsValid || isLoading}
+                disabled={!state.allStepsComplete || isLoading}
                 onClick={state.handleSubmit}
                 className="gap-1 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
               >
@@ -152,7 +162,7 @@ export function PendingQuestionCard({
             ) : (
               <Button
                 size="xs"
-                disabled={!state.isStepValid(state.activeStep)}
+                disabled={!state.isStepComplete(state.activeStep)}
                 onClick={() => state.setActiveStep((s) => s + 1)}
                 className="gap-0.5 bg-purple-600 pr-1 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
               >

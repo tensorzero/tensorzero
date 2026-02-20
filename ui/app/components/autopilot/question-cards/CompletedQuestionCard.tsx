@@ -74,9 +74,15 @@ export function CompletedQuestionCard({
                 {q.header}
               </span>
               {responses ? (
-                <span className="text-fg-primary text-sm">
-                  {formatResponse(responses[q.id], q)}
-                </span>
+                responses[q.id]?.type === "skipped" ? (
+                  <span className="text-fg-muted text-sm italic">
+                    User skipped this question
+                  </span>
+                ) : (
+                  <span className="text-fg-primary text-sm">
+                    {formatResponse(responses[q.id], q)}
+                  </span>
+                )
               ) : (
                 <span className="text-fg-muted text-sm italic">
                   {q.question}
