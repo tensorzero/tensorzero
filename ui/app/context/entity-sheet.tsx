@@ -94,7 +94,9 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
 export function useEntitySheet() {
   const context = useContext(EntitySheetContext);
   if (!context) {
-    throw new Error("useEntitySheet must be used within EntitySheetProvider");
+    throw new Error(
+      "`useEntitySheet` must be used within `EntitySheetProvider`",
+    );
   }
   return context;
 }
