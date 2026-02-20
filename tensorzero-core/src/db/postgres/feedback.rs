@@ -36,7 +36,7 @@ use super::PostgresConnectionInfo;
 /// If `variant_names` is non-empty, only the specified variants are included.
 ///
 /// If `namespace` is `Some`, the inferences CTE is extended to include both inference-level
-/// and episode-level IDs filtered by `tags->>'tensorzero::namespace'`.
+/// and episode-level IDs filtered by `tags @> jsonb_build_object('tensorzero::namespace', ...)`.
 ///
 /// If `max_samples_per_variant` is `Some`, uses `ROW_NUMBER() OVER (PARTITION BY variant_name)`
 /// to limit to the most recent N samples per variant before aggregating.
@@ -76,8 +76,9 @@ fn build_feedback_by_variant_query(
         WHERE function_name = ",
         );
         qb.push_bind(function_name);
-        qb.push(r" AND tags->>'tensorzero::namespace' = ");
+        qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
         qb.push_bind(ns);
+        qb.push(")");
         qb.push(
             r"
         UNION ALL
@@ -86,8 +87,9 @@ fn build_feedback_by_variant_query(
         WHERE function_name = ",
         );
         qb.push_bind(function_name);
-        qb.push(r" AND tags->>'tensorzero::namespace' = ");
+        qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
         qb.push_bind(ns);
+        qb.push(")");
         // Episode-level: only include episodes where all inferences belong to a single variant,
         // matching ClickHouse's `WHERE length(unique_variants) = 1` in the materialized view.
         qb.push(
@@ -100,8 +102,9 @@ fn build_feedback_by_variant_query(
             WHERE function_name = ",
         );
         qb.push_bind(function_name);
-        qb.push(r" AND tags->>'tensorzero::namespace' = ");
+        qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
         qb.push_bind(ns);
+        qb.push(")");
         qb.push(
             r" AND episode_id IS NOT NULL
             UNION ALL
@@ -110,8 +113,9 @@ fn build_feedback_by_variant_query(
             WHERE function_name = ",
         );
         qb.push_bind(function_name);
-        qb.push(r" AND tags->>'tensorzero::namespace' = ");
+        qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
         qb.push_bind(ns);
+        qb.push(")");
         qb.push(
             r" AND episode_id IS NOT NULL
         ) episode_inferences
@@ -1648,21 +1652,21 @@ mod tests {
             inferences AS (
                 SELECT id, variant_name
                 FROM tensorzero.chat_inferences
-                WHERE function_name = $3 AND tags->>'tensorzero::namespace' = $4
+                WHERE function_name = $3 AND tags @> jsonb_build_object('tensorzero::namespace', $4)
                 UNION ALL
                 SELECT id, variant_name
                 FROM tensorzero.json_inferences
-                WHERE function_name = $5 AND tags->>'tensorzero::namespace' = $6
+                WHERE function_name = $5 AND tags @> jsonb_build_object('tensorzero::namespace', $6)
                 UNION ALL
                 SELECT episode_id AS id, MIN(variant_name) AS variant_name
                 FROM (
                     SELECT episode_id, variant_name
                     FROM tensorzero.chat_inferences
-                    WHERE function_name = $7 AND tags->>'tensorzero::namespace' = $8 AND episode_id IS NOT NULL
+                    WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IS NOT NULL
                     UNION ALL
                     SELECT episode_id, variant_name
                     FROM tensorzero.json_inferences
-                    WHERE function_name = $9 AND tags->>'tensorzero::namespace' = $10 AND episode_id IS NOT NULL
+                    WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IS NOT NULL
                 ) episode_inferences
                 GROUP BY episode_id
                 HAVING COUNT(DISTINCT variant_name) = 1
@@ -1707,21 +1711,21 @@ mod tests {
             inferences AS (
                 SELECT id, variant_name
                 FROM tensorzero.chat_inferences
-                WHERE function_name = $3 AND tags->>'tensorzero::namespace' = $4
+                WHERE function_name = $3 AND tags @> jsonb_build_object('tensorzero::namespace', $4)
                 UNION ALL
                 SELECT id, variant_name
                 FROM tensorzero.json_inferences
-                WHERE function_name = $5 AND tags->>'tensorzero::namespace' = $6
+                WHERE function_name = $5 AND tags @> jsonb_build_object('tensorzero::namespace', $6)
                 UNION ALL
                 SELECT episode_id AS id, MIN(variant_name) AS variant_name
                 FROM (
                     SELECT episode_id, variant_name
                     FROM tensorzero.chat_inferences
-                    WHERE function_name = $7 AND tags->>'tensorzero::namespace' = $8 AND episode_id IS NOT NULL
+                    WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IS NOT NULL
                     UNION ALL
                     SELECT episode_id, variant_name
                     FROM tensorzero.json_inferences
-                    WHERE function_name = $9 AND tags->>'tensorzero::namespace' = $10 AND episode_id IS NOT NULL
+                    WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IS NOT NULL
                 ) episode_inferences
                 GROUP BY episode_id
                 HAVING COUNT(DISTINCT variant_name) = 1
@@ -1813,21 +1817,21 @@ mod tests {
             inferences AS (
                 SELECT id, variant_name
                 FROM tensorzero.chat_inferences
-                WHERE function_name = $3 AND tags->>'tensorzero::namespace' = $4
+                WHERE function_name = $3 AND tags @> jsonb_build_object('tensorzero::namespace', $4)
                 UNION ALL
                 SELECT id, variant_name
                 FROM tensorzero.json_inferences
-                WHERE function_name = $5 AND tags->>'tensorzero::namespace' = $6
+                WHERE function_name = $5 AND tags @> jsonb_build_object('tensorzero::namespace', $6)
                 UNION ALL
                 SELECT episode_id AS id, MIN(variant_name) AS variant_name
                 FROM (
                     SELECT episode_id, variant_name
                     FROM tensorzero.chat_inferences
-                    WHERE function_name = $7 AND tags->>'tensorzero::namespace' = $8 AND episode_id IS NOT NULL
+                    WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IS NOT NULL
                     UNION ALL
                     SELECT episode_id, variant_name
                     FROM tensorzero.json_inferences
-                    WHERE function_name = $9 AND tags->>'tensorzero::namespace' = $10 AND episode_id IS NOT NULL
+                    WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IS NOT NULL
                 ) episode_inferences
                 GROUP BY episode_id
                 HAVING COUNT(DISTINCT variant_name) = 1

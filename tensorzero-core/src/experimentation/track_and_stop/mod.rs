@@ -432,6 +432,17 @@ impl UninitializedTrackAndStopConfig {
             }
         }
 
+        if let Some(max_samples) = self.max_samples_per_variant
+            && max_samples < self.min_samples_per_variant
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`max_samples_per_variant` ({max_samples}) must be >= `min_samples_per_variant` ({})",
+                    self.min_samples_per_variant
+                ),
+            }));
+        }
+
         let keep_variants: Vec<String> = self
             .candidate_variants
             .iter()
@@ -3030,6 +3041,46 @@ mod tests {
         );
         assert!(err_msg.contains("B"));
         assert!(err_msg.contains("C"));
+    }
+
+    #[test]
+    fn test_load_error_max_samples_less_than_min_samples() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 100,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+            max_samples_per_variant: Some(50),
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A"]).into_iter().collect();
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+                description: None,
+            },
+        );
+
+        let result = config.load(&variants, &metrics, None);
+        assert!(
+            result.is_err(),
+            "`max_samples_per_variant` < `min_samples_per_variant` should fail"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains(
+                "`max_samples_per_variant` (50) must be >= `min_samples_per_variant` (100)"
+            ),
+            "Error message should mention both values, got: {err_msg}"
+        );
     }
 
     #[test]
