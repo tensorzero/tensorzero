@@ -29,42 +29,39 @@ export function ModelInferencePreviewSheet({
   isOpen,
   onClose,
 }: ModelInferencePreviewSheetProps) {
-  const fetcher = useFetcher<ModelInferenceDetailData>();
+  const fetcherKey = modelInferenceId
+    ? `model-inference-sheet-${modelInferenceId}`
+    : "model-inference-sheet";
+  const fetcher = useFetcher<ModelInferenceDetailData>({ key: fetcherKey });
 
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  const lastFetchedIdRef = useRef<string | null>(null);
+  const hasFetchedRef = useRef(false);
+  const prevKeyRef = useRef(fetcherKey);
+  if (prevKeyRef.current !== fetcherKey) {
+    prevKeyRef.current = fetcherKey;
+    hasFetchedRef.current = false;
+  }
 
   const fetcherState = fetcher.state;
-  const fetcherDataId = fetcher.data?.model_inference.id;
+  const fetcherData = fetcher.data;
 
   useEffect(() => {
     if (!isOpen || !modelInferenceId) return;
-
-    const idChanged = lastFetchedIdRef.current !== modelInferenceId;
-    lastFetchedIdRef.current = modelInferenceId;
-
-    if (
-      !idChanged &&
-      fetcherDataId === modelInferenceId &&
-      fetcherState === "idle"
-    ) {
-      return;
-    }
-
     if (fetcherState !== "idle") return;
+    if (fetcherData) return;
 
+    hasFetchedRef.current = true;
     fetcherRef.current.load(toModelInferenceApiUrl(modelInferenceId));
-  }, [isOpen, modelInferenceId, fetcherState, fetcherDataId]);
+  }, [isOpen, modelInferenceId, fetcherState, fetcherData]);
 
-  const data = fetcher.data ?? null;
-  const isLoading = fetcher.state === "loading";
   const hasError =
-    fetcher.state === "idle" &&
-    !fetcher.data &&
+    fetcherState === "idle" &&
+    !fetcherData &&
     modelInferenceId !== null &&
-    lastFetchedIdRef.current === modelInferenceId;
+    hasFetchedRef.current;
+  const showLoading = !fetcherData && modelInferenceId !== null && !hasError;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -74,11 +71,11 @@ export function ModelInferencePreviewSheet({
         className="pt-page-top pb-page-bottom w-full overflow-y-auto border-l-0 px-8 focus:outline-hidden sm:max-w-full md:w-5/6 [&>button.absolute]:hidden"
       >
         <div className="absolute top-8 right-8 z-10 flex items-center gap-5">
-          {data && (
+          {fetcherData && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
-                  to={toInferenceUrl(data.inference_id)}
+                  to={toInferenceUrl(fetcherData.inference_id)}
                   className="text-fg-secondary cursor-pointer rounded-sm transition-colors hover:text-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2"
                   aria-label="Open parent inference"
                 >
@@ -102,9 +99,9 @@ export function ModelInferencePreviewSheet({
         <SheetHeader className="space-y-3">
           <Breadcrumbs segments={[{ label: "Model Inferences" }]} />
           <SheetTitle className="font-mono text-2xl font-medium">
-            {data ? (
+            {fetcherData ? (
               <Link
-                to={toInferenceUrl(data.inference_id)}
+                to={toInferenceUrl(fetcherData.inference_id)}
                 className="transition-colors hover:text-orange-600"
               >
                 {modelInferenceId}
@@ -118,7 +115,7 @@ export function ModelInferencePreviewSheet({
         </SheetHeader>
 
         <div className="mt-8 flex flex-col gap-8">
-          {isLoading && !data && (
+          {showLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-fg-muted text-sm">
                 Loading model inference details...
@@ -134,7 +131,9 @@ export function ModelInferencePreviewSheet({
             </div>
           )}
 
-          {data && <ModelInferenceItem inference={data.model_inference} />}
+          {fetcherData && (
+            <ModelInferenceItem inference={fetcherData.model_inference} />
+          )}
         </div>
       </SheetContent>
     </Sheet>
