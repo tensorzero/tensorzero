@@ -104,40 +104,16 @@ export function useQuestionCardState(
       return next;
     });
 
-    if (isSingleQuestion || isLastStep) {
-      // Build responses and submit immediately
-      const responses: Record<string, UserQuestionAnswer> = {};
-      payload.questions.forEach((question, idx) => {
-        if (idx === activeStep || skippedSteps.has(idx)) {
-          responses[question.id] = { type: "skipped" };
-          return;
-        }
-        switch (question.type) {
-          case "multiple_choice": {
-            const selected = selections.get(idx);
-            if (!selected || selected.size === 0) return;
-            responses[question.id] = {
-              type: "multiple_choice",
-              selected: Array.from(selected),
-            };
-            break;
-          }
-          case "free_response":
-            responses[question.id] = {
-              type: "free_response",
-              text: freeTexts.get(idx) ?? "",
-            };
-            break;
-          default: {
-            const _exhaustiveCheck: never = question;
-            return _exhaustiveCheck;
-          }
-        }
+    if (isSingleQuestion) {
+      // Single question: skip is equivalent to "submit as skipped"
+      onSubmit(eventId, {
+        [payload.questions[0].id]: { type: "skipped" },
       });
-      onSubmit(eventId, responses);
-    } else {
+    } else if (!isLastStep) {
       setActiveStep((s) => s + 1);
     }
+    // Last step of multi-question: just mark as skipped.
+    // Submit button (gated on allStepsComplete) handles submission.
   };
 
   const handleSubmit = () => {
