@@ -32,51 +32,40 @@ export function InferencePreviewSheet({
   isOpen,
   onClose,
 }: InferencePreviewSheetProps) {
-  const fetcher = useFetcher<InferenceDetailData>();
+  const fetcherKey = inferenceId
+    ? `inference-sheet-${inferenceId}`
+    : "inference-sheet";
+  const fetcher = useFetcher<InferenceDetailData>({ key: fetcherKey });
   const { toast } = useToast();
 
-  // Use a ref to access fetcher.load without causing effect re-runs
-  // The fetcher object changes identity on state changes, but the load function is stable
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  // Track the inference ID that was last fetched to detect when it changes
-  const lastFetchedInferenceIdRef = useRef<string | null>(null);
+  // Track whether we've initiated a fetch for the current key to distinguish
+  // "haven't fetched yet" (show loading) from "fetched and failed" (show error)
+  const hasFetchedRef = useRef(false);
+  const prevKeyRef = useRef(fetcherKey);
+  if (prevKeyRef.current !== fetcherKey) {
+    prevKeyRef.current = fetcherKey;
+    hasFetchedRef.current = false;
+  }
 
-  // Extract stable values from fetcher for dependency arrays
   const fetcherState = fetcher.state;
-  const fetcherDataInferenceId = fetcher.data?.inference.inference_id;
+  const fetcherData = fetcher.data;
 
-  // Fetch data when sheet opens with an inference ID (only if we don't have data)
-  // Also refetch when inference ID changes to avoid showing stale data
   useEffect(() => {
     if (!isOpen || !inferenceId) return;
-
-    // Check if inference ID changed - if so, always refetch
-    const inferenceIdChanged =
-      lastFetchedInferenceIdRef.current !== inferenceId;
-    lastFetchedInferenceIdRef.current = inferenceId;
-
-    // Only fetch if we don't have data, data is for a different inference, or ID changed
-    if (
-      !inferenceIdChanged &&
-      fetcherDataInferenceId === inferenceId &&
-      fetcherState === "idle"
-    ) {
-      return;
-    }
-
     if (fetcherState !== "idle") return;
+    if (fetcherData) return;
 
+    hasFetchedRef.current = true;
     fetcherRef.current.load(toInferenceApiUrl(inferenceId));
-  }, [isOpen, inferenceId, fetcherState, fetcherDataInferenceId]);
+  }, [isOpen, inferenceId, fetcherState, fetcherData]);
 
   const refreshInferenceData = useCallback(
     (redirectUrl?: string) => {
       if (!inferenceId) return;
-      // Show success toast when feedback is added
       toast.success({ title: "Feedback Added" });
-      // Load with newFeedbackId if provided in the redirect URL for proper polling
       if (redirectUrl) {
         fetcherRef.current.load(redirectUrl);
       } else {
@@ -86,16 +75,12 @@ export function InferencePreviewSheet({
     [inferenceId, toast],
   );
 
-  // Only use fetcher data when it matches the current inference ID to avoid
-  // briefly showing stale content under the wrong ID during transitions
-  const isDataCurrent = fetcher.data?.inference.inference_id === inferenceId;
-  const currentData = isDataCurrent ? fetcher.data : null;
   const hasError =
-    fetcher.state === "idle" &&
-    !currentData &&
+    fetcherState === "idle" &&
+    !fetcherData &&
     inferenceId !== null &&
-    lastFetchedInferenceIdRef.current === inferenceId;
-  const showLoading = !currentData && inferenceId !== null && !hasError;
+    hasFetchedRef.current;
+  const showLoading = !fetcherData && inferenceId !== null && !hasError;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -105,11 +90,11 @@ export function InferencePreviewSheet({
         className="pt-page-top pb-page-bottom w-full overflow-y-auto border-l-0 px-8 focus:outline-hidden sm:max-w-full md:w-5/6 [&>button.absolute]:hidden"
       >
         <div className="absolute top-8 right-8 z-10 flex items-center gap-5">
-          {currentData && (
+          {fetcherData && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
-                  to={toInferenceUrl(currentData.inference.inference_id)}
+                  to={toInferenceUrl(fetcherData.inference.inference_id)}
                   className="text-fg-secondary cursor-pointer rounded-sm transition-colors hover:text-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2"
                   aria-label="Open full page"
                 >
@@ -167,9 +152,9 @@ export function InferencePreviewSheet({
             </div>
           )}
 
-          {currentData && inferenceId && (
+          {fetcherData && inferenceId && (
             <InferenceDetailContent
-              data={currentData}
+              data={fetcherData}
               onFeedbackAdded={refreshInferenceData}
             />
           )}
