@@ -86,7 +86,8 @@ function IconWithTooltip({
 
 export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
-  const { openInferenceSheet, openEpisodeSheet } = useEntitySheet();
+  const { openInferenceSheet, openEpisodeSheet, openDatapointSheet } =
+    useEntitySheet();
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
   const url = obj ? toResolvedObjectUrl(uuid, obj) : null;
@@ -100,9 +101,15 @@ export function UuidLink({ uuid }: UuidLinkProps) {
       } else if (obj?.type === "episode") {
         e.preventDefault();
         openEpisodeSheet(uuid);
+      } else if (
+        obj?.type === "chat_datapoint" ||
+        obj?.type === "json_datapoint"
+      ) {
+        e.preventDefault();
+        openDatapointSheet(uuid);
       }
     },
-    [obj, uuid, openInferenceSheet, openEpisodeSheet],
+    [obj, uuid, openInferenceSheet, openEpisodeSheet, openDatapointSheet],
   );
 
   return (

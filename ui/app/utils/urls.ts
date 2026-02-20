@@ -59,6 +59,10 @@ export function toDatapointUrl(
   return `/datasets/${encodeURIComponent(datasetName)}/datapoint/${encodeURIComponent(datapointId)}`;
 }
 
+export function toDatapointApiUrl(datapointId: string): string {
+  return `/api/datapoint/${encodeURIComponent(datapointId)}`;
+}
+
 // ============================================================================
 // Evaluations
 // ============================================================================
