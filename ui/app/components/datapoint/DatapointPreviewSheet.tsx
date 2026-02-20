@@ -29,43 +29,39 @@ export function DatapointPreviewSheet({
   isOpen,
   onClose,
 }: DatapointPreviewSheetProps) {
-  const fetcher = useFetcher<DatapointDetailData>();
+  const fetcherKey = datapointId
+    ? `datapoint-sheet-${datapointId}`
+    : "datapoint-sheet";
+  const fetcher = useFetcher<DatapointDetailData>({ key: fetcherKey });
 
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  const lastFetchedDatapointIdRef = useRef<string | null>(null);
+  const hasFetchedRef = useRef(false);
+  const prevKeyRef = useRef(fetcherKey);
+  if (prevKeyRef.current !== fetcherKey) {
+    prevKeyRef.current = fetcherKey;
+    hasFetchedRef.current = false;
+  }
 
   const fetcherState = fetcher.state;
-  const fetcherDataDatapointId = fetcher.data?.datapoint.id;
+  const fetcherData = fetcher.data;
 
   useEffect(() => {
     if (!isOpen || !datapointId) return;
-
-    const datapointIdChanged =
-      lastFetchedDatapointIdRef.current !== datapointId;
-    lastFetchedDatapointIdRef.current = datapointId;
-
-    if (
-      !datapointIdChanged &&
-      fetcherDataDatapointId === datapointId &&
-      fetcherState === "idle"
-    ) {
-      return;
-    }
-
     if (fetcherState !== "idle") return;
+    if (fetcherData) return;
 
+    hasFetchedRef.current = true;
     fetcherRef.current.load(toDatapointApiUrl(datapointId));
-  }, [isOpen, datapointId, fetcherState, fetcherDataDatapointId]);
+  }, [isOpen, datapointId, fetcherState, fetcherData]);
 
-  const datapointData = fetcher.data ?? null;
-  const isLoading = fetcher.state === "loading";
   const hasError =
-    fetcher.state === "idle" &&
-    !fetcher.data &&
+    fetcherState === "idle" &&
+    !fetcherData &&
     datapointId !== null &&
-    lastFetchedDatapointIdRef.current === datapointId;
+    hasFetchedRef.current;
+  const showLoading = !fetcherData && datapointId !== null && !hasError;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -75,13 +71,13 @@ export function DatapointPreviewSheet({
         className="pt-page-top pb-page-bottom w-full overflow-y-auto border-l-0 px-8 focus:outline-hidden sm:max-w-full md:w-5/6 [&>button.absolute]:hidden"
       >
         <div className="absolute top-8 right-8 z-10 flex items-center gap-5">
-          {datapointData && (
+          {fetcherData && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
                   to={toDatapointUrl(
-                    datapointData.dataset_name,
-                    datapointData.datapoint.id,
+                    fetcherData.dataset_name,
+                    fetcherData.datapoint.id,
                   )}
                   className="text-fg-secondary cursor-pointer rounded-sm transition-colors hover:text-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2"
                   aria-label="Open full page"
@@ -107,11 +103,11 @@ export function DatapointPreviewSheet({
           <Breadcrumbs segments={[{ label: "Datapoints" }]} />
           <SheetTitle className="font-mono text-2xl font-medium">
             {datapointId ? (
-              datapointData ? (
+              fetcherData ? (
                 <Link
                   to={toDatapointUrl(
-                    datapointData.dataset_name,
-                    datapointData.datapoint.id,
+                    fetcherData.dataset_name,
+                    fetcherData.datapoint.id,
                   )}
                   className="transition-colors hover:text-orange-600"
                 >
@@ -127,7 +123,7 @@ export function DatapointPreviewSheet({
         </SheetHeader>
 
         <div className="mt-8 flex flex-col gap-8">
-          {isLoading && !datapointData && (
+          {showLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-fg-muted text-sm">
                 Loading datapoint details...
@@ -143,8 +139,8 @@ export function DatapointPreviewSheet({
             </div>
           )}
 
-          {datapointData && datapointId && (
-            <DatapointDetailContent data={datapointData} />
+          {fetcherData && datapointId && (
+            <DatapointDetailContent data={fetcherData} />
           )}
         </div>
       </SheetContent>
