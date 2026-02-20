@@ -233,7 +233,7 @@ impl Error {
     /// Returns `None` if no entries were collected.
     pub fn extract_raw_response_entries(&self) -> Option<Vec<RawResponseEntry>> {
         let mut entries = Vec::new();
-        self.0.collect_raw_response_entries(&mut entries);
+        self.details.collect_raw_response_entries(&mut entries);
         if entries.is_empty() {
             None
         } else {
@@ -268,7 +268,7 @@ impl Error {
         include_raw_response: bool,
     ) -> Value {
         let mut body = self.build_response_body(openai_format, None);
-        if include_raw_response && let Some(raw_chunk) = self.0.extract_raw_chunk() {
+        if include_raw_response && let Some(raw_chunk) = self.details.extract_raw_chunk() {
             let key = if openai_format {
                 "tensorzero_raw_chunk"
             } else {
@@ -1156,22 +1156,22 @@ impl ErrorDetails {
         match self {
             ErrorDetails::AllRetriesFailed { errors } => {
                 for error in errors {
-                    error.0.collect_raw_response_entries(entries);
+                    error.details.collect_raw_response_entries(entries);
                 }
             }
             ErrorDetails::AllVariantsFailed { errors } => {
                 for error in errors.values() {
-                    error.0.collect_raw_response_entries(entries);
+                    error.details.collect_raw_response_entries(entries);
                 }
             }
             ErrorDetails::AllCandidatesFailed { candidate_errors } => {
                 for error in candidate_errors.values() {
-                    error.0.collect_raw_response_entries(entries);
+                    error.details.collect_raw_response_entries(entries);
                 }
             }
             ErrorDetails::AllModelProvidersFailed { provider_errors } => {
                 for error in provider_errors.values() {
-                    error.0.collect_raw_response_entries(entries);
+                    error.details.collect_raw_response_entries(entries);
                 }
             }
             ErrorDetails::InferenceClient {
