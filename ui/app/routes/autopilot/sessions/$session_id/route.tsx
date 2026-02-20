@@ -686,17 +686,6 @@ function AutopilotSessionEventsPageContent({
     [sessionId, toast],
   );
 
-  const handleSkipQuestions = useCallback(
-    async (eventId: string, questionIds: string[]) => {
-      const responses: Record<string, UserQuestionAnswer> = {};
-      for (const qId of questionIds) {
-        responses[qId] = { type: "skipped" };
-      }
-      await handleAnswerQuestions(eventId, responses);
-    },
-    [handleAnswerQuestions],
-  );
-
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
     interruptedSessionRef.current = sessionId;
@@ -987,17 +976,6 @@ function AutopilotSessionEventsPageContent({
                   payload={oldestPendingUserQuestion.payload}
                   isLoading={isQuestionSubmitting}
                   onSubmit={handleAnswerQuestions}
-                  onSkip={() =>
-                    handleSkipQuestions(
-                      oldestPendingUserQuestion.id,
-                      oldestPendingUserQuestion.payload.type ===
-                        "user_questions"
-                        ? oldestPendingUserQuestion.payload.questions.map(
-                            (q) => q.id,
-                          )
-                        : [],
-                    )
-                  }
                 />
               ) : (
                 oldestPendingToolCall &&

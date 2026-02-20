@@ -19,7 +19,6 @@ type PendingQuestionCardProps = {
     eventId: string,
     responses: Record<string, UserQuestionAnswer>,
   ) => void;
-  onSkip?: () => void;
   className?: string;
 };
 
@@ -28,13 +27,20 @@ export function PendingQuestionCard({
   payload,
   isLoading,
   onSubmit,
-  onSkip,
   className,
 }: PendingQuestionCardProps) {
   const state = useQuestionCardState(payload, eventId, onSubmit);
   const { ref: contentRef, height: contentHeight } = useAnimatedHeight(
     state.activeStep,
   );
+
+  const handleDismiss = () => {
+    const responses: Record<string, UserQuestionAnswer> = {};
+    for (const q of payload.questions) {
+      responses[q.id] = { type: "skipped" };
+    }
+    onSubmit(eventId, responses);
+  };
 
   const renderActiveStep = () => {
     const data = state.getStepData(state.activeStep);
@@ -81,17 +87,15 @@ export function PendingQuestionCard({
         <span className="text-sm font-medium">
           {state.isSingleQuestion ? "Question" : "Questions"}
         </span>
-        {onSkip && (
-          <button
-            type="button"
-            onClick={onSkip}
-            disabled={isLoading}
-            className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-400 transition-colors hover:text-purple-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-purple-500 dark:hover:text-purple-300"
-            aria-label="Dismiss questions"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={handleDismiss}
+          disabled={isLoading}
+          className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-400 transition-colors hover:text-purple-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-purple-500 dark:hover:text-purple-300"
+          aria-label="Dismiss questions"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Step tabs (only for multi-question) */}
