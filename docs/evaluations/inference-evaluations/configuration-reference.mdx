@@ -41,8 +41,8 @@ This value sets which function this evaluation should evaluate when run.
 - **Type:** string
 - **Required:** no
 
-An optional description for this evaluation.
-This can be used to document the purpose of the evaluation for automated workflows.
+An optional description of the evaluation.
+It helps TensorZero Autopilot understand the intent behind the evaluation.
 
 ### `[evaluations.evaluation_name.evaluators.evaluator_name]`
 
@@ -205,8 +205,8 @@ cutoff = 0.8 # Example: Consider passing if average score is >= 0.8
 - **Type:** string
 - **Required:** no
 
-An optional description for this evaluator.
-This can be used to document the purpose of the evaluator for automated workflows.
+An optional description of the evaluator.
+It helps TensorZero Autopilot understand the intent behind the evaluator.
 
 ###### `[evaluations.evaluation_name.evaluators.evaluator_name.variants.variant_name]`
 
@@ -227,20 +227,17 @@ Here we list only the configuration for variants that differs from the configura
 type = "llm_judge"
 optimize = "max"
 
-[evaluations.email-guardrails.evaluators.check-signature.variants."claude3.5sonnet"]
+[evaluations.email-guardrails.evaluators.check-signature.variants.claude_sonnet_4_5]
 type = "chat_completion"
-model = "anthropic::claude-sonnet-4-5-20250929"
+model = "anthropic::claude-sonnet-4-5"
 temperature = 0.1
 system_instructions = "./evaluations/email-guardrails/check-signature/system_instructions.txt"
 # ... other chat completion configuration ...
 
-[evaluations.email-guardrails.evaluators.check-signature.variants."mix3claude3.5sonnet"]
+[evaluations.email-guardrails.evaluators.check-signature.variants.mix_of_3]
 active = true  # if we run the `email-guardrails` evaluation, this is the variant we'll use for the check-signature evaluator
 type = "experimental_mixture_of_n"
-candidates = ["claude3.5sonnet", "claude3.5sonnet", "claude3.5sonnet"]
-
-
-
+candidates = ["claude_sonnet_4_5", "claude_sonnet_4_5", "claude_sonnet_4_5"]
 ```
 
 ###### `active`
@@ -255,9 +252,10 @@ Sets which of the variants should be used for evaluation runs.
 [evaluations.email-guardrails.evaluators.check-signature]
 # ...
 
-[evaluations.email-guardrails.evaluators.check-signature.variants."mix3claude3.5sonnet"]
+[evaluations.email-guardrails.evaluators.check-signature.variants.mix_of_3]
 active = true # if we run the `email-guardrails` evaluation, this is the variant we'll use for the check-signature evaluator
 type = "experimental_mixture_of_n"
+# ...
 ```
 
 ###### `system_instructions`
@@ -272,7 +270,7 @@ This file should contain a text file with the system instructions for the LLM ju
 These instructions should instruct the judge to output a float or boolean value.
 We use JSON mode to enforce that the judge returns a JSON object of the form `{"thinking": "<thinking>", "score": <float or boolean>}` configured to the `output_type` of the evaluator.
 
-```text title="evaluations/email-guardrails/check-signature/claude_35_sonnet/system_instructions.txt"
+```text title="evaluations/email-guardrails/check-signature/claude_sonnet_4_5/system_instructions.txt"
 Evaluate if the text follows the haiku structure of exactly three lines with a 5-7-5 syllable pattern, totaling 17 syllables. Verify only this specific syllable structure of a haiku without making content assumptions.
 ```
 
@@ -280,7 +278,7 @@ Evaluate if the text follows the haiku structure of exactly three lines with a 5
 // tensorzero.toml
 [evaluations.email-guardrails.evaluators.check-signature]
 # ...
-system_instructions = "./evaluations/email-guardrails/check-signature/claude_35_sonnet/system_instructions.txt"
+system_instructions = "./evaluations/email-guardrails/check-signature/claude_sonnet_4_5/system_instructions.txt"
 # ...
 ```
 

@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_id",
+        "type_info": "Bpchar",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "public_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "organization",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "organization"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "workspace",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "workspace"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "disabled_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "disabled_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "97c1ae769f9c03c5eda14cde29d338153023b36becd12a4a1c708b2058e7462a"
+}

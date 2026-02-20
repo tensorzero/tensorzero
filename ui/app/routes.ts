@@ -39,6 +39,10 @@ export default [
     ...prefix("tensorzero", [
       route("inference", "routes/api/tensorzero/inference.ts"),
       route("status", "routes/api/tensorzero/status.ts"),
+      route(
+        "resolve_uuid/:uuid",
+        "routes/api/tensorzero/resolve_uuid.route.ts",
+      ),
     ]),
 
     route(
@@ -68,6 +72,22 @@ export default [
     route(
       "autopilot/sessions/:session_id/events/message",
       "routes/api/autopilot/sessions/$session_id/events/message.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/actions/interrupt",
+      "routes/api/autopilot/sessions/$session_id/actions/interrupt.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/config-apply/apply",
+      "routes/api/autopilot/sessions/$session_id/config-apply/apply.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/config-apply/apply-all",
+      "routes/api/autopilot/sessions/$session_id/config-apply/apply-all.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/actions/approve_all",
+      "routes/api/autopilot/sessions/$session_id/actions/approve_all.route.ts",
     ),
   ]),
 
@@ -106,12 +126,12 @@ export default [
   ]),
 
   // Workflow Evaluations (formerly Dynamic Evaluations)
-  route("workflow_evaluations", "routes/workflow_evaluations/layout.tsx", [
-    index("routes/workflow_evaluations/route.tsx"),
-    route("runs/:run_id", "routes/workflow_evaluations/runs/$run_id/route.tsx"),
+  route("workflow-evaluations", "routes/workflow-evaluations/layout.tsx", [
+    index("routes/workflow-evaluations/route.tsx"),
+    route("runs/:run_id", "routes/workflow-evaluations/runs/$run_id/route.tsx"),
     route(
       "projects/:project_name",
-      "routes/workflow_evaluations/projects/$project_name/route.tsx",
+      "routes/workflow-evaluations/projects/$project_name/route.tsx",
     ),
   ]),
 

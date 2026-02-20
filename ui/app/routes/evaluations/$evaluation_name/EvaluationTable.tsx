@@ -19,12 +19,12 @@ import {
 import { toEvaluationDatapointUrl } from "~/utils/urls";
 
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
+import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
 import type {
-  EvaluationRunInfo,
-  ParsedEvaluationResult,
-} from "~/utils/clickhouse/evaluations";
-import type { EvaluationStatistics } from "~/types/tensorzero";
-import type { ZodDisplayInput } from "~/utils/clickhouse/common";
+  EvaluationStatistics,
+  EvaluationResultRow,
+  Input,
+} from "~/types/tensorzero";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 
@@ -49,7 +49,7 @@ import {
 import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
-import Input from "~/components/inference/Input";
+import { InputElement } from "~/components/input_output/InputElement";
 import { logger } from "~/utils/logger";
 import { TableItemText } from "~/components/ui/TableItems";
 
@@ -60,7 +60,7 @@ type TruncatedContentProps = (
     }
   | {
       type: "input";
-      content: ZodDisplayInput;
+      content: Input;
     }
   | {
       type: "output";
@@ -91,7 +91,7 @@ const TruncatedContent = ({
           <pre className="w-full text-xs whitespace-pre-wrap">{content}</pre>
         </div>
       ) : type === "input" ? (
-        <Input {...content} />
+        <InputElement input={content} />
       ) : Array.isArray(content) ? (
         <ChatOutputElement output={content} />
       ) : (
@@ -127,7 +127,7 @@ const TruncatedContentTooltip: React.FC<
 );
 
 // Helper function to generate a summary of an Input object
-function getInputSummary(input: ZodDisplayInput): string {
+function getInputSummary(input: Input): string {
   if (!input || !input.messages || input.messages.length === 0) {
     return "Empty input";
   }
@@ -142,11 +142,6 @@ function getInputSummary(input: ZodDisplayInput): string {
 
   if (firstContent.type === "text") {
     const text = firstContent.text;
-    return text.length > 30 ? text.substring(0, 30) + "..." : text;
-  }
-
-  if (firstContent.type === "missing_function_text") {
-    const text = firstContent.value;
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
 
@@ -219,7 +214,7 @@ const VariantCircle = ({
 
 interface EvaluationTableProps {
   selected_evaluation_run_infos: EvaluationRunInfo[];
-  evaluation_results: ParsedEvaluationResult[];
+  evaluation_results: EvaluationResultRow[];
   evaluation_statistics: EvaluationStatistics[];
   evaluator_names: string[];
   evaluation_name: string;
@@ -230,7 +225,7 @@ interface EvaluationTableProps {
 }
 
 interface MetricValueInfo {
-  value: string;
+  value?: string;
   evaluator_inference_id?: string;
   inference_id: string;
   is_human_feedback: boolean;
@@ -266,9 +261,9 @@ export function EvaluationTable({
       string,
       {
         id: string;
-        name: string | null;
-        input: ZodDisplayInput;
-        reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
+        name?: string;
+        input?: Input;
+        reference_output?: JsonInferenceOutput | ContentBlockChatOutput[];
       }
     >();
 
@@ -296,7 +291,7 @@ export function EvaluationTable({
       Map<
         string, // evaluation run id
         {
-          generated_output: JsonInferenceOutput | ContentBlockChatOutput[];
+          generated_output?: JsonInferenceOutput | ContentBlockChatOutput[];
           metrics: Map<string, MetricValueInfo>;
         }
       >
@@ -529,10 +524,14 @@ export function EvaluationTable({
                                   rowSpan={filteredVariants.length}
                                   className="max-w-[200px] align-middle"
                                 >
-                                  <TruncatedContent
-                                    content={datapoint.input}
-                                    type="input"
-                                  />
+                                  {datapoint.input ? (
+                                    <TruncatedContent
+                                      content={datapoint.input}
+                                      type="input"
+                                    />
+                                  ) : (
+                                    "-"
+                                  )}
                                 </TableCell>
                               )}
 
@@ -567,10 +566,14 @@ export function EvaluationTable({
 
                               {/* Generated output */}
                               <TableCell className="max-w-[200px] align-middle">
-                                <TruncatedContent
-                                  content={data.generated_output}
-                                  type="output"
-                                />
+                                {data.generated_output ? (
+                                  <TruncatedContent
+                                    content={data.generated_output}
+                                    type="output"
+                                  />
+                                ) : (
+                                  "-"
+                                )}
                               </TableCell>
 
                               {/* Metrics cells */}
@@ -595,6 +598,7 @@ export function EvaluationTable({
                                     {/* Add group and relative positioning to the container */}
                                     <div className="group relative flex h-full items-center justify-center">
                                       {metricValue &&
+                                      metricValue.value &&
                                       metricType &&
                                       evaluatorConfig ? (
                                         <>

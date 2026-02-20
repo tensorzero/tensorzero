@@ -1,6 +1,6 @@
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import { data, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import EpisodeSearchBar from "./EpisodeSearchBar";
 import {
@@ -8,10 +8,11 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { logger } from "~/utils/logger";
+import { HelpTooltip, docsUrl } from "~/components/ui/HelpTooltip";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { EpisodeByIdRow, TableBoundsWithCount } from "~/types/tensorzero";
-import { Suspense, use } from "react";
+import { Suspense } from "react";
+import { Await } from "react-router";
 
 export type EpisodesData = {
   episodes: EpisodeByIdRow[];
@@ -29,19 +30,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const client = getTensorZeroClient();
 
-  // Don't await - return promises for streaming
   const episodesPromise = client
     .listEpisodes(limit, before, after)
     .then((r) => r.episodes);
   const boundsPromise = client.queryEpisodeTableBounds();
 
-  // Combine into single promise for pagination logic
   const dataPromise: Promise<EpisodesData> = Promise.all([
     episodesPromise,
     boundsPromise,
   ]).then(([episodes, bounds]) => ({ episodes, bounds }));
 
-  // Derive count promise from bounds - convert bigint to number for serialization
   const countPromise = boundsPromise.then((b) => Number(b.count));
 
   return {
@@ -51,14 +49,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-function PaginationContent({
+function PaginationButtons({
   data,
   limit,
 }: {
-  data: Promise<EpisodesData>;
+  data: EpisodesData;
   limit: number;
 }) {
-  const { episodes, bounds } = use(data);
+  const { episodes, bounds } = data;
   const navigate = useNavigate();
 
   const topEpisode = episodes.at(0);
@@ -101,51 +99,27 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="Episodes" count={countPromise} />
+      <PageHeader
+        heading="Episodes"
+        count={countPromise}
+        help={
+          <HelpTooltip link={{ href: docsUrl("gateway/guides/episodes") }}>
+            Episodes group related inferences from multi-step workflows or agent
+            interactions into a single sequence.
+          </HelpTooltip>
+        }
+      />
       <SectionLayout>
         <EpisodeSearchBar />
         <EpisodesTable data={dataPromise} />
-        <Suspense
-          fallback={
-            <PageButtons
-              onPreviousPage={() => {}}
-              onNextPage={() => {}}
-              disablePrevious
-              disableNext
-            />
-          }
-        >
-          <PaginationContent data={dataPromise} limit={limit} />
+        <Suspense fallback={<PageButtons disabled />}>
+          <Await resolve={dataPromise} errorElement={<PageButtons disabled />}>
+            {(resolvedData) => (
+              <PaginationButtons data={resolvedData} limit={limit} />
+            )}
+          </Await>
         </Suspense>
       </SectionLayout>
     </PageLayout>
   );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  logger.error(error);
-
-  if (isRouteErrorResponse(error)) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">
-          {error.status} {error.statusText}
-        </h1>
-        <p>{error.data}</p>
-      </div>
-    );
-  } else if (error instanceof Error) {
-    return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-500">
-        <h1 className="text-2xl font-bold">Error</h1>
-        <p>{error.message}</p>
-      </div>
-    );
-  } else {
-    return (
-      <div className="flex h-screen items-center justify-center text-red-500">
-        <h1 className="text-2xl font-bold">Unknown Error</h1>
-      </div>
-    );
-  }
 }

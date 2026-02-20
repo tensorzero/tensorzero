@@ -52,7 +52,7 @@ export function ToolDetails({ toolName, onClose }: ToolDetailsProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
-        <PageHeader name={tool.name} label={"Tool Information"}>
+        <PageHeader name={tool.name} eyebrow="Tool Information">
           <BasicInfoLayout>
             <BasicInfoItem>
               <BasicInfoItemTitle>Description</BasicInfoItemTitle>

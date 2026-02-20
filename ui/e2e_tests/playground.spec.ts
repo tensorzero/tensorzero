@@ -21,7 +21,7 @@ test("playground should work for a chat function that sets 2 variants", async ({
     .getByPlaceholder("Filter by variant...")
     .fill("initial_prompt_gpt4o_mini");
   await page.getByRole("option", { name: "initial_prompt_gpt4o_mini" }).click();
-  await page.getByRole("option", { name: "initial_prompt_haiku_3_5" }).click();
+  await page.getByRole("option", { name: "initial_prompt_haiku_4_5" }).click();
 
   // Verify the selections are visible
   await expect(page.getByPlaceholder("Select function")).toHaveValue(
@@ -32,7 +32,7 @@ test("playground should work for a chat function that sets 2 variants", async ({
     page.getByRole("link", { name: "initial_prompt_gpt4o_mini" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "initial_prompt_haiku_3_5" }),
+    page.getByRole("link", { name: "initial_prompt_haiku_4_5" }),
   ).toBeVisible();
 
   // Verify that there are 2 inputs and 2 reference outputs
@@ -110,9 +110,6 @@ test("playground should work for extract_entities JSON function with 2 variants"
 test("playground should work for image_judger function with images in input", async ({
   page,
 }) => {
-  // We set 'limit=1' so that we don't make parallel inference requests
-  // (two of the datapoints have the same input, and could trample on each other's
-  // cache entries)
   await page.goto("/playground?limit=1");
   await expect(page.getByPlaceholder("Select function")).toBeVisible();
 

@@ -1,6 +1,5 @@
 //! Together Supervised Fine-Tuning (SFT) optimizer implementation
 
-use async_trait::async_trait;
 use std::{borrow::Cow, collections::HashMap, fmt::Display, io::Write};
 
 use futures::future::try_join_all;
@@ -16,11 +15,11 @@ use tensorzero_core::{
         Config, TimeoutsConfig,
         provider_types::{ProviderTypesConfig, TogetherSFTConfig as TogetherProviderSFTConfig},
     },
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
-    inference::types::ContentBlock,
+    inference::types::{ContentBlock, usage::ApiType},
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     model_table::{ProviderKind, ProviderTypeDefaultCredentials, TogetherKind},
     optimization::{
@@ -128,7 +127,6 @@ struct TogetherCreateJobRequest {
     pub hf_output_repo_name: Option<String>,
 }
 
-#[async_trait]
 impl Optimizer for TogetherSFTConfig {
     type Handle = TogetherSFTJobHandle;
 
@@ -138,7 +136,7 @@ impl Optimizer for TogetherSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Get optional provider-level configuration
@@ -264,7 +262,7 @@ impl Optimizer for TogetherSFTConfig {
                 hf_api_token: sft_config.and_then(|c| c.hf_api_token.clone()),
                 hf_output_repo_name: self.hf_output_repo_name.clone(),
             })
-            .send_and_parse_json(PROVIDER_TYPE)
+            .send_and_parse_json(PROVIDER_TYPE, ApiType::Other)
             .await?;
         Ok(TogetherSFTJobHandle {
             job_id: res.id.clone(),
@@ -281,7 +279,6 @@ impl Optimizer for TogetherSFTConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for TogetherSFTJobHandle {
     async fn poll(
         &self,
@@ -309,7 +306,7 @@ impl JobHandle for TogetherSFTJobHandle {
                     .convert_parse_error()?,
             )
             .bearer_auth(api_key.expose_secret())
-            .send_and_parse_json(PROVIDER_TYPE)
+            .send_and_parse_json(PROVIDER_TYPE, ApiType::Other)
             .await?;
         match res.status {
             TogetherJobStatus::Pending
@@ -334,6 +331,7 @@ impl JobHandle for TogetherSFTJobHandle {
                     Error::new(ErrorDetails::InferenceServer {
                         message: "Missing model_output_name in Together job response".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Other,
                         raw_request: None,
                         raw_response: None,
                     })
@@ -356,6 +354,7 @@ impl JobHandle for TogetherSFTJobHandle {
                         providers: HashMap::from([(model_name.into(), model_provider)]),
                         timeouts: TimeoutsConfig::default(),
                         skip_relay: None,
+                        namespace: None,
                     }),
                 })
             }
@@ -480,7 +479,7 @@ async fn upload_file(
         .post(api_base.join("files/upload").convert_parse_error()?)
         .bearer_auth(api_key.expose_secret())
         .multipart(form)
-        .send_and_parse_json(PROVIDER_TYPE)
+        .send_and_parse_json(PROVIDER_TYPE, ApiType::Other)
         .await?;
     Ok(res.id)
 }

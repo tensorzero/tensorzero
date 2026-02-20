@@ -1,11 +1,13 @@
+import { Suspense, useEffect, useState } from "react";
+import { AlertCircle } from "lucide-react";
 import type { Route } from "./+types/route";
+import type { EvaluationResultRow } from "~/types/tensorzero";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   getEvaluationResults,
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import type { ParsedEvaluationResult } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable, type SelectedRowData } from "./EvaluationTable";
 import {
   PageHeader,
@@ -13,9 +15,19 @@ import {
   SectionHeader,
   SectionLayout,
   SectionsGroup,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import { data, redirect, useNavigate } from "react-router";
+import {
+  Await,
+  data,
+  isRouteErrorResponse,
+  redirect,
+  useAsyncError,
+  useLocation,
+  useNavigate,
+  useFetcher,
+} from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
@@ -29,14 +41,105 @@ import {
   getTensorZeroClient,
 } from "~/utils/tensorzero.server";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
 import { ActionBar } from "~/components/layout/ActionBar";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DatasetSelect } from "~/components/dataset/DatasetSelect";
-import { useFetcher } from "react-router";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
 import { useReadOnly } from "~/context/read-only";
+import { Skeleton } from "~/components/ui/skeleton";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+
+type EvaluationData = {
+  selected_evaluation_run_infos: Awaited<
+    ReturnType<ReturnType<typeof getTensorZeroClient>["getEvaluationRunInfos"]>
+  >["run_infos"];
+  evaluation_results: EvaluationResultRow[];
+  evaluation_statistics: Awaited<
+    ReturnType<
+      ReturnType<typeof getTensorZeroClient>["getEvaluationStatistics"]
+    >
+  >["statistics"];
+  total_datapoints: number;
+};
+
+async function fetchEvaluationData(
+  evaluation_name: string,
+  function_name: string,
+  function_type: "chat" | "json",
+  selected_evaluation_run_ids_array: string[],
+  metric_names: string[],
+  limit: number,
+  offset: number,
+  newFeedbackId: string | null,
+): Promise<EvaluationData> {
+  if (selected_evaluation_run_ids_array.length === 0) {
+    return {
+      selected_evaluation_run_infos: [],
+      evaluation_results: [],
+      evaluation_statistics: [],
+      total_datapoints: 0,
+    };
+  }
+
+  const tensorZeroClient = getTensorZeroClient();
+
+  const evaluationRunInfosPromise = tensorZeroClient
+    .getEvaluationRunInfos(selected_evaluation_run_ids_array, function_name)
+    .then((response) => response.run_infos);
+
+  // If there is a freshly inserted feedback, ClickHouse may take some time to
+  // update the evaluation results as it is eventually consistent.
+  // In this case, we poll for the evaluation results until the feedback is found.
+  const resultsPromise: Promise<EvaluationResultRow[]> = newFeedbackId
+    ? pollForEvaluationResults(
+        evaluation_name,
+        selected_evaluation_run_ids_array,
+        newFeedbackId,
+        limit,
+        offset,
+      )
+    : getEvaluationResults(
+        evaluation_name,
+        selected_evaluation_run_ids_array,
+        limit,
+        offset,
+      );
+
+  const statisticsPromise = tensorZeroClient
+    .getEvaluationStatistics(
+      function_name,
+      function_type,
+      metric_names,
+      selected_evaluation_run_ids_array,
+    )
+    .then((response) => response.statistics);
+
+  const totalDatapointsPromise = tensorZeroClient.countDatapointsForEvaluation(
+    function_name,
+    selected_evaluation_run_ids_array,
+  );
+
+  const [
+    selected_evaluation_run_infos,
+    evaluation_results,
+    evaluation_statistics,
+    total_datapoints,
+  ] = await Promise.all([
+    evaluationRunInfosPromise,
+    resultsPromise,
+    statisticsPromise,
+    totalDatapointsPromise,
+  ]);
+
+  return {
+    selected_evaluation_run_infos,
+    evaluation_results,
+    evaluation_statistics,
+    total_datapoints,
+  };
+}
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -70,80 +173,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const limit = parseInt(searchParams.get("limit") || "15");
 
   const evaluator_names = Object.keys(evaluationConfig.evaluators);
-
   const metric_names = evaluator_names.map((evaluatorName) =>
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
   );
-
-  const tensorZeroClient = getTensorZeroClient();
-
-  // Set up all promises to run concurrently
-  const evaluationRunInfosPromise = tensorZeroClient
-    .getEvaluationRunInfos(selected_evaluation_run_ids_array, function_name)
-    .then((response) => response.run_infos);
-
-  // Create placeholder promises for results and statistics that will be used conditionally
-  let resultsPromise: Promise<ParsedEvaluationResult[]>;
-  if (selected_evaluation_run_ids_array.length > 0) {
-    // If there is a freshly inserted feedback, ClickHouse may take some time to
-    // update the evaluation results as it is eventually consistent.
-    // In this case, we poll for the evaluation results until the feedback is found.
-    resultsPromise = newFeedbackId
-      ? pollForEvaluationResults(
-          params.evaluation_name,
-          function_name,
-          selected_evaluation_run_ids_array,
-          newFeedbackId,
-          limit,
-          offset,
-        )
-      : getEvaluationResults(
-          params.evaluation_name,
-          function_name,
-          selected_evaluation_run_ids_array,
-          limit,
-          offset,
-        );
-  } else {
-    resultsPromise = Promise.resolve([]);
-  }
-
-  let statisticsPromise;
-  if (selected_evaluation_run_ids_array.length > 0) {
-    statisticsPromise = tensorZeroClient
-      .getEvaluationStatistics(
-        function_name,
-        function_type,
-        metric_names,
-        selected_evaluation_run_ids_array,
-      )
-      .then((response) => response.statistics);
-  } else {
-    statisticsPromise = Promise.resolve([]);
-  }
-
-  let total_datapoints_promise;
-  if (selected_evaluation_run_ids_array.length > 0) {
-    total_datapoints_promise = tensorZeroClient.countDatapointsForEvaluation(
-      function_name,
-      selected_evaluation_run_ids_array,
-    );
-  } else {
-    total_datapoints_promise = Promise.resolve(0);
-  }
-
-  // Wait for all promises to complete concurrently
-  const [
-    selected_evaluation_run_infos,
-    evaluation_results,
-    evaluation_statistics,
-    total_datapoints,
-  ] = await Promise.all([
-    evaluationRunInfosPromise,
-    resultsPromise,
-    statisticsPromise,
-    total_datapoints_promise,
-  ]);
 
   const any_evaluation_is_running = Object.values(
     selected_evaluation_run_ids_array,
@@ -153,8 +185,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       return false;
     }
     if (runningEvaluation.completed) {
-      // If the evaluation has completed and the completion time is at least
-      // 5 seconds ago, return false
+      // If the evaluation completed more than 5 seconds ago, consider it done
       if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
         return false;
       }
@@ -184,13 +215,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     evaluation_name: params.evaluation_name,
-    selected_evaluation_run_infos,
-    evaluation_results,
-    evaluation_statistics,
+    evaluationData: fetchEvaluationData(
+      params.evaluation_name,
+      function_name,
+      function_type,
+      selected_evaluation_run_ids_array,
+      metric_names,
+      limit,
+      offset,
+      newFeedbackId,
+    ),
     has_selected_runs: selected_evaluation_run_ids_array.length > 0,
     offset,
     limit,
-    total_datapoints,
     evaluator_names,
     any_evaluation_is_running,
     errors,
@@ -258,28 +295,133 @@ export async function action({ request }: Route.ActionArgs) {
   }
 }
 
-export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
+function ResultsSkeleton() {
+  return (
+    <>
+      <div className="flex items-center">
+        <SectionHeader heading="Results" />
+      </div>
+      <Skeleton className="h-64 w-full" />
+      <Skeleton className="mt-4 h-10 w-48" />
+    </>
+  );
+}
+
+function ResultsError() {
+  const error = useAsyncError();
+  let message = "Failed to load evaluation results";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading evaluation results"
+      description={message}
+    />
+  );
+}
+
+function ResultsContent({
+  evaluation_name,
+  data,
+  evaluator_names,
+  any_evaluation_is_running,
+  has_selected_runs,
+  offset,
+  limit,
+  selectedRows,
+  setSelectedRows,
+}: {
+  evaluation_name: string;
+  data: EvaluationData;
+  evaluator_names: string[];
+  any_evaluation_is_running: boolean;
+  has_selected_runs: boolean;
+  offset: number;
+  limit: number;
+  selectedRows: Map<string, SelectedRowData>;
+  setSelectedRows: React.Dispatch<
+    React.SetStateAction<Map<string, SelectedRowData>>
+  >;
+}) {
+  const navigate = useNavigate();
   const {
-    evaluation_name,
     selected_evaluation_run_infos,
     evaluation_results,
     evaluation_statistics,
+    total_datapoints,
+  } = data;
+
+  const handleNextPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset + limit));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  const handlePreviousPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset - limit));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
+  return (
+    <>
+      <div className="flex items-center">
+        <SectionHeader heading="Results" />
+        <div
+          className="ml-4"
+          data-testid="auto-refresh-wrapper"
+          data-running={any_evaluation_is_running}
+        >
+          <AutoRefreshIndicator isActive={any_evaluation_is_running} />
+        </div>
+      </div>
+      <EvaluationTable
+        evaluation_name={evaluation_name}
+        selected_evaluation_run_infos={selected_evaluation_run_infos}
+        evaluation_results={evaluation_results}
+        evaluation_statistics={evaluation_statistics}
+        evaluator_names={evaluator_names}
+        selectedRows={selectedRows}
+        setSelectedRows={setSelectedRows}
+      />
+      {has_selected_runs ? (
+        <PageButtons
+          onPreviousPage={handlePreviousPage}
+          onNextPage={handleNextPage}
+          disablePrevious={offset <= 0}
+          disableNext={offset + limit >= total_datapoints}
+        />
+      ) : (
+        <div className="mt-4 text-center text-gray-500">
+          Select evaluation run IDs to view results
+        </div>
+      )}
+    </>
+  );
+}
+
+export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
+  const {
+    evaluation_name,
+    evaluationData,
     has_selected_runs,
     offset,
     limit,
-    total_datapoints,
     evaluator_names,
     any_evaluation_is_running,
     errors,
     newFeedbackId,
     newJudgeDemonstrationId,
   } = loaderData;
-  const navigate = useNavigate();
+  const location = useLocation();
   const isReadOnly = useReadOnly();
   const { toast } = useToast();
   const fetcher = useFetcher();
 
-  // State for tracking selected rows
   const [selectedRows, setSelectedRows] = useState<
     Map<string, SelectedRowData>
   >(new Map());
@@ -294,25 +436,13 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     );
   }
   const function_name = evaluation_config.function_name;
-  const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-  const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
 
-  // Use that time for auto-refreshing
   useAutoRefresh(any_evaluation_is_running);
 
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
   );
 
-  // Handle feedback toast
   useEffect(() => {
     if (newFeedbackId) {
       const { dismiss } = toast.success({ title: "Feedback Added" });
@@ -321,7 +451,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     return;
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
-  // Handle fetcher response for bulk add to dataset
   useBulkAddToDatasetToast({
     fetcher,
     toast,
@@ -329,7 +458,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     setSelectedDataset,
   });
 
-  // Handle dataset selection for bulk add
   const handleDatasetSelect = (dataset: string) => {
     setSelectedDataset(dataset);
 
@@ -340,7 +468,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
       return;
     }
 
-    // Submit the form with all selected items
     const formData = new FormData();
     formData.append("_action", "addMultipleToDataset");
     formData.append("dataset", dataset);
@@ -352,7 +479,14 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader label="Evaluation" name={evaluation_name}>
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[{ label: "Evaluations", href: "/evaluations" }]}
+          />
+        }
+        name={evaluation_name}
+      >
         <BasicInfo evaluation_config={evaluation_config} />
         <ActionBar>
           <DatasetSelect
@@ -367,6 +501,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                 : "Add selected inferences to dataset"
             }
           />
+          <AskAutopilotButton message={`Evaluation: ${evaluation_name}\n\n`} />
         </ActionBar>
       </PageHeader>
 
@@ -378,36 +513,23 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
               <EvaluationErrorInfo errors={errors} />
             </>
           )}
-          <div className="flex items-center">
-            <SectionHeader heading="Results" />
-            <div
-              className="ml-4"
-              data-testid="auto-refresh-wrapper"
-              data-running={any_evaluation_is_running}
-            >
-              <AutoRefreshIndicator isActive={any_evaluation_is_running} />
-            </div>
-          </div>
-          <EvaluationTable
-            evaluation_name={evaluation_name}
-            selected_evaluation_run_infos={selected_evaluation_run_infos}
-            evaluation_results={evaluation_results}
-            evaluation_statistics={evaluation_statistics}
-            evaluator_names={evaluator_names}
-            selectedRows={selectedRows}
-            setSelectedRows={setSelectedRows}
-          />
-          <PageButtons
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-            disablePrevious={offset <= 0}
-            disableNext={offset + limit >= total_datapoints}
-          />
-          {!has_selected_runs && (
-            <div className="mt-4 text-center text-gray-500">
-              Select evaluation run IDs to view results
-            </div>
-          )}
+          <Suspense key={location.key} fallback={<ResultsSkeleton />}>
+            <Await resolve={evaluationData} errorElement={<ResultsError />}>
+              {(resolvedData) => (
+                <ResultsContent
+                  evaluation_name={evaluation_name}
+                  data={resolvedData}
+                  evaluator_names={evaluator_names}
+                  any_evaluation_is_running={any_evaluation_is_running}
+                  has_selected_runs={has_selected_runs}
+                  offset={offset}
+                  limit={limit}
+                  selectedRows={selectedRows}
+                  setSelectedRows={setSelectedRows}
+                />
+              )}
+            </Await>
+          </Suspense>
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>

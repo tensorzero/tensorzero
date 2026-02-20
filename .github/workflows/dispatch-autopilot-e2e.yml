@@ -51,7 +51,11 @@ jobs:
           # Find the workflow run by display_title (correlates to our specific dispatch)
           for i in {1..120}; do
             RUN_ID=$(gh api repos/tensorzero/autopilot/actions/runs \
-              -q ".workflow_runs[] | select(.display_title==\"$EXPECTED_NAME\") | .id")
+              -q ".workflow_runs[] | select(.display_title==\"$EXPECTED_NAME\") | .id") || {
+              echo "::warning::gh api request failed (attempt $i/120), possibly throttled. Retrying..."
+              sleep 10
+              continue
+            }
 
             if [ -n "$RUN_ID" ]; then
               break
@@ -68,15 +72,21 @@ jobs:
 
           # Poll until complete
           while true; do
-            RESULT=$(gh api "repos/tensorzero/autopilot/actions/runs/$RUN_ID" -q '{status: .status, conclusion: .conclusion}')
+            RESULT=$(gh api "repos/tensorzero/autopilot/actions/runs/$RUN_ID" -q '{status: .status, conclusion: .conclusion}') || {
+              echo "::warning::gh api request failed, possibly throttled. Retrying..."
+              sleep 30
+              continue
+            }
             STATUS=$(echo "$RESULT" | jq -r '.status')
             CONCLUSION=$(echo "$RESULT" | jq -r '.conclusion')
 
             if [ "$STATUS" = "completed" ]; then
               if [ "$CONCLUSION" = "success" ]; then
+                echo "Autopilot E2E tests passed"
                 exit 0
               else
-                exit 0
+                echo "Autopilot E2E tests failed with conclusion: $CONCLUSION"
+                exit 1
               fi
             fi
 

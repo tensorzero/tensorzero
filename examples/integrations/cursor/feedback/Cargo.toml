@@ -2,13 +2,13 @@
 name = "cursorzero"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.93.0"
 license = "Apache-2.0"
 
 [workspace]
 
 [dependencies]
-git2 = { version = "0.20.3", default-features = false }
+git2 = { version = "0.20.4", default-features = false }
 tokio = { version = "1.48.0", features = ["full"] }
 clap = { version = "4.5.53", features = ["derive"] }
 anyhow = "1.0.99"

@@ -4,8 +4,8 @@ use std::time::Duration;
 use tensorzero_core::config::snapshot::SnapshotHash;
 use uuid::Uuid;
 
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
 use tensorzero_core::endpoints::datasets::v1::types::ListDatasetsResponse;
 use tensorzero_core::inference::types::{
@@ -17,7 +17,7 @@ use crate::common::get_gateway_endpoint;
 #[tokio::test]
 async fn test_list_datasets_no_params() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Create a test dataset with a datapoint
     let dataset_name = format!("test-list-datasets-{}", Uuid::now_v7());
@@ -54,7 +54,7 @@ async fn test_list_datasets_no_params() {
         snapshot_hash: Some(SnapshotHash::new_test()),
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -107,7 +107,7 @@ async fn test_list_datasets_no_params() {
 #[tokio::test]
 async fn test_list_datasets_with_function_filter() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Create two datasets with different functions
     let dataset_name_1 = format!("test-list-func-1-{}", Uuid::now_v7());
@@ -169,7 +169,7 @@ async fn test_list_datasets_with_function_filter() {
         snapshot_hash: Some(SnapshotHash::new_test()),
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_1, datapoint_2])
         .await
         .unwrap();
@@ -239,7 +239,7 @@ async fn test_list_datasets_with_function_filter() {
 #[tokio::test]
 async fn test_list_datasets_with_pagination() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Create multiple datasets to test pagination
     let mut dataset_names = Vec::new();
@@ -279,7 +279,7 @@ async fn test_list_datasets_with_pagination() {
         datapoints.push(datapoint);
     }
 
-    clickhouse.insert_datapoints(&datapoints).await.unwrap();
+    database.insert_datapoints(&datapoints).await.unwrap();
 
     // Wait for all datasets to be visible
     let mut all_found = false;

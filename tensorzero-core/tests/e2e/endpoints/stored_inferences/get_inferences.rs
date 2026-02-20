@@ -41,9 +41,11 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
 pub async fn test_output_source_defaults_to_inference() {
     let http_client = Client::new();
 
-    // Test list_inferences without output_source - should succeed and default to "inference"
+    // Test list_inferences without output_source - should succeed and default to "inference".
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "limit": 1
     });
 
@@ -574,9 +576,11 @@ async fn test_list_combined_time_and_tag_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_json_only() {
-    // First, list some JSON inference IDs
+    // First, list some JSON inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "extract_entities",
+        "variant_name": "baseline",
         "output_source": "inference",
         "limit": 3
     });
@@ -609,9 +613,11 @@ pub async fn test_get_by_ids_json_only() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_chat_only() {
-    // First, list some Chat inference IDs
+    // First, list some Chat inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "output_source": "inference",
         "limit": 2
     });
@@ -655,17 +661,21 @@ pub async fn test_get_by_ids_unknown_id_returns_empty() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_mixed_types() {
-    // Get some JSON inference IDs
+    // Get some JSON inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let json_request = json!({
         "function_name": "extract_entities",
+        "variant_name": "baseline",
         "output_source": "inference",
         "limit": 2
     });
     let json_res = list_inferences(json_request).await.unwrap();
 
-    // Get some Chat inference IDs
+    // Get some Chat inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let chat_request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "output_source": "inference",
         "limit": 2
     });
@@ -723,9 +733,11 @@ pub async fn test_get_by_ids_empty_list() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_duplicate_ids() {
-    // First, get one inference ID
+    // First, get one inference ID.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "extract_entities",
+        "variant_name": "baseline",
         "output_source": "inference",
         "limit": 1
     });
@@ -754,22 +766,22 @@ pub async fn test_get_by_ids_duplicate_ids() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_simple_search() {
     let request = json!({
-        "function_name": "write_haiku",
+        "function_name": "answer_question",
         "output_source": "inference",
         "limit": 10,
         // We arbitrarily choose a query term in the data fixture
-        "search_query_experimental": "formamide"
+        "search_query_experimental": "canister"
     });
 
     let res = list_inferences(request).await.unwrap();
     assert!(
         !res.is_empty(),
-        "Expected at least one result for 'formamide' query"
+        "Expected at least one result for 'canister' query"
     );
 
     for inference in &res {
         assert_eq!(
-            inference["function_name"], "write_haiku",
+            inference["function_name"], "answer_question",
             "Function name filter should be applied"
         );
         let input_string = serde_json::to_string(&inference["input"])
@@ -779,8 +791,8 @@ async fn test_search_query_simple_search() {
             .unwrap()
             .to_lowercase();
         assert!(
-            input_string.contains("formamide") || output_string.contains("formamide"),
-            "Input or output should contain 'formamide'"
+            input_string.contains("canister") || output_string.contains("canister"),
+            "Input or output should contain 'canister'"
         );
     }
 }
@@ -788,28 +800,28 @@ async fn test_search_query_simple_search() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_case_insensitive() {
     let request = json!({
-        "function_name": "write_haiku",
+        "function_name": "answer_question",
         "output_source": "inference",
         "limit": 5,
-        "search_query_experimental": "FORMAMIDE"
+        "search_query_experimental": "CANISTER"
     });
 
     let res = list_inferences(request).await.unwrap();
 
-    assert!(!res.is_empty(), "Expected results for 'FORMAMIDE' query");
+    assert!(!res.is_empty(), "Expected results for 'CANISTER' query");
 
-    // There is no inference with all-caps 'FORMAMIDE', but there are ones with lowercase ones.
+    // There is no inference with all-caps 'CANISTER', but there are ones with lowercase ones.
     for inference in &res {
         let input_string = serde_json::to_string(&inference["input"]).unwrap();
         let output_string = serde_json::to_string(&inference["output"]).unwrap();
         assert!(
-            !input_string.contains("FORMAMIDE") && !output_string.contains("FORMAMIDE"),
-            "Input or output should not contain all-caps 'FORMAMIDE'"
+            !input_string.contains("CANISTER") && !output_string.contains("CANISTER"),
+            "Input or output should not contain all-caps 'CANISTER'"
         );
         assert!(
-            input_string.to_lowercase().contains("formamide")
-                || output_string.to_lowercase().contains("formamide"),
-            "Input or output should contain 'formamide' in a case-insensitive match"
+            input_string.to_lowercase().contains("canister")
+                || output_string.to_lowercase().contains("canister"),
+            "Input or output should contain 'canister' in a case-insensitive match"
         );
     }
 }
@@ -870,12 +882,13 @@ async fn test_search_query_with_other_filters() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_order_by_search_relevance() {
-    // Test ordering by term frequency in descending order
+    // ClickHouse uses term frequency and Postgres uses pg_trgm similarity() for ranking,
+    // so ordering may differ between backends. We only check that results are returned.
     let request = json!({
-        "function_name": "write_haiku",
+        "function_name": "answer_question",
         "output_source": "inference",
         "limit": 10,
-        "search_query_experimental": "formamide",
+        "search_query_experimental": "canister",
         "order_by": [
             {
                 "by": "search_relevance",
@@ -886,27 +899,23 @@ async fn test_search_query_order_by_search_relevance() {
 
     let res = list_inferences(request).await.unwrap();
 
-    assert!(!res.is_empty(), "Expected results for 'formamide' query");
+    assert!(!res.is_empty(), "Expected results for 'canister' query");
 
-    // Verify that results are ordered by search relevance (currently term frequency) in descending order
-    let mut prev_relevance = None;
     for inference in &res {
-        assert_eq!(inference["function_name"], "write_haiku");
+        assert_eq!(
+            inference["function_name"], "answer_question",
+            "All results should belong to the requested function"
+        );
         let input_string = serde_json::to_string(&inference["input"])
             .unwrap()
             .to_lowercase();
         let output_string = serde_json::to_string(&inference["output"])
             .unwrap()
             .to_lowercase();
-        let relevance =
-            input_string.matches("formamide").count() + output_string.matches("formamide").count();
-        if let Some(prev) = &prev_relevance {
-            assert!(
-                relevance <= *prev,
-                "Search relevance should be in descending order. Got: {relevance} > {prev}"
-            );
-            prev_relevance = Some(relevance);
-        }
+        assert!(
+            input_string.contains("canister") || output_string.contains("canister"),
+            "Each result should contain the search term in input or output"
+        );
     }
 }
 
@@ -1350,7 +1359,11 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
     };
 
     // Assert the extra_body is correctly returned
-    let extra_body = inference.extra_body.as_slice();
+    let extra_body = inference
+        .extra_body
+        .as_ref()
+        .expect("extra_body should be present")
+        .as_slice();
     assert_eq!(extra_body.len(), 2);
 
     // Check the first extra_body entry (Always variant with pointer and value)
@@ -1372,7 +1385,11 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
     }
 
     // Assert the inference_params are correctly returned
-    let chat_completion_params = &inference.inference_params.chat_completion;
+    let chat_completion_params = &inference
+        .inference_params
+        .as_ref()
+        .expect("inference_params should be present")
+        .chat_completion;
     assert_eq!(chat_completion_params.temperature, Some(0.7));
     assert_eq!(chat_completion_params.max_tokens, Some(100));
     assert_eq!(chat_completion_params.seed, Some(42));
@@ -1444,7 +1461,11 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
     };
 
     // Assert the extra_body is correctly returned
-    let extra_body = inference.extra_body.as_slice();
+    let extra_body = inference
+        .extra_body
+        .as_ref()
+        .expect("extra_body should be present")
+        .as_slice();
     assert_eq!(extra_body.len(), 2);
 
     // Check the first extra_body entry (Always variant with pointer and value)
@@ -1466,7 +1487,11 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
     }
 
     // Assert the inference_params are correctly returned
-    let chat_completion_params = &inference.inference_params.chat_completion;
+    let chat_completion_params = &inference
+        .inference_params
+        .as_ref()
+        .expect("inference_params should be present")
+        .chat_completion;
     assert_eq!(chat_completion_params.temperature, Some(0.5));
     assert_eq!(chat_completion_params.max_tokens, Some(200));
     assert_eq!(chat_completion_params.top_p, Some(0.9));
@@ -1475,5 +1500,62 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
     assert!(
         inference.processing_time_ms.is_some(),
         "processing_time_ms should be present for a completed inference"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_inferences_rejects_output_source_none() {
+    let http_client = Client::new();
+
+    let request = json!({
+        "ids": ["00000000-0000-0000-0000-000000000000"],
+        "output_source": "none"
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/v1/inferences/get_inferences"))
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected 400 Bad Request for output_source: none"
+    );
+    let error: serde_json::Value = response.json().await.unwrap();
+    let error_message = error["error"].as_str().unwrap().to_lowercase();
+    assert!(
+        error_message.contains("none"),
+        "Error message should mention 'none': {error_message}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_inferences_rejects_output_source_none() {
+    let http_client = Client::new();
+
+    let request = json!({
+        "output_source": "none"
+    });
+
+    let response = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected 400 Bad Request for output_source: none"
+    );
+    let error: serde_json::Value = response.json().await.unwrap();
+    let error_message = error["error"].as_str().unwrap().to_lowercase();
+    assert!(
+        error_message.contains("none"),
+        "Error message should mention 'none': {error_message}"
     );
 }

@@ -17,6 +17,7 @@ permissions:
   actions: read
 
 env:
+  CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
@@ -34,17 +35,17 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
       - name: Write GCP JWT key to file
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Install Rust
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then

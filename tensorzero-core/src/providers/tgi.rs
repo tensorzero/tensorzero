@@ -14,7 +14,7 @@ use async_trait::async_trait;
 /// Our implementation currently allows you to use a tool in TGI (nonstreaming), but YMMV.
 use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -62,8 +62,9 @@ use uuid::Uuid;
 const PROVIDER_NAME: &str = "TGI";
 pub const PROVIDER_TYPE: &str = "tgi";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TGIProvider {
     api_base: Url,
     #[serde(skip)]
@@ -192,6 +193,7 @@ impl WrappedProvider for TGIProvider {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             })
@@ -245,6 +247,7 @@ impl InferenceProvider for TGIProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &model_provider_request.request.extra_body,
             &model_provider_request.request.extra_headers,
             model_provider,
@@ -262,6 +265,7 @@ impl InferenceProvider for TGIProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -289,10 +293,12 @@ impl InferenceProvider for TGIProvider {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: Some(raw_request.clone()),
                         raw_response: None,
                     })
                 })?,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -339,6 +345,7 @@ impl InferenceProvider for TGIProvider {
         }
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -400,7 +407,7 @@ fn stream_tgi(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
+                            yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                         }
                     }
                 }
@@ -418,6 +425,7 @@ fn stream_tgi(
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }));
 
                         let latency = start_time.elapsed();
@@ -587,6 +595,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response),
             }
@@ -602,6 +611,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
@@ -634,6 +644,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: finish_reason.map(Into::into),
                 id: model_inference_id,
@@ -642,7 +653,11 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
     }
 }
 
-pub(super) fn handle_tgi_error(response_code: StatusCode, response_body: &str) -> Error {
+pub(super) fn handle_tgi_error(
+    response_code: StatusCode,
+    response_body: &str,
+    api_type: ApiType,
+) -> Error {
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
@@ -651,6 +666,7 @@ pub(super) fn handle_tgi_error(response_code: StatusCode, response_body: &str) -
             message: response_body.to_string(),
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
             raw_request: None,
             raw_response: None,
         }
@@ -658,6 +674,7 @@ pub(super) fn handle_tgi_error(response_code: StatusCode, response_body: &str) -
         _ => ErrorDetails::InferenceServer {
             message: response_body.to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
             raw_request: None,
             raw_response: None,
         }
@@ -809,6 +826,7 @@ fn tgi_to_tensorzero_chunk(
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into());
     }
@@ -840,6 +858,7 @@ fn tgi_to_tensorzero_chunk(
                 raw_request: None,
                 raw_response: Some(raw_message),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }

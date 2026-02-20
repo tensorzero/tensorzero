@@ -2,10 +2,16 @@ import { useTensorZeroStatusFetcher } from "~/routes/api/tensorzero/status";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useMemo } from "react";
 
+interface TensorZeroStatusIndicatorProps {
+  collapsed?: boolean;
+}
+
 /**
  * A component that displays the status of the TensorZero Gateway.
  */
-export default function TensorZeroStatusIndicator() {
+export default function TensorZeroStatusIndicator({
+  collapsed = false,
+}: TensorZeroStatusIndicatorProps) {
   const { status, isLoading } = useTensorZeroStatusFetcher();
   const uiVersion = __APP_VERSION__;
 
@@ -26,37 +32,60 @@ export default function TensorZeroStatusIndicator() {
     return "bg-green-500"; // Everything is good
   }, [isLoading, status, versionsMatch]);
 
-  return (
-    <div className="px-3 py-2 text-xs">
-      <div className="text-fg-muted flex flex-col gap-1 truncate">
-        <div className="flex items-center gap-2">
-          <div
-            className={`h-2 w-2 rounded-full ${statusColor} mr-1 inline-block`}
-          />
-          {isLoading
-            ? "Checking status..."
-            : status === undefined
-              ? "Connecting to Gateway..."
-              : status
-                ? `TensorZero Gateway ${serverVersion}`
-                : "Failed to connect to Gateway"}
-        </div>
-        {status && !versionsMatch && (
-          <div className="ml-5">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-[10px] text-yellow-600">
-                  Version mismatch: UI {uiVersion}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="right" align="center">
-                Please make sure your UI has the same version as the gateway.
-                Otherwise you might have compatibility issues.
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        )}
-      </div>
+  const statusText = isLoading
+    ? "Checking status..."
+    : status === undefined
+      ? "Connecting to Gateway..."
+      : status
+        ? `TensorZero Gateway ${serverVersion}`
+        : "Gateway Unavailable";
+
+  const statusDot = (
+    <div className="flex h-4 w-4 shrink-0 items-center justify-center">
+      <div className={`h-2 w-2 rounded-full ${statusColor}`} />
     </div>
   );
+
+  const content = (
+    <div className="text-fg-muted flex flex-col gap-1 overflow-hidden p-2 text-xs">
+      <div className="flex items-center gap-2">
+        {statusDot}
+        <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+          {statusText}
+        </span>
+      </div>
+      {status && !versionsMatch && !collapsed && (
+        <div className="ml-6 transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-[10px] whitespace-nowrap text-yellow-600">
+                Version mismatch: UI {uiVersion}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="right" align="center">
+              You may experience compatibility issues
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      )}
+    </div>
+  );
+
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{content}</TooltipTrigger>
+        <TooltipContent side="right" align="center">
+          {statusText}
+          {status && !versionsMatch && (
+            <div className="text-yellow-600">
+              Version mismatch: UI {uiVersion}
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return content;
 }

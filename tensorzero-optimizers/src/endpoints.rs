@@ -16,9 +16,9 @@ use rand::seq::SliceRandom;
 use tensorzero_core::{
     config::{Config, provider_types::ProviderTypesConfig},
     db::{
-        clickhouse::ClickHouseConnectionInfo,
         clickhouse::query_builder::{InferenceFilter, OrderBy},
-        inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
+        delegating_connection::DelegatingDatabaseQueries,
+        inferences::{InferenceOutputSource, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},
     error::{Error, ErrorDetails},
@@ -34,8 +34,9 @@ use crate::{JobHandle, Optimizer};
 // TODO(shuyangli): revisit this and see if it should be u32::MAX.
 const DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS: u32 = u32::MAX;
 
-#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
     pub template_variant_name: String,
@@ -50,17 +51,13 @@ pub struct LaunchOptimizationWorkflowParams {
 }
 
 pub async fn launch_optimization_workflow_handler(
-    State(AppStateData {
-        config,
-        http_client,
-        clickhouse_connection_info,
-        ..
-    }): AppState,
+    State(app_state): AppState,
     StructuredJson(params): StructuredJson<LaunchOptimizationWorkflowParams>,
 ) -> Result<Response<Body>, Error> {
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+        Arc::new(app_state.get_delegating_database());
     let job_handle =
-        launch_optimization_workflow(&http_client, config, &clickhouse_connection_info, params)
-            .await?;
+        launch_optimization_workflow(&app_state.http_client, app_state.config, &db, params).await?;
     let encoded_job_handle = job_handle.to_base64_urlencoded()?;
     Ok(encoded_job_handle.into_response())
 }
@@ -73,7 +70,7 @@ pub async fn launch_optimization_workflow_handler(
 pub async fn launch_optimization_workflow(
     http_client: &TensorzeroHttpClient,
     config: Arc<Config>,
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
     params: LaunchOptimizationWorkflowParams,
 ) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationWorkflowParams {
@@ -89,7 +86,7 @@ pub async fn launch_optimization_workflow(
         optimizer_config,
     } = params;
     // Query the database for the stored inferences
-    let stored_inferences = clickhouse_connection_info
+    let stored_inferences = db
         .list_inferences(
             &config,
             &ListInferencesParams {
@@ -129,14 +126,15 @@ pub async fn launch_optimization_workflow(
             train_examples,
             val_examples,
             &InferenceCredentials::default(),
-            clickhouse_connection_info,
+            db,
             config.clone(),
         )
         .await
 }
 
-#[derive(ts_rs::TS, Debug, Deserialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LaunchOptimizationParams {
     pub train_samples: Vec<RenderedSample>,
     pub val_samples: Option<Vec<RenderedSample>>,
@@ -151,7 +149,7 @@ pub struct LaunchOptimizationParams {
 pub async fn launch_optimization(
     http_client: &TensorzeroHttpClient,
     params: LaunchOptimizationParams,
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    db: Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
     config: Arc<Config>,
     // For the TODO above: will need to pass config in here
 ) -> Result<OptimizationJobHandle, Error> {
@@ -167,7 +165,7 @@ pub async fn launch_optimization(
             train_examples,
             val_examples,
             &InferenceCredentials::default(),
-            clickhouse_connection_info,
+            &db,
             config.clone(),
         )
         .await

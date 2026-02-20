@@ -373,18 +373,20 @@ test.describe("should be able to add demonstration feedback via Try with X flows
     test(buttonText, async ({ page }) => {
       await page.goto(`/observability/inferences/${inference}`);
 
-      // Wait for the page to load
+      // Wait for the page to load and the action bar to resolve
       await page.waitForLoadState("networkidle");
+      const tryButton = page.getByText(buttonText);
+      await expect(tryButton).toBeEnabled();
 
       // Click on "Try with variant" button
-      await page.getByText(buttonText).click();
+      await tryButton.click();
 
       // Wait for the dropdown menu to appear and select a variant
       // Look for variant options and click on one that's not the current variant
-      const variantOption = page.getByRole("menuitem").filter({
-        // NOTE(bret): Get exact match, in the case that the
-        // option is also a substring of another option
-        has: page.locator(`text="${option}"`),
+      // ButtonSelect uses cmdk CommandItem which has role="option"
+      const variantOption = page.getByRole("option", {
+        name: option,
+        exact: true,
       });
 
       await variantOption.waitFor({ state: "visible" });
@@ -448,15 +450,19 @@ test.describe("should navigate to inference from Try with X modal and verify tag
     test(buttonText, async ({ page }) => {
       await page.goto(`/observability/inferences/${inference}`);
 
-      // Wait for the page to load
+      // Wait for the page to load and the action bar to resolve
       await page.waitForLoadState("networkidle");
+      const tryButton = page.getByText(buttonText);
+      await expect(tryButton).toBeEnabled();
 
       // Click on "Try with variant/model" button
-      await page.getByText(buttonText).click();
+      await tryButton.click();
 
       // Wait for the dropdown menu to appear and select a variant
-      const variantOption = page.getByRole("menuitem").filter({
-        has: page.locator(`text="${option}"`),
+      // ButtonSelect uses cmdk CommandItem which has role="option"
+      const variantOption = page.getByRole("option", {
+        name: option,
+        exact: true,
       });
 
       await variantOption.waitFor({ state: "visible" });
@@ -485,7 +491,11 @@ test.describe("should navigate to inference from Try with X modal and verify tag
       });
 
       // Verify we're on an inference detail page
-      await expect(page.getByText("Inference", { exact: true })).toBeVisible();
+      await expect(
+        page
+          .getByRole("navigation", { name: "breadcrumb" })
+          .getByText("Inferences", { exact: true }),
+      ).toBeVisible();
 
       // Verify the tags section shows our UI tags
       await expect(page.getByText("tensorzero::internal")).toBeVisible();
@@ -522,8 +532,12 @@ test("should be able to add a datapoint from the inference page", async ({
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
 
-  // Verify we can see the datapoint content
-  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+  // Verify we can see the datapoint page loaded (breadcrumb shows "Datapoints")
+  await expect(
+    page
+      .getByRole("navigation", { name: "breadcrumb" })
+      .getByText("Datapoints", { exact: true }),
+  ).toBeVisible();
 
   // Clean up: delete the dataset by going to the list datasets page
   await page.goto("/datasets");
@@ -543,7 +557,7 @@ test("should be able to add a datapoint from the inference page", async ({
   await deleteButton.click();
 
   // Wait for the shadcn dialog to appear and click the Delete button
-  const dialog = page.locator('div[role="dialog"]');
+  const dialog = page.getByRole("alertdialog");
   await dialog.waitFor({ state: "visible" });
 
   // Click the destructive "Delete" button in the dialog
@@ -608,7 +622,7 @@ test("should handle model inference with null input and output tokens", async ({
   await page.getByText("01954435-76ab-78b1-a76e-d5676b0dd2f9").click();
 
   // Wait for the sheet/dialog to appear
-  const sheet = page.locator('[role="dialog"]');
+  const sheet = page.getByRole("dialog");
   await sheet.waitFor({ state: "visible" });
 
   // Verify we're on the model inference page (use exact match to avoid matching "Model Inferences")
@@ -622,3 +636,63 @@ test("should handle model inference with null input and output tokens", async ({
   // Verify the crab description output is visible in the sheet
   await expect(sheet.getByText("cartoon-style crab").first()).toBeVisible();
 });
+
+// TODO(#5691): Run all UI e2e tests against Postgres-backed gateway too.
+// These are commented out because these tests are only supported on Postgres
+// because we don't TTL inference data in ClickHouse.
+//
+// ===== METADATA-ONLY INFERENCE TESTS =====
+// These inferences have metadata (in chat_inferences / json_inferences) but no data
+// (no rows in chat_inference_data / json_inference_data), simulating data retention expiry.
+
+// test("should display chat inference with no data gracefully", async ({
+//   page,
+// }) => {
+//   await page.goto(
+//     "/observability/inferences/019c592a-111d-7190-bcfa-380a6143e5ee",
+//   );
+//   await page.waitForLoadState("networkidle");
+
+//   // Verify the page loaded (inference ID is visible)
+//   await expect(
+//     page.getByText("019c592a-111d-7190-bcfa-380a6143e5ee").first(),
+//   ).toBeVisible();
+
+//   // Verify metadata is present
+//   await expect(page.getByText("write_haiku").first()).toBeVisible();
+//   await expect(
+//     page.getByText("initial_prompt_gpt4o_mini").first(),
+//   ).toBeVisible();
+
+//   // Verify output section shows "No output"
+//   await expect(page.getByText("No output")).toBeVisible();
+
+//   // Verify inference params shows "Parameters missing"
+//   await expect(page.getByText("Parameters missing")).toBeVisible();
+// });
+
+// test("should display json inference with no data gracefully", async ({
+//   page,
+// }) => {
+//   await page.goto(
+//     "/observability/inferences/019c592a-2fd7-78cc-8703-7e3f8fba7d44",
+//   );
+//   await page.waitForLoadState("networkidle");
+
+//   // Verify the page loaded (inference ID is visible)
+//   await expect(
+//     page.getByText("019c592a-2fd7-78cc-8703-7e3f8fba7d44").first(),
+//   ).toBeVisible();
+
+//   // Verify metadata is present
+//   await expect(page.getByText("extract_entities").first()).toBeVisible();
+//   await expect(
+//     page.getByText("gpt4o_mini_initial_prompt").first(),
+//   ).toBeVisible();
+
+//   // Verify output section shows "No output"
+//   await expect(page.getByText("No output")).toBeVisible();
+
+//   // Verify inference params shows "Parameters missing"
+//   await expect(page.getByText("Parameters missing")).toBeVisible();
+// });

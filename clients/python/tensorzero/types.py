@@ -41,6 +41,19 @@ class RawUsageEntry:
 
 
 @dataclass
+class RawResponseEntry:
+    """A single entry in the raw response array, representing raw response data from one model inference.
+
+    This contains the original provider-specific response string for debugging and advanced use cases.
+    """
+
+    provider_type: str
+    api_type: ApiType
+    data: str
+    model_inference_id: Optional[UUID] = None
+
+
+@dataclass
 class Usage:
     input_tokens: int
     output_tokens: int
@@ -212,6 +225,7 @@ class ChatInferenceResponse:
     content: List[ContentBlock]
     usage: Usage
     raw_usage: Optional[List[RawUsageEntry]] = None
+    raw_response: Optional[List[RawResponseEntry]] = None
     finish_reason: Optional[FinishReason] = None
     original_response: Optional[str] = None
 
@@ -224,6 +238,7 @@ class JsonInferenceResponse:
     output: JsonInferenceOutput
     usage: Usage
     raw_usage: Optional[List[RawUsageEntry]] = None
+    raw_response: Optional[List[RawResponseEntry]] = None
     finish_reason: Optional[FinishReason] = None
     original_response: Optional[str] = None
 
@@ -269,6 +284,24 @@ def parse_raw_usage(
     return [parse_raw_usage_entry(entry) for entry in raw_usage_data]
 
 
+def parse_raw_response_entry(entry: Dict[str, Any]) -> RawResponseEntry:
+    model_inference_id_raw = entry.get("model_inference_id")
+    return RawResponseEntry(
+        model_inference_id=UUID(model_inference_id_raw) if model_inference_id_raw is not None else None,
+        provider_type=entry["provider_type"],
+        api_type=entry["api_type"],
+        data=entry["data"],
+    )
+
+
+def parse_raw_response(
+    raw_response_data: Optional[List[Dict[str, Any]]],
+) -> Optional[List[RawResponseEntry]]:
+    if raw_response_data is None:
+        return None
+    return [parse_raw_response_entry(entry) for entry in raw_response_data]
+
+
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
     if "content" in data and isinstance(data["content"], list):
         finish_reason = data.get("finish_reason")
@@ -281,6 +314,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             content=[parse_content_block(block) for block in data["content"]],  # type: ignore
             usage=Usage(**data["usage"]),
             raw_usage=parse_raw_usage(data.get("raw_usage")),
+            raw_response=parse_raw_response(data.get("raw_response")),
             finish_reason=finish_reason_enum,
             original_response=data.get("original_response"),
         )
@@ -296,6 +330,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             output=JsonInferenceOutput(**output),
             usage=Usage(**data["usage"]),
             raw_usage=parse_raw_usage(data.get("raw_usage")),
+            raw_response=parse_raw_response(data.get("raw_response")),
             finish_reason=finish_reason_enum,
             original_response=data.get("original_response"),
         )
@@ -391,8 +426,10 @@ class ChatChunk:
     content: List[ContentBlockChunk]
     usage: Optional[Usage] = None
     raw_usage: Optional[List[RawUsageEntry]] = None
+    raw_response: Optional[List[RawResponseEntry]] = None
     finish_reason: Optional[FinishReason] = None
     original_chunk: Optional[str] = None
+    raw_chunk: Optional[str] = None
 
 
 @dataclass
@@ -403,8 +440,10 @@ class JsonChunk:
     raw: str
     usage: Optional[Usage] = None
     raw_usage: Optional[List[RawUsageEntry]] = None
+    raw_response: Optional[List[RawResponseEntry]] = None
     finish_reason: Optional[FinishReason] = None
     original_chunk: Optional[str] = None
+    raw_chunk: Optional[str] = None
 
 
 InferenceChunk = Union[ChatChunk, JsonChunk]
@@ -422,8 +461,10 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             content=[parse_content_block_chunk(block) for block in chunk["content"]],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
             raw_usage=parse_raw_usage(chunk.get("raw_usage")),
+            raw_response=parse_raw_response(chunk.get("raw_response")),
             finish_reason=finish_reason_enum,
             original_chunk=chunk.get("original_chunk"),
+            raw_chunk=chunk.get("raw_chunk"),
         )
     elif "raw" in chunk:
         return JsonChunk(
@@ -433,8 +474,10 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             raw=chunk["raw"],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
             raw_usage=parse_raw_usage(chunk.get("raw_usage")),
+            raw_response=parse_raw_response(chunk.get("raw_response")),
             finish_reason=finish_reason_enum,
             original_chunk=chunk.get("original_chunk"),
+            raw_chunk=chunk.get("raw_chunk"),
         )
     else:
         raise ValueError(f"Unable to determine response type: {chunk}")

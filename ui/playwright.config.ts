@@ -6,12 +6,16 @@ const useUIDocker =
   process.env.TENSORZERO_PLAYWRIGHT_NO_WEBSERVER || process.env.TENSORZERO_CI;
 // Allow docker-compose to override baseURL explicitly (e.g., http://ui:4000 in CI)
 const baseURLOverride = process.env.TENSORZERO_PLAYWRIGHT_BASE_URL;
+// Set to include autopilot tests (excluded by default)
+const includeAutopilot = process.env.TENSORZERO_PLAYWRIGHT_INCLUDE_AUTOPILOT;
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
   testDir: "./e2e_tests",
+  /* Exclude autopilot tests by default - they require a separate environment */
+  testIgnore: includeAutopilot ? undefined : "autopilot/**",
   /* Global timeout: 60 seconds max per test */
   timeout: 60000,
   /* Run tests in files in parallel */
@@ -26,19 +30,14 @@ export default defineConfig({
       : 0,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: process.env.TENSORZERO_CI
-    ? [
-        ["list"],
-        ["github"],
-        ["buildkite-test-collector/playwright/reporter"],
-        ["junit", { outputFile: "playwright.junit.xml" }],
-      ]
+    ? [["list"], ["github"], ["junit", { outputFile: "playwright.junit.xml" }]]
     : [["dot"], ["junit", { outputFile: "playwright.junit.xml" }]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL:
       baseURLOverride ||
-      (useUIDocker ? "http://localhost:4000" : "http://localhost:5173"),
+      (useUIDocker ? "http://0.0.0.0:4000" : "http://localhost:5173"),
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: "on",

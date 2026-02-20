@@ -53,5 +53,5 @@ We provide a sample configuration for the MCP server in `config/mcp-clickhouse.t
 
 1. Set the `OPENAI_API_KEY` environment variable to your OpenAI API key.
 2. Run `docker compose up` to start TensorZero.
-3. Install the Python dependencies: `pip install -r requirements.txt`
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 4. Run the script: `python main.py`

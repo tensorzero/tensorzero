@@ -15,7 +15,7 @@ use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use object_store::gcp::{GcpCredential, GoogleCloudStorageBuilder};
 use object_store::{ObjectStore, ObjectStoreExt, StaticCredentialProvider};
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -38,7 +38,7 @@ use crate::config::provider_types::{
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
     DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE,
-    warn_discarded_thought_block, warn_discarded_unknown_chunk,
+    warn_discarded_unknown_chunk,
 };
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
@@ -90,8 +90,9 @@ const DUMMY_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
 /// * In streaming mode, 'thought: true' parts with non-text content produce an error (since we don't have "unknown" blocks in streaming mode)
 ///
 /// In the future, we'll support 'unknown' blocks in streaming mode, and adjust this provider to emit them.
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GCPVertexGeminiProvider {
     api_v1_base_url: Url,
     request_url: String,
@@ -105,8 +106,9 @@ pub struct GCPVertexGeminiProvider {
     batch_config: Option<BatchConfig>,
 }
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 struct BatchConfig {
     input_uri_prefix: String,
     output_uri_prefix: String,
@@ -694,6 +696,7 @@ impl GCPVertexGeminiProvider {
                         raw_response,
                         file_id: store_and_path.path.to_string(),
                     },
+                    ApiType::ChatCompletions,
                     |r| {
                         make_provider_batch_inference_output(
                             r,
@@ -813,11 +816,12 @@ fn make_provider_batch_inference_output(
             raw_request: Some(raw_request.clone()),
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
     let usage = Usage {
         input_tokens: usage_metadata.prompt_token_count,
-        output_tokens: usage_metadata.candidates_token_count,
+        output_tokens: usage_metadata.output_tokens(),
     };
 
     let (output, finish_reason) = get_response_content(
@@ -1110,6 +1114,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let builder = http_client.post(&self.request_url).headers(auth_headers);
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &provider_request.request.extra_body,
             &provider_request.request.extra_headers,
             model_provider,
@@ -1129,6 +1134,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1138,6 +1144,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -1159,6 +1166,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`.".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 }));
@@ -1170,6 +1178,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1178,6 +1187,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 raw_request,
                 response_code,
                 error_body,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -1219,6 +1229,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .headers(auth_headers);
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -1358,6 +1369,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1372,6 +1384,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1380,6 +1393,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 raw_request.clone(),
                 response_code,
                 error_body,
+                ApiType::ChatCompletions,
             ));
         }
 
@@ -1392,6 +1406,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 raw_request: Some(raw_request.clone()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -1402,6 +1417,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -1475,6 +1491,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     status_code: e.status(),
                     message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1489,6 +1506,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -1497,6 +1515,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 raw_request.clone(),
                 response_code,
                 error_body,
+                ApiType::ChatCompletions,
             ));
         }
         let raw_response = res.text().await.map_err(|e| {
@@ -1508,6 +1527,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 raw_request: Some(raw_request.clone()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
         let response =
@@ -1515,6 +1535,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -1539,6 +1560,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 })?;
                 let batch_response = self
@@ -1585,10 +1607,7 @@ fn stream_gcp_vertex_gemini(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if matches!(*e, reqwest_eventsource::Error::StreamEnded) {
-                        break;
-                    }
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -1597,6 +1616,7 @@ fn stream_gcp_vertex_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                             })
@@ -1686,26 +1706,29 @@ pub enum GCPVertexGeminiPartData<'a> {
 #[serde(rename_all = "camelCase")]
 pub struct GCPVertexGeminiContentPart<'a> {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    thought: bool,
+    pub thought: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    thought_signature: Option<String>,
+    pub thought_signature: Option<String>,
     #[serde(flatten)]
     #[serde(default)]
-    data: FlattenUnknown<'a, GCPVertexGeminiPartData<'a>>,
+    pub data: FlattenUnknown<'a, GCPVertexGeminiPartData<'a>>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct GCPVertexGeminiContent<'a> {
-    role: GCPVertexGeminiRole,
-    parts: Vec<GCPVertexGeminiContentPart<'a>>,
+    pub role: GCPVertexGeminiRole,
+    pub parts: Vec<GCPVertexGeminiContentPart<'a>>,
 }
 
 impl<'a> GCPVertexGeminiContent<'a> {
-    async fn from_request_message(message: &'a RequestMessage) -> Result<Self, Error> {
+    pub async fn from_request_message(
+        message: &'a RequestMessage,
+        provider_type: &str,
+    ) -> Result<Self, Error> {
         tensorzero_to_gcp_vertex_gemini_content(
             message.role.into(),
             Cow::Borrowed(&message.content),
-            PROVIDER_TYPE,
+            provider_type,
         )
         .await
     }
@@ -1763,7 +1786,7 @@ struct GCPVertexGeminiFunctionCallingConfig<'a> {
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GCPVertexGeminiToolConfig<'a> {
+pub(super) struct GCPVertexGeminiToolConfig<'a> {
     function_calling_config: GCPVertexGeminiFunctionCallingConfig<'a>,
 }
 
@@ -1904,12 +1927,15 @@ enum GCPVertexGeminiResponseMimeType {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiThinkingConfig {
-    thinking_budget: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_budget: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_level: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GCPVertexGeminiGenerationConfig<'a> {
+pub(super) struct GCPVertexGeminiGenerationConfig<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1934,18 +1960,18 @@ struct GCPVertexGeminiGenerationConfig<'a> {
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GCPVertexGeminiRequest<'a> {
-    contents: Vec<GCPVertexGeminiContent<'a>>,
+pub(super) struct GCPVertexGeminiRequest<'a> {
+    pub(super) contents: Vec<GCPVertexGeminiContent<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<GCPVertexGeminiTool<'a>>>,
+    pub(super) tools: Option<Vec<GCPVertexGeminiTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
+    pub(super) tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
+    pub(super) generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system_instruction: Option<GCPVertexGeminiContent<'a>>,
+    pub(super) system_instruction: Option<GCPVertexGeminiContent<'a>>,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    labels: HashMap<String, String>,
+    pub(super) labels: HashMap<String, String>,
     // TODO (if needed): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
 
@@ -1960,26 +1986,18 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
-        );
-    }
-
-    if let Some(budget_tokens) = thinking_budget_tokens {
+    if reasoning_effort.is_some() || thinking_budget_tokens.is_some() {
+        let thinking_config = GCPVertexGeminiThinkingConfig {
+            thinking_budget: *thinking_budget_tokens,
+            thinking_level: reasoning_effort.clone(),
+        };
         if let Some(gen_config) = &mut request.generation_config {
-            gen_config.thinking_config = Some(GCPVertexGeminiThinkingConfig {
-                thinking_budget: *budget_tokens,
-            });
+            gen_config.thinking_config = Some(thinking_config);
         } else {
             request.generation_config = Some(GCPVertexGeminiGenerationConfig {
                 stop_sequences: None,
                 temperature: None,
-                thinking_config: Some(GCPVertexGeminiThinkingConfig {
-                    thinking_budget: *budget_tokens,
-                }),
+                thinking_config: Some(thinking_config),
                 max_output_tokens: None,
                 top_p: None,
                 presence_penalty: None,
@@ -2027,7 +2045,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             request
                 .messages
                 .iter()
-                .map(GCPVertexGeminiContent::from_request_message),
+                .map(|m| GCPVertexGeminiContent::from_request_message(m, PROVIDER_TYPE)),
         )
         .await?
         .into_iter()
@@ -2096,7 +2114,7 @@ pub async fn prepare_gcp_vertex_gemini_messages<'a>(
     let gcp_vertex_gemini_messages = try_join_all(
         messages
             .iter()
-            .map(GCPVertexGeminiContent::from_request_message),
+            .map(|message| GCPVertexGeminiContent::from_request_message(message, PROVIDER_TYPE)),
     )
     .await?;
     Ok(gcp_vertex_gemini_messages)
@@ -2156,6 +2174,7 @@ async fn convert_non_thought_content_block<'a>(
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 })
@@ -2166,6 +2185,7 @@ async fn convert_non_thought_content_block<'a>(
                     status_code: Some(StatusCode::BAD_REQUEST),
                     message: "Tool call arguments must be a JSON object".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 }
@@ -2190,6 +2210,7 @@ async fn convert_non_thought_content_block<'a>(
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 })
@@ -2200,6 +2221,7 @@ async fn convert_non_thought_content_block<'a>(
                     status_code: Some(StatusCode::BAD_REQUEST),
                     message: "Tool call arguments must be a JSON object".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(tool_call.arguments.clone()),
                 }
@@ -2293,41 +2315,53 @@ async fn handle_thought_block<'a>(
     model_content_blocks: &mut Vec<GCPVertexGeminiContentPart<'a>>,
     iter: &mut impl Iterator<Item = Cow<'a, ContentBlock>>,
 ) -> Result<(), Error> {
-    // GCP Vertex Gemini never produces 'thought: true' at the moment, and there's no documentation
-    // on whether or not they should be passed back in.;
-    // As a result, we don't attempt to feed `Thought.text` back to GCP, as this would
-    // require us to set 'thought: true' in the request.
-    // Instead, we just warn and discard the content block if it has text.
-    if thought.text.is_some() {
-        warn_discarded_thought_block(provider_type, thought);
+    if let Some(text) = &thought.text {
+        // Send thought text back with `thought: true` to maintain reasoning context.
+        // See: https://ai.google.dev/gemini-api/docs/thinking
+        model_content_blocks.push(GCPVertexGeminiContentPart {
+            thought: true,
+            thought_signature: thought.signature.clone(),
+            data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                text: Cow::Owned(text.clone()),
+            }),
+        });
     } else if let Some(signature) = &thought.signature {
         let next_block = iter.next();
         match next_block {
             None => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "Thought block with signature must be followed by a content block in GCP Vertex Gemini".to_string(),
+                    message: format!(
+                        "Thought block with signature must be followed by a content block in {provider_type}"
+                    ),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: None,
-                    }));
+                }));
             }
             Some(Cow::Borrowed(ContentBlock::Thought(_)))
             | Some(Cow::Owned(ContentBlock::Thought(_))) => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "Thought block with signature cannot be followed by another thought block in GCP Vertex Gemini".to_string(),
+                    message: format!(
+                        "Thought block with signature cannot be followed by another thought block in {provider_type}"
+                    ),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: None,
-                    }));
+                }));
             }
             Some(Cow::Borrowed(ContentBlock::Unknown(_)))
             | Some(Cow::Owned(ContentBlock::Unknown(_))) => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
-message: "Thought block with signature cannot be followed by an unknown block in GCP Vertex Gemini".to_string(),
-provider_type: provider_type.to_string(),
-raw_request: None,
-raw_response: None,
-}));
+                    message: format!(
+                        "Thought block with signature cannot be followed by an unknown block in {provider_type}"
+                    ),
+                    provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    raw_request: None,
+                    raw_response: None,
+                }));
             }
             Some(next_block) => {
                 let gcp_part = convert_non_thought_content_block(next_block).await?;
@@ -2385,6 +2419,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     })
@@ -2395,6 +2430,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     }
@@ -2422,6 +2458,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     })
@@ -2432,6 +2469,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     }
@@ -2570,8 +2608,8 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     Ok(message)
 }
 
-/// Recursively removes `$schema` and `additionalProperties` from JSON schemas
-/// for GCP Vertex API compatibility.
+/// Recursively removes fields unsupported by Google's Schema spec
+/// (`$schema`, `additionalProperties`, bare `ref`) from JSON schemas.
 pub(crate) fn process_jsonschema_for_gcp_vertex_gemini(schema: &Value) -> Value {
     let mut schema = schema.clone();
 
@@ -2580,6 +2618,8 @@ pub(crate) fn process_jsonschema_for_gcp_vertex_gemini(schema: &Value) -> Value 
             Value::Object(obj) => {
                 obj.remove("additionalProperties");
                 obj.remove("$schema");
+                // Bare "ref" (without $) is not a valid Google Schema field
+                obj.remove("ref");
                 for (_, v) in obj.iter_mut() {
                     remove_properties(v);
                 }
@@ -2646,6 +2686,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -2660,6 +2701,7 @@ fn content_part_to_tensorzero_chunk(
                     summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             _ => {
@@ -2667,6 +2709,7 @@ fn content_part_to_tensorzero_chunk(
                     message: "Thought part in GCP Vertex Gemini response must be a text block"
                         .to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
                 }));
@@ -2693,6 +2736,7 @@ fn content_part_to_tensorzero_chunk(
             summary_text: None,
             signature: Some(thought_signature),
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
 
@@ -2736,6 +2780,7 @@ fn content_part_to_tensorzero_chunk(
                     "executableCode is not supported in streaming response for GCP Vertex Gemini"
                         .to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: None,
                 raw_response: Some(serde_json::to_string(&part).unwrap_or_default()),
             }));
@@ -2771,6 +2816,7 @@ fn convert_to_output(
                     text: Some(text),
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             // Handle 'thought/thoughtSignature' with no other fields
@@ -2782,6 +2828,7 @@ fn convert_to_output(
                     text: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 })]);
             }
             _ => {
@@ -2812,6 +2859,7 @@ fn convert_to_output(
             text: None,
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         }));
     }
 
@@ -2913,6 +2961,20 @@ struct GCPVertexGeminiUsageMetadata {
     // GCP doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thoughts_token_count: Option<u32>,
+}
+
+impl GCPVertexGeminiUsageMetadata {
+    /// Returns output_tokens by summing candidates + thoughts tokens
+    fn output_tokens(&self) -> Option<u32> {
+        match (self.candidates_token_count, self.thoughts_token_count) {
+            (Some(c), Some(t)) => Some(c + t),
+            (Some(c), None) => Some(c),
+            (None, Some(t)) => Some(t),
+            (None, None) => None,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -2949,6 +3011,7 @@ fn get_response_content(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(raw_response.to_string()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -2990,6 +3053,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             })
         })?;
 
@@ -3003,7 +3067,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         });
         let usage = Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count,
+            output_tokens: usage_metadata.output_tokens(),
         };
 
         let system = generic_request.system.clone();
@@ -3026,6 +3090,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 raw_response,
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason,
                 id: model_inference_id,
@@ -3053,6 +3118,7 @@ fn convert_stream_response_with_metadata_to_chunk(
             raw_request: None,
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         })
     })?;
 
@@ -3091,10 +3157,11 @@ fn convert_stream_response_with_metadata_to_chunk(
         Some(metadata) => {
             let usage = if metadata.prompt_token_count.is_some()
                 || metadata.candidates_token_count.is_some()
+                || metadata.thoughts_token_count.is_some()
             {
                 Some(Usage {
                     input_tokens: metadata.prompt_token_count,
-                    output_tokens: metadata.candidates_token_count,
+                    output_tokens: metadata.output_tokens(),
                 })
             } else {
                 None
@@ -3135,6 +3202,7 @@ fn handle_gcp_vertex_gemini_error(
     raw_request: String,
     response_code: StatusCode,
     response_body: String,
+    api_type: ApiType,
 ) -> Error {
     match response_code {
         StatusCode::UNAUTHORIZED
@@ -3146,6 +3214,7 @@ fn handle_gcp_vertex_gemini_error(
             raw_request: Some(raw_request),
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
         }),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
@@ -3154,6 +3223,7 @@ fn handle_gcp_vertex_gemini_error(
             raw_request: Some(raw_request),
             raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
         }),
     }
 }
@@ -3175,7 +3245,7 @@ mod tests {
             role: Role::User,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::from_request_message(&message)
+        let content = GCPVertexGeminiContent::from_request_message(&message, PROVIDER_TYPE)
             .await
             .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
@@ -3193,7 +3263,7 @@ mod tests {
             role: Role::Assistant,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::from_request_message(&message)
+        let content = GCPVertexGeminiContent::from_request_message(&message, PROVIDER_TYPE)
             .await
             .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
@@ -3217,7 +3287,7 @@ mod tests {
                 }),
             ],
         };
-        let content = GCPVertexGeminiContent::from_request_message(&message)
+        let content = GCPVertexGeminiContent::from_request_message(&message, PROVIDER_TYPE)
             .await
             .unwrap();
 
@@ -3248,7 +3318,7 @@ mod tests {
                 result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
             })],
         };
-        let content = GCPVertexGeminiContent::from_request_message(&message)
+        let content = GCPVertexGeminiContent::from_request_message(&message, PROVIDER_TYPE)
             .await
             .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
@@ -3715,6 +3785,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: None,
                 candidates_token_count: None,
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3815,6 +3886,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3952,6 +4024,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
+                thoughts_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -4094,7 +4167,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice) =
-            prepare_tools(&request_with_tools, "gemini-2.0-flash-lite").unwrap();
+            prepare_tools(&request_with_tools, "gemini-2.5-flash-lite").unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -4623,18 +4696,18 @@ mod tests {
             "GCP shorthand url does not contain a publisher or endpoint: `projects/tensorzero-public/locations/us-central1/`"
         );
 
-        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001", "google").unwrap_err().to_string();
+        let non_google_publisher = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.5-flash", "google").unwrap_err().to_string();
         assert_eq!(
             non_google_publisher,
-            "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.0-flash-001`"
+            "GCP shorthand url has publisher `not-google`, expected `google` : `projects/tensorzero-public/locations/us-central1/publishers/not-google/models/gemini-2.5-flash`"
         );
 
-        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001", "google").unwrap();
+        let valid_model_url = parse_shorthand_url("projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.5-flash", "google").unwrap();
         assert_eq!(
             valid_model_url,
             ShorthandUrl::Publisher {
                 location: "us-central1",
-                model_id: "gemini-2.0-flash-001"
+                model_id: "gemini-2.5-flash"
             }
         );
 
@@ -4674,6 +4747,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4736,6 +4810,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4786,6 +4861,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
+                thoughts_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4954,6 +5030,7 @@ mod tests {
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
+                thoughts_token_count: None,
             }),
         };
         let mut last_tool_name = None;
@@ -5460,24 +5537,187 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
-        // Test that reasoning_effort warns with tip about thinking_budget_tokens
-        assert!(logs_contain(
-            "GCP Vertex Gemini does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
-        ));
-
-        // Test that thinking_budget_tokens is applied correctly in generation_config
-        assert!(request.generation_config.is_some());
+        // Test that thinking_budget_tokens and reasoning_effort are applied correctly in generation_config
+        assert!(
+            request.generation_config.is_some(),
+            "generation_config should be set when thinking params are provided"
+        );
         let gen_config = request.generation_config.unwrap();
         assert_eq!(
             gen_config.thinking_config,
             Some(GCPVertexGeminiThinkingConfig {
-                thinking_budget: 1024,
-            })
+                thinking_budget: Some(1024),
+                thinking_level: Some("high".to_string()),
+            }),
+            "thinking_config should contain both thinking_budget and thinking_level"
         );
 
         // Test that verbosity warns
         assert!(logs_contain(
             "GCP Vertex Gemini does not support the inference parameter `verbosity`"
         ));
+    }
+
+    #[tokio::test]
+    async fn test_gcp_vertex_thought_text_roundtrip() {
+        // Thought with text only → part with thought: true, text content, no signature
+        let content_blocks = vec![ContentBlock::Thought(Thought {
+            text: Some("Let me think about this...".to_string()),
+            signature: None,
+            summary: None,
+            provider_type: None,
+            extra_data: None,
+        })];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .await
+        .unwrap();
+        assert_eq!(gcp_content.parts.len(), 1, "Should have one thought part");
+        assert!(
+            gcp_content.parts[0].thought,
+            "Part should have thought: true"
+        );
+        assert_eq!(
+            gcp_content.parts[0].thought_signature, None,
+            "Thought with no signature should have no thought_signature"
+        );
+        match &gcp_content.parts[0].data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
+                assert_eq!(
+                    text, "Let me think about this...",
+                    "Thought text should be preserved"
+                );
+            }
+            _ => panic!("Expected a text part"),
+        }
+
+        // Thought with text AND signature → part with thought: true, text, and signature
+        let content_blocks = vec![ContentBlock::Thought(Thought {
+            text: Some("Reasoning step".to_string()),
+            signature: Some("sig123".to_string()),
+            summary: None,
+            provider_type: None,
+            extra_data: None,
+        })];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .await
+        .unwrap();
+        assert_eq!(gcp_content.parts.len(), 1, "Should have one thought part");
+        assert!(
+            gcp_content.parts[0].thought,
+            "Part should have thought: true"
+        );
+        assert_eq!(
+            gcp_content.parts[0].thought_signature,
+            Some("sig123".to_string()),
+            "Thought with signature should preserve it"
+        );
+        match &gcp_content.parts[0].data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
+                assert_eq!(text, "Reasoning step", "Thought text should be preserved");
+            }
+            _ => panic!("Expected a text part"),
+        }
+
+        // Thought with text + FunctionCall (no signature) → thought part + FunctionCall gets dummy signature
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("I should call a function".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            ContentBlock::ToolCall(ToolCall {
+                id: "call_1".to_string(),
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "NYC"}"#.to_string(),
+            }),
+        ];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            gcp_content.parts.len(),
+            2,
+            "Should have thought part and function call part"
+        );
+        assert!(
+            gcp_content.parts[0].thought,
+            "First part should be a thought"
+        );
+        match &gcp_content.parts[0].data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
+                assert_eq!(
+                    text, "I should call a function",
+                    "Thought text should be preserved"
+                );
+            }
+            _ => panic!("Expected a text part for thought"),
+        }
+        // FunctionCall without a real signature should get a dummy signature
+        assert_eq!(
+            gcp_content.parts[1].thought_signature,
+            Some(DUMMY_THOUGHT_SIGNATURE.to_string()),
+            "FunctionCall should get dummy thought signature when no real signature is present"
+        );
+
+        // Signature-only thought + FunctionCall → existing merge behavior (regression test)
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: None,
+                signature: Some("real_sig".to_string()),
+                summary: None,
+                provider_type: None,
+                extra_data: None,
+            }),
+            ContentBlock::ToolCall(ToolCall {
+                id: "call_2".to_string(),
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "LA"}"#.to_string(),
+            }),
+        ];
+        let gcp_content = tensorzero_to_gcp_vertex_gemini_content(
+            GCPVertexGeminiRole::Model,
+            Cow::Borrowed(&content_blocks),
+            PROVIDER_TYPE,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            gcp_content.parts.len(),
+            1,
+            "Signature-only thought should merge with next block"
+        );
+        assert!(
+            !gcp_content.parts[0].thought,
+            "Merged part should not be a thought"
+        );
+        assert_eq!(
+            gcp_content.parts[0].thought_signature,
+            Some("real_sig".to_string()),
+            "Merged part should carry the real signature"
+        );
+        match &gcp_content.parts[0].data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { function_call }) => {
+                assert_eq!(
+                    function_call.name,
+                    Cow::Borrowed("get_temperature"),
+                    "Should be the merged function call"
+                );
+            }
+            _ => panic!("Expected a function call part"),
+        }
     }
 }

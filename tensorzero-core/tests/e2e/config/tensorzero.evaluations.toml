@@ -275,7 +275,7 @@ optimize = "min"
 
 [evaluations.best_of_3.evaluators.llm_judge_bool.variants.anthropic_promptA]
 type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
+model = "anthropic::claude-haiku-4-5"
 system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
 json_mode = "tool"
 
@@ -287,7 +287,7 @@ json_mode = "strict"
 
 [evaluations.best_of_3.evaluators.llm_judge_bool.variants.llama_promptA]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
 json_mode = "strict"
 
@@ -313,7 +313,7 @@ optimize = "min"
 
 [evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.anthropic_promptA]
 type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
+model = "anthropic::claude-haiku-4-5"
 system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
 json_mode = "tool"
 
@@ -325,7 +325,7 @@ json_mode = "strict"
 
 [evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.llama_promptA]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
 json_mode = "strict"
 

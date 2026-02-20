@@ -7,7 +7,7 @@ use crate::inference::types::chat_completion_inference_params::{
 use crate::providers::openai::OpenAIMessagesConfig;
 use futures::{StreamExt, future::try_join_all};
 use lazy_static::lazy_static;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -61,8 +61,9 @@ lazy_static! {
 pub const PROVIDER_NAME: &str = "Together";
 pub const PROVIDER_TYPE: &str = "together";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TogetherProvider {
     model_name: String,
     #[serde(skip)]
@@ -197,6 +198,7 @@ impl InferenceProvider for TogetherProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -215,6 +217,7 @@ impl InferenceProvider for TogetherProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -227,6 +230,7 @@ impl InferenceProvider for TogetherProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -253,6 +257,7 @@ impl InferenceProvider for TogetherProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
             Err(handle_openai_error(
@@ -261,6 +266,7 @@ impl InferenceProvider for TogetherProvider {
                 &raw_response,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -300,6 +306,7 @@ impl InferenceProvider for TogetherProvider {
             .bearer_auth(api_key.expose_secret());
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -625,6 +632,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -638,19 +646,25 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(raw_text) = message.content {
-            let (clean_text, extracted_reasoning) =
-                process_think_blocks(&raw_text, parse_think_blocks, PROVIDER_TYPE)?;
+            let (clean_text, extracted_reasoning) = process_think_blocks(
+                &raw_text,
+                parse_think_blocks,
+                PROVIDER_TYPE,
+                ApiType::ChatCompletions,
+            )?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
                     text: Some(reasoning),
                     signature: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
+                    extra_data: None,
                 }));
             }
             if !clean_text.is_empty() {
@@ -681,6 +695,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
+                relay_raw_response: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: finish_reason.map(Into::into),
@@ -706,7 +721,7 @@ fn stream_together(
                 Err(e) => {
                     let message = e.to_string();
                     let mut raw_response = None;
-                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = *e {
+                    if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(_, resp) = *e {
                         raw_response = resp.text().await.ok();
                     }
                     yield Err(ErrorDetails::InferenceServer {
@@ -714,6 +729,7 @@ fn stream_together(
                         raw_request: None,
                         raw_response,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     }.into());
                 }
                 Ok(event) => match event {
@@ -728,6 +744,7 @@ fn stream_together(
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }));
 
                         let latency = start_time.elapsed();
@@ -773,6 +790,7 @@ fn together_to_tensorzero_chunk(
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into());
     }
@@ -793,7 +811,7 @@ fn together_to_tensorzero_chunk(
         }
         if let Some(text) = choice.delta.content {
             if parse_think_blocks {
-                if !thinking_state.update(&text, PROVIDER_TYPE)? {
+                if !thinking_state.update(&text, PROVIDER_TYPE, ApiType::ChatCompletions)? {
                     match thinking_state {
                         ThinkingState::Normal | ThinkingState::Finished => {
                             content.push(ContentBlockChunk::Text(TextChunk {
@@ -809,6 +827,7 @@ fn together_to_tensorzero_chunk(
                                 summary_text: None,
                                 id: thinking_state.get_id(),
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                                extra_data: None,
                             }));
                         }
                     }
@@ -837,6 +856,7 @@ fn together_to_tensorzero_chunk(
                                 raw_request: None,
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }))?
                             .clone()
                     }
@@ -1129,6 +1149,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: Some("together".to_string()),
+                extra_data: None,
             })
         );
         assert_eq!(
@@ -1178,6 +1199,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: Some("together".to_string()),
+                extra_data: None,
             })
         );
         assert_eq!(
@@ -1547,6 +1569,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
         // Test a correct new tool chunk
@@ -1710,6 +1733,7 @@ mod tests {
                 summary_text: None,
                 id: "1".to_string(),
                 provider_type: Some("together".to_string()),
+                extra_data: None,
             })]
         );
         assert!(matches!(thinking_state, ThinkingState::Thinking));

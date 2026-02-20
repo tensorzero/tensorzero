@@ -5,10 +5,19 @@ import { TooltipProvider } from "~/components/ui/tooltip";
 import { Toaster } from "~/components/ui/toaster";
 import { ReadOnlyProvider } from "~/context/read-only";
 import { AutopilotAvailableProvider } from "~/context/autopilot-available";
+import { ConfigProvider, EMPTY_CONFIG } from "~/context/config";
+import {
+  FeatureFlagsProvider,
+  DEFAULT_FEATURE_FLAGS,
+  type FeatureFlags,
+} from "~/context/feature-flags";
+import type { UiConfig } from "~/types/tensorzero";
 
 export interface AppProvidersLoaderData {
   isReadOnly?: boolean;
   autopilotAvailable?: boolean;
+  config?: UiConfig;
+  featureFlags?: FeatureFlags;
 }
 
 interface AppProvidersProps {
@@ -28,9 +37,17 @@ export function AppProviders({ children, loaderData }: AppProvidersProps) {
           <AutopilotAvailableProvider
             value={loaderData?.autopilotAvailable ?? false}
           >
-            <SidebarProvider>
-              <TooltipProvider>{children}</TooltipProvider>
-            </SidebarProvider>
+            <FeatureFlagsProvider
+              value={loaderData?.featureFlags ?? DEFAULT_FEATURE_FLAGS}
+            >
+              <ConfigProvider value={loaderData?.config ?? EMPTY_CONFIG}>
+                <SidebarProvider>
+                  <TooltipProvider delayDuration={250}>
+                    {children}
+                  </TooltipProvider>
+                </SidebarProvider>
+              </ConfigProvider>
+            </FeatureFlagsProvider>
           </AutopilotAvailableProvider>
         </ReadOnlyProvider>
         <Toaster />

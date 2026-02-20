@@ -1,7 +1,10 @@
+#![recursion_limit = "256"]
+
 use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
 use secrecy::ExposeSecret;
+use sqlx::types::chrono::{DateTime, Utc};
 use std::fmt::Display;
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
@@ -13,14 +16,14 @@ use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
-use durable_tools::EmbeddedClient;
+use durable_tools::{EmbeddedClient, WorkerOptions};
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
+use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error;
-use tensorzero_core::feature_flags;
+use tensorzero_core::error::{self, Error, ErrorDetails};
 use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
@@ -38,22 +41,65 @@ fn print_key(key: &secrecy::SecretString) {
     println!("{}", key.expose_secret());
 }
 
-async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
+async fn handle_create_api_key(
+    expiration: Option<DateTime<Utc>>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Read the Postgres URL from the environment
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
+
+    let now = Utc::now();
+
+    if let Some(expiration_datetime) = expiration
+        && expiration_datetime < now
+    {
+        return Err("Expiration datetime needs to be in the future".into());
+    }
 
     // Create connection pool (alpha version for tensorzero-auth)
     let pool = sqlx::PgPool::connect(&postgres_url).await?;
 
     // Create the key with default organization and workspace
-    let key =
-        tensorzero_auth::postgres::create_key(DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE, None, &pool)
-            .await?;
+    let key = tensorzero_auth::postgres::create_key(
+        DEFAULT_ORGANIZATION,
+        DEFAULT_WORKSPACE,
+        None,
+        expiration,
+        &pool,
+    )
+    .await?;
 
     // Print only the API key to stdout for easy machine parsing
     print_key(&key);
 
+    if let Some(expiration) = expiration {
+        tracing::debug!("Created API key with expiration: {expiration}");
+    } else {
+        tracing::debug!("Created API key with no expiration");
+    }
+
+    Ok(())
+}
+
+async fn run_optimization_postgres_migrations() -> Result<(), Error> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: "Failed to read TENSORZERO_POSTGRES_URL environment variable".to_string(),
+        })
+    })?;
+    let pool = sqlx::PgPool::connect(&postgres_url).await.map_err(|e| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: e.to_string(),
+        })
+    })?;
+    tensorzero_optimizers::postgres::make_migrator()
+        .run(&pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresMigration {
+                message: format!("Failed to run optimization migrations: {e}"),
+            })
+        })?;
     Ok(())
 }
 
@@ -80,9 +126,6 @@ async fn main() -> ExitCode {
 async fn run() -> Result<(), ExitCode> {
     let args = GatewayArgs::parse();
 
-    // Initialize feature flags
-    feature_flags::init_flags().log_err_pretty("Failed to initialize feature flags")?;
-
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     // We start with empty headers and update them after loading the config
@@ -93,7 +136,7 @@ async fn run() -> Result<(), ExitCode> {
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
     if args.early_exit_commands.create_api_key {
-        handle_create_api_key()
+        handle_create_api_key(args.early_exit_command_arguments.expiration)
             .await
             .log_err_pretty("Failed to create API key")?;
         return Ok(());
@@ -117,10 +160,18 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     if args.early_exit_commands.run_postgres_migrations {
-        tracing::info!("Applying PostgreSQL migrations...");
+        tracing::info!("Applying Postgres migrations...");
         manual_run_postgres_migrations()
             .await
-            .log_err_pretty("Failed to run PostgreSQL migrations")?;
+            .log_err_pretty("Failed to run Postgres migrations")?;
+        if args
+            .postgres_migration_args
+            .enable_optimization_postgres_migrations
+        {
+            run_optimization_postgres_migrations()
+                .await
+                .log_err_pretty("Failed to run optimization Postgres migrations")?;
+        }
         tracing::info!("Postgres is ready.");
         return Ok(());
     }
@@ -235,8 +286,13 @@ async fn run() -> Result<(), ExitCode> {
         );
     }
 
+    // Collect available tool names for autopilot (single source of truth)
+    let available_tools = autopilot_tools::collect_tool_names()
+        .await
+        .log_err_pretty("Failed to collect autopilot tool names")?;
+
     // Initialize GatewayHandle
-    let gateway_handle = gateway::GatewayHandle::new(unwritten_config)
+    let gateway_handle = gateway::GatewayHandle::new(unwritten_config, available_tools)
         .await
         .log_err_pretty("Failed to initialize AppState")?;
 
@@ -276,7 +332,7 @@ async fn run() -> Result<(), ExitCode> {
     // Bind to the socket address specified in the CLI, config, or default to 0.0.0.0:3000
     if args.bind_address.is_some() && config.gateway.bind_address.is_some() {
         tracing::error!(
-            "You must not specify both `--bind-address` and `gateway.bind_address` in the config file."
+            "You must only specify one of `--bind-address` (CLI), `TENSORZERO_GATEWAY_BIND_ADDRESS` (environment variable), or `gateway.bind_address` (configuration)."
         );
         return Err(ExitCode::FAILURE);
     }
@@ -341,6 +397,16 @@ async fn run() -> Result<(), ExitCode> {
     // Print whether postgres is enabled
     tracing::info!("├ Postgres: {postgres_enabled_pretty}");
 
+    // Print whether valkey is enabled
+    let valkey_enabled_pretty =
+        get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info);
+    tracing::info!("├ Valkey: {valkey_enabled_pretty}");
+    if std::env::var("TENSORZERO_VALKEY_CACHE_URL").is_ok() {
+        let valkey_cache_enabled_pretty =
+            get_valkey_status_string(&gateway_handle.app_state.valkey_cache_connection_info);
+        tracing::info!("├ Valkey (cache): {valkey_cache_enabled_pretty}");
+    }
+
     if let Some(gateway_url) = config
         .gateway
         .relay
@@ -366,10 +432,17 @@ async fn run() -> Result<(), ExitCode> {
         tracing::info!("└ OpenTelemetry: disabled");
     }
 
-    let shutdown_signal = shutdown_signal().shared();
+    let shutdown_token = gateway_handle.app_state.shutdown_token.clone();
+    let shutdown_token_clone = shutdown_token.clone();
+    // This is responsible for starting the shutdown
+    #[expect(clippy::disallowed_methods)]
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        shutdown_token_clone.cancel();
+    });
 
     let server_fut = axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal.clone())
+        .with_graceful_shutdown(shutdown_token.clone().cancelled_owned())
         .into_future()
         .map(|r| {
             let _ = r.log_err_pretty("Failed to start server");
@@ -379,7 +452,7 @@ async fn run() -> Result<(), ExitCode> {
     // This is a purely informational logging task, so we don't need to wait for it to finish.
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(monitor_server_shutdown(
-        shutdown_signal,
+        shutdown_token.clone().cancelled_owned(),
         server_fut.clone(),
         in_flight_requests_data,
     ));
@@ -460,6 +533,13 @@ fn get_postgres_status_string(postgres: &PostgresConnectionInfo) -> String {
     }
 }
 
+fn get_valkey_status_string(valkey: &ValkeyConnectionInfo) -> String {
+    match valkey {
+        ValkeyConnectionInfo::Disabled => "disabled".to_string(),
+        ValkeyConnectionInfo::Enabled { .. } => "enabled".to_string(),
+    }
+}
+
 pub async fn shutdown_signal() {
     // If any errors occur in these futures, we log them and return from the future
     // This will cause the `tokio::select!` block to resolve - i.e. we treat it as
@@ -537,12 +617,17 @@ async fn spawn_autopilot_worker_if_configured(
 
     // TODO: decide how we want to do autopilot config.
     let default_max_attempts = 5;
-    let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts);
+    let worker_options = WorkerOptions {
+        poll_interval: Duration::from_secs(1),
+        concurrency: 8,
+        ..Default::default()
+    };
+    let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts, worker_options);
 
     Ok(Some(
         spawn_autopilot_worker(
             &gateway_handle.app_state.deferred_tasks,
-            gateway_handle.cancel_token.clone(),
+            gateway_handle.app_state.shutdown_token.clone(),
             config,
         )
         .await

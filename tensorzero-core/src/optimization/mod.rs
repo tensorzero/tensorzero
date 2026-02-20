@@ -9,6 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
@@ -40,14 +41,16 @@ pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
 
-#[derive(Clone, Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OptimizerInfo {
     pub inner: OptimizerConfig,
 }
 
-#[derive(Clone, Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum OptimizerConfig {
     Dicl(DiclOptimizationConfig),
     OpenAISFT(OpenAISFTConfig),
@@ -58,10 +61,12 @@ pub enum OptimizerConfig {
     TogetherSFT(Box<TogetherSFTConfig>),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum OptimizationJobHandle {
     #[serde(rename = "dicl")]
     Dicl(DiclOptimizationJobHandle),
@@ -121,8 +126,9 @@ impl OptimizationJobHandle {
     }
 }
 
-#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 pub enum OptimizerOutput {
     Variant(Box<UninitializedVariantConfig>),
@@ -130,13 +136,15 @@ pub enum OptimizerOutput {
     Model(UninitializedModelConfig),
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
-#[serde(tag = "status", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(tag = "status")]
+#[serde(rename_all = "snake_case")]
 pub enum OptimizationJobInfo {
     Pending {
         message: String,
-        #[ts(type = "Date | null")]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "Date | null"))]
         estimated_finish: Option<DateTime<Utc>>,
         trained_tokens: Option<u64>,
         error: Option<Value>,
@@ -239,8 +247,9 @@ impl OptimizationJobInfoPyClass {
     }
 }
 
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedOptimizerInfo {
     #[serde(flatten)]
     pub inner: UninitializedOptimizerConfig,
@@ -254,9 +263,11 @@ impl UninitializedOptimizerInfo {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
-#[ts(export)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum UninitializedOptimizerConfig {
     #[serde(rename = "dicl")]
     Dicl(UninitializedDiclOptimizationConfig),

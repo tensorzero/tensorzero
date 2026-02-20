@@ -399,12 +399,17 @@ func TestBasicInference(t *testing.T) {
 			openai.UserMessage("Hello"),
 		}
 
-		// First request (non-cached)
+		// First request (write_only to populate cache)
 		req := &openai.ChatCompletionNewParams{
 			Model:       "tensorzero::function_name::basic_test",
 			Messages:    messages,
 			Temperature: openai.Float(0.4),
 		}
+		req.SetExtraFields(map[string]any{
+			"tensorzero::cache_options": map[string]any{
+				"enabled": "write_only",
+			},
+		})
 
 		resp, err := client.Chat.Completions.New(ctx, *req)
 		require.NoError(t, err, "Unexpected error while getting completion")
@@ -924,7 +929,7 @@ func TestStreamingInference(t *testing.T) {
 			" pizza.",
 		}
 
-		// First request without cache to populate the cache
+		// First request with write_only cache to populate the cache
 		req := &openai.ChatCompletionNewParams{
 			Model:    "tensorzero::function_name::basic_test",
 			Messages: messages,
@@ -934,6 +939,11 @@ func TestStreamingInference(t *testing.T) {
 			},
 		}
 		addEpisodeIDToRequest(t, req, episodeID)
+		req.SetExtraFields(map[string]any{
+			"tensorzero::cache_options": map[string]any{
+				"enabled": "write_only",
+			},
+		})
 
 		stream := client.Chat.Completions.NewStreaming(ctx, *req)
 		require.NotNil(t, stream, "Streaming response should not be nil")
@@ -1025,7 +1035,8 @@ func TestStreamingInference(t *testing.T) {
 		var apiErr *openai.Error
 		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError") // ErrorAs assign err to apiErr
 		assert.Equal(t, 404, apiErr.StatusCode, "Expected status code 404")
-		assert.Contains(t, err.Error(), "404 Not Found \"Unknown function: does_not_exist\"", "Error should indicate 404 Not Found")
+		assert.Contains(t, err.Error(), "404 Not Found", "Error should indicate 404 Not Found")
+		assert.Contains(t, err.Error(), "Unknown function: does_not_exist", "Error should indicate unknown function")
 	})
 
 	t.Run("it should handle streaming inference with a missing function", func(t *testing.T) {
@@ -1075,7 +1086,8 @@ func TestStreamingInference(t *testing.T) {
 		var apiErr *openai.Error
 		assert.ErrorAs(t, err, &apiErr, "Expected error to be of type APIError")
 		assert.Equal(t, 400, apiErr.StatusCode, "Expected status code 404")
-		assert.Contains(t, apiErr.Error(), "400 Bad Request \"Invalid request to OpenAI-compatible endpoint", "Error should indicate invalid request to OpenAI compartible endpoint")
+		assert.Contains(t, apiErr.Error(), "400 Bad Request", "Error should indicate 400 Bad Request")
+		assert.Contains(t, apiErr.Error(), "Invalid request to OpenAI-compatible endpoint", "Error should indicate invalid request to OpenAI compatible endpoint")
 	})
 
 	t.Run("it should handle streaming inference with a missing model", func(t *testing.T) {

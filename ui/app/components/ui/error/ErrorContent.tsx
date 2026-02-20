@@ -16,8 +16,7 @@ import {
   ErrorContentCard,
   ErrorContentHeader,
   ErrorInlineCode,
-  PageErrorContainer,
-  PageErrorStack,
+  PageErrorNotice,
   StackTraceContent,
   TroubleshootingSection,
 } from "./ErrorContentPrimitives";
@@ -141,7 +140,7 @@ function ServerErrorContent({
     <ErrorContentCard>
       <ErrorContentHeader
         icon={AlertTriangle}
-        title={status ? `Error ${status}` : "Something Went Wrong"}
+        title={status ? `Error ${status}` : "Something went wrong"}
         description={message || "An unexpected error occurred."}
       />
       {stack && <StackTraceContent stack={stack} />}
@@ -151,14 +150,12 @@ function ServerErrorContent({
 
 export function PageNotFound() {
   return (
-    <PageErrorContainer>
-      <PageErrorStack
-        icon={FileQuestion}
-        title="Page Not Found"
-        description="The page you're looking for doesn't exist."
-        muted
-      />
-    </PageErrorContainer>
+    <PageErrorNotice
+      icon={FileQuestion}
+      title="Page Not Found"
+      description="The page you're looking for doesn't exist."
+      muted
+    />
   );
 }
 
@@ -181,12 +178,10 @@ export function PageErrorContent({ error }: PageErrorContentProps) {
   const { title, message, status } = getPageErrorInfo(error);
 
   return (
-    <PageErrorContainer>
-      <PageErrorStack
-        icon={AlertTriangle}
-        title={status ? `Error ${status}` : title}
-        description={message}
-      />
-    </PageErrorContainer>
+    <PageErrorNotice
+      icon={AlertTriangle}
+      title={status ? `Error ${status}` : title}
+      description={message}
+    />
   );
 }

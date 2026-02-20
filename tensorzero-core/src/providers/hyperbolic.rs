@@ -30,7 +30,8 @@ use uuid::Uuid;
 
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, SystemOrDeveloper, get_chat_url,
-    handle_openai_error, prepare_openai_messages, stream_openai,
+    handle_openai_error, openai_response_tool_call_to_tensorzero_tool_call,
+    prepare_openai_messages, stream_openai,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -45,8 +46,9 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Hyperbolic";
 pub const PROVIDER_TYPE: &str = "hyperbolic";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct HyperbolicProvider {
     model_name: String,
     #[serde(skip)]
@@ -170,6 +172,7 @@ impl InferenceProvider for HyperbolicProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -189,6 +192,7 @@ impl InferenceProvider for HyperbolicProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -201,6 +205,7 @@ impl InferenceProvider for HyperbolicProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -229,10 +234,12 @@ impl InferenceProvider for HyperbolicProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 })?,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -272,6 +279,7 @@ impl InferenceProvider for HyperbolicProvider {
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -458,6 +466,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -474,6 +483,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
@@ -481,7 +491,9 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
 
@@ -505,6 +517,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,
@@ -559,10 +572,9 @@ mod tests {
             ..Default::default()
         };
 
-        let hyperbolic_request =
-            HyperbolicRequest::new("meta-llama/Meta-Llama-3-70B-Instruct", &request_with_tools)
-                .await
-                .expect("failed to create Hyperbolic Request during test");
+        let hyperbolic_request = HyperbolicRequest::new("openai/gpt-oss-20b", &request_with_tools)
+            .await
+            .expect("failed to create Hyperbolic Request during test");
 
         assert_eq!(hyperbolic_request.messages.len(), 1);
         assert_eq!(hyperbolic_request.temperature, Some(0.5));
@@ -617,10 +629,10 @@ mod tests {
                     tool_calls: None,
                 },
             }],
-            usage: OpenAIUsage {
+            usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
-            },
+            }),
         };
         let generic_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),

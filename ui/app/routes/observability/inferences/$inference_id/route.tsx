@@ -1,162 +1,125 @@
-import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
+import { useEffect, useState, useCallback } from "react";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import {
-  resolveModelInferences,
-  loadFileDataForStoredInput,
-} from "~/utils/resolve.server";
 import type { Route } from "./+types/route";
 import {
   data,
-  isRouteErrorResponse,
-  Link,
+  useLocation,
   useNavigate,
   type RouteHandle,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
-import { useEffect } from "react";
-import type { ReactNode } from "react";
-import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
-import { useToast } from "~/hooks/use-toast";
-import { logger } from "~/utils/logger";
-import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
-  InferenceDetailContent,
-  type InferenceDetailData,
-} from "~/components/inference/InferenceDetailContent";
+  PageHeader,
+  PageLayout,
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+  Breadcrumbs,
+} from "~/components/layout/PageLayout";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { getPageErrorInfo } from "~/utils/tensorzero/errors";
+import { AlertTriangle } from "lucide-react";
+import { useToast } from "~/hooks/use-toast";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
+import { ParameterCard } from "./ParameterCard";
+import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
+import { TagsTable } from "~/components/tags/TagsTable";
+import {
+  fetchModelInferences,
+  fetchUsedVariants,
+  fetchHasDemonstration,
+  fetchInput,
+  fetchFeedbackData,
+} from "./inference-data.server";
+import { BasicInfoStreaming } from "./BasicInfo";
+import { InferenceActionBar } from "./InferenceActionBar";
+import { InputSection } from "./InputSection";
+import { FeedbackSection } from "./FeedbackSection";
+import { ModelInferencesSection } from "./ModelInferencesSection";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
 };
 
+/**
+ * Prevent revalidation when fetchers submit to API routes.
+ * With streaming/deferred data, revalidation re-runs the loader and waits for
+ * deferred promises to resolve, keeping the fetcher in "loading" state and
+ * blocking downstream effects that depend on "idle" state.
+ */
+export function shouldRevalidate({
+  formAction,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (
+    formAction?.startsWith("/api/feedback") ||
+    formAction?.startsWith("/api/datasets/datapoints/from-inference") ||
+    formAction?.startsWith("/api/tensorzero/inference")
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
+}
+
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
   const url = new URL(request.url);
+  const limit = Number(url.searchParams.get("limit")) || 10;
   const newFeedbackId = url.searchParams.get("newFeedbackId");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
-  const limit = Number(url.searchParams.get("limit")) || 10;
 
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  // --- Define all promises, conditionally choosing the feedback promise ---
-
   const tensorZeroClient = getTensorZeroClient();
-
-  const inferencesPromise = tensorZeroClient.getInferences({
+  const inferences = await tensorZeroClient.getInferences({
     ids: [inference_id],
     output_source: "inference",
   });
-  const modelInferencesPromise = tensorZeroClient
-    .getModelInferences(inference_id)
-    .then((response) => resolveModelInferences(response.model_inferences));
-  const demonstrationFeedbackPromise =
-    tensorZeroClient.getDemonstrationFeedback(
-      inference_id,
-      { limit: 1 }, // Only need to know if *any* exist
-    );
-  // If there is a freshly inserted feedback, ClickHouse may take some time to
-  // update the feedback table and materialized views as it is eventually consistent.
-  // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
-  // When polling for new feedback, we also need to query feedbackBounds and latestFeedbackByMetric
-  // AFTER the polling completes to ensure the materialized views have caught up.
-  const feedbackDataPromise = newFeedbackId
-    ? pollForFeedbackItem(inference_id, newFeedbackId, limit)
-    : tensorZeroClient.getFeedbackByTargetId(inference_id, {
-        before: beforeFeedback || undefined,
-        after: afterFeedback || undefined,
-        limit,
-      });
-
-  // --- Execute promises concurrently (with special handling for new feedback) ---
-
-  let inferences,
-    model_inferences,
-    demonstration_feedback,
-    feedback_bounds,
-    feedback,
-    latestFeedbackByMetric;
-
-  if (newFeedbackId) {
-    // When there's new feedback, wait for polling to complete before querying
-    // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
-    [inferences, model_inferences, demonstration_feedback, feedback] =
-      await Promise.all([
-        inferencesPromise,
-        modelInferencesPromise,
-        demonstrationFeedbackPromise,
-        feedbackDataPromise,
-      ]);
-
-    // Query these after polling completes to avoid race condition with materialized views
-    [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
-      tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
-      tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
-    ]);
-  } else {
-    // Normal case: execute all queries in parallel
-    [
-      inferences,
-      model_inferences,
-      demonstration_feedback,
-      feedback_bounds,
-      feedback,
-      latestFeedbackByMetric,
-    ] = await Promise.all([
-      inferencesPromise,
-      modelInferencesPromise,
-      demonstrationFeedbackPromise,
-      tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
-      feedbackDataPromise,
-      tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
-    ]);
-  }
-
-  // --- Process results ---
-
   if (inferences.inferences.length !== 1) {
-    throw data(`No inference found for id ${inference_id}.`, {
-      status: 404,
-    });
+    throw data(`No inference found for id ${inference_id}.`, { status: 404 });
   }
-  const inference = inferences.inferences[0];
 
-  const usedVariants =
-    inference.function_name === DEFAULT_FUNCTION
-      ? await tensorZeroClient.getUsedVariants(inference.function_name)
-      : [];
-  const resolvedInput = await loadFileDataForStoredInput(inference.input);
+  const inference = inferences.inferences[0];
 
   return {
     inference,
-    resolvedInput,
-    model_inferences,
-    usedVariants,
-    feedback,
-    feedback_bounds,
-    hasDemonstration: demonstration_feedback.length > 0,
     newFeedbackId,
-    latestFeedbackByMetric,
+    modelInferences: fetchModelInferences(inference_id),
+    usedVariants: fetchUsedVariants(inference.function_name),
+    hasDemonstration: fetchHasDemonstration(inference_id),
+    input: fetchInput(inference),
+    feedbackData: fetchFeedbackData(inference_id, {
+      newFeedbackId,
+      beforeFeedback,
+      afterFeedback,
+      limit,
+    }),
   };
 }
 
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
-    resolvedInput,
-    model_inferences,
-    usedVariants,
-    feedback,
-    feedback_bounds,
-    hasDemonstration,
     newFeedbackId,
-    latestFeedbackByMetric,
+    modelInferences,
+    usedVariants,
+    hasDemonstration,
+    input,
+    feedbackData,
   } = loaderData;
+  const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Show toast when feedback is successfully added
+  const [feedbackCount, setFeedbackCount] = useState<number | undefined>(
+    undefined,
+  );
+
+  // Show toast when feedback is added
   useEffect(() => {
     if (newFeedbackId) {
       const { dismiss } = toast.success({ title: "Feedback Added" });
@@ -165,151 +128,147 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     return;
   }, [newFeedbackId, toast]);
 
-  // Feedback pagination
-  const topFeedback = feedback[0] as { id: string } | undefined;
-  const bottomFeedback = feedback[feedback.length - 1] as
-    | { id: string }
-    | undefined;
+  // Reset feedback count on navigation
+  useEffect(() => {
+    setFeedbackCount(undefined);
+  }, [location.key]);
 
-  const handleNextFeedbackPage = () => {
-    if (!bottomFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("afterFeedback");
-    searchParams.set("beforeFeedback", bottomFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousFeedbackPage = () => {
-    if (!topFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("beforeFeedback");
-    searchParams.set("afterFeedback", topFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  // These are swapped because the table is sorted in descending order
-  const disablePreviousFeedbackPage =
-    !topFeedback?.id ||
-    !feedback_bounds.last_id ||
-    feedback_bounds.last_id === topFeedback.id;
-
-  const disableNextFeedbackPage =
-    !bottomFeedback?.id ||
-    !feedback_bounds.first_id ||
-    feedback_bounds.first_id === bottomFeedback.id;
-
-  // Build the data object for InferenceDetailContent
-  const inferenceData: InferenceDetailData = {
-    inference,
-    input: resolvedInput,
-    model_inferences,
-    feedback,
-    feedback_bounds,
-    hasDemonstration,
-    latestFeedbackByMetric,
-    usedVariants,
-  };
-
-  // Handle feedback added callback - extract newFeedbackId from the API redirect URL
-  // and navigate to the page URL with the newFeedbackId
-  const handleFeedbackAdded = (redirectUrl?: string) => {
-    if (redirectUrl) {
-      // redirectUrl is like /api/inference/{id}?newFeedbackId={feedbackId}
-      // Extract the newFeedbackId and navigate to the current page with it
-      const url = new URL(redirectUrl, window.location.origin);
-      const newFeedbackIdParam = url.searchParams.get("newFeedbackId");
-      if (newFeedbackIdParam) {
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.delete("beforeFeedback");
-        currentUrl.searchParams.delete("afterFeedback");
-        currentUrl.searchParams.set("newFeedbackId", newFeedbackIdParam);
-        navigate(currentUrl.pathname + currentUrl.search);
+  const handleFeedbackAdded = useCallback(
+    (redirectUrl?: string) => {
+      if (redirectUrl) {
+        const url = new URL(redirectUrl, window.location.origin);
+        const newFeedbackIdParam = url.searchParams.get("newFeedbackId");
+        if (newFeedbackIdParam) {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.delete("beforeFeedback");
+          currentUrl.searchParams.delete("afterFeedback");
+          currentUrl.searchParams.set("newFeedbackId", newFeedbackIdParam);
+          navigate(currentUrl.pathname + currentUrl.search);
+        }
       }
-    }
-  };
+    },
+    [navigate],
+  );
 
   return (
     <PageLayout>
-      <InferenceDetailContent
-        data={inferenceData}
-        onFeedbackAdded={handleFeedbackAdded}
-        feedbackFooter={
-          <PageButtons
-            onNextPage={handleNextFeedbackPage}
-            onPreviousPage={handlePreviousFeedbackPage}
-            disableNext={disableNextFeedbackPage}
-            disablePrevious={disablePreviousFeedbackPage}
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Inferences", href: "/observability/inferences" },
+            ]}
           />
         }
-        renderHeader={({ basicInfo, actionBar }) => (
-          <PageHeader label="Inference" name={inference.inference_id}>
-            {basicInfo}
-            {actionBar}
-          </PageHeader>
+        name={inference.inference_id}
+      >
+        <BasicInfoStreaming
+          inference={inference}
+          promise={modelInferences}
+          locationKey={location.key}
+        />
+        <InferenceActionBar
+          inference={inference}
+          usedVariantsPromise={usedVariants}
+          hasDemonstrationPromise={hasDemonstration}
+          inputPromise={input}
+          modelInferencesPromise={modelInferences}
+          onFeedbackAdded={handleFeedbackAdded}
+          locationKey={location.key}
+        />
+      </PageHeader>
+
+      <SectionsGroup>
+        <InputSection promise={input} locationKey={location.key} />
+
+        <SectionLayout>
+          <SectionHeader heading="Output" />
+          {inference.type === "json" ? (
+            <JsonOutputElement
+              output={inference.output}
+              outputSchema={inference.output_schema}
+            />
+          ) : (
+            <ChatOutputElement output={inference.output} />
+          )}
+        </SectionLayout>
+
+        <FeedbackSection
+          promise={feedbackData}
+          locationKey={location.key}
+          count={feedbackCount}
+          onCountUpdate={setFeedbackCount}
+        />
+
+        <SectionLayout>
+          <SectionHeader heading="Inference Parameters" />
+          {inference.inference_params ? (
+            <ParameterCard
+              parameters={JSON.stringify(inference.inference_params, null, 2)}
+            />
+          ) : (
+            <div className="text-fg-muted flex items-center justify-center py-12 text-sm">
+              Parameters missing
+            </div>
+          )}
+        </SectionLayout>
+
+        {inference.type === "chat" && (
+          <SectionLayout>
+            <SectionHeader heading="Tool Parameters" />
+            <ToolParametersSection
+              allowed_tools={inference.allowed_tools}
+              additional_tools={inference.additional_tools}
+              tool_choice={inference.tool_choice}
+              parallel_tool_calls={inference.parallel_tool_calls}
+              provider_tools={inference.provider_tools}
+            />
+          </SectionLayout>
         )}
-      />
+
+        <SectionLayout>
+          <SectionHeader heading="Tags" />
+          <TagsTable
+            tags={Object.fromEntries(
+              Object.entries(inference.tags).filter(
+                (entry): entry is [string, string] => entry[1] !== undefined,
+              ),
+            )}
+            isEditing={false}
+          />
+        </SectionLayout>
+
+        <ModelInferencesSection
+          promise={modelInferences}
+          locationKey={location.key}
+        />
+      </SectionsGroup>
     </PageLayout>
   );
 }
 
-function getUserFacingError(error: unknown): {
-  heading: string;
-  message: ReactNode;
-} {
-  if (isRouteErrorResponse(error)) {
-    switch (error.status) {
-      case 400:
-        return {
-          heading: `${error.status}: Bad Request`,
-          message: "Please try again later.",
-        };
-      case 401:
-        return {
-          heading: `${error.status}: Unauthorized`,
-          message: "You do not have permission to access this resource.",
-        };
-      case 403:
-        return {
-          heading: `${error.status}: Forbidden`,
-          message: "You do not have permission to access this resource.",
-        };
-      case 404:
-        return {
-          heading: `${error.status}: Not Found`,
-          message:
-            "The requested resource was not found. Please check the URL and try again.",
-        };
-      case 500:
-      default:
-        return {
-          heading: "An unknown error occurred",
-          message: "Please try again later.",
-        };
-    }
-  }
-  return {
-    heading: "An unknown error occurred",
-    message: "Please try again later.",
-  };
-}
+export function ErrorBoundary({ params, error }: Route.ErrorBoundaryProps) {
+  const { title, message, status } = getPageErrorInfo(error);
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  useEffect(() => {
-    logger.error(error);
-  }, [error]);
-  const { heading, message } = getUserFacingError(error);
   return (
-    <div className="flex flex-col items-center justify-center md:h-full">
-      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
-        <h1 className="text-2xl font-bold">{heading}</h1>
-        {typeof message === "string" ? <p>{message}</p> : message}
-        <Link
-          to={`/observability/inferences`}
-          className="font-bold text-red-800 hover:text-red-600"
-        >
-          Go back &rarr;
-        </Link>
-      </div>
-    </div>
+    <PageLayout>
+      <PageHeader
+        eyebrow={
+          <Breadcrumbs
+            segments={[
+              { label: "Inferences", href: "/observability/inferences" },
+            ]}
+          />
+        }
+        name={params.inference_id}
+      />
+      <SectionsGroup>
+        <SectionErrorNotice
+          icon={AlertTriangle}
+          title={status ? `Error ${status}` : title}
+          description={message}
+        />
+      </SectionsGroup>
+    </PageLayout>
   );
 }

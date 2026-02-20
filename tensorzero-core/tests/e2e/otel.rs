@@ -16,9 +16,7 @@ use tensorzero::{
 };
 use tensorzero::{
     InferenceParams,
-    test_helpers::{
-        make_embedded_gateway_with_config, make_embedded_gateway_with_config_and_postgres,
-    },
+    test_helpers::{make_embedded_gateway_with_config, make_embedded_gateway_with_rate_limiting},
 };
 use tensorzero_core::observability::{
     enter_fake_http_request_otel, setup_observability_with_exporter_override,
@@ -213,11 +211,17 @@ pub async fn test_reproduce_tracing_bug() {
         .await
         .unwrap();
 
-    // We should now see 'variant_inference' as a root span, and have the 'function_inference' span missing
+    // We should now see 'variant_inference' and 'write_inference' as root spans,
+    // and have the 'function_inference' span missing
     let all_spans = exporter.take_spans();
     let spans = build_span_map(all_spans);
-    assert_eq!(spans.root_spans[0].name, "variant_inference");
-    assert_eq!(spans.root_spans.len(), 1);
+    let mut root_span_names: Vec<_> = spans.root_spans.iter().map(|s| s.name.as_ref()).collect();
+    root_span_names.sort_unstable();
+    assert_eq!(
+        root_span_names,
+        vec!["variant_inference", "write_inference"],
+        "Expected variant_inference and write_inference as root spans (function_inference should be missing due to tracing bug)"
+    );
 }
 
 #[tokio::test]
@@ -402,7 +406,7 @@ async fn test_stream_fatal_error_usage() {
 
     let _guard = enter_fake_http_request_otel();
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = make_embedded_gateway_with_rate_limiting(&config).await;
     let model_name = "dummy::fatal_stream_error";
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
@@ -570,8 +574,15 @@ fn check_spans(
     assert_eq!(tag_count, 3);
 
     let root_children = &spans.span_children[&root_span.span_context.span_id()];
-    let [variant_span] = root_children.as_slice() else {
-        panic!("Expected one child span: {root_children:#?}");
+    let (variant_span, write_inference_span) = {
+        let mut children: Vec<_> = root_children.iter().collect();
+        children.sort_by_key(|s| s.name.as_ref());
+        match children.as_slice() {
+            [variant, write] => (*variant, *write),
+            _ => panic!(
+                "Expected two child spans (variant_inference, write_inference): {root_children:#?}"
+            ),
+        }
     };
 
     assert_eq!(variant_span.name, "variant_inference");
@@ -783,7 +794,37 @@ fn check_spans(
         ])
     );
 
-    assert_eq!(num_spans, 6);
+    // Check write_inference span
+    assert_eq!(
+        write_inference_span.name, "write_inference",
+        "Expected write_inference span"
+    );
+    assert_eq!(
+        write_inference_span.status,
+        Status::Ok,
+        "write_inference span should have Ok status"
+    );
+    let write_inference_attr_map = attrs_to_map(&write_inference_span.attributes);
+    assert_eq!(
+        write_inference_attr_map["stream"],
+        streaming.into(),
+        "write_inference span should have correct stream attribute"
+    );
+    assert_eq!(
+        write_inference_attr_map["inference_id"],
+        inference_id.to_string().into(),
+        "write_inference span should have correct inference_id attribute"
+    );
+    assert_eq!(
+        write_inference_attr_map["async_writes"],
+        false.into(),
+        "write_inference span should have async_writes=false in synchronous mode"
+    );
+
+    assert_eq!(
+        num_spans, 7,
+        "Expected 7 spans total (function_inference, variant_inference, model_inference, model_provider_inference, consume_tickets, return_tickets, write_inference)"
+    );
 }
 
 fn remove_unstable_attrs(attrs: &mut HashMap<String, Value>) {
@@ -831,7 +872,7 @@ pub async fn test_capture_simple_inference_spans(
     "#
     );
 
-    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = make_embedded_gateway_with_rate_limiting(&config).await;
     let _guard = enter_fake_http_request_otel();
     let response_data = if streaming {
         make_streaming_inference(&client).await
@@ -879,8 +920,7 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     let (exporter, _err) = runtime.block_on(async {
         let exporter = install_capturing_otel_exporter().await;
         let _guard = enter_fake_http_request_otel();
-        let client =
-            tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+        let client = make_embedded_gateway_with_rate_limiting(&config).await;
         let _err = client
             .inference(ClientInferenceParams {
                 episode_id: Some(episode_uuid),
@@ -1105,8 +1145,7 @@ pub fn test_capture_rate_limit_error() {
     let (exporter, _res) = runtime.block_on(async {
         let exporter = install_capturing_otel_exporter().await;
         let _guard = enter_fake_http_request_otel();
-        let client =
-            tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+        let client = make_embedded_gateway_with_rate_limiting(&config).await;
         let err = client
             .inference(ClientInferenceParams {
                 episode_id: Some(episode_uuid),

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO tensorzero.float_metric_feedback (id, target_id, metric_name, value, tags, snapshot_hash)\n            VALUES ($1, $2, $3, $4, $5, $6)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Float8",
+        "Jsonb",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a7ee55d391857381df97974b2a6f5abf9726c5e4a674bd8035bd49c2b22de181"
+}

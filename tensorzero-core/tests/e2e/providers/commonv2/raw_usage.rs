@@ -8,7 +8,7 @@ use crate::providers::common::E2ETestProvider;
 use crate::providers::helpers::get_modal_extra_headers;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use uuid::Uuid;
@@ -41,7 +41,6 @@ fn assert_raw_usage_entry(entry: &Value, provider: &E2ETestProvider) {
 /// Test that include_raw_usage works correctly for non-streaming inference
 pub async fn test_raw_usage_inference_with_provider_non_streaming(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -57,7 +56,7 @@ pub async fn test_raw_usage_inference_with_provider_non_streaming(provider: E2ET
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the capital of Japan? {random_suffix}")
+                    "content": "What is the capital of Japan?"
                 }
             ]
         },
@@ -135,7 +134,6 @@ pub async fn test_raw_usage_inference_with_provider_streaming(provider: E2ETestP
     }
 
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
     } else {
@@ -151,7 +149,7 @@ pub async fn test_raw_usage_inference_with_provider_streaming(provider: E2ETestP
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("What is the capital of France? {random_suffix}")
+                    "content": "What is the capital of France?"
                 }
             ]
         },
@@ -164,6 +162,7 @@ pub async fn test_raw_usage_inference_with_provider_streaming(provider: E2ETestP
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap_or_else(|e| {
             panic!(
                 "Failed to create eventsource for streaming request for provider {}: {e}",

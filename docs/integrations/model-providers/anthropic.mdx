@@ -16,7 +16,7 @@ For example:
 ```toml {3}
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
+model = "anthropic::claude-haiku-4-5"
 ```
 
 Additionally, you can set `model_name` in the inference request to use a specific Anthropic model, without having to configure a function and variant in TensorZero.
@@ -25,7 +25,7 @@ Additionally, you can set `model_name` in the inference request to use a specifi
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "anthropic::claude-3-5-haiku-20241022",
+    "model_name": "anthropic::claude-haiku-4-5",
     "input": {
       "messages": [
         {
@@ -62,19 +62,19 @@ For production deployments, see our [Deployment Guide](/deployment/tensorzero-ga
 Create a minimal configuration file that defines a model and a simple chat function:
 
 ```toml title="config/tensorzero.toml"
-[models.claude_3_5_haiku_20241022]
+[models.claude_haiku_4_5]
 routing = ["anthropic"]
 
-[models.claude_3_5_haiku_20241022.providers.anthropic]
+[models.claude_haiku_4_5.providers.anthropic]
 type = "anthropic"
-model_name = "claude-3-5-haiku-20241022"
+model_name = "claude-haiku-4-5"
 
 [functions.my_function_name]
 type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "claude_3_5_haiku_20241022"
+model = "claude_haiku_4_5"
 ```
 
 See the [list of models available on Anthropic](https://docs.anthropic.com/en/docs/about-claude/models).
@@ -130,6 +130,130 @@ curl -X POST http://localhost:3000/inference \
   }'
 ```
 
+## Enable Anthropic's prompt caching capability
+
+You can enable [Anthropic's prompt caching capability](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) with TensorZero's `extra_body`.
+
+For example, to enable caching on your system prompt:
+
+```bash {14-19}
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "anthropic::claude-haiku-4-5",
+    "input": {
+      "system": "... very long prompt ...",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a haiku about TensorZero."
+        }
+      ]
+    },
+    "extra_body": [
+        {
+            "pointer": "/system/0/cache_control",
+            "value": {"type": "ephemeral"}
+        }
+    ]
+  }'
+```
+
+Similarly, to enable caching on a message:
+
+```bash {16}
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "anthropic::claude-haiku-4-5",
+    "input": {
+      "system": "... very long prompt ...",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a haiku about TensorZero."
+        }
+      ]
+    },
+    "extra_body": [
+        {
+            "pointer": "/messages/0/content/0/cache_control",
+            "value": {"type": "ephemeral"}
+        }
+    ]
+  }'
+```
+
+<Tip>
+
+You can specify `extra_body` in the [configuration](/gateway/configuration-reference) or at [inference time](/gateway/api-reference/inference).
+If you're using the OpenAI-Compatible Inference API, use `tensorzero::extra_body` instead.
+
+</Tip>
+
+<Tip>
+
+You can retrieve prompt caching usage information with `include_raw_usage`.
+See the [API Reference](/gateway/api-reference/inference) for more information.
+
+</Tip>
+
+## Use Anthropic models on third-party platforms
+
+### Use Anthropic models on AWS Bedrock
+
+You can use Anthropic models on AWS Bedrock with the `aws_bedrock` model provider.
+
+```toml
+[models.claude_haiku_4_5.providers.aws]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+region = "us-east-1"  # TODO: set your AWS region
+```
+
+Read more about the [AWS Bedrock model provider](/integrations/model-providers/aws-bedrock).
+
+### Use Anthropic models on Azure
+
+You can use Anthropic models on Azure AI Foundry by overriding the API base in your configuration:
+
+```toml
+[models.claude_haiku_4_5.providers.azure]
+type = "anthropic"
+model_name = "claude-haiku-4-5"
+api_base = "https://YOUR-RESOURCE-NAME.services.ai.azure.com/anthropic/v1/"  # TODO: set your resource name
+api_key_location = "env::AZURE_API_KEY"  # optional
+```
+
+### Use Anthropic models on GCP Vertex AI
+
+You can use Anthropic models on GCP Vertex AI with the `gcp_vertex_anthropic` model provider.
+
+```toml
+[models.claude_haiku_4_5.providers.gcp]
+type = "gcp_vertex_anthropic"
+model_id = "claude-haiku-4-5@20251001"
+location = "us-east5"  # TODO: set your GCP region
+project_id = "YOUR-PROJECT-ID"  # TODO: set your GCP project ID
+```
+
+Read more about the [GCP Vertex AI Anthropic model provider](/integrations/model-providers/gcp-vertex-ai-anthropic).
+
+## Extended Thinking
+
+TensorZero supports Anthropic's [Extended Thinking](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) feature.
+You can enable it by setting `thinking_budget_tokens` on your variant:
+
+```toml title="tensorzero.toml"
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+thinking_budget_tokens = 10000
+```
+
+The model's reasoning will be returned as `thought` content blocks in the response.
+For multi-turn reasoning conversations, pass the `signature` field from the response's `thought` blocks back in subsequent requests.
+
 ## Other Features
 
-See [Extending TensorZero](/operations/extend-tensorzero) for information about Anthropic Computer Use and other beta features.
+See [Extend TensorZero](/operations/extend-tensorzero) for information about Anthropic Computer Use and other beta features.

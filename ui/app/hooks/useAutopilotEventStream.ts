@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Event } from "~/types/tensorzero";
+import type {
+  AutopilotStatus,
+  GatewayEvent,
+  GatewayStreamUpdate,
+} from "~/types/tensorzero";
 
 interface UseAutopilotEventStreamOptions {
   sessionId: string;
-  initialEvents: Event[];
-  initialPendingToolCalls: Event[];
+  initialEvents: GatewayEvent[];
+  initialPendingToolCalls: GatewayEvent[];
+  initialStatus: AutopilotStatus;
   enabled?: boolean;
 }
 
 interface UseAutopilotEventStreamResult {
-  events: Event[];
-  pendingToolCalls: Event[];
+  events: GatewayEvent[];
+  pendingToolCalls: GatewayEvent[];
+  status: AutopilotStatus;
   isConnected: boolean;
   error: string | null;
   isRetrying: boolean;
-  prependEvents: (newEvents: Event[]) => void;
+  prependEvents: (newEvents: GatewayEvent[]) => void;
 }
 
 const RETRY_DELAY_MS = 5000;
@@ -27,12 +33,14 @@ export function useAutopilotEventStream({
   sessionId,
   initialEvents,
   initialPendingToolCalls,
+  initialStatus,
   enabled = true,
 }: UseAutopilotEventStreamOptions): UseAutopilotEventStreamResult {
-  const [events, setEvents] = useState<Event[]>(initialEvents);
-  const [pendingToolCalls, setPendingToolCalls] = useState<Event[]>(
+  const [events, setEvents] = useState<GatewayEvent[]>(initialEvents);
+  const [pendingToolCalls, setPendingToolCalls] = useState<GatewayEvent[]>(
     initialPendingToolCalls,
   );
+  const [status, setStatus] = useState<AutopilotStatus>(initialStatus);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -118,7 +126,8 @@ export function useAutopilotEventStream({
               const data = line.slice(6).trim();
               if (data) {
                 try {
-                  const event = JSON.parse(data) as Event;
+                  const streamUpdate = JSON.parse(data) as GatewayStreamUpdate;
+                  const event = streamUpdate.event;
                   lastEventIdRef.current = event.id;
 
                   setEvents((prev) => {
@@ -158,6 +167,9 @@ export function useAutopilotEventStream({
                     }
                     return prev;
                   });
+
+                  // Update autopilot status
+                  setStatus(streamUpdate.status);
                 } catch {
                   // Skip invalid JSON
                 }
@@ -227,14 +239,15 @@ export function useAutopilotEventStream({
   useEffect(() => {
     setEvents(initialEvents);
     setPendingToolCalls(initialPendingToolCalls);
+    setStatus(initialStatus);
     lastEventIdRef.current =
       initialEvents.length > 0
         ? initialEvents[initialEvents.length - 1].id
         : null;
-  }, [initialEvents, initialPendingToolCalls]);
+  }, [initialEvents, initialPendingToolCalls, initialStatus]);
 
   // Allow prepending older events (for reverse infinite scroll)
-  const prependEvents = useCallback((newEvents: Event[]) => {
+  const prependEvents = useCallback((newEvents: GatewayEvent[]) => {
     setEvents((prev) => {
       // Create a set of existing event IDs for deduplication
       const existingIds = new Set(prev.map((e) => e.id));
@@ -253,6 +266,7 @@ export function useAutopilotEventStream({
   return {
     events,
     pendingToolCalls,
+    status,
     isConnected,
     error,
     isRetrying,

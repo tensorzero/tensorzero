@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfigType, get_function};
@@ -26,8 +27,9 @@ pub struct GetEvaluationRunInfosForDatapointParams {
 }
 
 /// Information about a single evaluation run (returned by get_evaluation_run_infos).
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EvaluationRunInfoById {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
@@ -35,8 +37,9 @@ pub struct EvaluationRunInfoById {
 }
 
 /// Response containing evaluation run infos.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetEvaluationRunInfosResponse {
     pub run_infos: Vec<EvaluationRunInfoById>,
 }
@@ -64,12 +67,12 @@ pub async fn get_evaluation_run_infos_handler(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let response = get_evaluation_run_infos(
-        &app_state.clickhouse_connection_info,
-        &evaluation_run_ids,
-        &params.function_name,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response =
+        get_evaluation_run_infos(&database, &evaluation_run_ids, &params.function_name).await?;
 
     Ok(Json(response))
 }
@@ -110,8 +113,12 @@ pub async fn get_evaluation_run_infos_for_datapoint_handler(
     let function_config = get_function(&app_state.config.functions, &params.function_name)?;
     let function_type = function_config.config_type();
 
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = get_evaluation_run_infos_for_datapoint(
-        &app_state.clickhouse_connection_info,
+        &database,
         &datapoint_id,
         &params.function_name,
         function_type,

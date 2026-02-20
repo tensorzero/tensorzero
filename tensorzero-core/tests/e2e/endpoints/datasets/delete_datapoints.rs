@@ -6,8 +6,8 @@ use std::time::Duration;
 use tensorzero::DeleteDatapointsRequest;
 use uuid::Uuid;
 
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{DatasetQueries, GetDatapointsParams};
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -21,7 +21,7 @@ use crate::common::get_gateway_endpoint;
 #[tokio::test]
 async fn test_delete_datapoints_single_chat() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-delete-dp-single-chat-{}", Uuid::now_v7());
 
     // Create a chat datapoint
@@ -57,7 +57,7 @@ async fn test_delete_datapoints_single_chat() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -65,7 +65,7 @@ async fn test_delete_datapoints_single_chat() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the datapoint exists
-    let datapoints = clickhouse
+    let datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -100,7 +100,7 @@ async fn test_delete_datapoints_single_chat() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the datapoint is now stale (doesn't show up in normal queries)
-    let datapoints = clickhouse
+    let datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -117,7 +117,7 @@ async fn test_delete_datapoints_single_chat() {
     assert_eq!(datapoints.len(), 0, "Deleted datapoint should not appear");
 
     // Verify we can still fetch it with allow_stale=true
-    let stale_datapoints = clickhouse
+    let stale_datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -143,7 +143,7 @@ async fn test_delete_datapoints_single_chat() {
 #[tokio::test]
 async fn test_delete_datapoints_multiple_mixed() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-delete-dp-multiple-{}", Uuid::now_v7());
 
     // Create multiple datapoints: 2 chat and 1 JSON
@@ -243,7 +243,7 @@ async fn test_delete_datapoints_multiple_mixed() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[chat_insert1, chat_insert2, json_insert])
         .await
         .unwrap();
@@ -269,7 +269,7 @@ async fn test_delete_datapoints_multiple_mixed() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify all are now stale
-    let datapoints = clickhouse
+    let datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -311,7 +311,7 @@ async fn test_delete_datapoints_empty_ids_list() {
 #[tokio::test]
 async fn test_delete_datapoints_non_existent_id() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-delete-dp-non-existent-{}", Uuid::now_v7());
 
     // Create one datapoint
@@ -347,7 +347,7 @@ async fn test_delete_datapoints_non_existent_id() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -373,7 +373,7 @@ async fn test_delete_datapoints_non_existent_id() {
     assert_eq!(delete_response.num_deleted_datapoints, 1);
 
     // Verify the existing datapoint was deleted.
-    let datapoints = clickhouse
+    let datapoints = database
         .get_datapoints(&GetDatapointsParams {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
@@ -438,7 +438,7 @@ async fn test_delete_datapoints_from_empty_dataset() {
 #[tokio::test]
 async fn test_delete_datapoints_already_stale() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-delete-dp-already-stale-{}", Uuid::now_v7());
 
     // Create a datapoint
@@ -474,7 +474,7 @@ async fn test_delete_datapoints_already_stale() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();

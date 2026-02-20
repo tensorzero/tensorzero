@@ -4,17 +4,11 @@ set -euo pipefail
 
 DATABASE_NAME="${1:-tensorzero_ui_fixtures}"
 CLICKHOUSE_HOST_VAR="${CLICKHOUSE_HOST}"
-# Determine credentials based on environment
-if command -v buildkite-agent >/dev/null 2>&1; then
-  # Running on Buildkite - use secrets (fail if not available)
-  CLICKHOUSE_USER_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
-  CLICKHOUSE_PASSWORD_VAR=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
+CLICKHOUSE_USER_VAR="${CLICKHOUSE_USER:-chuser}"
+CLICKHOUSE_PASSWORD_VAR="${CLICKHOUSE_PASSWORD:-chpassword}"
+CLICKHOUSE_SECURE_FLAG=""
+if [ "${CLICKHOUSE_SECURE:-0}" = "1" ]; then
   CLICKHOUSE_SECURE_FLAG="--secure"
-else
-  # Not on Buildkite - use environment variables with defaults
-  CLICKHOUSE_USER_VAR="${CLICKHOUSE_USER:-chuser}"
-  CLICKHOUSE_PASSWORD_VAR="${CLICKHOUSE_PASSWORD:-chpassword}"
-  CLICKHOUSE_SECURE_FLAG=""
 fi
 
 echo "Verifying fixture counts for tables..."
@@ -22,20 +16,19 @@ echo "==============================================="
 
 # Define tables and their corresponding files
 declare -A all_tables
-all_tables["JsonInference"]="json_inference_examples.jsonl ./s3-fixtures/large_json_inference_v2.parquet"
-all_tables["BooleanMetricFeedback"]="boolean_metric_feedback_examples.jsonl ./s3-fixtures/large_chat_boolean_feedback.parquet ./s3-fixtures/large_json_boolean_feedback.parquet"
-all_tables["BooleanMetricFeedbackByTargetId"]="boolean_metric_feedback_examples.jsonl ./s3-fixtures/large_chat_boolean_feedback.parquet ./s3-fixtures/large_json_boolean_feedback.parquet"
-all_tables["FloatMetricFeedback"]="float_metric_feedback_examples.jsonl jaro_winkler_similarity_feedback.jsonl ./s3-fixtures/large_chat_float_feedback.parquet ./s3-fixtures/large_json_float_feedback.parquet"
-all_tables["FloatMetricFeedbackByTargetId"]="float_metric_feedback_examples.jsonl jaro_winkler_similarity_feedback.jsonl ./s3-fixtures/large_chat_float_feedback.parquet ./s3-fixtures/large_json_float_feedback.parquet"
-all_tables["CommentFeedback"]="comment_feedback_examples.jsonl ./s3-fixtures/large_chat_comment_feedback.parquet ./s3-fixtures/large_json_comment_feedback.parquet"
-all_tables["DemonstrationFeedback"]="demonstration_feedback_examples.jsonl ./s3-fixtures/large_chat_demonstration_feedback.parquet ./s3-fixtures/large_json_demonstration_feedback.parquet"
-all_tables["ChatInference"]="chat_inference_examples.jsonl ./s3-fixtures/large_chat_inference_v2.parquet"
-all_tables["ModelInference"]="model_inference_examples.jsonl ./s3-fixtures/large_chat_model_inference_v2.parquet ./s3-fixtures/large_json_model_inference_v2.parquet"
-all_tables["ChatInferenceDatapoint FINAL"]="chat_inference_datapoint_examples.jsonl"
-all_tables["JsonInferenceDatapoint FINAL"]="json_inference_datapoint_examples.jsonl"
-all_tables["ModelInferenceCache"]="model_inference_cache_e2e.jsonl"
-all_tables["DynamicEvaluationRun"]="dynamic_evaluation_run_examples.jsonl"
-all_tables["DynamicEvaluationRunEpisode"]="dynamic_evaluation_run_episode_examples.jsonl"
+all_tables["JsonInference"]="./small-fixtures/json_inference_examples.jsonl ./large-fixtures/large_json_inference_v2.parquet"
+all_tables["BooleanMetricFeedback"]="./small-fixtures/boolean_metric_feedback_examples.jsonl ./large-fixtures/large_chat_boolean_feedback.parquet ./large-fixtures/large_json_boolean_feedback.parquet"
+all_tables["BooleanMetricFeedbackByTargetId"]="./small-fixtures/boolean_metric_feedback_examples.jsonl ./large-fixtures/large_chat_boolean_feedback.parquet ./large-fixtures/large_json_boolean_feedback.parquet"
+all_tables["FloatMetricFeedback"]="./small-fixtures/float_metric_feedback_examples.jsonl ./small-fixtures/jaro_winkler_similarity_feedback.jsonl ./large-fixtures/large_chat_float_feedback.parquet ./large-fixtures/large_json_float_feedback.parquet"
+all_tables["FloatMetricFeedbackByTargetId"]="./small-fixtures/float_metric_feedback_examples.jsonl ./small-fixtures/jaro_winkler_similarity_feedback.jsonl ./large-fixtures/large_chat_float_feedback.parquet ./large-fixtures/large_json_float_feedback.parquet"
+all_tables["CommentFeedback"]="./small-fixtures/comment_feedback_examples.jsonl ./large-fixtures/large_chat_comment_feedback.parquet ./large-fixtures/large_json_comment_feedback.parquet"
+all_tables["DemonstrationFeedback"]="./small-fixtures/demonstration_feedback_examples.jsonl ./large-fixtures/large_chat_demonstration_feedback.parquet ./large-fixtures/large_json_demonstration_feedback.parquet"
+all_tables["ChatInference"]="./small-fixtures/chat_inference_examples.jsonl ./large-fixtures/large_chat_inference_v2.parquet"
+all_tables["ModelInference"]="./small-fixtures/model_inference_examples.jsonl ./large-fixtures/large_chat_model_inference_v2.parquet ./large-fixtures/large_json_model_inference_v2.parquet"
+all_tables["ChatInferenceDatapoint FINAL"]="./small-fixtures/chat_inference_datapoint_examples.jsonl"
+all_tables["JsonInferenceDatapoint FINAL"]="./small-fixtures/json_inference_datapoint_examples.jsonl"
+all_tables["DynamicEvaluationRun"]="./small-fixtures/dynamic_evaluation_run_examples.jsonl"
+all_tables["DynamicEvaluationRunEpisode"]="./small-fixtures/dynamic_evaluation_run_episode_examples.jsonl"
 
 # Track if there's any mismatch
 mismatch=0
@@ -75,7 +68,7 @@ for table in "${!all_tables[@]}"; do
                 echo "  - $file: $file_count rows"
             fi
         else
-            echo "  - WARNING: File $file not found in current directory or s3-fixtures/"
+            echo "  - WARNING: File $file not found"
             mismatch=1
         fi
         total_file_count=$(($total_file_count + $file_count))

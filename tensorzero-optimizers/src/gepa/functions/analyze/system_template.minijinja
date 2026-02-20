@@ -11,7 +11,7 @@ The **function_context** contains:
 
 The **inference_context** contains:
 - **message_templates:** The system, user, or assistant templates/instructions used for the LLM
-- **datapoint:** The complete datapoint including the LLM input, tags, episode_id, function_name, and other metadata.
+- **datapoint:** The datapoint including the function_name and LLM input along with the LLM output, tags, and other metadata (if provided).
   - The datapoint may include an output (e.g., human annotation or synthetic generation). Use this for reference with caution as it may be suboptimal or even erroneous.
 
 The **inference_output** is the LLM response given the **inference_context.**

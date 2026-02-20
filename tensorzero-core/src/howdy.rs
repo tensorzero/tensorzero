@@ -22,7 +22,7 @@
 
 use lazy_static::lazy_static;
 use reqwest::Client;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::Serialize;
 use std::env;
 use tokio::{
     time::{self, Duration},
@@ -31,9 +31,12 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::{DeploymentIdQueries, HowdyQueries};
 use crate::{config::Config, utils::spawn_ignoring_shutdown};
+use crate::{db::clickhouse::ClickHouseConnectionInfo, feature_flags};
 
 lazy_static! {
     /// The URL to send usage data to.
@@ -47,6 +50,7 @@ lazy_static! {
 pub fn setup_howdy(
     config: &Config,
     clickhouse: ClickHouseConnectionInfo,
+    postgres: PostgresConnectionInfo,
     token: CancellationToken,
 ) {
     if config.gateway.disable_pseudonymous_usage_analytics
@@ -55,17 +59,24 @@ pub fn setup_howdy(
         info!("Pseudonymous usage analytics is disabled");
         return;
     }
-    // TODO(shuyangli): Don't like this...
-    if clickhouse.client_type() == ClickHouseClientType::Disabled {
+
+    // TODO(#5691): Support reading deployment ID when ClickHouse is disabled.
+    let clickhouse_disabled = clickhouse.client_type() == ClickHouseClientType::Disabled;
+    if clickhouse_disabled {
         return;
     }
-    spawn_ignoring_shutdown(howdy_loop(clickhouse, token));
+    spawn_ignoring_shutdown(howdy_loop(clickhouse, postgres, token));
 }
 
 /// Loops and sends usage data to the Howdy service every 6 hours.
-pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: CancellationToken) {
+pub async fn howdy_loop(
+    clickhouse: ClickHouseConnectionInfo,
+    postgres: PostgresConnectionInfo,
+    token: CancellationToken,
+) {
+    let db = DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone());
     let client = Client::new();
-    let deployment_id = match get_deployment_id(&clickhouse).await {
+    let deployment_id = match get_deployment_id(&clickhouse, &postgres).await {
         Ok(deployment_id) => deployment_id,
         Err(()) => {
             return;
@@ -73,7 +84,7 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: Cancellatio
     };
     let mut interval = time::interval(Duration::from_secs(6 * 60 * 60));
     loop {
-        let copied_clickhouse = clickhouse.clone();
+        let copied_db = db.clone();
         let copied_client = client.clone();
         let copied_deployment_id = deployment_id.clone();
         tokio::select! {
@@ -83,9 +94,7 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: Cancellatio
             _ = interval.tick() => {}
         }
         spawn_ignoring_shutdown(async move {
-            if let Err(e) =
-                send_howdy(&copied_clickhouse, &copied_client, &copied_deployment_id).await
-            {
+            if let Err(e) = send_howdy(&copied_db, &copied_client, &copied_deployment_id).await {
                 debug!("{e}");
             }
         });
@@ -94,33 +103,61 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: Cancellatio
 
 /// Sends usage data to the Howdy service.
 async fn send_howdy(
-    clickhouse: &ClickHouseConnectionInfo,
+    db: &DelegatingDatabaseConnection,
     client: &Client,
     deployment_id: &str,
 ) -> Result<(), String> {
     let howdy_url = HOWDY_URL.clone();
-    let howdy_report = get_howdy_report(clickhouse, deployment_id).await?;
+    let howdy_report = get_howdy_report(db, deployment_id).await?;
     if let Err(e) = client.post(&howdy_url).json(&howdy_report).send().await {
         return Err(format!("Failed to send howdy: {e}"));
     }
     Ok(())
 }
 
-/// Gets the deployment ID from the ClickHouse DB.
-/// This is a 64 char hex hash that is used to identify the deployment.
-/// It is stored in the `DeploymentID` table.
-pub async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<String, ()> {
-    let response = clickhouse
-        .run_query_synchronous_no_params(
-            "SELECT deployment_id FROM DeploymentID LIMIT 1".to_string(),
-        )
-        .await
-        .map_err(|_| ())?;
-    if response.response.is_empty() {
-        debug!("Failed to get deployment ID (response was empty)");
+/// Synchronizes the deployment ID from ClickHouse to Postgres if Postgres is enabled.
+/// For existing ClickHouse deployments, we make sure Postgres contains the same deployment ID.
+/// This only executes the actual synchronization once.
+async fn synchronize_deployment_id(
+    clickhouse: &ClickHouseConnectionInfo,
+    postgres: &PostgresConnectionInfo,
+) -> Result<(), ()> {
+    if !feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+        return Ok(());
+    }
+    if clickhouse.client_type() != ClickHouseClientType::Production {
+        return Ok(());
+    }
+    if !matches!(postgres, &PostgresConnectionInfo::Enabled { .. }) {
+        return Ok(());
+    }
+    let Ok(id) = clickhouse.get_deployment_id().await else {
+        tracing::debug!("Failed to get deployment ID from ClickHouse");
+        return Err(());
+    };
+    if let Err(e) = &postgres.insert_deployment_id(&id).await {
+        tracing::debug!("Failed to sync deployment ID to Postgres: {e}");
         return Err(());
     }
-    Ok(response.response.trim().to_string())
+
+    Ok(())
+}
+
+/// Gets the deployment ID.
+/// This is a 64 char hex hash that is used to identify the deployment.
+pub async fn get_deployment_id(
+    clickhouse: &ClickHouseConnectionInfo,
+    postgres: &PostgresConnectionInfo,
+) -> Result<String, ()> {
+    // Make sure deployment ID is consistent between ClickHouse and Postgres
+    synchronize_deployment_id(clickhouse, postgres).await?;
+
+    DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone())
+        .get_deployment_id()
+        .await
+        .map_err(|e| {
+            tracing::debug!("Failed to get deployment ID: {e}");
+        })
 }
 
 /// Gets the howdy report.
@@ -128,191 +165,43 @@ pub async fn get_deployment_id(clickhouse: &ClickHouseConnectionInfo) -> Result<
 /// It contains the deployment ID, the number of inferences, and the number of feedbacks.
 /// It is also configurable to run in dryrun mode for testing.
 pub async fn get_howdy_report<'a>(
-    clickhouse: &ClickHouseConnectionInfo,
+    db: &(dyn HowdyQueries + Sync),
     deployment_id: &'a str,
 ) -> Result<HowdyReportBody<'a>, String> {
     let dryrun = cfg!(any(test, feature = "e2e_tests"));
     let (inference_counts, feedback_counts, token_totals) = try_join!(
-        count_inferences(clickhouse),
-        count_feedbacks(clickhouse),
-        get_token_totals(clickhouse)
-    )?;
+        db.count_inferences_for_howdy(),
+        db.count_feedbacks_for_howdy(),
+        db.get_token_totals_for_howdy()
+    )
+    .map_err(|e| e.to_string())?;
+
+    let inference_count =
+        inference_counts.chat_inference_count + inference_counts.json_inference_count;
+    let feedback_count = feedback_counts.boolean_metric_feedback_count
+        + feedback_counts.float_metric_feedback_count
+        + feedback_counts.comment_feedback_count
+        + feedback_counts.demonstration_feedback_count;
+
     Ok(HowdyReportBody {
         deployment_id,
-        inference_count: inference_counts.inference_count,
-        feedback_count: feedback_counts.feedback_count,
+        inference_count: inference_count.to_string(),
+        feedback_count: feedback_count.to_string(),
         gateway_version: crate::endpoints::status::TENSORZERO_VERSION,
         commit_hash: crate::built_info::GIT_COMMIT_HASH_SHORT,
         input_token_total: token_totals.input_tokens.map(|x| x.to_string()),
         output_token_total: token_totals.output_tokens.map(|x| x.to_string()),
-        chat_inference_count: Some(inference_counts.chat_inference_count),
-        json_inference_count: Some(inference_counts.json_inference_count),
-        float_metric_feedback_count: Some(feedback_counts.float_metric_feedback_count),
-        boolean_metric_feedback_count: Some(feedback_counts.boolean_metric_feedback_count),
-        comment_feedback_count: Some(feedback_counts.comment_feedback_count),
-        demonstration_feedback_count: Some(feedback_counts.demonstration_feedback_count),
+        chat_inference_count: Some(inference_counts.chat_inference_count.to_string()),
+        json_inference_count: Some(inference_counts.json_inference_count.to_string()),
+        float_metric_feedback_count: Some(feedback_counts.float_metric_feedback_count.to_string()),
+        boolean_metric_feedback_count: Some(
+            feedback_counts.boolean_metric_feedback_count.to_string(),
+        ),
+        comment_feedback_count: Some(feedback_counts.comment_feedback_count.to_string()),
+        demonstration_feedback_count: Some(
+            feedback_counts.demonstration_feedback_count.to_string(),
+        ),
         dryrun,
-    })
-}
-
-#[derive(Debug)]
-struct InferenceCounts {
-    inference_count: String,
-    chat_inference_count: String,
-    json_inference_count: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ClickHouseInferenceCounts {
-    #[serde(deserialize_with = "deserialize_u64")]
-    chat_inference_count: u64,
-    #[serde(deserialize_with = "deserialize_u64")]
-    json_inference_count: u64,
-}
-
-// Since ClickHouse returns strings for UInt64, we need to deserialize them as u64
-fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    s.parse().map_err(serde::de::Error::custom)
-}
-
-/// Count all inferences in the ClickHouse DB.
-/// This returns a string since u64 cannot be represented in JSON and we simply pass it through to howdy
-async fn count_inferences(
-    clickhouse: &ClickHouseConnectionInfo,
-) -> Result<InferenceCounts, String> {
-    let Ok(response) = clickhouse
-        .run_query_synchronous_no_params(
-            r"
-            SELECT
-                (SELECT COUNT() FROM ChatInference) as chat_inference_count,
-                (SELECT COUNT() FROM JsonInference) as json_inference_count
-            Format JSONEachRow
-            "
-            .to_string(),
-        )
-        .await
-    else {
-        return Err("Failed to query ClickHouse for inference count".to_string());
-    };
-    let response_counts: ClickHouseInferenceCounts = serde_json::from_str(&response.response)
-        .map_err(|e| format!("Failed to deserialize ClickHouseInferenceCounts: {e}"))?;
-
-    let inference_count =
-        response_counts.chat_inference_count + response_counts.json_inference_count;
-
-    Ok(InferenceCounts {
-        inference_count: inference_count.to_string(),
-        chat_inference_count: response_counts.chat_inference_count.to_string(),
-        json_inference_count: response_counts.json_inference_count.to_string(),
-    })
-}
-
-#[derive(Debug, Deserialize)]
-struct CumulativeUsage {
-    #[serde(deserialize_with = "deserialize_optional_u64")]
-    input_tokens: Option<u64>,
-    #[serde(deserialize_with = "deserialize_optional_u64")]
-    output_tokens: Option<u64>,
-}
-
-// Since ClickHouse returns strings for UInt64, we need to deserialize them as u64
-// If the value is null we return None
-fn deserialize_optional_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum StringOrNull {
-        String(String),
-        Null,
-    }
-
-    match StringOrNull::deserialize(deserializer)? {
-        StringOrNull::String(s) => Some(s.parse().map_err(serde::de::Error::custom)).transpose(),
-        StringOrNull::Null => Ok(None),
-    }
-}
-
-async fn get_token_totals(
-    clickhouse: &ClickHouseConnectionInfo,
-) -> Result<CumulativeUsage, String> {
-    let Ok(response) = clickhouse
-        .run_query_synchronous_no_params(
-            r"
-            SELECT
-                (SELECT count FROM CumulativeUsage FINAL WHERE type = 'input_tokens') as input_tokens,
-                (SELECT count FROM CumulativeUsage FINAL WHERE type = 'output_tokens') as output_tokens
-            Format JSONEachRow
-            "
-            .to_string(),
-        )
-        .await
-    else {
-        return Err("Failed to query ClickHouse for token total count".to_string());
-    };
-    serde_json::from_str(&response.response)
-        .map_err(|e| format!("Failed to deserialize ClickHouseInferenceCounts: {e}"))
-}
-
-#[derive(Debug)]
-struct FeedbackCounts {
-    feedback_count: String,
-    float_metric_feedback_count: String,
-    boolean_metric_feedback_count: String,
-    comment_feedback_count: String,
-    demonstration_feedback_count: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ClickHouseFeedbackCounts {
-    #[serde(deserialize_with = "deserialize_u64")]
-    boolean_metric_feedback_count: u64,
-    #[serde(deserialize_with = "deserialize_u64")]
-    float_metric_feedback_count: u64,
-    #[serde(deserialize_with = "deserialize_u64")]
-    demonstration_feedback_count: u64,
-    #[serde(deserialize_with = "deserialize_u64")]
-    comment_feedback_count: u64,
-}
-
-/// Count all feedbacks in the ClickHouse DB.
-/// This returns a string since u64 cannot be represented in JSON and we simply pass it through to howdy
-async fn count_feedbacks(clickhouse: &ClickHouseConnectionInfo) -> Result<FeedbackCounts, String> {
-    let Ok(response) = clickhouse
-        .run_query_synchronous_no_params(
-            r"
-            SELECT
-                (SELECT COUNT() FROM BooleanMetricFeedback) as boolean_metric_feedback_count,
-                (SELECT COUNT() FROM FloatMetricFeedback) as float_metric_feedback_count,
-                (SELECT COUNT() FROM DemonstrationFeedback) as demonstration_feedback_count,
-                (SELECT COUNT() FROM CommentFeedback) as comment_feedback_count
-            Format JSONEachRow
-            "
-            .to_string(),
-        )
-        .await
-    else {
-        return Err("Failed to query ClickHouse for feedback count".to_string());
-    };
-    let response_counts: ClickHouseFeedbackCounts = serde_json::from_str(&response.response)
-        .map_err(|e| format!("Failed to deserialize ClickHouseFeedbackCounts: {e}"))?;
-
-    let feedback_count = response_counts.boolean_metric_feedback_count
-        + response_counts.float_metric_feedback_count
-        + response_counts.demonstration_feedback_count
-        + response_counts.comment_feedback_count;
-
-    Ok(FeedbackCounts {
-        feedback_count: feedback_count.to_string(),
-        float_metric_feedback_count: response_counts.float_metric_feedback_count.to_string(),
-        boolean_metric_feedback_count: response_counts.boolean_metric_feedback_count.to_string(),
-        comment_feedback_count: response_counts.comment_feedback_count.to_string(),
-        demonstration_feedback_count: response_counts.demonstration_feedback_count.to_string(),
     })
 }
 

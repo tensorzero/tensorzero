@@ -5,7 +5,7 @@
 
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
+use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -221,7 +221,7 @@ async fn test_openai_compatible_raw_usage_streaming_error_without_include_usage(
     );
 
     let error_body: Value = response.json().await.unwrap();
-    let error_message = error_body["error"].as_str().unwrap_or("");
+    let error_message = error_body["error"]["message"].as_str().unwrap_or("");
     assert!(
         error_message.contains("include_usage"),
         "Error message should mention include_usage requirement. Got: {error_message}"
@@ -258,6 +258,7 @@ async fn test_openai_compatible_raw_usage_streaming() {
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut all_chunks: Vec<Value> = Vec::new();
@@ -368,6 +369,7 @@ async fn test_openai_compatible_streaming_usage_only_in_last_chunk() {
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut all_chunks: Vec<Value> = Vec::new();
@@ -464,6 +466,7 @@ async fn test_openai_compatible_streaming_no_usage_when_disabled() {
         .post(get_gateway_endpoint("/openai/v1/chat/completions"))
         .json(&payload)
         .eventsource()
+        .await
         .unwrap();
 
     let mut all_chunks: Vec<Value> = Vec::new();

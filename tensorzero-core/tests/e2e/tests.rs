@@ -5,14 +5,14 @@
     clippy::print_stdout,
     clippy::unwrap_used
 )]
-mod batch;
+mod aggregated_response;
 mod best_of_n;
 mod built_in;
 mod cache;
 mod clickhouse;
+#[macro_use]
 mod common;
 mod config;
-mod datasets;
 mod db;
 mod dicl;
 mod dynamic_variants;
@@ -35,10 +35,12 @@ mod otel;
 mod otel_config_headers;
 mod otel_export;
 mod prometheus;
+mod provider_tools;
 mod providers;
 mod proxy;
 mod rate_limiting;
 mod rate_limiting_startup;
+mod raw_response;
 mod raw_usage;
 mod render_inferences;
 mod retries;

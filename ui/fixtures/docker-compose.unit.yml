@@ -29,6 +29,8 @@ services:
       context: ../..
       dockerfile: gateway/Dockerfile
       target: gateway
+      args:
+        PROFILE: dev
     volumes:
       - ./config:/app/config:ro
       # Mount GCP JWT key file (optional - only needed for GCP providers)
@@ -81,6 +83,7 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PASSWORD=chpassword
       - CLICKHOUSE_USER=chuser
+      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
       - R2_ACCESS_KEY_ID
       - R2_SECRET_ACCESS_KEY
     depends_on:
@@ -96,7 +99,7 @@ services:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_interval: 1s
       start_period: 300s # Give the script time to start
 
@@ -111,8 +114,6 @@ services:
     environment:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       TENSORZERO_GATEWAY_URL: http://gateway:3000
-      BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
-      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro

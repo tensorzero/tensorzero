@@ -46,7 +46,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 > ### **Coming Soon: TensorZero Autopilot**
 >
 > TensorZero Autopilot is an **automated AI engineer** (powered by the TensorZero Stack) that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests.
-> **[Learn more](https://www.tensorzero.com/)** **[Join the waitlist](https://tensorzerodotcom.notion.site/2d87520bbad380c9ad0dd19566b3bc91)**
+> **[Learn more](https://www.tensorzero.com/)** **[Join the waitlist](https://tensorzero.com/autopilot-waitlist)**
 
 ## Features
 
@@ -106,7 +106,7 @@ from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 with TensorZeroGateway.build_embedded(...) as t0:
     response = t0.inference(
         model_name="openai::gpt-4o-mini",
-        # Try other providers easily: "anthropic::claude-sonnet-4-5-20250929"
+        # Try other providers easily: "anthropic::claude-sonnet-4-5"
         input={
             "messages": [
                 {
@@ -141,7 +141,7 @@ patch_openai_client(client, ...)
 
 response = client.chat.completions.create(
     model="tensorzero::model_name::openai::gpt-4o-mini",
-    # Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929"
+    # Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5"
     messages=[
         {
             "role": "user",
@@ -174,7 +174,7 @@ const client = new OpenAI({
 
 const response = await client.chat.completions.create({
   model: "tensorzero::model_name::openai::gpt-4o-mini",
-  // Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5-20250929"
+  // Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5"
   messages: [
     {
       role: "user",

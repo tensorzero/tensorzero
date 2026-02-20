@@ -1,14 +1,6 @@
-import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
-import {
-  data,
-  isRouteErrorResponse,
-  Link,
-  redirect,
-  useFetcher,
-  useParams,
-} from "react-router";
+import { Await, data, redirect, useFetcher, useLocation } from "react-router";
 import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
 import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
@@ -20,6 +12,7 @@ import {
   SectionHeader,
   SectionLayout,
   SectionsGroup,
+  Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { Badge } from "~/components/ui/badge";
 import {
@@ -49,8 +42,100 @@ import type {
   Datapoint,
   JsonValue,
 } from "~/types/tensorzero";
+import { BasicInfoLayoutSkeleton } from "~/components/layout/BasicInfoLayout";
+import { Skeleton } from "~/components/ui/skeleton";
+import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
 
-// Discriminated union for type-safe output state
+interface DatapointPageHeaderProps {
+  id?: string;
+  datasetName?: string;
+  tag?: ReactNode;
+}
+
+function DatapointPageHeader({
+  id,
+  datasetName,
+  tag,
+}: DatapointPageHeaderProps) {
+  return (
+    <PageHeader
+      eyebrow={
+        <Breadcrumbs
+          segments={[
+            { label: "Datasets", href: "/datasets" },
+            ...(datasetName
+              ? [
+                  {
+                    label: datasetName,
+                    href: toDatasetUrl(datasetName),
+                    isIdentifier: true,
+                  },
+                ]
+              : []),
+            { label: "Datapoints" },
+          ]}
+        />
+      }
+      name={id}
+      tag={tag}
+    />
+  );
+}
+
+function DatapointContentSkeleton({
+  id,
+  datasetName,
+}: {
+  id?: string;
+  datasetName?: string;
+}) {
+  return (
+    <>
+      <DatapointPageHeader id={id} datasetName={datasetName} />
+      <SectionsGroup>
+        <SectionLayout>
+          <BasicInfoLayoutSkeleton rows={6} />
+        </SectionLayout>
+        <SectionLayout>
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-8 w-36" />
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-8 w-8" />
+            <Skeleton className="h-8 w-8" />
+          </div>
+        </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Input" />
+          <Skeleton className="h-32 w-full" />
+        </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Output" />
+          <Skeleton className="h-48 w-full" />
+        </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Tags" />
+          <Skeleton className="h-16 w-full" />
+        </SectionLayout>
+      </SectionsGroup>
+    </>
+  );
+}
+
+function DatapointErrorState({
+  id,
+  datasetName,
+}: {
+  id?: string;
+  datasetName?: string;
+}) {
+  return (
+    <>
+      <DatapointPageHeader id={id} datasetName={datasetName} />
+      <SectionAsyncErrorState />
+    </>
+  );
+}
+
 type OutputState =
   | { type: "chat"; value?: ContentBlockChatOutput[] }
   | { type: "json"; value?: JsonInferenceOutput; outputSchema: JsonValue };
@@ -135,13 +220,11 @@ export function hasDatapointChanged(params: {
     originalTags,
   } = params;
 
-  // Check if system has changed (added, removed, or modified)
   const hasSystemChanged =
     "system" in currentInput !== "system" in originalInput ||
     JSON.stringify(currentInput.system) !==
       JSON.stringify(originalInput.system);
 
-  // Check if messages changed
   const hasMessagesChanged =
     JSON.stringify(currentInput.messages) !==
     JSON.stringify(originalInput.messages);
@@ -357,6 +440,11 @@ export const handle: RouteHandle = {
   ],
 };
 
+export type DatapointData = {
+  datapoint: Datapoint;
+  resolvedInput: Input;
+};
+
 export async function loader({
   params,
 }: {
@@ -368,24 +456,24 @@ export async function loader({
       status: 404,
     });
   }
-  const datapoint = await getTensorZeroClient().getDatapoint(id, dataset_name);
-  if (!datapoint) {
-    throw data(`No datapoint found for ID \`${id}\`.`, {
-      status: 404,
-    });
-  }
 
-  // Load file data for InputElement component
-  const resolvedInput = await loadFileDataForInput(datapoint.input);
+  const datapointDataPromise: Promise<DatapointData> = getTensorZeroClient()
+    .getDatapoint(id, dataset_name)
+    .then(async (datapoint) => {
+      if (!datapoint) {
+        throw data(`No datapoint found for ID \`${id}\`.`, { status: 404 });
+      }
+      const resolvedInput = await loadFileDataForInput(datapoint.input);
+      return { datapoint, resolvedInput };
+    });
 
   return {
-    datapoint,
-    resolvedInput,
+    datapointData: datapointDataPromise,
   };
 }
 
-export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { datapoint, resolvedInput } = loaderData;
+function DatapointContent({ data }: { data: DatapointData }) {
+  const { datapoint, resolvedInput } = data;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
@@ -499,7 +587,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       return;
     }
 
-    // Validate schema for JSON output
     if (output.type === "json") {
       const schemaValidation = validateJsonSchema(output.outputSchema);
       if (!schemaValidation.valid) {
@@ -564,7 +651,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           title: "Request Error",
           description: "Failed to prepare the request. Please try again.",
         });
-        // Reset state on error
         setLastRequestArgs(null);
         setIsModalOpen(false);
         setSelectedVariant(null);
@@ -572,7 +658,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     } catch (error) {
       logger.error("Failed to prepare inference request:", error);
 
-      // Show user-friendly error message based on the error type
       let errorMessage = "Failed to prepare the request. Please try again.";
       if (error instanceof Error) {
         if (error.message.includes("Extra body is not supported")) {
@@ -637,10 +722,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <PageLayout>
-      <PageHeader
-        label="Datapoint"
-        name={datapoint.id}
+    <>
+      <DatapointPageHeader
+        id={datapoint.id}
+        datasetName={datapoint.dataset_name}
         tag={
           <>
             {datapoint.is_custom && (
@@ -780,74 +865,40 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           onRefresh={lastRequestArgs ? handleRefresh : null}
         />
       )}
-    </PageLayout>
+    </>
   );
 }
 
-function getUserFacingError(error: unknown): {
-  heading: string;
-  message: ReactNode;
-} {
-  if (isRouteErrorResponse(error)) {
-    switch (error.status) {
-      case 400:
-        return {
-          heading: `${error.status}: Bad Request`,
-          message: "Please try again later.",
-        };
-      case 401:
-        return {
-          heading: `${error.status}: Unauthorized`,
-          message: "You do not have permission to access this resource.",
-        };
-      case 403:
-        return {
-          heading: `${error.status}: Forbidden`,
-          message: "You do not have permission to access this resource.",
-        };
-      case 404:
-        return {
-          heading: `${error.status}: Not Found`,
-          message:
-            "The requested resource was not found. Please check the URL and try again.",
-        };
-      case 500:
-      default:
-        return {
-          heading: "An unknown error occurred",
-          message: "Please try again later.",
-        };
-    }
-  }
-  return {
-    heading: "An unknown error occurred",
-    message: "Please try again later.",
-  };
-}
+export default function DatapointPage({
+  loaderData,
+  params,
+}: Route.ComponentProps) {
+  const { datapointData } = loaderData;
+  const location = useLocation();
 
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  useEffect(() => {
-    logger.error(error);
-  }, [error]);
-  const { heading, message } = getUserFacingError(error);
-  const { dataset_name: datasetName } = useParams<{
-    dataset_name: string;
-    id: string;
-  }>();
   return (
-    <div className="flex flex-col items-center justify-center md:h-full">
-      <div className="mt-8 flex flex-col items-center justify-center gap-2 rounded-xl bg-red-50 p-6 md:mt-0">
-        <h1 className="text-2xl font-bold">{heading}</h1>
-        {typeof message === "string" ? <p>{message}</p> : message}
-        {datasetName && (
-          <Link
-            to={toDatasetUrl(datasetName)}
-            className="font-bold text-red-800 hover:text-red-600"
-          >
-            Go back &rarr;
-          </Link>
-        )}
-      </div>
-    </div>
+    <PageLayout>
+      <Suspense
+        key={location.key}
+        fallback={
+          <DatapointContentSkeleton
+            id={params.id}
+            datasetName={params.dataset_name}
+          />
+        }
+      >
+        <Await
+          resolve={datapointData}
+          errorElement={
+            <DatapointErrorState
+              id={params.id}
+              datasetName={params.dataset_name}
+            />
+          }
+        >
+          {(resolvedData) => <DatapointContent data={resolvedData} />}
+        </Await>
+      </Suspense>
+    </PageLayout>
   );
 }

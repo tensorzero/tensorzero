@@ -13,7 +13,7 @@ We provide a simple TensorZero configuration with a function `chatbot` that uses
 ### Prerequisites
 
 1. Install Python 3.10+.
-2. Install the Python dependencies with `pip install -r requirements.txt`.
+2. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv): `uv sync`
 3. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 
 ### Setup

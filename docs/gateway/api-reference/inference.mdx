@@ -237,6 +237,7 @@ This advanced feature is an "escape hatch" that lets you use provider-specific f
 Each object in the array must have two or three fields:
 
 - `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
+  - Use `-` as the final path element to append to an array (e.g., `/messages/-` appends to `messages`)
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
   - `delete = true`: Deletes the field at the specified location, if present.
@@ -385,14 +386,14 @@ The function must be defined in the configuration file.
 Alternatively, you can use the `model_name` field to call a model directly, without the need to define a function.
 See below for more details.
 
-#### `include_original_response`
+#### `include_raw_response`
 
 - **Type:** boolean
 - **Required:** no
 
-If `true`, the original response from the model will be included in the response in the `original_response` field as a string.
+If `true`, the raw responses from all model inferences will be included in the response in the `raw_response` field as an array.
 
-See `original_response` in the [response](#response) section for more details.
+See `raw_response` in the [response](#response) section for more details.
 
 #### `include_raw_usage`
 
@@ -474,9 +475,16 @@ If the content block has type `raw_text`, it must have the following additional 
 - `value`: The text for the content block.
   This content block will ignore any relevant templates and schemas for this function.
 
+<Note>
+
+`raw_text` only works for user and assistant messages. For system messages, `raw_text` is treated as plain text and will not bypass templates.
+
+</Note>
+
 If the content block has type `thought`, it must have the following additional fields:
 
-- `text`: The text for the content block.
+- `text` (string, optional): The text for the content block.
+- `signature` (string, optional): An opaque signature used for multi-turn reasoning conversations with Anthropic and OpenRouter. Pass through the `signature` from the model's response to continue a reasoning conversation.
 
 If the content block has type `unknown`, it must have the following additional fields:
 
@@ -683,21 +691,6 @@ Be careful about the different prefixes: `model_name="gpt-4o"` will use the `[mo
 If set, this schema will override the `output_schema` defined in the function configuration for a JSON function.
 This dynamic output schema is used for validating the output of the function, and sent to providers which support structured outputs.
 
-#### `otlp_traces_extra_headers`
-
-- **Type:** object (a map from string to string)
-- **Required:** no (default: `{}`)
-
-Dynamic headers to include in OTLP trace exports for this specific inference request.
-This is useful for adding per-request metadata to OTLP trace exports (e.g. user IDs, request sources).
-
-The headers are automatically prefixed with `tensorzero-otlp-traces-extra-header-` before being sent to the OTLP endpoint.
-
-These headers are merged with any static headers configured in `export.otlp.traces.extra_headers`.
-When the same header key is present in both static and dynamic headers, the dynamic header value takes precedence.
-
-See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces#send-custom-http-headers) for more details and examples.
-
 #### `parallel_tool_calls`
 
 - **Type:** boolean
@@ -878,6 +871,22 @@ If set, pins the inference request to a particular variant (not recommended).
 You should generally not set this field, and instead let the TensorZero gateway assign a variant.
 This field is primarily used for testing or debugging purposes.
 
+### Request Headers
+
+You can attach custom OTLP trace metadata to individual inference requests using HTTP headers.
+This allows you to extend TensorZero's OpenTelemetry integration with per-request metadata useful for other observability solutions.
+The TensorZero client SDKs handle this automatically through parameters like `otlp_traces_extra_headers`, `otlp_traces_extra_attributes`, and `otlp_traces_extra_resources`.
+
+When making raw HTTP requests, use the following header prefixes:
+
+| Header prefix                             | Description                                                                                                                                           |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tensorzero-otlp-traces-extra-header-`    | Custom headers to include in OTLP trace exports. Merged with static headers from `export.otlp.traces.extra_headers` (dynamic values take precedence). |
+| `tensorzero-otlp-traces-extra-attribute-` | Custom span attributes to attach to OTLP trace exports.                                                                                               |
+| `tensorzero-otlp-traces-extra-resource-`  | Custom resource attributes to attach to OTLP trace exports.                                                                                           |
+
+See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces) for more details and examples.
+
 ### Response
 
 The response format depends on the function type (as defined in the configuration file) and whether the response is streamed or not.
@@ -914,7 +923,9 @@ If `type` is `tool_call`, the content block has the following fields:
 
 If `type` is `thought`, the content block has the following fields:
 
-- `text` (string): The text of the thought.
+- `text` (string, optional): The text of the thought. May be absent for encrypted reasoning.
+- `signature` (string, optional): An opaque signature for multi-turn reasoning conversations. Pass this back in subsequent requests to continue a reasoning conversation with Anthropic or OpenRouter.
+- `summary` (array, optional): A summary of the thought, provided by some providers when the full reasoning is encrypted.
 
 If the model provider responds with a content block of an unknown type, it will be included in the response as a content block of type `unknown` with the following additional fields:
 
@@ -948,18 +959,18 @@ The ID of the episode associated with the inference.
 
 The ID assigned to the inference.
 
-##### `original_response`
+##### `raw_response`
 
-- **Type:** string (optional)
+- **Type:** array (optional, only when `include_raw_response` is `true`)
 
-The original response from the model provider (only available when `include_original_response` is `true`).
+An array of raw provider-specific response data from all model inferences. Each entry contains:
 
-The returned data depends on the variant type:
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data`: The raw response string from the provider.
 
-- `chat_completion`: raw response from the inference to the `model`
-- `experimental_best_of_n_sampling`: raw response from the inference to the `evaluator`
-- `experimental_mixture_of_n_sampling`: raw response from the inference to the `fuser`
-- `experimental_dynamic_in_context_learning`: raw response from the inference to the `model`
+For complex variants like `experimental_best_of_n_sampling`, this includes raw responses from all candidate inferences as well as the evaluator/fuser inference.
 
 ##### `variant_name`
 
@@ -1020,6 +1031,7 @@ If `type` is `thought`, the chunk has the following fields:
 
 - `id`: The ID of the content block.
 - `text`: The text delta for the thought.
+- `signature` (string, optional): An opaque signature for multi-turn reasoning conversations (see above).
 
 ##### `episode_id`
 
@@ -1061,6 +1073,25 @@ An array of raw provider-specific usage data. Each entry contains:
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
+##### `raw_response`
+
+- **Type:** array (optional, only when `include_raw_response` is `true`)
+
+An array of raw provider-specific response data from model inferences that occurred before the current streaming inference (e.g., candidate inferences in `experimental_best_of_n_sampling`). This appears in early chunks of the stream.
+
+Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data`: The raw response string from the provider.
+
+##### `raw_chunk`
+
+- **Type:** string (optional, only when `include_raw_response` is `true`)
+
+The raw chunk from the current streaming model inference. This is included in content-bearing chunks (typically all chunks except the first metadata chunk and final usage-only chunk).
+
 </Tab>
 </Tabs>
 
@@ -1085,18 +1116,18 @@ The ID assigned to the inference.
 
 The ID of the episode associated with the inference.
 
-##### `original_response`
+##### `raw_response`
 
-- **Type:** string (optional)
+- **Type:** array (optional, only when `include_raw_response` is `true`)
 
-The original response from the model provider (only available when `include_original_response` is `true`).
+An array of raw provider-specific response data from all model inferences. Each entry contains:
 
-The returned data depends on the variant type:
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data`: The raw response string from the provider.
 
-- `chat_completion`: raw response from the inference to the `model`
-- `experimental_best_of_n_sampling`: raw response from the inference to the `evaluator`
-- `experimental_mixture_of_n_sampling`: raw response from the inference to the `fuser`
-- `experimental_dynamic_in_context_learning`: raw response from the inference to the `model`
+For complex variants like `experimental_best_of_n_sampling`, this includes raw responses from all candidate inferences as well as the evaluator/fuser inference.
 
 ##### `output`
 
@@ -1190,6 +1221,25 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+##### `raw_response`
+
+- **Type:** array (optional, only when `include_raw_response` is `true`)
+
+An array of raw provider-specific response data from model inferences that occurred before the current streaming inference (e.g., candidate inferences in `experimental_best_of_n_sampling`). This appears in early chunks of the stream.
+
+Each entry contains:
+
+- `model_inference_id`: UUID of the model inference.
+- `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
+- `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
+- `data`: The raw response string from the provider.
+
+##### `raw_chunk`
+
+- **Type:** string (optional, only when `include_raw_response` is `true`)
+
+The raw chunk from the current streaming model inference. This is included in content-bearing chunks (typically all chunks except the first metadata chunk and final usage-only chunk).
 
 </Tab>
 </Tabs>

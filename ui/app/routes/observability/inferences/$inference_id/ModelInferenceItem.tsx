@@ -21,7 +21,8 @@ import {
   Cached,
 } from "~/components/icons/Icons";
 import Chip from "~/components/ui/Chip";
-import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
+import { formatDateWithSeconds } from "~/utils/date";
+import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import {
   SnippetLayout,
   SnippetContent,
@@ -34,20 +35,9 @@ interface ModelInferenceItemProps {
 }
 
 export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
-  // Create timestamp tooltip
-  const { formattedDate, formattedTime, relativeTime } =
-    getTimestampTooltipData(inference.timestamp);
-  const timestampTooltip = (
-    <div className="flex flex-col gap-1">
-      <div>{formattedDate}</div>
-      <div>{formattedTime}</div>
-      <div>{relativeTime}</div>
-    </div>
-  );
-
   return (
     <PageLayout>
-      <PageHeader label="Model Inference" name={inference.id}>
+      <PageHeader eyebrow="Model Inference" name={inference.id}>
         <BasicInfoLayout>
           <BasicInfoItem>
             <BasicInfoItemTitle>Model</BasicInfoItemTitle>
@@ -114,7 +104,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
               <Chip
                 icon={<Calendar className="text-fg-tertiary" />}
                 label={formatDateWithSeconds(new Date(inference.timestamp))}
-                tooltip={timestampTooltip}
+                tooltip={<TimestampTooltip timestamp={inference.timestamp} />}
               />
             </BasicInfoItemContent>
           </BasicInfoItem>

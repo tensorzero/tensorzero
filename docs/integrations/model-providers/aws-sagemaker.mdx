@@ -43,7 +43,7 @@ type = "aws_sagemaker"
 model_name = "gemma3:1b"
 endpoint_name = "my-sagemaker-endpoint"
 region = "us-east-1"
-# ... or use `allow_auto_detect_region = true` to infer region with the AWS SDK
+# ... or use `region = "sdk"` to auto-detect region with the AWS SDK
 hosted_provider = "openai"  # Ollama is OpenAI-compatible
 
 [functions.my_function_name]
@@ -58,7 +58,14 @@ The `hosted_provider` field specifies the model provider that you deployed on AW
 For example, Ollama is OpenAI-compatible, so we use `openai` as the hosted provider.
 Alternatively, you can use `hosted_provider = "tgi"` if you had deployed TGI instead.
 
-You can specify the endpoint's `region` explicitly, or use `allow_auto_detect_region = true` to infer region with the AWS SDK.
+You can specify the endpoint's `region` explicitly, or use `region = "sdk"` to auto-detect region with the AWS SDK.
+
+<Note>
+
+If you're using AWS China regions (`cn-north-1`, `cn-northwest-1`) or AWS GovCloud, you must also specify the `endpoint_url` field since these partitions use different DNS suffixes.
+For example: `endpoint_url = "https://runtime.sagemaker.cn-north-1.amazonaws.com.cn"`
+
+</Note>
 
 See the [Configuration Reference](/gateway/configuration-reference/) for optional fields.
 The relevant fields will depend on the `hosted_provider`.
@@ -66,7 +73,7 @@ The relevant fields will depend on the `hosted_provider`.
 ### Credentials
 
 You must make sure that the gateway has the necessary permissions to access AWS SageMaker.
-The TensorZero Gateway will use the AWS SDK to retrieve the relevant credentials.
+By default, the TensorZero Gateway will use the AWS SDK to retrieve the relevant credentials.
 
 The simplest way is to set the following environment variables before running the gateway:
 
@@ -76,7 +83,8 @@ AWS_REGION=us-east-1
 AWS_SECRET_ACCESS_KEY=...
 ```
 
-Alternatively, you can use other authentication methods supported by the AWS SDK.
+You can also provide credentials dynamically at inference time using the `dynamic::` prefix (e.g. `access_key_id = "dynamic::aws_access_key_id"`).
+See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more details on authentication options.
 
 ### Deployment (Docker Compose)
 

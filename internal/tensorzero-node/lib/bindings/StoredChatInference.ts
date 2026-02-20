@@ -13,15 +13,15 @@ import type { ToolChoice } from "./ToolChoice";
 export type StoredChatInference = {
   function_name: string;
   variant_name: string;
-  input: StoredInput;
-  output: Array<ContentBlockChatOutput>;
+  input?: StoredInput;
+  output?: Array<ContentBlockChatOutput>;
   dispreferred_outputs: Array<Array<ContentBlockChatOutput>>;
   timestamp: string;
   episode_id: string;
   inference_id: string;
-  tags: { [key in string]?: string };
-  extra_body: Array<ExtraBody>;
-  inference_params: InferenceParams;
+  tags: { [key in string]: string };
+  extra_body?: Array<ExtraBody>;
+  inference_params?: InferenceParams;
   processing_time_ms?: bigint;
   ttft_ms?: bigint;
   /**

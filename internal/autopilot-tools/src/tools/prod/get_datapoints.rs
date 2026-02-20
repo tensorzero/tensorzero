@@ -34,18 +34,18 @@ impl ToolMetadata for GetDatapointsTool {
     type Output = GetDatapointsResponse;
     type LlmParams = GetDatapointsToolParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("get_datapoints")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Get specific datapoints by their IDs. \
              Optionally provide dataset_name for better query performance.",
         )
     }
 
-    fn parameters_schema() -> ToolResult<Schema> {
+    fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Get specific datapoints by their IDs.",
@@ -60,7 +60,8 @@ impl ToolMetadata for GetDatapointsTool {
                     "description": "The IDs of the datapoints to retrieve."
                 }
             },
-            "required": ["ids"]
+            "required": ["ids"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

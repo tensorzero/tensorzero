@@ -1,6 +1,6 @@
 [package]
 name = "mock-provider-api"
-version = "0.1.0"
+version = "0.0.0"
 rust-version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,7 +16,7 @@ futures = { workspace = true }
 mimalloc = "0.1.48"
 serde_json = { workspace = true }
 tokio = { workspace = true }
-tower = { version = "0.5.2", features = ["util"] }
+tower = { version = "0.5.3", features = ["util"] }
 serde = { workspace = true }
 rand = { workspace = true }
 chrono = { workspace = true }
@@ -27,8 +27,9 @@ anyhow.workspace = true
 uuid = { workspace = true }
 object_store = { workspace = true }
 bytes = "1.10.1"
+reqwest = { workspace = true }
 
 [dev-dependencies]
-eventsource-stream = "0.2.3"
+sse-stream = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 tokio-stream = { workspace = true }

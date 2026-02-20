@@ -19,7 +19,7 @@ use evaluations::{
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::UninitializedVariantInfo;
-use tensorzero_core::db::clickhouse::BatchWriterHandle;
+use tensorzero_core::db::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -29,8 +29,9 @@ use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
 // =============================================================================
 
 /// Request body for running an evaluation.
-#[derive(Debug, Clone, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct RunEvaluationRequest {
     /// The evaluation configuration (serialized)
     pub evaluation_config: EvaluationConfig,
@@ -73,8 +74,9 @@ fn default_inference_cache() -> String {
 }
 
 /// SSE event types for evaluation streaming.
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluationRunEvent {
     Start(EvaluationRunStartEvent),
@@ -84,8 +86,9 @@ pub enum EvaluationRunEvent {
     Complete(EvaluationRunCompleteEvent),
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
@@ -96,8 +99,9 @@ pub struct EvaluationRunStartEvent {
     pub variant_name: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EvaluationRunSuccessEvent {
     pub evaluation_run_id: Uuid,
     pub datapoint: Value,
@@ -106,24 +110,27 @@ pub struct EvaluationRunSuccessEvent {
     pub evaluator_errors: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EvaluationRunErrorEvent {
     pub evaluation_run_id: Uuid,
     pub datapoint_id: Uuid,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct EvaluationRunFatalErrorEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluation_run_id: Option<Uuid>,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EvaluationRunCompleteEvent {
     pub evaluation_run_id: Uuid,
 }
@@ -162,7 +169,7 @@ struct EvaluationStreamParams {
     dataset_name: Option<String>,
     variant_name: Option<String>,
     receiver: mpsc::Receiver<EvaluationUpdate>,
-    batcher_join_handle: Option<BatchWriterHandle>,
+    batcher_join_handles: Vec<BatchWriterHandle>,
 }
 
 fn create_evaluation_stream(
@@ -175,7 +182,7 @@ fn create_evaluation_stream(
         dataset_name,
         variant_name,
         mut receiver,
-        batcher_join_handle,
+        batcher_join_handles,
     } = params;
 
     async_stream::stream! {
@@ -234,18 +241,18 @@ fn create_evaluation_stream(
             }
         }
 
-        // Wait for ClickHouse batch writer to finish
-        if let Some(handle) = batcher_join_handle
-            && let Err(e) = handle.await
-        {
-            let error_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
-                evaluation_run_id: Some(evaluation_run_id),
-                message: format!("Error waiting for ClickHouse batch writer: {e}"),
-            });
-            if let Ok(data) = serde_json::to_string(&error_event) {
-                yield Ok(Event::default().event("event").data(data));
+        // Wait for batch writers to finish
+        for handle in batcher_join_handles {
+            if let Err(e) = handle.await {
+                let error_event = EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
+                    evaluation_run_id: Some(evaluation_run_id),
+                    message: format!("Error waiting for batch writer: {e}"),
+                });
+                if let Ok(data) = serde_json::to_string(&error_event) {
+                    yield Ok(Event::default().event("event").data(data));
+                }
+                return;
             }
-            return;
         }
 
         // Send complete event
@@ -352,6 +359,7 @@ pub async fn run_evaluation_handler(
         cache_mode,
         max_datapoints: request.max_datapoints,
         precision_targets,
+        tags: HashMap::new(), // No external tags for HTTP-initiated evaluations
     };
 
     // Run the evaluation
@@ -374,7 +382,7 @@ pub async fn run_evaluation_handler(
         dataset_name: dataset_name_for_event,
         variant_name: variant_name_for_event,
         receiver: result.receiver,
-        batcher_join_handle: result.batcher_join_handle,
+        batcher_join_handles: result.batcher_join_handles,
     });
 
     Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))

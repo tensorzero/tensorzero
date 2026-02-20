@@ -2,6 +2,7 @@ import type { InferenceFilter, InferenceMetadata } from "~/types/tensorzero";
 import { uuidv7ToTimestamp } from "~/utils/clickhouse/helpers";
 import {
   Table,
+  TableAsyncErrorState,
   TableBody,
   TableCell,
   TableHead,
@@ -20,8 +21,8 @@ import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Input } from "~/components/ui/input";
 import { Filter } from "lucide-react";
-import { Suspense, use, useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { Suspense, useState, useEffect } from "react";
+import { useNavigate, useLocation, Await } from "react-router";
 import { useForm } from "react-hook-form";
 import { Form } from "~/components/ui/form";
 import {
@@ -72,9 +73,9 @@ function SkeletonRows() {
   );
 }
 
-// Resolves promise and renders table rows
-function TableBodyContent({ data }: { data: Promise<InferencesData> }) {
-  const { inferences } = use(data);
+// Renders table rows from resolved data
+function TableRows({ data }: { data: InferencesData }) {
+  const { inferences } = data;
 
   if (inferences.length === 0) {
     return <TableEmptyState message="No inferences found" />;
@@ -125,7 +126,7 @@ function TableBodyContent({ data }: { data: Promise<InferencesData> }) {
   );
 }
 
-function PaginationContent({
+function PaginationButtons({
   data,
   limit,
   function_name,
@@ -134,7 +135,7 @@ function PaginationContent({
   search_query,
   filters,
 }: {
-  data: Promise<InferencesData>;
+  data: InferencesData;
   limit: number;
   function_name?: string;
   variant_name?: string;
@@ -142,7 +143,7 @@ function PaginationContent({
   search_query?: string;
   filters?: InferenceFilter;
 }) {
-  const { inferences, hasNextPage, hasPreviousPage } = use(data);
+  const { inferences, hasNextPage, hasPreviousPage } = data;
   const navigate = useNavigate();
 
   const topInference = inferences.at(0);
@@ -319,31 +320,35 @@ export default function InferencesTable({
         </TableHeader>
         <TableBody>
           <Suspense key={location.key} fallback={<SkeletonRows />}>
-            <TableBodyContent data={data} />
+            <Await
+              resolve={data}
+              errorElement={
+                <TableAsyncErrorState
+                  colSpan={6}
+                  defaultMessage="Failed to load inferences"
+                />
+              }
+            >
+              {(resolvedData) => <TableRows data={resolvedData} />}
+            </Await>
           </Suspense>
         </TableBody>
       </Table>
 
-      <Suspense
-        key={location.key}
-        fallback={
-          <PageButtons
-            onPreviousPage={() => {}}
-            onNextPage={() => {}}
-            disablePrevious
-            disableNext
-          />
-        }
-      >
-        <PaginationContent
-          data={data}
-          limit={limit}
-          function_name={function_name}
-          variant_name={variant_name}
-          episode_id={episode_id}
-          search_query={search_query}
-          filters={filters}
-        />
+      <Suspense key={location.key} fallback={<PageButtons disabled />}>
+        <Await resolve={data} errorElement={<PageButtons disabled />}>
+          {(resolvedData) => (
+            <PaginationButtons
+              data={resolvedData}
+              limit={limit}
+              function_name={function_name}
+              variant_name={variant_name}
+              episode_id={episode_id}
+              search_query={search_query}
+              filters={filters}
+            />
+          )}
+        </Await>
       </Suspense>
 
       <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
@@ -468,6 +473,7 @@ export default function InferencesTable({
                 <InferenceFilterBuilder
                   inferenceFilter={filterAdvanced}
                   setInferenceFilter={setFilterAdvanced}
+                  functionName={filterFunctionName}
                 />
               </div>
             </div>

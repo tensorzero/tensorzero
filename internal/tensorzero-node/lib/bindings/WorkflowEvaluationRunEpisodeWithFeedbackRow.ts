@@ -19,7 +19,7 @@ export type WorkflowEvaluationRunEpisodeWithFeedbackRow = {
   /**
    * Tags associated with this episode
    */
-  tags: { [key in string]?: string };
+  tags: { [key in string]: string };
   /**
    * The task name (datapoint_name). NULL for episodes without a task name.
    */

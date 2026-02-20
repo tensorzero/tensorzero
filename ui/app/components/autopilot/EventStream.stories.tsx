@@ -1,18 +1,20 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import EventStream from "./EventStream";
-import type { Event } from "~/types/tensorzero";
+import type { GatewayEvent } from "~/types/tensorzero";
+import { GlobalToastProvider } from "~/providers/global-toast-provider";
+import { AutopilotSessionProvider } from "~/contexts/AutopilotSessionContext";
 
 const baseTime = new Date("2026-04-12T10:00:00Z").getTime();
 const sessionId = "d1a0b0c0-0000-0000-0000-000000000001";
 
-function buildEvent(event: Event, index: number): Event {
+function buildEvent(event: GatewayEvent, index: number): GatewayEvent {
   return {
     ...event,
     created_at: new Date(baseTime + index * 60 * 1000).toISOString(),
   };
 }
 
-const conversationEvents: Event[] = [
+const conversationEvents: GatewayEvent[] = [
   buildEvent(
     {
       id: "e2a3f5d6-7b8c-4d9e-8f01-1234567890a1",
@@ -46,7 +48,7 @@ const conversationEvents: Event[] = [
   ),
 ];
 
-const toolingEvents: Event[] = [
+const toolingEvents: GatewayEvent[] = [
   buildEvent(
     {
       id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
@@ -101,7 +103,7 @@ const toolingEvents: Event[] = [
   ),
 ];
 
-const mixedEvents: Event[] = [
+const mixedEvents: GatewayEvent[] = [
   buildEvent(
     {
       id: "a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
@@ -237,7 +239,7 @@ const mixedEvents: Event[] = [
         type: "tool_result",
         tool_call_event_id: "other-tool-call-event-id",
         outcome: {
-          type: "other",
+          type: "unknown",
         },
       },
     },
@@ -267,7 +269,7 @@ const mixedEvents: Event[] = [
       session_id: sessionId,
       created_at: "",
       payload: {
-        type: "other",
+        type: "unknown",
       },
     },
     10,
@@ -279,6 +281,95 @@ const longText =
   "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. " +
   "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. " +
   "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+
+const markdownText = `# Project Overview
+
+This is a **markdown** example with various formatting options.
+
+## Features
+- Bullet point one
+- Bullet point two
+- Bullet point three
+
+### Code Example
+\`\`\`javascript
+function hello() {
+  console.log("Hello, world!");
+}
+\`\`\`
+
+### Links and Formatting
+Visit [TensorZero](https://tensorzero.com) for more information.
+
+*Italic text* and **bold text** are supported.
+
+> This is a blockquote with important information.
+
+1. Ordered list item
+2. Another item
+3. Final item`;
+
+const markdownEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "md-user-1",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "text", text: "Can you give me a project overview?" },
+        ],
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "md-assistant-1",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text: markdownText }],
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "md-user-2",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "text", text: "Thanks! Can you show inline code?" }],
+      },
+    },
+    2,
+  ),
+  buildEvent(
+    {
+      id: "md-assistant-2",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Sure! You can use `console.log()` to print values, or run `npm install` to install dependencies.",
+          },
+        ],
+      },
+    },
+    3,
+  ),
+];
 
 const longToolArguments = JSON.stringify({
   query: longText,
@@ -297,7 +388,7 @@ const longToolResult = [
   longText,
 ].join("\n\n");
 
-const longFormEvents: Event[] = [
+const longFormEvents: GatewayEvent[] = [
   buildEvent(
     {
       id: "7b8c9d0e-1f2a-4b3c-8d4e-0123456789d0",
@@ -372,6 +463,15 @@ const longFormEvents: Event[] = [
 const meta = {
   title: "Autopilot/EventStream",
   component: EventStream,
+  decorators: [
+    (Story) => (
+      <AutopilotSessionProvider>
+        <GlobalToastProvider>
+          <Story />
+        </GlobalToastProvider>
+      </AutopilotSessionProvider>
+    ),
+  ],
   render: (args) => (
     <div className="w-[80vw] max-w-3xl p-4">
       <EventStream {...args} />
@@ -409,5 +509,263 @@ export const Mixed: Story = {
 export const LongForm: Story = {
   args: {
     events: longFormEvents,
+  },
+};
+
+// Events demonstrating visualization rendering with tool results
+const visualizationEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "v1-user-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Run a top-k evaluation on the test variants.",
+          },
+        ],
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "v2-tool-call",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "topk_evaluation",
+        arguments: {
+          evaluation_name: "test_topk_evaluation",
+          dataset_name: "topk_test_dataset",
+          variant_names: ["echo", "empty", "empty2", "test", "test2"],
+          k_min: 1,
+          max_datapoints: 100,
+        },
+        side_info: {
+          tool_call_event_id: "v2-tool-call",
+          session_id: sessionId,
+          config_snapshot_hash: "abc123",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "v3-auth",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call_authorization",
+        source: { type: "ui" },
+        status: { type: "approved" },
+        tool_call_event_id: "v2-tool-call",
+      },
+    },
+    2,
+  ),
+  buildEvent(
+    {
+      id: "v4-result",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_result",
+        tool_call_event_id: "v2-tool-call",
+        outcome: {
+          type: "success",
+          result: JSON.stringify(
+            {
+              winner: "echo",
+              final_k: 3,
+              evaluations_run: 150,
+            },
+            null,
+            2,
+          ),
+        },
+      },
+    },
+    3,
+  ),
+  // Visualization event tied to the tool call
+  // Data designed to show separation lines at top-1 and top-3:
+  // Non-failed variants sorted by lower bound: echo(0.85) > empty2(0.70) > empty(0.60) > test(0.45)
+  // Top-1: echo's lower (0.85) > max upper of rest (0.80) ✓ (clear gap, line at midpoint)
+  // Top-3: empty's lower (0.60) < test's upper (0.62) - overlap due to epsilon tolerance
+  //        (line drawn below empty's LCB to test epsilon-based separation)
+  // Failed variants (displayed on right): failed_bad_variant1, failed_bad_variant2
+  buildEvent(
+    {
+      id: "v5-visualization",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "visualization",
+        tool_execution_id: "v2-tool-call",
+        visualization: {
+          type: "top_k_evaluation",
+          variant_summaries: {
+            echo: {
+              mean_est: 0.9,
+              cs_lower: 0.85,
+              cs_upper: 0.95,
+              count: BigInt(50),
+              failed: false,
+            },
+            test: {
+              mean_est: 0.52,
+              cs_lower: 0.45,
+              cs_upper: 0.62, // UCB overlaps with empty's LCB (0.6) to test epsilon-based separation
+              count: BigInt(25),
+              failed: false,
+            },
+            empty: {
+              mean_est: 0.65,
+              cs_lower: 0.6,
+              cs_upper: 0.7,
+              count: BigInt(45),
+              failed: false,
+            },
+            empty2: {
+              mean_est: 0.75,
+              cs_lower: 0.7,
+              cs_upper: 0.8,
+              count: BigInt(35),
+              failed: false,
+            },
+            failed_bad_variant1: {
+              mean_est: 0.55,
+              cs_lower: 0.45,
+              cs_upper: 0.65,
+              count: BigInt(20),
+              failed: true,
+            },
+            failed_bad_variant2: {
+              mean_est: 0.32,
+              cs_lower: 0.25,
+              cs_upper: 0.4,
+              count: BigInt(15),
+              failed: true,
+            },
+          },
+          confident_top_k_sizes: [1, 3],
+          summary_text: `## Overview
+The top-k evaluation tool identifies the best-performing variants from a set of candidates using adaptive evaluation with statistical confidence bounds.
+
+## Chart Description
+The top chart shows the estimated mean performance with final 95% confidence intervals for each variant.
+
+The bottom chart shows the number of evaluations per variant.
+
+## Results
+The algorithm identified the top-1 variant and the top-3 variants.
+
+## Efficiency
+- Total evaluations: 190.
+- Total evaluations that would have been run without adaptive stopping: 300.
+- Savings: (300 - 190) / 300 * 100% = 36.7%.
+
+## Next Steps
+Deploy the "echo" variant to production for improved performance.`,
+        },
+      },
+    },
+    4,
+  ),
+  buildEvent(
+    {
+      id: "v6-assistant-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: 'The top-k evaluation is complete. We can confidently identify "echo" as the top-1 performer (mean: 0.90) and a top-3 set of "echo", "test", and "empty" that statistically outperforms the remaining variants.',
+          },
+        ],
+      },
+    },
+    5,
+  ),
+];
+
+export const WithVisualization: Story = {
+  args: {
+    events: visualizationEvents,
+  },
+};
+
+const unknownVisualizationEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "uv1-user-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Run an analysis on the data.",
+          },
+        ],
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "uv2-visualization",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "visualization",
+        tool_execution_id: "some-task-id",
+        // Unknown visualization type - simulates a future visualization type
+        // that the current UI doesn't know how to render
+        visualization: {
+          type: "future_analysis",
+          data: {
+            metric_a: 0.95,
+            metric_b: 0.87,
+            samples: 1000,
+          },
+          metadata: {
+            version: "2.0",
+            algorithm: "advanced_analysis",
+          },
+        } as GatewayEvent["payload"] extends { visualization: infer V }
+          ? V
+          : never,
+      },
+    },
+    1,
+  ),
+];
+
+export const WithUnknownVisualization: Story = {
+  args: {
+    events: unknownVisualizationEvents,
+  },
+};
+
+export const MarkdownContent: Story = {
+  args: {
+    events: markdownEvents,
   },
 };

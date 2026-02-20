@@ -5,7 +5,7 @@ on:
   #   workflows: ["General Checks"]
   #   types:
   #     - completed
-  workflow_dispatch:  # placeholder to silence errors
+  workflow_dispatch: # placeholder to silence errors
 
 jobs:
   generate-patch:
@@ -41,9 +41,9 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
-          version: "0.6.17"
+          version: "0.9.27"
 
       - name: Install mini-swe-agent
         run: 'uv tool install mini-swe-agent --from "git+https://github.com/virajmehta/mini-swe-agent.git@main"'

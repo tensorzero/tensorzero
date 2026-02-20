@@ -20,7 +20,7 @@ impl PostgresClient {
             .map_err(|e| napi::Error::from_reason(format!("Failed to setup Postgres: {e}")))?
             .dangerous_into_config_without_writing();
 
-        let connection_info = setup_postgres(&config, Some(postgres_url))
+        let connection_info = setup_postgres(&config, Some(&postgres_url))
             .await
             .map_err(|e| napi::Error::from_reason(format!("Failed to setup Postgres: {e}")))?;
 
@@ -38,6 +38,7 @@ impl PostgresClient {
             DEFAULT_ORGANIZATION,
             DEFAULT_WORKSPACE,
             description.as_deref(),
+            None,
             pool,
         )
         .await

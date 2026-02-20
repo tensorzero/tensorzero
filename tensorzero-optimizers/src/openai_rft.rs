@@ -1,6 +1,5 @@
 //! OpenAI Reinforcement Fine-Tuning (RFT) optimizer implementation
 
-use async_trait::async_trait;
 use futures::future::try_join_all;
 use secrecy::ExposeSecret;
 use std::sync::Arc;
@@ -9,10 +8,11 @@ use url::Url;
 
 use tensorzero_core::{
     config::{Config, provider_types::ProviderTypesConfig},
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
+    inference::types::usage::ApiType,
     model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{
         OptimizationJobInfo,
@@ -34,7 +34,6 @@ use crate::{
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
-#[async_trait]
 impl Optimizer for OpenAIRFTConfig {
     type Handle = OpenAIRFTJobHandle;
 
@@ -44,7 +43,7 @@ impl Optimizer for OpenAIRFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Get credentials from provider defaults
@@ -152,6 +151,7 @@ impl Optimizer for OpenAIRFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
             })
@@ -165,6 +165,7 @@ impl Optimizer for OpenAIRFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
             })
@@ -179,6 +180,7 @@ impl Optimizer for OpenAIRFTConfig {
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
             })
         })?;
         let job_api_url = get_fine_tuning_url(&api_base, Some(&job.id))?;
@@ -198,7 +200,6 @@ impl Optimizer for OpenAIRFTConfig {
     }
 }
 
-#[async_trait]
 impl JobHandle for OpenAIRFTJobHandle {
     async fn poll(
         &self,
@@ -228,6 +229,7 @@ impl JobHandle for OpenAIRFTJobHandle {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
             })
@@ -240,6 +242,7 @@ impl JobHandle for OpenAIRFTJobHandle {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
             })
@@ -254,6 +257,7 @@ impl JobHandle for OpenAIRFTJobHandle {
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
             })
         })?;
         convert_to_optimizer_status(job)

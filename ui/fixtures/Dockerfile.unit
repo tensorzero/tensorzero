@@ -18,7 +18,7 @@ RUN find . -type d \( -name .venv -o -name node_modules -o -name .vite \) -prune
 
 # ========== tensorzero-node-build-env ==========
 
-FROM rust:1.88.0 AS tensorzero-node-build-env
+FROM rust:1.93.0 AS tensorzero-node-build-env
 
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
@@ -48,9 +48,6 @@ COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.no
 
 # Copy the rest of the code
 COPY . .
-
-# Install buildkite-test-collector for test reporting
-RUN pnpm add -D -w buildkite-test-collector
 
 # Set CI environment variable for non-interactive mode
 ENV CI=true

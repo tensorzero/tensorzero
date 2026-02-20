@@ -3,6 +3,7 @@
 //! Integration tests that require Postgres are in `tests/integration.rs`.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -41,15 +42,15 @@ impl ToolMetadata for EchoSimpleTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("echo_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message")
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(10)
     }
 }
@@ -69,6 +70,7 @@ impl SimpleTool for EchoSimpleTool {
 }
 
 /// A simple `TaskTool` for testing.
+#[derive(Default)]
 struct EchoTaskTool;
 
 impl ToolMetadata for EchoTaskTool {
@@ -76,22 +78,24 @@ impl ToolMetadata for EchoTaskTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("echo_task")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Echoes the input message (durable)")
     }
 
-    fn timeout() -> Duration {
+    fn timeout(&self) -> Duration {
         Duration::from_secs(60)
     }
 }
 
 #[async_trait]
 impl TaskTool for EchoTaskTool {
+    type ExtraState = ();
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,
@@ -103,6 +107,7 @@ impl TaskTool for EchoTaskTool {
 }
 
 /// Another `TaskTool` with different timeout for testing defaults.
+#[derive(Default)]
 struct DefaultTimeoutTaskTool;
 
 impl ToolMetadata for DefaultTimeoutTaskTool {
@@ -110,11 +115,11 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_task")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
     }
     // Uses default timeout (60 seconds from ToolMetadata)
@@ -122,7 +127,9 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
 
 #[async_trait]
 impl TaskTool for DefaultTimeoutTaskTool {
+    type ExtraState = ();
     async fn execute(
+        &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
         _ctx: &mut ToolContext<'_>,
@@ -142,11 +149,11 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
     type Output = EchoOutput;
     type LlmParams = EchoParams;
 
-    fn name() -> Cow<'static, str> {
+    fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("default_timeout_simple")
     }
 
-    fn description() -> Cow<'static, str> {
+    fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed("Uses default timeout")
     }
     // Uses default timeout (60 seconds from ToolMetadata)
@@ -176,7 +183,7 @@ mod registry_tests {
     #[test]
     fn register_task_tool_adds_to_tools_map() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         assert!(registry.get("echo_task").is_some());
         assert_eq!(registry.len(), 1);
@@ -185,7 +192,9 @@ mod registry_tests {
     #[test]
     fn register_simple_tool_adds_to_both_maps() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         // Should be in both tools and simple_tools
         assert!(registry.get("echo_simple").is_some());
@@ -196,7 +205,9 @@ mod registry_tests {
     #[test]
     fn get_returns_registered_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry
+            .register_task_tool_instance::<EchoTaskTool>(EchoTaskTool)
+            .unwrap();
 
         let tool = registry.get("echo_task").unwrap();
         assert_eq!(tool.name(), "echo_task");
@@ -215,7 +226,9 @@ mod registry_tests {
     #[test]
     fn get_simple_tool_returns_simple_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let tool = registry.get_simple_tool("echo_simple");
         assert!(tool.is_some());
@@ -224,7 +237,7 @@ mod registry_tests {
     #[test]
     fn get_simple_tool_returns_none_for_task_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         // TaskTools are not in simple_tools map
         assert!(registry.get_simple_tool("echo_task").is_none());
@@ -233,7 +246,7 @@ mod registry_tests {
     #[test]
     fn is_durable_returns_true_for_task_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         assert_eq!(registry.is_durable("echo_task"), Some(true));
     }
@@ -241,7 +254,9 @@ mod registry_tests {
     #[test]
     fn is_durable_returns_false_for_simple_tool() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         assert_eq!(registry.is_durable("echo_simple"), Some(false));
     }
@@ -255,8 +270,10 @@ mod registry_tests {
     #[test]
     fn list_tools_returns_all_names() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let tools = registry.list_tools();
         assert_eq!(tools.len(), 2);
@@ -267,8 +284,10 @@ mod registry_tests {
     #[test]
     fn list_task_tools_filters_to_durable_only() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let task_tools = registry.list_task_tools();
         assert_eq!(task_tools.len(), 1);
@@ -278,8 +297,10 @@ mod registry_tests {
     #[test]
     fn list_simple_tools_filters_to_non_durable_only() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let simple_tools = registry.list_simple_tools();
         assert_eq!(simple_tools.len(), 1);
@@ -291,7 +312,9 @@ mod registry_tests {
         use tensorzero::Tool;
 
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         let tools: Vec<Tool> = registry
             .iter()
@@ -306,7 +329,7 @@ mod registry_tests {
                 assert_eq!(func.name, "echo_simple");
                 assert_eq!(func.description, "Echoes the input message");
                 assert!(func.parameters.is_object());
-                assert!(!func.strict);
+                assert!(func.strict);
             }
             Tool::OpenAICustom(_) => panic!("Expected Function tool"),
         }
@@ -319,12 +342,14 @@ mod registry_tests {
         assert!(registry.is_empty());
         assert_eq!(registry.len(), 0);
 
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         assert!(!registry.is_empty());
         assert_eq!(registry.len(), 1);
 
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         assert_eq!(registry.len(), 2);
     }
@@ -332,10 +357,10 @@ mod registry_tests {
     #[test]
     fn register_task_tool_errors_on_duplicate() {
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         // Second registration should fail
-        let result = registry.register_task_tool::<EchoTaskTool>();
+        let result = registry.register_task_tool_instance(EchoTaskTool);
         match result {
             Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
@@ -350,10 +375,12 @@ mod registry_tests {
     #[test]
     fn register_simple_tool_errors_on_duplicate() {
         let mut registry = ToolRegistry::new();
-        registry.register_simple_tool::<EchoSimpleTool>().unwrap();
+        registry
+            .register_simple_tool_instance(EchoSimpleTool)
+            .unwrap();
 
         // Second registration should fail
-        let result = registry.register_simple_tool::<EchoSimpleTool>();
+        let result = registry.register_simple_tool_instance(EchoSimpleTool);
         match result {
             Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_simple");
@@ -378,11 +405,11 @@ mod registry_tests {
             type Output = EchoOutput;
             type LlmParams = EchoParams;
 
-            fn name() -> Cow<'static, str> {
+            fn name(&self) -> Cow<'static, str> {
                 Cow::Borrowed("echo_task") // Same name as EchoTaskTool
             }
 
-            fn description() -> Cow<'static, str> {
+            fn description(&self) -> Cow<'static, str> {
                 Cow::Borrowed("Conflicting tool")
             }
         }
@@ -402,10 +429,10 @@ mod registry_tests {
         }
 
         let mut registry = ToolRegistry::new();
-        registry.register_task_tool::<EchoTaskTool>().unwrap();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
 
         // Registering a SimpleTool with the same name should fail
-        let result = registry.register_simple_tool::<ConflictingSimpleTool>();
+        let result = registry.register_simple_tool_instance(ConflictingSimpleTool);
         match result {
             Err(ToolError::NonControl(NonControlToolError::DuplicateToolName { name })) => {
                 assert_eq!(name, "echo_task");
@@ -427,13 +454,13 @@ mod erasure_tests {
 
     #[test]
     fn erased_task_tool_wrapper_exposes_name() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         assert_eq!(wrapper.name(), "echo_task");
     }
 
     #[test]
     fn erased_task_tool_wrapper_exposes_description() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         assert_eq!(
             wrapper.description().as_ref(),
             "Echoes the input message (durable)"
@@ -442,45 +469,48 @@ mod erasure_tests {
 
     #[test]
     fn erased_task_tool_wrapper_exposes_timeout() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         assert_eq!(wrapper.timeout(), Duration::from_secs(60));
     }
 
     #[test]
     fn erased_task_tool_wrapper_default_timeout() {
-        let wrapper = ErasedTaskToolWrapper::<DefaultTimeoutTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(DefaultTimeoutTaskTool));
         assert_eq!(wrapper.timeout(), Duration::from_secs(60));
     }
 
     #[test]
     fn erased_task_tool_wrapper_is_durable_true() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         assert!(wrapper.is_durable());
     }
 
     #[test]
     fn erased_simple_tool_exposes_metadata() {
         let tool = EchoSimpleTool;
-        assert_eq!(tool.name(), "echo_simple");
-        assert_eq!(tool.description().as_ref(), "Echoes the input message");
-        assert_eq!(tool.timeout(), Duration::from_secs(10));
+        assert_eq!(ToolMetadata::name(&tool), "echo_simple");
+        assert_eq!(
+            ToolMetadata::description(&tool).as_ref(),
+            "Echoes the input message"
+        );
+        assert_eq!(ToolMetadata::timeout(&tool), Duration::from_secs(10));
     }
 
     #[test]
     fn erased_simple_tool_default_timeout() {
         let tool = DefaultTimeoutSimpleTool;
-        assert_eq!(tool.timeout(), Duration::from_secs(60));
+        assert_eq!(ToolMetadata::timeout(&tool), Duration::from_secs(60));
     }
 
     #[test]
     fn erased_simple_tool_is_durable_false() {
         let tool = EchoSimpleTool;
-        assert!(!tool.is_durable());
+        assert!(!ErasedTool::is_durable(&tool));
     }
 
     #[test]
     fn erased_task_tool_wrapper_parameters_schema_has_message_field() {
-        let wrapper = ErasedTaskToolWrapper::<EchoTaskTool>::new();
+        let wrapper = ErasedTaskToolWrapper::new(Arc::new(EchoTaskTool));
         let schema = wrapper.parameters_schema().unwrap();
 
         // The schema should be an object with a "message" property
@@ -501,7 +531,7 @@ mod builder_tests {
 
     #[test]
     fn builder_default_queue_name_is_tools() {
-        let builder = ToolExecutorBuilder::new();
+        let builder = ToolExecutorBuilder::new(());
         // We can't directly inspect the builder, but we can verify behavior
         // by checking the default is used when not overridden.
         // For now, just verify the builder can be created.
@@ -510,7 +540,7 @@ mod builder_tests {
 
     #[test]
     fn builder_methods_return_self_for_chaining() {
-        let builder = ToolExecutorBuilder::new()
+        let builder = ToolExecutorBuilder::new(())
             .queue_name("custom_queue")
             .default_max_attempts(10);
 
@@ -520,7 +550,7 @@ mod builder_tests {
 
     #[test]
     fn builder_accepts_database_url() {
-        let builder = ToolExecutorBuilder::new().database_url("postgres://localhost/test".into());
+        let builder = ToolExecutorBuilder::new(()).database_url("postgres://localhost/test".into());
 
         let _ = builder;
     }
@@ -533,19 +563,6 @@ mod builder_tests {
 mod error_tests {
     use super::*;
     use durable::{ControlFlow, TaskError};
-
-    #[test]
-    fn tool_error_from_task_error_task_internal() {
-        let task_err = TaskError::TaskInternal(anyhow::anyhow!("test error"));
-        let tool_err: ToolError = task_err.into();
-
-        match tool_err {
-            ToolError::NonControl(NonControlToolError::Internal { message }) => {
-                assert_eq!(message, "test error");
-            }
-            _ => panic!("Expected NonControl(Internal)"),
-        }
-    }
 
     #[test]
     fn tool_error_from_task_error_control_flow_suspend() {
@@ -629,12 +646,29 @@ mod error_tests {
     #[test]
     fn task_error_from_tool_error_serialization() {
         let json_err = serde_json::from_str::<String>("not valid json").unwrap_err();
-        let tool_err = ToolError::Serialization(json_err);
+        let tool_err = ToolError::NonControl(NonControlToolError::Serialization {
+            message: json_err.to_string(),
+        });
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::Serialization(_) => {}
-            _ => panic!("Expected Serialization"),
+            TaskError::User {
+                message,
+                error_data,
+            } => {
+                assert_eq!(
+                    message,
+                    "Serialization error: expected ident at line 1 column 2"
+                );
+                assert_eq!(
+                    error_data,
+                    serde_json::json!({
+                        "kind": "serialization",
+                        "message": "expected ident at line 1 column 2",
+                    })
+                );
+            }
+            _ => panic!("Expected User"),
         }
     }
 }

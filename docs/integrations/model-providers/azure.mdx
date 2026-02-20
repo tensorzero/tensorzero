@@ -33,12 +33,12 @@ For production deployments, see our [Deployment Guide](/deployment/tensorzero-ga
 Create a minimal configuration file that defines a model and a simple chat function:
 
 ```toml title="config/tensorzero.toml"
-[models.gpt_4o_mini_2024_07_18]
+[models.gpt_5_mini]
 routing = ["azure"]
 
-[models.gpt_4o_mini_2024_07_18.providers.azure]
+[models.gpt_5_mini.providers.azure]
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
+deployment_id = "gpt-5-mini"
 endpoint = "https://your-azure-openai-endpoint.openai.azure.com"
 
 [functions.my_function_name]
@@ -46,7 +46,7 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "gpt_4o_mini_2024_07_18"
+model = "gpt_5_mini"
 ```
 
 See the [list of models available on Azure OpenAI Service](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models).
@@ -129,7 +129,7 @@ routing = ["azure"]
 
 [models.azure-gpt-5-mini-responses.providers.azure]
 type = "openai"  # CAREFUL: not `azure`!
-api_base = "https://YOUR-DEPLOYMENT-HERE.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
+api_base = "https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1/"  # TODO: Insert your API base URL here
 api_key_location = "env::AZURE_API_KEY"
 model_name = "gpt-5-mini"
 api_type = "responses"

@@ -1,20 +1,23 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::Extension;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::{
-    cache::CacheParamsOptions,
+    cache::{CacheManager, CacheParamsOptions},
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
     endpoints::inference::InferenceClients,
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
-    inference::types::Usage,
-    rate_limiting::ScopeInfo,
+    inference::types::{
+        Usage,
+        usage::{ApiType, RawResponseEntry},
+    },
+    rate_limiting::{RateLimitingManager, ScopeInfo},
 };
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
@@ -35,15 +38,23 @@ pub struct EmbeddingsParams {
     pub credentials: InferenceCredentials,
     #[serde(default)]
     pub cache_options: CacheParamsOptions,
+    #[serde(default, rename = "tensorzero::include_raw_response")]
+    pub include_raw_response: bool,
 }
 
 #[instrument(name = "embeddings", skip_all, fields(model, num_inputs))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Function signature matches existing API pattern"
+)]
 pub async fn embeddings(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    cache_manager: CacheManager,
     deferred_tasks: TaskTracker,
+    rate_limiting_manager: std::sync::Arc<RateLimitingManager>,
     params: EmbeddingsParams,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<EmbeddingResponse, Error> {
@@ -84,31 +95,55 @@ pub async fn embeddings(
         http_client: http_client.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
+        cache_manager,
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
         tags: tags.clone(),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        rate_limiting_manager,
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: None,
         include_raw_usage: false, // not supported for embeddings endpoint (#5451)
+        include_raw_response: params.include_raw_response,
+        include_aggregated_response: false, // not supported for embeddings endpoint
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
         .await?;
     let usage = response.usage_considering_cached();
+    let tensorzero_raw_response = if params.include_raw_response && !response.cached {
+        let mut entries = response.failed_raw_response.clone();
+        entries.push(RawResponseEntry {
+            model_inference_id: Some(response.id),
+            provider_type: response.provider_type.to_string(),
+            api_type: ApiType::Embeddings,
+            data: response.raw_response.clone(),
+        });
+        Some(entries)
+    } else if params.include_raw_response {
+        Some(vec![]) // Empty array for cached responses
+    } else {
+        None
+    };
     Ok(EmbeddingResponse {
         embeddings: response.embeddings,
         usage,
         model: params.model_name,
+        tensorzero_raw_response,
     })
 }
 
+#[derive(Debug, Clone, Serialize)]
 pub struct EmbeddingResponse {
     pub embeddings: Vec<Embedding>,
     pub usage: Usage,
     pub model: String,
+    #[serde(
+        rename = "tensorzero::raw_response",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tensorzero_raw_response: Option<Vec<RawResponseEntry>>,
 }
 
 #[cfg(test)]
@@ -119,7 +154,7 @@ mod tests {
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;
-    use std::collections::HashMap;
+
     #[tokio::test]
     async fn test_no_warning_when_model_exists() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -133,6 +168,7 @@ mod tests {
             timeout_ms: None,
             provider_name: Arc::from("dummy"),
             extra_body: None,
+            extra_headers: None,
         };
         let embedding_model = EmbeddingModelConfig {
             routing: vec!["dummy".to_string().into()],
@@ -168,16 +204,19 @@ mod tests {
             dryrun: None,
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
+            include_raw_response: false,
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
-
+        let cache_manager = CacheManager::new(Arc::new(clickhouse_connection_info.clone()));
         let result = embeddings(
             config,
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            cache_manager,
             tokio_util::task::TaskTracker::new(),
+            Arc::new(RateLimitingManager::new_dummy()),
             params,
             None,
         )
@@ -204,16 +243,20 @@ mod tests {
             dryrun: None,
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
+            include_raw_response: false,
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let cache_manager = CacheManager::new(Arc::new(clickhouse_connection_info.clone()));
 
         let result = embeddings(
             config,
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            cache_manager,
             tokio_util::task::TaskTracker::new(),
+            Arc::new(RateLimitingManager::new_dummy()),
             params,
             None,
         )

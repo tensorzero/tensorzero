@@ -5,6 +5,7 @@ use tracing::instrument;
 
 use crate::config::Config;
 use crate::db::datasets::DatasetQueries;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
@@ -23,10 +24,14 @@ pub async fn create_datapoints_handler(
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<CreateDatapointsRequest>,
 ) -> Result<Json<CreateDatapointsResponse>, Error> {
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
     let response = create_datapoints(
         &app_state.config,
         &app_state.http_client,
-        &app_state.clickhouse_connection_info,
+        &database,
         &dataset_name,
         request,
     )
@@ -36,13 +41,13 @@ pub async fn create_datapoints_handler(
 
 /// Business logic for creating datapoints manually in a dataset.
 /// This function validates the request, converts inputs, validates schemas,
-/// and inserts the new datapoints into ClickHouse.
+/// and inserts the new datapoints into the database.
 ///
 /// Returns an error if there are no datapoints, or if validation fails.
 pub async fn create_datapoints(
     config: &Config,
     http_client: &TensorzeroHttpClient,
-    clickhouse: &impl DatasetQueries,
+    database: &(dyn DatasetQueries + Sync),
     dataset_name: &str,
     request: CreateDatapointsRequest,
 ) -> Result<CreateDatapointsResponse, Error> {
@@ -101,7 +106,7 @@ pub async fn create_datapoints(
         .collect::<Vec<_>>();
 
     // Insert all datapoints
-    clickhouse.insert_datapoints(&datapoints_to_insert).await?;
+    database.insert_datapoints(&datapoints_to_insert).await?;
 
     Ok(CreateDatapointsResponse { ids })
 }
@@ -115,7 +120,7 @@ mod tests {
         CreateChatDatapointRequest, CreateDatapointRequest, CreateJsonDatapointRequest,
         JsonDatapointOutputUpdate,
     };
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::{
@@ -143,7 +148,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: Some(true),
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: HashSet::new(),
             })),
         );
@@ -163,7 +168,7 @@ mod tests {
                 .unwrap(),
                 json_mode_tool_call_config: crate::tool::ToolCallConfig::default(),
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_template_names: HashSet::new(),
             })),
         );

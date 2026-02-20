@@ -3,9 +3,10 @@ use std::fmt::Display;
 
 use futures::StreamExt;
 use futures::future::try_join_all;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 
 use super::helpers::{
@@ -40,13 +41,13 @@ use crate::providers::anthropic::{
     handle_anthropic_error,
 };
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
-use crate::tool::{ToolCall, ToolChoice};
+use crate::tool::ToolCall;
 use uuid::Uuid;
 
 use super::anthropic::{
     AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig, AnthropicRole,
-    AnthropicStopReason, AnthropicSystemBlock, AnthropicTool, prefill_json_chunk_response,
-    prefill_json_response,
+    AnthropicStopReason, AnthropicSystemBlock, AnthropicTool, build_anthropic_tools,
+    collect_all_provider_tools, prefill_json_chunk_response, prefill_json_response,
 };
 use super::gcp_vertex_gemini::{GCPVertexCredentials, ShorthandUrl, parse_shorthand_url};
 use super::helpers::{convert_stream_error, peek_first_chunk};
@@ -56,8 +57,9 @@ use super::helpers::{convert_stream_error, peek_first_chunk};
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 pub const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GCPVertexAnthropicProvider {
     model_id: String,
     request_url: String,
@@ -65,6 +67,7 @@ pub struct GCPVertexAnthropicProvider {
     audience: String,
     #[serde(skip)]
     credentials: GCPVertexCredentials,
+    provider_tools: Vec<serde_json::Value>,
 }
 
 fn handle_gcp_error(
@@ -146,6 +149,7 @@ impl GCPVertexAnthropicProvider {
             streaming_request_url,
             audience,
             credentials,
+            provider_tools: vec![],
         })
     }
 
@@ -155,6 +159,7 @@ impl GCPVertexAnthropicProvider {
         project_id: String,
         api_key_location: Option<CredentialLocationWithFallback>,
         default_credentials: &ProviderTypeDefaultCredentials,
+        provider_tools: Vec<serde_json::Value>,
     ) -> Result<Self, Error> {
         let credentials = GCPVertexAnthropicKind
             .get_defaulted_credential(api_key_location.as_ref(), default_credentials)
@@ -176,11 +181,16 @@ impl GCPVertexAnthropicProvider {
             streaming_request_url,
             audience,
             credentials,
+            provider_tools,
         })
     }
 
     pub fn model_id(&self) -> &str {
         &self.model_id
+    }
+
+    pub fn provider_tools(&self) -> &[serde_json::Value] {
+        &self.provider_tools
     }
 }
 
@@ -201,8 +211,11 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
+        let all_provider_tools =
+            collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(
-            GCPVertexAnthropicRequestBody::new(self.model_id(), request).await?,
+            GCPVertexAnthropicRequestBody::new(self.model_id(), request, &all_provider_tools)
+                .await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -222,6 +235,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -243,6 +257,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some(raw_request.clone()),
                 raw_response: None,
             })
@@ -253,6 +268,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -273,7 +289,12 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
             Ok(response_with_latency.try_into()?)
         } else {
-            handle_anthropic_error(response_status, raw_request, raw_response)
+            handle_anthropic_error(
+                response_status,
+                raw_request,
+                raw_response,
+                ApiType::ChatCompletions,
+            )
         }
     }
 
@@ -291,8 +312,11 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
+        let all_provider_tools =
+            collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(
-            GCPVertexAnthropicRequestBody::new(self.model_id(), request).await?,
+            GCPVertexAnthropicRequestBody::new(self.model_id(), request, &all_provider_tools)
+                .await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -311,8 +335,10 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let builder = http_client
             .post(&self.streaming_request_url)
             .headers(auth_headers);
+
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -331,7 +357,14 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             model_inference_id,
         )
         .peekable();
-        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
+        let chunk = peek_first_chunk(
+            &mut stream,
+            &raw_request,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+        )
+        .await?;
+        // Handle JSON prefill for streaming.
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -384,12 +417,12 @@ fn stream_anthropic(
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
-        let mut current_tool_id : Option<String> = None;
-        let mut current_tool_name: Option<String> = None;
+        // Track tool state per content block index for robust handling of interleaved blocks
+        let mut tool_state: std::collections::HashMap<u32, (String, String)> = std::collections::HashMap::new();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -401,6 +434,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }));
@@ -414,8 +448,7 @@ fn stream_anthropic(
                                 message.data,
                                 data,
                                 start_time.elapsed(),
-                                &mut current_tool_id,
-                                &mut current_tool_name,
+                                &mut tool_state,
                                 discard_unknown_chunks,
                                 &model_name,
                                 &provider_name,
@@ -505,6 +538,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
     async fn new(
         model_id: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        provider_tools: &'a [serde_json::Value],
     ) -> Result<GCPVertexAnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -529,26 +563,19 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             .await?
             .into_iter()
             .collect::<Vec<_>>();
+        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
+            warn_gcp_vertex_anthropic_strict_json_mode(request.json_mode);
             prefill_json_message(&mut messages);
         }
 
-        // Workaround for GCP Vertex AI Anthropic API limitation: they don't support explicitly specifying "none"
-        // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
-        // request payload to achieve the same effect.
-        let tools = match request.tool_config.as_ref() {
-            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => Some(
-                c.strict_tools_available()?
-                    // GCP Vertex Anthropic does not support structured outputs
-                    .map(|tool| AnthropicTool::new(tool, false))
-                    .collect::<Vec<_>>(),
-            ),
-            _ => None,
-        };
+        // GCP Vertex Anthropic doesn't support strict mode for tools
+        let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools, false)?;
+
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
@@ -616,6 +643,7 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
             ),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }))
@@ -632,8 +660,20 @@ fn prefill_json_message(messages: &mut Vec<AnthropicMessage>) {
     });
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+/// Warn if json_mode=strict is used since GCP Vertex Anthropic doesn't support structured outputs
+fn warn_gcp_vertex_anthropic_strict_json_mode(json_mode: ModelInferenceRequestJsonMode) {
+    if matches!(json_mode, ModelInferenceRequestJsonMode::Strict) {
+        tracing::warn!(
+            "GCP Vertex Anthropic does not support Anthropic's structured outputs feature. \
+            `json_mode = \"strict\"` will use prefill fallback instead of guaranteed schema compliance. \
+            For strict JSON schema enforcement, use direct Anthropic."
+        );
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
 pub enum GCPVertexAnthropicContentBlock {
     Text {
         text: String,
@@ -681,6 +721,7 @@ fn convert_to_output(
             signature: Some(signature),
             summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: None,
         })),
         FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
@@ -688,6 +729,7 @@ fn convert_to_output(
                 signature: Some(data),
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: None,
             }))
         }
         FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown(Unknown {
@@ -698,17 +740,40 @@ fn convert_to_output(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct GCPVertexAnthropic {
-    input_tokens: u32,
-    output_tokens: u32,
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct GCPVertexAnthropicUsage {
+    #[serde(default)]
+    input_tokens: Option<u32>,
+    #[serde(default)]
+    output_tokens: Option<u32>,
+    /// Number of input tokens used to create a new cache entry
+    #[serde(default)]
+    cache_creation_input_tokens: Option<u32>,
+    /// Number of input tokens read from cache
+    #[serde(default)]
+    cache_read_input_tokens: Option<u32>,
 }
 
-impl From<GCPVertexAnthropic> for Usage {
-    fn from(value: GCPVertexAnthropic) -> Self {
+impl From<GCPVertexAnthropicUsage> for Usage {
+    fn from(value: GCPVertexAnthropicUsage) -> Self {
+        // GCP Vertex Anthropic reports cache tokens separately from input_tokens.
+        // We need to add them back to get the total input token count.
+        let total_input_tokens = match (
+            value.input_tokens,
+            value.cache_creation_input_tokens,
+            value.cache_read_input_tokens,
+        ) {
+            (None, None, None) => None,
+            _ => Some(
+                value.input_tokens.unwrap_or(0)
+                    + value.cache_creation_input_tokens.unwrap_or(0)
+                    + value.cache_read_input_tokens.unwrap_or(0),
+            ),
+        };
+
         Usage {
-            input_tokens: Some(value.input_tokens),
-            output_tokens: Some(value.output_tokens),
+            input_tokens: total_input_tokens,
+            output_tokens: value.output_tokens,
         }
     }
 }
@@ -724,7 +789,7 @@ struct GCPVertexAnthropicResponse {
     stop_reason: Option<AnthropicStopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequence: Option<String>,
-    usage: GCPVertexAnthropic,
+    usage: GCPVertexAnthropicUsage,
 }
 
 #[derive(Debug)]
@@ -764,6 +829,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
 
+        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
         let content = if matches!(
             json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -794,6 +860,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 raw_response,
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
                 id: model_inference_id,
@@ -823,22 +890,12 @@ mod tests {
         ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
     use crate::jsonschema_util::JSONSchema;
+    use crate::providers::anthropic::AnthropicFunctionTool;
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolResult};
 
-    fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
-        let input_tokens = usage_info
-            .get("input_tokens")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as u32;
-        let output_tokens = usage_info
-            .get("output_tokens")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as u32;
-        GCPVertexAnthropic {
-            input_tokens,
-            output_tokens,
-        }
+    fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropicUsage {
+        serde_json::from_value(usage_info.clone()).unwrap_or_default()
     }
 
     #[tokio::test]
@@ -857,10 +914,10 @@ mod tests {
             parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicTool = AnthropicTool::new(&tool, false);
+        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool, false);
         assert_eq!(
             anthropic_tool,
-            AnthropicTool {
+            AnthropicFunctionTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
@@ -933,7 +990,8 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request).await;
+            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request, &[])
+                .await;
         let error = anthropic_request_body.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -976,7 +1034,8 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
         };
         let anthropic_request_body =
-            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request).await;
+            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request, &[])
+                .await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -1042,7 +1101,8 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request).await;
+            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request, &[])
+                .await;
         let message_config = AnthropicMessagesConfig {
             fetch_and_encode_input_files_before_inference: false,
         };
@@ -1125,7 +1185,8 @@ mod tests {
         };
 
         let anthropic_request_body =
-            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request).await;
+            GCPVertexAnthropicRequestBody::new("claude-opus-4@20250514", &inference_request, &[])
+                .await;
         let message_config = AnthropicMessagesConfig {
             fetch_and_encode_input_files_before_inference: false,
         };
@@ -1168,12 +1229,12 @@ mod tests {
                     name: "get_temperature",
                     disable_parallel_tool_use: Some(false),
                 }),
-                tools: Some(vec![AnthropicTool {
+                tools: Some(vec![AnthropicTool::Function(AnthropicFunctionTool {
                     name: WEATHER_TOOL.name(),
                     description: Some(WEATHER_TOOL.description()),
                     input_schema: WEATHER_TOOL.parameters(),
                     strict: None,
-                }]),
+                })]),
                 ..Default::default()
             }
         );
@@ -1198,89 +1259,122 @@ mod tests {
         };
 
         let model = "claude-opus-4-1@20250805".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4@20250514".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4@20250514".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet@20250219".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-v2@20240222".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet@20240229".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku@20240307".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku@20240307".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-haiku-4-5@20251001".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-5@20250929".to_string();
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4".to_string(); // fake model
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert!(body.is_err());
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-4-5-ballad@20260101".to_string(); // fake model
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
         assert!(body.is_err());
-        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
     }
 
     #[test]
     fn test_anthropic_usage_to_usage() {
-        let anthropic_usage = GCPVertexAnthropic {
-            input_tokens: 100,
-            output_tokens: 50,
+        let anthropic_usage = GCPVertexAnthropicUsage {
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            ..Default::default()
         };
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, Some(100));
-        assert_eq!(usage.output_tokens, Some(50));
+        assert_eq!(usage.input_tokens, Some(100), "input_tokens should match");
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
+
+        // Test with None values
+        let anthropic_usage = GCPVertexAnthropicUsage {
+            input_tokens: None,
+            output_tokens: Some(100),
+            ..Default::default()
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(
+            usage.input_tokens, None,
+            "input_tokens should be None when not provided"
+        );
+        assert_eq!(usage.output_tokens, Some(100), "output_tokens should match");
+
+        // Test with cache tokens
+        let anthropic_usage = GCPVertexAnthropicUsage {
+            input_tokens: Some(10),
+            output_tokens: Some(50),
+            cache_creation_input_tokens: Some(100),
+            cache_read_input_tokens: Some(200),
+        };
+
+        let usage: Usage = anthropic_usage.into();
+
+        assert_eq!(
+            usage.input_tokens,
+            Some(310),
+            "input_tokens should include cache tokens (10 + 100 + 200)"
+        );
+        assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
     }
 
     #[test]
@@ -1299,9 +1393,10 @@ mod tests {
             model: "model-name".into(),
             stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
-            usage: GCPVertexAnthropic {
-                input_tokens: 100,
-                output_tokens: 50,
+            usage: GCPVertexAnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let latency = Latency::NonStreaming {
@@ -1391,9 +1486,10 @@ mod tests {
             model: "model-name".into(),
             stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
-            usage: GCPVertexAnthropic {
-                input_tokens: 100,
-                output_tokens: 50,
+            usage: GCPVertexAnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1479,9 +1575,10 @@ mod tests {
             model: "model-name".into(),
             stop_reason: None,
             stop_sequence: None,
-            usage: GCPVertexAnthropic {
-                input_tokens: 100,
-                output_tokens: 50,
+            usage: GCPVertexAnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                ..Default::default()
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1563,31 +1660,70 @@ mod tests {
             "output_tokens": 200
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 100);
-        assert_eq!(result.output_tokens, 200);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(200),
+                ..Default::default()
+            },
+            "both fields should be Some when present"
+        );
 
-        // Test with missing fields
+        // Test with missing output_tokens
         let usage_info = json!({
             "input_tokens": 50
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 50);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage {
+                input_tokens: Some(50),
+                output_tokens: None,
+                ..Default::default()
+            },
+            "output_tokens should be None when missing"
+        );
+
+        // Test with missing input_tokens (like Anthropic's message_delta)
+        let usage_info = json!({
+            "output_tokens": 100
+        });
+        let result = parse_usage_info(&usage_info);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage {
+                input_tokens: None,
+                output_tokens: Some(100),
+                ..Default::default()
+            },
+            "input_tokens should be None when missing"
+        );
 
         // Test with empty object
         let usage_info = json!({});
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage {
+                input_tokens: None,
+                output_tokens: None,
+                ..Default::default()
+            },
+            "both fields should be None for empty object"
+        );
 
-        // Test with non-numeric values
+        // Test with non-numeric values (falls back to default)
         let usage_info = json!({
             "input_tokens": "not a number",
             "output_tokens": true
         });
         let result = parse_usage_info(&usage_info);
-        assert_eq!(result.input_tokens, 0);
-        assert_eq!(result.output_tokens, 0);
+        assert_eq!(
+            result,
+            GCPVertexAnthropicUsage::default(),
+            "non-numeric values should fall back to default"
+        );
     }
 
     #[test]

@@ -1,10 +1,14 @@
 services:
   postgres:
-    image: postgres:14-alpine
+    build:
+      context: ../../tensorzero-core/tests/e2e
+      dockerfile: Dockerfile.postgres
+    image: tensorzero/postgres-dev:14-trixie-slim
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    command: ["postgres", "-c", "cron.database_name=tensorzero-e2e-tests"]
     ports:
       - "5432:5432"
     healthcheck:
@@ -120,6 +124,17 @@ services:
       - "5778:5778"
       - "9411:9411"
 
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+    command: valkey-server --appendonly no
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
   gateway-postgres-migrations:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     environment:
@@ -130,7 +145,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       [
-        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+        "gateway --run-postgres-migrations --enable-optimization-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
       ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
@@ -138,7 +153,7 @@ services:
       test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_period: 5s
 
   # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
@@ -170,6 +185,7 @@ services:
       start_interval: 1s
       timeout: 1s
   fixtures:
+    image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       dockerfile: ui/fixtures/Dockerfile
       context: ../../..
@@ -198,5 +214,5 @@ services:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
-      retries: 48 # Retry for up to 4 minutes
+      retries: 72 # Retry for up to 6 minutes
       start_period: 5s # Give the script time to start

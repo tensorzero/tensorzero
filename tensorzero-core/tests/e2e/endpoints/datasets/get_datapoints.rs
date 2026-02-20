@@ -8,8 +8,8 @@ use std::time::Duration;
 use tensorzero::GetDatapointsRequest;
 use uuid::Uuid;
 
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -27,7 +27,7 @@ mod get_datapoints_tests {
     #[tokio::test]
     async fn test_get_datapoints_single_chat_datapoint_without_dataset_name() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-get-dp-single-chat-{}", Uuid::now_v7());
 
         // Create a chat datapoint
@@ -71,7 +71,7 @@ mod get_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
@@ -112,7 +112,7 @@ mod get_datapoints_tests {
     #[tokio::test]
     async fn test_get_datapoints_single_chat_datapoint() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-get-dp-single-chat-{}", Uuid::now_v7());
 
         // Create a chat datapoint
@@ -156,7 +156,7 @@ mod get_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
@@ -199,7 +199,7 @@ mod get_datapoints_tests {
     #[tokio::test]
     async fn test_get_datapoints_single_json_datapoint() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-get-dp-single-json-{}", Uuid::now_v7());
 
         // Create a JSON datapoint
@@ -246,7 +246,7 @@ mod get_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
@@ -282,7 +282,7 @@ mod get_datapoints_tests {
     #[tokio::test]
     async fn test_get_datapoints_multiple_mixed_datapoints() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-get-dp-multiple-{}", Uuid::now_v7());
 
         // Create multiple datapoints
@@ -382,7 +382,7 @@ mod get_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[chat_insert1, chat_insert2, json_insert])
             .await
             .unwrap();
@@ -426,7 +426,7 @@ mod get_datapoints_tests {
     #[tokio::test]
     async fn test_get_datapoints_with_non_existent_ids() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-get-dp-non-existent-{}", Uuid::now_v7());
 
         // Create one datapoint
@@ -462,7 +462,7 @@ mod get_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
@@ -497,7 +497,7 @@ mod get_datapoints_tests {
     #[tokio::test]
     async fn test_get_datapoints_returns_stale_datapoints() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-get-dp-stale-{}", Uuid::now_v7());
 
         // Create a datapoint
@@ -533,7 +533,7 @@ mod get_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
@@ -541,7 +541,7 @@ mod get_datapoints_tests {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Mark it as stale
-        clickhouse
+        database
             .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
             .await
             .unwrap();
@@ -573,7 +573,7 @@ mod get_datapoints_tests {
     #[tokio::test]
     async fn test_get_datapoints_empty_ids_list() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-get-dp-empty-ids-list-{}", Uuid::now_v7());
 
         // Create a datapoint so we have a valid dataset name.
@@ -609,7 +609,7 @@ mod get_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
@@ -637,7 +637,7 @@ mod get_datapoints_tests {
         // Create a valid dataset name so we have a valid dataset name.
         let dataset_name = format!("test-get-dp-invalid-uuid-{}", Uuid::now_v7());
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
         // Create a datapoint so we have a valid dataset name.
         let datapoint_id = Uuid::now_v7();
@@ -672,7 +672,7 @@ mod get_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
@@ -702,7 +702,7 @@ mod list_datapoints_tests {
     #[tokio::test]
     async fn test_list_datapoints_basic_pagination() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-list-dp-pagination-{}", Uuid::now_v7());
 
         // Create 5 datapoints
@@ -740,7 +740,7 @@ mod list_datapoints_tests {
             }));
         }
 
-        clickhouse.insert_datapoints(&inserts).await.unwrap();
+        database.insert_datapoints(&inserts).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Test default pagination (limit: 20, offset: 0)
@@ -816,7 +816,7 @@ mod list_datapoints_tests {
     #[tokio::test]
     async fn test_list_datapoints_filter_by_function_name() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-list-dp-function-{}", Uuid::now_v7());
 
         // Create datapoints with different function names
@@ -884,7 +884,7 @@ mod list_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[function1_insert, function2_insert])
             .await
             .unwrap();
@@ -929,7 +929,7 @@ mod list_datapoints_tests {
     #[tokio::test]
     async fn test_list_datapoints_filter_by_tags() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-list-dp-tags-{}", Uuid::now_v7());
 
         // Create datapoints with different tags
@@ -1004,7 +1004,7 @@ mod list_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[datapoint1, datapoint2])
             .await
             .unwrap();
@@ -1061,7 +1061,7 @@ mod list_datapoints_tests {
     #[tokio::test]
     async fn test_list_datapoints_filter_by_time() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-list-dp-time-{}", Uuid::now_v7());
 
         // Create a datapoint
@@ -1097,7 +1097,7 @@ mod list_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
+        database.insert_datapoints(&[datapoint]).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Filter with time before (should not return the datapoint)
@@ -1151,7 +1151,7 @@ mod list_datapoints_tests {
     #[tokio::test]
     async fn test_list_datapoints_complex_filters() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-list-dp-complex-{}", Uuid::now_v7());
 
         // Create datapoints with various tags
@@ -1263,7 +1263,7 @@ mod list_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[datapoint1, datapoint2, datapoint3])
             .await
             .unwrap();
@@ -1363,7 +1363,7 @@ mod list_datapoints_tests {
     #[tokio::test]
     async fn test_list_datapoints_does_not_return_stale() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-list-dp-no-stale-{}", Uuid::now_v7());
 
         // Create a datapoint
@@ -1399,7 +1399,7 @@ mod list_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
+        database.insert_datapoints(&[datapoint]).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Verify it's returned before staling
@@ -1419,7 +1419,7 @@ mod list_datapoints_tests {
         assert_eq!(datapoints[0]["id"], datapoint_id.to_string());
 
         // Mark it as stale
-        clickhouse
+        database
             .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
             .await
             .unwrap();
@@ -1445,7 +1445,7 @@ mod list_datapoints_tests {
     #[tokio::test]
     async fn test_list_datapoints_mixed_chat_and_json() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-list-dp-mixed-{}", Uuid::now_v7());
 
         // Create both chat and JSON datapoints
@@ -1512,7 +1512,7 @@ mod list_datapoints_tests {
             snapshot_hash: None,
         });
 
-        clickhouse
+        database
             .insert_datapoints(&[chat_insert, json_insert])
             .await
             .unwrap();
@@ -1552,7 +1552,7 @@ mod list_datapoints_tests {
     #[tokio::test]
     async fn test_list_datapoints_with_large_limit() {
         let http_client = Client::new();
-        let clickhouse = get_clickhouse().await;
+        let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
         let dataset_name = format!("test-list-dp-large-page-{}", Uuid::now_v7());
 
         // Create 3 datapoints
@@ -1590,7 +1590,7 @@ mod list_datapoints_tests {
             }));
         }
 
-        clickhouse.insert_datapoints(&inserts).await.unwrap();
+        database.insert_datapoints(&inserts).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Request with limit larger than available datapoints

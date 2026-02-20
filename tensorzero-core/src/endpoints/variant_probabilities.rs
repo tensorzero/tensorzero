@@ -5,6 +5,8 @@ use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+use crate::config::Config;
+use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -17,8 +19,9 @@ pub struct GetVariantSamplingProbabilitiesParams {
 }
 
 /// Response containing variant sampling probabilities
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetVariantSamplingProbabilitiesResponse {
     /// Map of variant names to their sampling probabilities (0.0 to 1.0)
     /// Probabilities sum to 1.0
@@ -32,7 +35,12 @@ pub async fn get_variant_sampling_probabilities_handler(
     Query(params): Query<GetVariantSamplingProbabilitiesParams>,
 ) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, Error> {
     Ok(Json(
-        get_variant_sampling_probabilities(app_state, params).await?,
+        get_variant_sampling_probabilities(
+            &app_state.config,
+            &app_state.postgres_connection_info,
+            params,
+        )
+        .await?,
     ))
 }
 
@@ -44,7 +52,12 @@ pub async fn get_variant_sampling_probabilities_by_function_handler(
 ) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, Error> {
     let params = GetVariantSamplingProbabilitiesParams { function_name };
     Ok(Json(
-        get_variant_sampling_probabilities(app_state, params).await?,
+        get_variant_sampling_probabilities(
+            &app_state.config,
+            &app_state.postgres_connection_info,
+            params,
+        )
+        .await?,
     ))
 }
 
@@ -57,11 +70,8 @@ pub async fn get_variant_sampling_probabilities_by_function_handler(
     )
 )]
 pub async fn get_variant_sampling_probabilities(
-    AppStateData {
-        config,
-        postgres_connection_info,
-        ..
-    }: AppStateData,
+    config: &Config,
+    postgres_connection_info: &PostgresConnectionInfo,
     params: GetVariantSamplingProbabilitiesParams,
 ) -> Result<GetVariantSamplingProbabilitiesResponse, Error> {
     let function_name = &params.function_name;
@@ -90,7 +100,7 @@ pub async fn get_variant_sampling_probabilities(
         .get_current_display_probabilities(
             function_name,
             function.variants(),
-            &postgres_connection_info,
+            postgres_connection_info,
         )?;
 
     // Convert HashMap<&str, f64> to HashMap<String, f64>
@@ -106,14 +116,12 @@ pub async fn get_variant_sampling_probabilities(
 mod tests {
     use super::*;
     use crate::config::{Config, ConfigFileGlob};
-    use crate::testing::get_unit_test_gateway_handle;
+    use crate::db::postgres::PostgresConnectionInfo;
     use std::io::Write;
-    use std::sync::Arc;
     use tempfile::NamedTempFile;
 
     #[tokio::test]
     async fn test_get_variant_sampling_probabilities_static_weights() {
-        // Create a config from TOML to avoid accessing private fields
         let config_str = r#"
             [functions.test_function]
             type = "chat"
@@ -128,7 +136,7 @@ mod tests {
 
             [functions.test_function.variants.variant_b]
             type = "chat_completion"
-            model = "anthropic::claude-3-5-sonnet-20241022"
+            model = "anthropic::claude-sonnet-4-5"
         "#;
 
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -142,62 +150,54 @@ mod tests {
         .unwrap()
         .into_config_without_writing_for_tests();
 
-        let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
+        let postgres = PostgresConnectionInfo::new_mock(true);
 
         let params = GetVariantSamplingProbabilitiesParams {
             function_name: "test_function".to_string(),
         };
 
-        let result =
-            get_variant_sampling_probabilities(gateway_handle.app_state.clone(), params).await;
+        let response = get_variant_sampling_probabilities(&config, &postgres, params)
+            .await
+            .unwrap();
 
-        assert!(result.is_ok());
-        let response = result.unwrap();
-
-        // Check that we got probabilities for both variants
         assert_eq!(response.probabilities.len(), 2);
         assert!(response.probabilities.contains_key("variant_a"));
         assert!(response.probabilities.contains_key("variant_b"));
 
-        // Check that probabilities match the weights (0.7 and 0.3)
         let prob_a = response.probabilities.get("variant_a").unwrap();
         let prob_b = response.probabilities.get("variant_b").unwrap();
         assert!((prob_a - 0.7).abs() < 1e-9);
         assert!((prob_b - 0.3).abs() < 1e-9);
 
-        // Check that probabilities sum to 1.0
         let sum: f64 = response.probabilities.values().sum();
         assert!((sum - 1.0).abs() < 1e-9);
     }
 
     #[tokio::test]
     async fn test_get_variant_sampling_probabilities_default_function_returns_empty() {
-        let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle(config);
+        let config = Config::default();
+        let postgres = PostgresConnectionInfo::new_mock(true);
 
         let params = GetVariantSamplingProbabilitiesParams {
             function_name: "tensorzero::default".to_string(),
         };
 
-        let result =
-            get_variant_sampling_probabilities(gateway_handle.app_state.clone(), params).await;
-
-        assert!(result.is_ok());
-        let response = result.unwrap();
+        let response = get_variant_sampling_probabilities(&config, &postgres, params)
+            .await
+            .unwrap();
         assert_eq!(response.probabilities.len(), 0);
     }
 
     #[tokio::test]
     async fn test_get_variant_sampling_probabilities_no_function() {
-        let config = Arc::new(Config::default());
-        let gateway_handle = get_unit_test_gateway_handle(config);
+        let config = Config::default();
+        let postgres = PostgresConnectionInfo::new_mock(true);
 
         let params = GetVariantSamplingProbabilitiesParams {
             function_name: "nonexistent_function".to_string(),
         };
 
-        let result =
-            get_variant_sampling_probabilities(gateway_handle.app_state.clone(), params).await;
+        let result = get_variant_sampling_probabilities(&config, &postgres, params).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();

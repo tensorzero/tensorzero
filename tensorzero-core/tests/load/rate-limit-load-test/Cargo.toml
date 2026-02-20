@@ -10,6 +10,7 @@ tensorzero-core = { path = "../../../" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
+redis = { workspace = true }
 rlt = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }

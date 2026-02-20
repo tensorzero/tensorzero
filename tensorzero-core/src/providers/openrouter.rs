@@ -2,12 +2,13 @@ use futures::future::try_join_all;
 use futures::{Stream, StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use reqwest_eventsource::Event;
+use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
-use serde::de::IntoDeserializer;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::borrow::Cow;
+// TODO: Remove this import after migrating OpenRouter streaming chunk types to `tensorzero-types-providers`
+use tensorzero_types_providers::serde_util::empty_string_as_none;
 
 use crate::http::TensorzeroHttpClient;
 use std::time::Duration;
@@ -40,11 +41,15 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Unknown, Usage,
+    TextChunk, ThoughtChunk, Unknown, Usage,
     resolved_input::{FileUrl, LazyFile},
 };
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use tensorzero_types::content::{Thought, ThoughtSummaryBlock};
+use tensorzero_types_providers::openrouter::{
+    ReasoningConfig as OpenRouterReasoningConfig, ReasoningDetail as OpenRouterReasoningDetail,
+};
 use uuid::Uuid;
 
 use crate::providers::chat_completions::prepare_chat_completion_tools;
@@ -85,8 +90,9 @@ type PreparedOpenRouterToolsResult<'a> = (
     Option<bool>,
 );
 
-#[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OpenRouterProvider {
     model_name: String,
     #[serde(skip)]
@@ -207,6 +213,7 @@ impl InferenceProvider for OpenRouterProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.request.extra_body,
             &request.request.extra_headers,
             model_provider,
@@ -226,6 +233,7 @@ impl InferenceProvider for OpenRouterProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -238,6 +246,7 @@ impl InferenceProvider for OpenRouterProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -266,9 +275,11 @@ impl InferenceProvider for OpenRouterProvider {
                         raw_request: Some(raw_request),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 })?,
                 PROVIDER_TYPE,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -312,6 +323,7 @@ impl InferenceProvider for OpenRouterProvider {
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -395,6 +407,7 @@ impl EmbeddingProvider for OpenRouterProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::Embeddings,
             &FullExtraBodyConfig::default(), // No overrides supported
             &Default::default(),             // No extra headers for embeddings yet
             model_provider_data,
@@ -413,6 +426,7 @@ impl EmbeddingProvider for OpenRouterProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Embeddings,
                 })
             })?;
 
@@ -426,6 +440,7 @@ impl EmbeddingProvider for OpenRouterProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?;
             let latency = Latency::NonStreaming {
@@ -452,9 +467,11 @@ impl EmbeddingProvider for OpenRouterProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::Embeddings,
                     })
                 })?,
                 PROVIDER_TYPE,
+                ApiType::Embeddings,
             ))
         }
     }
@@ -479,7 +496,7 @@ pub fn stream_openrouter(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), *e, None).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), ApiType::ChatCompletions, *e, None).await);
                         }
                     }
                 }
@@ -497,6 +514,7 @@ pub fn stream_openrouter(
                                 raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: provider_type.clone(),
+                                api_type: ApiType::ChatCompletions,
                             }));
 
                         let latency = start_time.elapsed();
@@ -566,6 +584,7 @@ pub(super) fn handle_openrouter_error(
     response_code: StatusCode,
     response_body: &str,
     provider_type: &str,
+    api_type: ApiType,
 ) -> Error {
     match response_code {
         StatusCode::BAD_REQUEST
@@ -577,6 +596,7 @@ pub(super) fn handle_openrouter_error(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type,
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
@@ -584,6 +604,7 @@ pub(super) fn handle_openrouter_error(
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(response_body.to_string()),
             provider_type: provider_type.to_string(),
+            api_type,
         }
         .into(),
     }
@@ -650,6 +671,7 @@ impl<'a> TryFrom<OpenRouterEmbeddingResponseWithMetadata<'a>> for EmbeddingProvi
                 raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Embeddings,
             })
         })?;
 
@@ -835,6 +857,9 @@ pub(super) struct OpenRouterAssistantRequestMessage<'a> {
     pub content: Option<Vec<OpenRouterContentBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<OpenRouterRequestToolCall<'a>>>,
+    /// Reasoning details for multi-turn reasoning support
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_details: Option<Vec<OpenRouterReasoningDetail>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1151,6 +1176,7 @@ async fn tensorzero_to_openrouter_assistant_messages(
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
     let mut assistant_tool_calls = Vec::new();
+    let mut reasoning_details = Vec::new();
 
     for block in content_blocks {
         match block {
@@ -1186,7 +1212,12 @@ async fn tensorzero_to_openrouter_assistant_messages(
                 );
             }
             ContentBlock::Thought(thought) => {
-                warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                // Only include reasoning_details if the thought was produced by OpenRouter
+                if thought.provider_type.as_deref() == Some(PROVIDER_TYPE) {
+                    reasoning_details.extend(thought_to_openrouter_reasoning_details(thought));
+                } else {
+                    warn_discarded_thought_block(PROVIDER_TYPE, thought);
+                }
             }
             ContentBlock::Unknown(Unknown { data, .. }) => {
                 assistant_content_blocks.push(OpenRouterContentBlock::Unknown {
@@ -1196,23 +1227,29 @@ async fn tensorzero_to_openrouter_assistant_messages(
         }
     }
 
-    let content = match assistant_content_blocks.len() {
-        0 => None,
-        _ => Some(assistant_content_blocks),
-    };
-
     let tool_calls = match assistant_tool_calls.len() {
         0 => None,
         _ => Some(assistant_tool_calls),
     };
 
-    if content.is_none() && tool_calls.is_none() {
+    let reasoning_details = match reasoning_details.len() {
+        0 => None,
+        _ => Some(reasoning_details),
+    };
+
+    let content = match assistant_content_blocks.len() {
+        0 => None,
+        _ => Some(assistant_content_blocks),
+    };
+
+    if content.is_none() && tool_calls.is_none() && reasoning_details.is_none() {
         return Ok(vec![]);
     }
 
     let message = OpenRouterRequestMessage::Assistant(OpenRouterAssistantRequestMessage {
         content,
         tool_calls,
+        reasoning_details,
     });
 
     Ok(vec![message])
@@ -1406,7 +1443,6 @@ pub(super) struct StreamOptions {
     pub(super) include_usage: bool,
 }
 
-/// This struct defines the supported parameters for the OpenRouter API
 /// See the [OpenRouter API documentation](https://platform.openrouter.com/docs/api-reference/chat/create)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n,
@@ -1441,8 +1477,10 @@ struct OpenRouterRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    /// Reasoning configuration for models that support it.
+    /// Maps `reasoning_effort` to `effort` and `thinking_budget_tokens` to `max_tokens`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_effort: Option<String>,
+    reasoning: Option<OpenRouterReasoningConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     verbosity: Option<String>,
 }
@@ -1458,20 +1496,17 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        request.reasoning_effort.clone_from(reasoning_effort);
+    // Build reasoning config if either reasoning_effort or thinking_budget_tokens is set
+    if reasoning_effort.is_some() || thinking_budget_tokens.is_some() {
+        let reasoning_config = OpenRouterReasoningConfig {
+            effort: reasoning_effort.clone(),
+            max_tokens: *thinking_budget_tokens,
+        };
+        request.reasoning = Some(reasoning_config);
     }
 
     if service_tier.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
-    }
-
-    if thinking_budget_tokens.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "thinking_budget_tokens",
-            Some("Tip: You might want to use `reasoning_effort` for this provider."),
-        );
     }
 
     if verbosity.is_some() {
@@ -1528,7 +1563,7 @@ impl<'a> OpenRouterRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-            reasoning_effort: None,
+            reasoning: None,
             verbosity: None,
         };
 
@@ -1582,6 +1617,9 @@ pub(super) struct OpenRouterResponseMessage {
     pub(super) content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenRouterResponseToolCall>>,
+    /// Reasoning details for models that support reasoning tokens
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) reasoning_details: Option<Vec<OpenRouterReasoningDetail>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -1653,6 +1691,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_request: Some(raw_request),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -1668,8 +1707,16 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        // Process reasoning_details first (thoughts should come before content)
+        if let Some(reasoning_details) = message.reasoning_details {
+            for detail in reasoning_details {
+                let thought = openrouter_reasoning_detail_to_thought(detail);
+                content.push(ContentBlockOutput::Thought(thought));
+            }
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -1698,12 +1745,178 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_response: raw_response.clone(),
                 usage,
                 raw_usage,
+                relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
                 id: model_inference_id,
             },
         ))
     }
+}
+
+/// Convert an OpenRouter reasoning detail to a TensorZero Thought block.
+fn openrouter_reasoning_detail_to_thought(detail: OpenRouterReasoningDetail) -> Thought {
+    match detail {
+        OpenRouterReasoningDetail::Text {
+            text,
+            signature,
+            format,
+            index: _, // index is only used for streaming chunk grouping
+        } => Thought {
+            text,
+            signature,
+            summary: None,
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: format.map(|f| json!({"format": f})),
+        },
+        OpenRouterReasoningDetail::Summary {
+            summary,
+            format,
+            index: _, // index is only used for streaming chunk grouping
+        } => Thought {
+            text: None,
+            signature: None,
+            summary: Some(vec![ThoughtSummaryBlock::SummaryText { text: summary }]),
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: format.map(|f| json!({"format": f})),
+        },
+        OpenRouterReasoningDetail::Encrypted {
+            data,
+            format,
+            index: _, // index is only used for streaming chunk grouping
+        } => Thought {
+            text: None,
+            // Store encrypted data in signature field for multi-turn support
+            signature: Some(data),
+            summary: None,
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: Some(json!({"format": format, "encrypted": true})),
+        },
+    }
+}
+
+/// Convert an OpenRouter reasoning detail to a TensorZero ThoughtChunk for streaming.
+///
+/// Uses the stable `index` field from the detail if present, otherwise falls back to
+/// the provided `fallback_id` (typically from enumerate position). This ensures chunks
+/// are grouped correctly even when OpenRouter streams different subsets of reasoning
+/// details across chunks.
+fn openrouter_reasoning_detail_to_thought_chunk(
+    detail: OpenRouterReasoningDetail,
+    fallback_id: String,
+) -> ThoughtChunk {
+    match detail {
+        OpenRouterReasoningDetail::Text {
+            text,
+            signature,
+            format,
+            index,
+        } => {
+            let id = index.map(|i| i.to_string()).unwrap_or(fallback_id);
+            ThoughtChunk {
+                id,
+                text,
+                signature,
+                summary_id: None,
+                summary_text: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: format.map(|f| json!({"format": f})),
+            }
+        }
+        OpenRouterReasoningDetail::Summary {
+            summary,
+            format,
+            index,
+        } => {
+            let id = index.map(|i| i.to_string()).unwrap_or(fallback_id);
+            ThoughtChunk {
+                id: id.clone(),
+                text: None,
+                signature: None,
+                summary_id: Some(id),
+                summary_text: Some(summary),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: format.map(|f| json!({"format": f})),
+            }
+        }
+        OpenRouterReasoningDetail::Encrypted {
+            data,
+            format,
+            index,
+        } => {
+            let id = index.map(|i| i.to_string()).unwrap_or(fallback_id);
+            ThoughtChunk {
+                id,
+                text: None,
+                // Store encrypted data in signature field for multi-turn support
+                signature: Some(data),
+                summary_id: None,
+                summary_text: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: Some(json!({"format": format, "encrypted": true})),
+            }
+        }
+    }
+}
+
+/// Convert a TensorZero Thought to OpenRouter reasoning details for multi-turn support.
+/// This reconstructs the appropriate reasoning detail type based on the fields present.
+fn thought_to_openrouter_reasoning_details(thought: &Thought) -> Vec<OpenRouterReasoningDetail> {
+    let mut details = Vec::new();
+
+    let extra_data = thought.extra_data.as_ref();
+
+    // Check if this was an encrypted block (based on extra_data)
+    let is_encrypted = extra_data
+        .and_then(|d| d.get("encrypted"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // Extract format from extra_data if present
+    let format = extra_data
+        .and_then(|d| d.get("format"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    // If encrypted, reconstruct from signature field
+    if is_encrypted {
+        if let Some(data) = &thought.signature {
+            details.push(OpenRouterReasoningDetail::Encrypted {
+                data: data.clone(),
+                format: format.unwrap_or_else(|| "raw".to_string()),
+                index: None, // index is only used for streaming chunk grouping
+            });
+        }
+    } else {
+        // Handle text reasoning (includes signature-only cases for multi-turn)
+        if thought.text.is_some() || thought.signature.is_some() {
+            details.push(OpenRouterReasoningDetail::Text {
+                text: thought.text.clone(),
+                signature: thought.signature.clone(),
+                format,
+                index: None, // index is only used for streaming chunk grouping
+            });
+        }
+        // Handle summary reasoning
+        if let Some(summary_blocks) = &thought.summary {
+            for block in summary_blocks {
+                match block {
+                    ThoughtSummaryBlock::SummaryText { text } => {
+                        details.push(OpenRouterReasoningDetail::Summary {
+                            summary: text.clone(),
+                            format: extra_data
+                                .and_then(|d| d.get("format"))
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string()),
+                            index: None, // index is only used for streaming chunk grouping
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    details
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1731,28 +1944,9 @@ struct OpenRouterDelta {
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenRouterToolCallChunk>>,
-}
-
-// Custom deserializer function for empty string to None
-// This is required because SGLang (which depends on this code) returns "" in streaming chunks instead of null
-fn empty_string_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    let opt = Option::<String>::deserialize(deserializer)?;
-    if let Some(s) = opt {
-        if s.is_empty() {
-            return Ok(None);
-        }
-        // Convert serde_json::Error to D::Error
-        Ok(Some(
-            T::deserialize(serde_json::Value::String(s).into_deserializer())
-                .map_err(|e| serde::de::Error::custom(e.to_string()))?,
-        ))
-    } else {
-        Ok(None)
-    }
+    /// Reasoning details for streaming responses from models that support reasoning tokens
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_details: Option<Vec<OpenRouterReasoningDetail>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1785,6 +1979,7 @@ fn openrouter_to_tensorzero_chunk(
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::ChatCompletions,
         }
         .into());
     }
@@ -1802,6 +1997,14 @@ fn openrouter_to_tensorzero_chunk(
     if let Some(choice) = chunk.choices.pop() {
         if let Some(choice_finish_reason) = choice.finish_reason {
             finish_reason = Some(choice_finish_reason.into());
+        }
+        // Process reasoning_details first (thoughts should come before content)
+        if let Some(reasoning_details) = choice.delta.reasoning_details {
+            for (idx, detail) in reasoning_details.into_iter().enumerate() {
+                let thought_chunk =
+                    openrouter_reasoning_detail_to_thought_chunk(detail, idx.to_string());
+                content.push(ContentBlockChunk::Thought(thought_chunk));
+            }
         }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
@@ -1825,6 +2028,7 @@ fn openrouter_to_tensorzero_chunk(
                                 raw_request: None,
                                 raw_response: None,
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                             }))?
                             .clone()
                     }
@@ -1904,6 +2108,7 @@ mod tests {
             StatusCode::UNAUTHORIZED,
             "Unauthorized access",
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         );
         let details = unauthorized.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -1913,6 +2118,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Unauthorized access");
@@ -1928,6 +2134,7 @@ mod tests {
             StatusCode::FORBIDDEN,
             "Forbidden access",
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         );
         let details = forbidden.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -1937,6 +2144,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Forbidden access");
@@ -1952,6 +2160,7 @@ mod tests {
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         );
         let details = rate_limit.get_details();
         assert!(matches!(details, ErrorDetails::InferenceClient { .. }));
@@ -1961,6 +2170,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Rate limit exceeded");
@@ -1976,6 +2186,7 @@ mod tests {
             StatusCode::INTERNAL_SERVER_ERROR,
             "Server error",
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
         );
         let details = server_error.get_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
@@ -1984,6 +2195,7 @@ mod tests {
             raw_request,
             raw_response,
             provider_type: provider,
+            ..
         } = details
         {
             assert_eq!(message, "Server error");
@@ -2287,6 +2499,7 @@ mod tests {
                 message: OpenRouterResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
+                    reasoning_details: None,
                 },
                 finish_reason: OpenRouterFinishReason::Stop,
             }],
@@ -2333,7 +2546,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
-            reasoning_effort: None,
+            reasoning: None,
             verbosity: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
@@ -2388,6 +2601,7 @@ mod tests {
                             arguments: "{}".to_string(),
                         },
                     }]),
+                    reasoning_details: None,
                 },
             }],
             usage: OpenRouterUsage {
@@ -2433,7 +2647,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
-            reasoning_effort: None,
+            reasoning: None,
             verbosity: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
@@ -2503,7 +2717,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
-            reasoning_effort: None,
+            reasoning: None,
             verbosity: None,
         };
         let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
@@ -2529,6 +2743,7 @@ mod tests {
                     message: OpenRouterResponseMessage {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
+                        reasoning_details: None,
                     },
                     finish_reason: OpenRouterFinishReason::Stop,
                 },
@@ -2538,6 +2753,7 @@ mod tests {
                     message: OpenRouterResponseMessage {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
+                        reasoning_details: None,
                     },
                 },
             ],
@@ -2563,7 +2779,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
-            reasoning_effort: None,
+            reasoning: None,
             verbosity: None,
         };
         let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
@@ -2739,6 +2955,7 @@ mod tests {
                 delta: OpenRouterDelta {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
+                    reasoning_details: None,
                 },
                 finish_reason: Some(OpenRouterFinishReason::Stop),
             }],
@@ -2776,6 +2993,7 @@ mod tests {
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
                     }]),
+                    reasoning_details: None,
                 },
             }],
             usage: None,
@@ -2812,6 +3030,7 @@ mod tests {
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
                     }]),
+                    reasoning_details: None,
                 },
             }],
             usage: None,
@@ -2833,6 +3052,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
         // Test a correct new tool chunk
@@ -2849,6 +3069,7 @@ mod tests {
                             arguments: Some("{\"hello\":\"world\"}".to_string()),
                         },
                     }]),
+                    reasoning_details: None,
                 },
             }],
             usage: None,
@@ -3020,6 +3241,7 @@ mod tests {
                     text: "Sure, here is the data.".into(),
                 }]),
                 tool_calls: None,
+                reasoning_details: None,
             }),
         ];
         let expected = Some(OpenRouterRequestMessage::System(
@@ -3044,6 +3266,7 @@ mod tests {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
+                reasoning_details: None,
             }),
         ];
         let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
@@ -3069,6 +3292,7 @@ mod tests {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
+                reasoning_details: None,
             }),
         ];
         let expected = Some(OpenRouterRequestMessage::System(
@@ -3093,6 +3317,7 @@ mod tests {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
+                reasoning_details: None,
             }),
         ];
         let expected = Some(OpenRouterRequestMessage::System(
@@ -3135,6 +3360,7 @@ mod tests {
                     text: "Sure, here's one for you.".into(),
                 }]),
                 tool_calls: None,
+                reasoning_details: None,
             }),
         ];
         let expected = Some(OpenRouterRequestMessage::System(
@@ -3159,6 +3385,7 @@ mod tests {
                     text: "Here's the summary.".into(),
                 }]),
                 tool_calls: None,
+                reasoning_details: None,
             }),
         ];
 
@@ -3305,7 +3532,6 @@ mod tests {
 
     #[test]
     fn test_openrouter_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,
@@ -3328,21 +3554,439 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
-            reasoning_effort: None,
+            reasoning: None,
             verbosity: None,
         };
 
         apply_inference_params(&mut request, &inference_params);
 
-        // Test that reasoning_effort is applied correctly
-        assert_eq!(request.reasoning_effort, Some("high".to_string()));
-
-        // Test that thinking_budget_tokens warns with tip about reasoning_effort
-        assert!(logs_contain(
-            "OpenRouter does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
-        ));
+        // Test that reasoning config is built with both effort and max_tokens
+        assert_eq!(
+            request.reasoning,
+            Some(OpenRouterReasoningConfig {
+                effort: Some("high".to_string()),
+                max_tokens: Some(1024),
+            }),
+            "reasoning config should contain both effort and max_tokens"
+        );
 
         // Test that verbosity is applied correctly
         assert_eq!(request.verbosity, Some("low".to_string()));
+    }
+
+    #[test]
+    fn test_openrouter_reasoning_config_serialization() {
+        // Test with both fields
+        let config = OpenRouterReasoningConfig {
+            effort: Some("medium".to_string()),
+            max_tokens: Some(2048),
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["effort"], "medium");
+        assert_eq!(json["max_tokens"], 2048);
+
+        // Test with only effort
+        let config = OpenRouterReasoningConfig {
+            effort: Some("low".to_string()),
+            max_tokens: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["effort"], "low");
+        assert!(json.get("max_tokens").is_none());
+
+        // Test with only max_tokens
+        let config = OpenRouterReasoningConfig {
+            effort: None,
+            max_tokens: Some(512),
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert!(json.get("effort").is_none());
+        assert_eq!(json["max_tokens"], 512);
+    }
+
+    #[test]
+    fn test_openrouter_parse_reasoning_details() {
+        // Test parsing reasoning.text
+        let json_text = json!({
+            "type": "reasoning.text",
+            "text": "Let me think about this...",
+            "signature": "abc123",
+            "format": "raw"
+        });
+        let detail: OpenRouterReasoningDetail = serde_json::from_value(json_text).unwrap();
+        assert!(
+            matches!(detail, OpenRouterReasoningDetail::Text { text, signature, format, .. }
+                if text == Some("Let me think about this...".to_string())
+                    && signature == Some("abc123".to_string())
+                    && format == Some("raw".to_string())),
+            "should parse reasoning.text correctly"
+        );
+
+        // Test parsing reasoning.text with signature only (no text field - multi-turn response)
+        let json_text_signature_only = json!({
+            "type": "reasoning.text",
+            "signature": "EpsDCkgICxAC...",
+            "format": "anthropic-claude-v1"
+        });
+        let detail: OpenRouterReasoningDetail =
+            serde_json::from_value(json_text_signature_only).unwrap();
+        assert!(
+            matches!(detail, OpenRouterReasoningDetail::Text { text, signature, format, .. }
+                if text.is_none()
+                    && signature == Some("EpsDCkgICxAC...".to_string())
+                    && format == Some("anthropic-claude-v1".to_string())),
+            "should parse reasoning.text with signature only"
+        );
+
+        // Test parsing reasoning.summary
+        let json_summary = json!({
+            "type": "reasoning.summary",
+            "summary": "The answer is 42.",
+            "format": "markdown"
+        });
+        let detail: OpenRouterReasoningDetail = serde_json::from_value(json_summary).unwrap();
+        assert!(
+            matches!(detail, OpenRouterReasoningDetail::Summary { summary, format, .. }
+                if summary == "The answer is 42."
+                    && format == Some("markdown".to_string())),
+            "should parse reasoning.summary correctly"
+        );
+
+        // Test parsing reasoning.encrypted
+        let json_encrypted = json!({
+            "type": "reasoning.encrypted",
+            "data": "encrypted_data_here",
+            "format": "aes-256"
+        });
+        let detail: OpenRouterReasoningDetail = serde_json::from_value(json_encrypted).unwrap();
+        assert!(
+            matches!(detail, OpenRouterReasoningDetail::Encrypted { data, format, .. }
+                if data == "encrypted_data_here"
+                    && format == "aes-256"),
+            "should parse reasoning.encrypted correctly"
+        );
+
+        // Test parsing reasoning.summary with `index` field (sent by OpenRouter in streaming)
+        let json_summary_with_index = json!({
+            "type": "reasoning.summary",
+            "summary": "First",
+            "format": "xai-responses-v1",
+            "index": 0
+        });
+        let detail: OpenRouterReasoningDetail =
+            serde_json::from_value(json_summary_with_index).unwrap();
+        assert!(
+            matches!(detail, OpenRouterReasoningDetail::Summary { summary, format, index }
+                if summary == "First"
+                    && format == Some("xai-responses-v1".to_string())
+                    && index == Some(0)),
+            "should parse reasoning.summary with index field"
+        );
+    }
+
+    #[test]
+    fn test_openrouter_streaming_chunk_with_reasoning_details() {
+        // Test parsing a streaming chunk with reasoning_details (actual format from OpenRouter)
+        let chunk_json = json!({
+            "id": "gen-1768936600-test",
+            "provider": "xAI",
+            "model": "x-ai/grok-code-fast-1",
+            "object": "chat.completion.chunk",
+            "created": 1768936600,
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "content": "",
+                    "reasoning": "First",
+                    "reasoning_details": [{
+                        "type": "reasoning.summary",
+                        "summary": "First",
+                        "format": "xai-responses-v1",
+                        "index": 0
+                    }]
+                },
+                "finish_reason": null,
+                "native_finish_reason": null,
+                "logprobs": null
+            }]
+        });
+        let chunk: OpenRouterChatChunk = serde_json::from_value(chunk_json).unwrap();
+        assert_eq!(chunk.choices.len(), 1, "should have one choice");
+        let delta = &chunk.choices[0].delta;
+        assert!(
+            delta.reasoning_details.is_some(),
+            "reasoning_details should be present"
+        );
+        let details = delta.reasoning_details.as_ref().unwrap();
+        assert_eq!(details.len(), 1, "should have one reasoning detail");
+        assert!(
+            matches!(&details[0], OpenRouterReasoningDetail::Summary { summary, .. } if summary == "First"),
+            "should parse reasoning.summary from streaming chunk"
+        );
+    }
+
+    #[test]
+    fn test_openrouter_reasoning_detail_to_thought() {
+        // Test Text conversion
+        let text_detail = OpenRouterReasoningDetail::Text {
+            text: Some("Thinking...".to_string()),
+            signature: Some("sig123".to_string()),
+            format: Some("raw".to_string()),
+            index: None,
+        };
+        let thought = openrouter_reasoning_detail_to_thought(text_detail);
+        assert_eq!(
+            thought.text,
+            Some("Thinking...".to_string()),
+            "text should be set"
+        );
+        assert_eq!(
+            thought.signature,
+            Some("sig123".to_string()),
+            "signature should be preserved"
+        );
+        assert_eq!(
+            thought.provider_type,
+            Some(PROVIDER_TYPE.to_string()),
+            "provider_type should be openrouter"
+        );
+        assert!(thought.summary.is_none(), "summary should be None for text");
+        assert_eq!(
+            thought.extra_data,
+            Some(json!({"format": "raw"})),
+            "format should be in extra_data"
+        );
+
+        // Test Summary conversion
+        let summary_detail = OpenRouterReasoningDetail::Summary {
+            summary: "The conclusion is...".to_string(),
+            format: None,
+            index: None,
+        };
+        let thought = openrouter_reasoning_detail_to_thought(summary_detail);
+        assert!(thought.text.is_none(), "text should be None for summary");
+        assert!(
+            thought.signature.is_none(),
+            "signature should be None for summary"
+        );
+        assert_eq!(
+            thought.summary.as_ref().unwrap().len(),
+            1,
+            "should have one summary block"
+        );
+        assert_eq!(thought.extra_data, None, "no format means no extra_data");
+
+        // Test Encrypted conversion
+        let encrypted_detail = OpenRouterReasoningDetail::Encrypted {
+            data: "encrypted_blob".to_string(),
+            format: "custom".to_string(),
+            index: None,
+        };
+        let thought = openrouter_reasoning_detail_to_thought(encrypted_detail);
+        assert!(thought.text.is_none(), "text should be None for encrypted");
+        assert_eq!(
+            thought.signature,
+            Some("encrypted_blob".to_string()),
+            "encrypted data in signature"
+        );
+        assert_eq!(
+            thought.extra_data,
+            Some(json!({"format": "custom", "encrypted": true})),
+            "encrypted flag and format should be in extra_data"
+        );
+    }
+
+    #[test]
+    fn test_openrouter_thought_to_reasoning_details() {
+        // Test Text Thought conversion
+        let text_thought = Thought {
+            text: Some("I'm reasoning...".to_string()),
+            signature: Some("sig456".to_string()),
+            summary: None,
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: Some(json!({"format": "raw"})),
+        };
+        let details = thought_to_openrouter_reasoning_details(&text_thought);
+        assert_eq!(details.len(), 1, "should produce one detail");
+        assert!(
+            matches!(&details[0], OpenRouterReasoningDetail::Text { text, signature, format, index }
+                if *text == Some("I'm reasoning...".to_string())
+                    && *signature == Some("sig456".to_string())
+                    && *format == Some("raw".to_string())
+                    && index.is_none()),
+            "should convert to Text detail"
+        );
+
+        // Test Summary Thought conversion
+        let summary_thought = Thought {
+            text: None,
+            signature: None,
+            summary: Some(vec![ThoughtSummaryBlock::SummaryText {
+                text: "Summary here".to_string(),
+            }]),
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: Some(json!({"format": "markdown"})),
+        };
+        let details = thought_to_openrouter_reasoning_details(&summary_thought);
+        assert_eq!(details.len(), 1, "should produce one detail");
+        assert!(
+            matches!(&details[0], OpenRouterReasoningDetail::Summary { summary, format, index }
+                if summary == "Summary here"
+                    && *format == Some("markdown".to_string())
+                    && index.is_none()),
+            "should convert to Summary detail"
+        );
+
+        // Test Encrypted Thought conversion
+        let encrypted_thought = Thought {
+            text: None,
+            signature: Some("encrypted_data".to_string()),
+            summary: None,
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+            extra_data: Some(json!({"format": "aes-256", "encrypted": true})),
+        };
+        let details = thought_to_openrouter_reasoning_details(&encrypted_thought);
+        assert_eq!(details.len(), 1, "should produce one detail");
+        assert!(
+            matches!(&details[0], OpenRouterReasoningDetail::Encrypted { data, format, index }
+                if data == "encrypted_data"
+                    && format == "aes-256"
+                    && index.is_none()),
+            "should convert to Encrypted detail"
+        );
+    }
+
+    #[test]
+    fn test_openrouter_reasoning_detail_roundtrip() {
+        // Test that Text -> Thought -> ReasoningDetail preserves data
+        // Note: index is not preserved through roundtrip (it's only for streaming chunk grouping)
+        let original_text = OpenRouterReasoningDetail::Text {
+            text: Some("Reasoning process".to_string()),
+            signature: Some("signature_value".to_string()),
+            format: Some("raw".to_string()),
+            index: None,
+        };
+        let thought = openrouter_reasoning_detail_to_thought(original_text.clone());
+        let roundtripped = thought_to_openrouter_reasoning_details(&thought);
+        assert_eq!(
+            roundtripped.len(),
+            1,
+            "should have one detail after roundtrip"
+        );
+        assert_eq!(
+            roundtripped[0], original_text,
+            "Text detail should roundtrip"
+        );
+
+        // Test that Encrypted -> Thought -> ReasoningDetail preserves data
+        let original_encrypted = OpenRouterReasoningDetail::Encrypted {
+            data: "encrypted_content".to_string(),
+            format: "custom_format".to_string(),
+            index: None,
+        };
+        let thought = openrouter_reasoning_detail_to_thought(original_encrypted.clone());
+        let roundtripped = thought_to_openrouter_reasoning_details(&thought);
+        assert_eq!(
+            roundtripped.len(),
+            1,
+            "should have one detail after roundtrip"
+        );
+        assert_eq!(
+            roundtripped[0], original_encrypted,
+            "Encrypted detail should roundtrip"
+        );
+    }
+
+    #[test]
+    fn test_openrouter_streaming_reasoning_details_stable_index() {
+        // This test verifies that when OpenRouter provides an `index` field in reasoning_details,
+        // we use it for stable chunk grouping instead of the enumerate position.
+        //
+        // Scenario: OpenRouter streams two chunks:
+        // - Chunk 1: [Text(index=0, "Hello "), Summary(index=1, "Sum1")]
+        // - Chunk 2: [Summary(index=1, " Sum2")] (only summary, no text)
+        //
+        // Without stable index: Chunk 2's summary would get id "0" (from enumerate),
+        // causing it to be grouped with the wrong thought.
+        //
+        // With stable index: Both summaries get id "1", correctly grouping them together.
+
+        // Chunk 1: Text at index 0, Summary at index 1
+        let detail_text = OpenRouterReasoningDetail::Text {
+            text: Some("Hello ".to_string()),
+            signature: None,
+            format: None,
+            index: Some(0),
+        };
+        let detail_summary1 = OpenRouterReasoningDetail::Summary {
+            summary: "Sum1".to_string(),
+            format: None,
+            index: Some(1),
+        };
+
+        // Convert with fallback ids that would be wrong without index
+        let chunk_text =
+            openrouter_reasoning_detail_to_thought_chunk(detail_text, "99".to_string());
+        let chunk_summary1 =
+            openrouter_reasoning_detail_to_thought_chunk(detail_summary1, "98".to_string());
+
+        // Text should use index 0, not fallback 99
+        assert_eq!(
+            chunk_text.id, "0",
+            "Text chunk should use index field, not fallback"
+        );
+        // Summary should use index 1, not fallback 98
+        assert_eq!(
+            chunk_summary1.id, "1",
+            "Summary chunk should use index field, not fallback"
+        );
+        assert_eq!(
+            chunk_summary1.summary_id,
+            Some("1".to_string()),
+            "Summary id should also use index"
+        );
+
+        // Chunk 2: Only Summary at index 1 (simulating partial streaming)
+        let detail_summary2 = OpenRouterReasoningDetail::Summary {
+            summary: " Sum2".to_string(),
+            format: None,
+            index: Some(1),
+        };
+
+        // Even though this is first in chunk 2's array (would be enumerate index 0),
+        // it should use the stable index 1
+        let chunk_summary2 =
+            openrouter_reasoning_detail_to_thought_chunk(detail_summary2, "0".to_string());
+
+        assert_eq!(
+            chunk_summary2.id, "1",
+            "Second summary chunk should use stable index 1, not enumerate position 0"
+        );
+        assert_eq!(
+            chunk_summary2.summary_id,
+            Some("1".to_string()),
+            "Summary id should match"
+        );
+
+        // Both summary chunks have the same id "1", so collect_chunks will correctly
+        // merge them into a single thought with summary "Sum1 Sum2"
+    }
+
+    #[test]
+    fn test_openrouter_streaming_reasoning_details_fallback_to_enumerate() {
+        // When no index is provided, we should fall back to the enumerate position
+        let detail_text = OpenRouterReasoningDetail::Text {
+            text: Some("Thinking...".to_string()),
+            signature: None,
+            format: None,
+            index: None,
+        };
+
+        let chunk = openrouter_reasoning_detail_to_thought_chunk(detail_text, "5".to_string());
+        assert_eq!(
+            chunk.id, "5",
+            "Should fall back to provided id when index is None"
+        );
     }
 }

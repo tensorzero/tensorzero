@@ -1,13 +1,20 @@
 import { BaseTensorZeroClient } from "./base-client";
 import type {
+  ApproveAllToolCallsGatewayRequest,
+  ApproveAllToolCallsResponse,
   CreateEventGatewayRequest,
   CreateEventResponse,
+  EditPayload,
+  GatewayEvent,
+  GatewayListConfigWritesResponse,
+  GatewayListEventsResponse,
+  GatewayStreamUpdate,
+  ListConfigWritesParams,
   ListEventsParams,
-  ListEventsResponse,
   ListSessionsParams,
   ListSessionsResponse,
   StreamEventsParams,
-  StreamUpdate,
+  WriteConfigToolParams,
 } from "~/types/tensorzero";
 
 /**
@@ -35,12 +42,24 @@ export class AutopilotClient extends BaseTensorZeroClient {
   }
 
   /**
+   * Interrupts an autopilot session.
+   */
+  async interruptAutopilotSession(sessionId: string): Promise<void> {
+    const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/actions/interrupt`;
+    const response = await this.fetch(endpoint, { method: "POST" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+  }
+
+  /**
    * Lists events for an autopilot session with optional pagination.
    */
   async listAutopilotEvents(
     sessionId: string,
     params?: ListEventsParams,
-  ): Promise<ListEventsResponse> {
+  ): Promise<GatewayListEventsResponse> {
     const searchParams = new URLSearchParams();
     if (params?.limit) searchParams.set("limit", params.limit.toString());
     if (params?.before) searchParams.set("before", params.before);
@@ -52,7 +71,7 @@ export class AutopilotClient extends BaseTensorZeroClient {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    return (await response.json()) as ListEventsResponse;
+    return (await response.json()) as GatewayListEventsResponse;
   }
 
   /**
@@ -76,13 +95,33 @@ export class AutopilotClient extends BaseTensorZeroClient {
   }
 
   /**
+   * Approves all pending tool calls for a session up to a specified event ID.
+   * This atomically approves all pending tool calls with event IDs <= last_tool_call_event_id.
+   */
+  async approveAllToolCalls(
+    sessionId: string,
+    request: ApproveAllToolCallsGatewayRequest,
+  ): Promise<ApproveAllToolCallsResponse> {
+    const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/actions/approve_all`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ApproveAllToolCallsResponse;
+  }
+
+  /**
    * Streams events for an autopilot session using Server-Sent Events.
-   * Returns an async generator that yields Event objects.
+   * Returns an async generator that yields GatewayStreamUpdate objects.
    */
   async *streamAutopilotEvents(
     sessionId: string,
     params?: StreamEventsParams,
-  ): AsyncGenerator<StreamUpdate, void, unknown> {
+  ): AsyncGenerator<GatewayStreamUpdate, void, unknown> {
     const searchParams = new URLSearchParams();
     if (params?.last_event_id)
       searchParams.set("last_event_id", params.last_event_id);
@@ -123,7 +162,7 @@ export class AutopilotClient extends BaseTensorZeroClient {
           if (line.startsWith("data: ")) {
             const data = line.slice(6);
             if (data) {
-              const event = JSON.parse(data) as StreamUpdate;
+              const event = JSON.parse(data) as GatewayStreamUpdate;
               yield event;
             }
           }
@@ -133,4 +172,90 @@ export class AutopilotClient extends BaseTensorZeroClient {
       reader.releaseLock();
     }
   }
+
+  /**
+   * Lists config writes (write_config tool calls) for a session.
+   */
+  async listConfigWrites(
+    sessionId: string,
+    params?: ListConfigWritesParams,
+  ): Promise<GatewayListConfigWritesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit !== undefined) {
+      searchParams.set("limit", params.limit.toString());
+    }
+    if (params?.offset !== undefined) {
+      searchParams.set("offset", params.offset.toString());
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/config-writes${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GatewayListConfigWritesResponse;
+  }
+}
+
+const CONFIG_WRITES_PAGE_SIZE = 100;
+
+/**
+ * Fetches all config writes for a session by paginating through results.
+ * Uses the N+1 pattern: requests `pageSize + 1` items to detect if more pages exist.
+ */
+export async function listAllConfigWrites(
+  client: Pick<AutopilotClient, "listConfigWrites">,
+  sessionId: string,
+  pageSize: number = CONFIG_WRITES_PAGE_SIZE,
+): Promise<GatewayEvent[]> {
+  const allConfigWrites: GatewayEvent[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await client.listConfigWrites(sessionId, {
+      limit: pageSize + 1,
+      offset,
+    });
+    const hasMore = page.config_writes.length > pageSize;
+    const items = hasMore
+      ? page.config_writes.slice(0, pageSize)
+      : page.config_writes;
+    allConfigWrites.push(...items);
+    if (!hasMore) break;
+    offset += pageSize;
+  }
+  return allConfigWrites;
+}
+
+/**
+ * Extracts the EditPayload from a config write event.
+ *
+ * @param event - A GatewayEvent that should be a write_config tool call
+ * @returns The EditPayload array from the event's arguments
+ * @throws Error if the event is not a write_config tool call or has no edit payload
+ */
+export function extractEditPayloadsFromConfigWrite(
+  event: GatewayEvent,
+): EditPayload[] {
+  if (event.payload.type !== "tool_call") {
+    throw new Error(
+      `Expected tool_call event but got ${event.payload.type} for event ${event.id}`,
+    );
+  }
+
+  if (event.payload.name !== "write_config") {
+    throw new Error(
+      `Expected write_config tool call but got ${event.payload.name} for event ${event.id}`,
+    );
+  }
+
+  const args = event.payload.arguments as unknown as WriteConfigToolParams;
+  if (!args.edit) {
+    throw new Error(
+      `Config write event ${event.id} does not have an edit payload. Args: ${JSON.stringify(args)}`,
+    );
+  }
+
+  return args.edit;
 }

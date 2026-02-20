@@ -8,12 +8,14 @@ use std::time::Duration;
 use tensorzero::{FunctionTool, GetDatapointParams};
 use uuid::Uuid;
 
-use tensorzero_core::db::clickhouse::test_helpers::{
-    clickhouse_flush_async_insert, get_clickhouse,
-};
 use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
+};
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::endpoints::datasets::v1::types::{
+    DatapointMetadataUpdate, UpdateDatapointMetadataRequest, UpdateDatapointsMetadataRequest,
 };
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
@@ -29,7 +31,7 @@ use crate::common::get_gateway_endpoint;
 #[tokio::test]
 async fn test_update_chat_datapoint_output() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-chat-{}", Uuid::now_v7());
 
     // First, create a datapoint
@@ -73,7 +75,7 @@ async fn test_update_chat_datapoint_output() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -110,11 +112,11 @@ async fn test_update_chat_datapoint_output() {
 
     // Wait for async inserts and give ClickHouse time to merge the staled version
 
-    clickhouse_flush_async_insert(&clickhouse).await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the old datapoint is staled
-    let old_datapoint = clickhouse
+    let old_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id,
@@ -135,7 +137,7 @@ async fn test_update_chat_datapoint_output() {
     );
 
     // Verify the new datapoint has updated values
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -162,7 +164,7 @@ async fn test_update_chat_datapoint_output() {
 #[tokio::test]
 async fn test_update_json_datapoint_output() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-json-{}", Uuid::now_v7());
 
     // First, create a JSON datapoint
@@ -211,7 +213,7 @@ async fn test_update_json_datapoint_output() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -249,7 +251,7 @@ async fn test_update_json_datapoint_output() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the new datapoint has updated output
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -268,7 +270,7 @@ async fn test_update_json_datapoint_output() {
 #[tokio::test]
 async fn test_update_multiple_datapoints() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-batch-{}", Uuid::now_v7());
 
     // Create two datapoints
@@ -347,7 +349,7 @@ async fn test_update_multiple_datapoints() {
         snapshot_hash: None,
     });
 
-    let insert_result = clickhouse
+    let insert_result = database
         .insert_datapoints(&[datapoint_insert1, datapoint_insert2])
         .await
         .unwrap();
@@ -388,11 +390,11 @@ async fn test_update_multiple_datapoints() {
 
     // Wait for async inserts and give ClickHouse time to merge the staled versions
     tokio::time::sleep(Duration::from_millis(1000)).await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify both old datapoints are staled
-    let old_dp1 = clickhouse
+    let old_dp1 = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: datapoint_id1,
@@ -405,7 +407,7 @@ async fn test_update_multiple_datapoints() {
     };
     assert!(chat_datapoint.staled_at.is_some());
 
-    let old_dp2 = clickhouse
+    let old_dp2 = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: datapoint_id2,
@@ -446,7 +448,7 @@ async fn test_update_datapoint_not_found() {
 #[tokio::test]
 async fn test_update_datapoint_type_mismatch() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-type-mismatch-{}", Uuid::now_v7());
 
     // Create a chat datapoint
@@ -488,7 +490,7 @@ async fn test_update_datapoint_type_mismatch() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -518,7 +520,7 @@ async fn test_update_datapoint_type_mismatch() {
 #[tokio::test]
 async fn test_update_datapoint_with_metadata() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-metadata-{}", Uuid::now_v7());
 
     // Create a datapoint
@@ -560,7 +562,7 @@ async fn test_update_datapoint_with_metadata() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -589,7 +591,7 @@ async fn test_update_datapoint_with_metadata() {
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -657,7 +659,7 @@ async fn test_update_datapoint_duplicate_ids() {
 #[tokio::test]
 async fn test_update_chat_datapoint_set_output_to_null() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-chat-output-null-{}", Uuid::now_v7());
 
     // Create a datapoint with output
@@ -699,7 +701,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -729,7 +731,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the new datapoint has output set to None
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -748,7 +750,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
 #[tokio::test]
 async fn test_update_chat_datapoint_set_tool_params_to_null() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-chat-tool-params-null-{}", Uuid::now_v7());
 
     // Create a datapoint with tool_params
@@ -807,7 +809,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -839,7 +841,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the new datapoint has tool_params fields cleared appropriately
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -861,7 +863,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
 #[tokio::test]
 async fn test_update_chat_datapoint_set_tags_to_empty() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-chat-tags-null-{}", Uuid::now_v7());
 
     // Create a datapoint with tags
@@ -906,7 +908,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -936,7 +938,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the new datapoint has tags set to None
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -955,7 +957,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
 #[tokio::test]
 async fn test_update_chat_datapoint_set_name_to_null() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-chat-name-null-{}", Uuid::now_v7());
 
     // Create a datapoint with a name
@@ -997,7 +999,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -1027,7 +1029,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the new datapoint has name set to None
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -1046,7 +1048,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
 #[tokio::test]
 async fn test_update_json_datapoint_set_output_to_null() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-json-output-null-{}", Uuid::now_v7());
 
     // Create a JSON datapoint with output
@@ -1095,7 +1097,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -1125,7 +1127,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the new datapoint has output set to None
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -1144,7 +1146,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
 #[tokio::test]
 async fn test_update_json_datapoint_set_tags_to_empty() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-json-tags-null-{}", Uuid::now_v7());
 
     // Create a JSON datapoint with tags
@@ -1197,7 +1199,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -1227,7 +1229,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Verify the new datapoint has tags set to None
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -1250,7 +1252,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
 #[tokio::test]
 async fn test_update_metadata_chat_datapoint() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-metadata-chat-{}", Uuid::now_v7());
 
     // Create a chat datapoint
@@ -1284,7 +1286,7 @@ async fn test_update_metadata_chat_datapoint() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -1322,11 +1324,11 @@ async fn test_update_metadata_chat_datapoint() {
 
     // Wait for async inserts
     tokio::time::sleep(Duration::from_millis(1000)).await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the datapoint has updated name
-    let updated_datapoint = clickhouse
+    let updated_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id,
@@ -1345,7 +1347,7 @@ async fn test_update_metadata_chat_datapoint() {
 #[tokio::test]
 async fn test_update_metadata_json_datapoint() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-metadata-json-{}", Uuid::now_v7());
 
     // Create a JSON datapoint
@@ -1389,7 +1391,7 @@ async fn test_update_metadata_json_datapoint() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -1420,11 +1422,11 @@ async fn test_update_metadata_json_datapoint() {
 
     // Wait for async inserts
     tokio::time::sleep(Duration::from_millis(1000)).await;
-    clickhouse_flush_async_insert(&clickhouse).await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the datapoint has updated name
-    let updated_datapoint = clickhouse
+    let updated_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id,
@@ -1443,7 +1445,7 @@ async fn test_update_metadata_json_datapoint() {
 #[tokio::test]
 async fn test_update_metadata_set_name_to_null() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-metadata-null-{}", Uuid::now_v7());
 
     // Create a chat datapoint with a name
@@ -1477,7 +1479,7 @@ async fn test_update_metadata_set_name_to_null() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -1502,11 +1504,11 @@ async fn test_update_metadata_set_name_to_null() {
     assert!(resp.status().is_success());
 
     // Wait for async inserts
-    clickhouse_flush_async_insert(&clickhouse).await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify name is now null
-    let updated_datapoint = clickhouse
+    let updated_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id,
@@ -1522,9 +1524,9 @@ async fn test_update_metadata_set_name_to_null() {
 }
 
 #[tokio::test]
-async fn test_update_metadata_batch() {
+async fn test_update_metadata_multiple_datapoints() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-update-metadata-batch-{}", Uuid::now_v7());
 
     // Create multiple datapoints
@@ -1589,7 +1591,7 @@ async fn test_update_metadata_batch() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint1, datapoint2])
         .await
         .unwrap();
@@ -1597,22 +1599,27 @@ async fn test_update_metadata_batch() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update both datapoints' metadata
+    let update_request = UpdateDatapointsMetadataRequest {
+        datapoints: vec![
+            UpdateDatapointMetadataRequest {
+                id: datapoint_id1,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("updated_name1".to_string())),
+                },
+            },
+            UpdateDatapointMetadataRequest {
+                id: datapoint_id2,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("updated_name2".to_string())),
+                },
+            },
+        ],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
         )))
-        .json(&json!({
-            "datapoints": [
-                {
-                    "id": datapoint_id1.to_string(),
-                    "metadata": {"name": "updated_name1"}
-                },
-                {
-                    "id": datapoint_id2.to_string(),
-                    "metadata": {"name": "updated_name2"}
-                }
-            ]
-        }))
+        .json(&update_request)
         .send()
         .await
         .unwrap();
@@ -1623,11 +1630,11 @@ async fn test_update_metadata_batch() {
     assert_eq!(returned_ids.len(), 2);
 
     // Wait for async inserts
-    clickhouse_flush_async_insert(&clickhouse).await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify both datapoints have updated names
-    let datapoint1 = clickhouse
+    let datapoint1 = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: datapoint_id1,
@@ -1641,7 +1648,7 @@ async fn test_update_metadata_batch() {
     };
     assert_eq!(chat_datapoint.name, Some("updated_name1".to_string()));
 
-    let datapoint2 = clickhouse
+    let datapoint2 = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: datapoint_id2,
@@ -1711,7 +1718,7 @@ async fn test_update_metadata_duplicate_ids() {
 #[tokio::test]
 async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-roundtrip-{}", Uuid::now_v7());
 
     // Create a datapoint
@@ -1756,7 +1763,7 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -1809,11 +1816,11 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
     assert_ne!(new_id, datapoint_id, "Should create a new datapoint ID");
 
     // Wait for async inserts
-    clickhouse_flush_async_insert(&clickhouse).await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the new datapoint has the modified output
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
@@ -1854,7 +1861,7 @@ async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
 #[tokio::test]
 async fn test_get_json_datapoint_modify_and_update_roundtrip() {
     let http_client = Client::new();
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("test-json-roundtrip-{}", Uuid::now_v7());
 
     // Create a JSON datapoint
@@ -1908,7 +1915,7 @@ async fn test_get_json_datapoint_modify_and_update_roundtrip() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -1964,11 +1971,11 @@ async fn test_get_json_datapoint_modify_and_update_roundtrip() {
     assert_ne!(new_id, datapoint_id, "Should create a new datapoint ID");
 
     // Wait for async inserts
-    clickhouse_flush_async_insert(&clickhouse).await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify the new datapoint has the modified output and name
-    let new_datapoint = clickhouse
+    let new_datapoint = database
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: new_id,
