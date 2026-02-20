@@ -3,6 +3,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use std::borrow::Cow;
 use std::time::Duration;
+#[cfg(feature = "ts-bindings")]
 use tensorzero_ts_types::TsTypeBundle;
 
 use crate::{NonControlToolError, ToolResult};
