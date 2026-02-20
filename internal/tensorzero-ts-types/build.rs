@@ -1,8 +1,10 @@
 #![expect(clippy::expect_used)]
+#![expect(clippy::panic)]
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// Root types for which we generate TypeScript bundles.
 /// Each entry is (const_name, type_name) where:
@@ -104,6 +106,7 @@ fn main() {
     let out_path = out_dir.join("ts_bundles.rs");
 
     let mut output = String::new();
+    let mut bundles_for_validation: Vec<(String, String)> = Vec::new();
 
     for &(const_name, type_name) in ROOT_TYPES {
         if !file_map.contains_key(type_name) {
@@ -118,6 +121,7 @@ fn main() {
         }
 
         let bundle = generate_bundle(type_name, &file_map);
+        bundles_for_validation.push((const_name.to_string(), bundle.clone()));
         output.push_str(&format!(
             "pub const {const_name}: TsTypeBundle = TsTypeBundle({bundle});\n",
             bundle = quote_rust_string(&bundle),
@@ -125,12 +129,19 @@ fn main() {
     }
 
     fs::write(&out_path, output).expect("Failed to write generated ts_bundles.rs");
+
+    // Validate that all bundles compile as TypeScript
+    validate_bundles_with_tsc(&out_dir, &bundles_for_validation);
 }
 
-/// Parse all .ts files in the bindings directory.
+/// Parse all .ts files in the bindings directory (recursively).
 fn parse_all_ts_files(dir: &Path) -> Vec<TsFile> {
     let mut files = Vec::new();
+    parse_ts_files_recursive(dir, &mut files);
+    files
+}
 
+fn parse_ts_files_recursive(dir: &Path, files: &mut Vec<TsFile>) {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) => {
@@ -138,7 +149,7 @@ fn parse_all_ts_files(dir: &Path) -> Vec<TsFile> {
                 "cargo::warning=tensorzero-ts-types: Could not read bindings directory {}: {e}",
                 dir.display()
             );
-            return files;
+            return;
         }
     };
 
@@ -147,7 +158,9 @@ fn parse_all_ts_files(dir: &Path) -> Vec<TsFile> {
             continue;
         };
         let path = entry.path();
-        if path.extension().is_some_and(|ext| ext == "ts")
+        if path.is_dir() {
+            parse_ts_files_recursive(&path, files);
+        } else if path.extension().is_some_and(|ext| ext == "ts")
             && path
                 .file_name()
                 .is_none_or(|n| n.to_string_lossy() != "index.ts")
@@ -156,8 +169,6 @@ fn parse_all_ts_files(dir: &Path) -> Vec<TsFile> {
             files.push(ts_file);
         }
     }
-
-    files
 }
 
 /// Parse a single .ts file to extract type name, imports, and declaration.
@@ -284,6 +295,65 @@ fn generate_bundle(root_type: &str, file_map: &HashMap<&str, &TsFile>) -> String
     }
 
     parts.join("\n\n")
+}
+
+/// Validate that all generated TypeScript bundles compile by shelling out to `tsc`.
+///
+/// Each bundle is written to a separate `.ts` file (with `export {}` to make it a module
+/// and prevent cross-file type conflicts). If `tsc` is not found in PATH, a warning is
+/// emitted and validation is skipped.
+fn validate_bundles_with_tsc(out_dir: &Path, bundles: &[(String, String)]) {
+    let tsc_dir = out_dir.join("tsc_check");
+    let _ = fs::remove_dir_all(&tsc_dir);
+    fs::create_dir_all(&tsc_dir).expect("Failed to create directory for tsc check");
+
+    let mut ts_files = Vec::new();
+    for (name, bundle) in bundles {
+        if bundle.is_empty() {
+            continue;
+        }
+        let file_path = tsc_dir.join(format!("{name}.ts"));
+        // Prefix with `export {}` so each file is treated as a module,
+        // preventing duplicate type errors across bundles that share dependencies.
+        let content = format!("export {{}}\n\n{bundle}");
+        fs::write(&file_path, content).expect("Failed to write TypeScript file for tsc check");
+        ts_files.push(file_path);
+    }
+
+    if ts_files.is_empty() {
+        return;
+    }
+
+    // Resolve `tsc` from the workspace's node_modules/.bin (installed via pnpm)
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..");
+    let tsc = workspace_root.join("node_modules").join(".bin").join("tsc");
+
+    let result = Command::new(&tsc)
+        .args(["--noEmit", "--skipLibCheck"])
+        .args(&ts_files)
+        .output();
+
+    match result {
+        Ok(output) if !output.status.success() => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            panic!("TypeScript bundle compilation check failed!\n{stdout}\n{stderr}");
+        }
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            println!(
+                "cargo::warning=tensorzero-ts-types: `tsc` not found at {}, skipping TypeScript bundle validation. Run `pnpm install` to enable.",
+                tsc.display()
+            );
+        }
+        Err(e) => {
+            println!(
+                "cargo::warning=tensorzero-ts-types: Failed to run `tsc`: {e}, skipping TypeScript bundle validation"
+            );
+        }
+    }
 }
 
 /// Quote a string as a Rust string literal, escaping special characters.
