@@ -11,11 +11,8 @@ use serde_json::json;
 use tensorzero_core::config::Config;
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::batch_inference::BatchInferenceQueries;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::model_inferences::ModelInferenceQueries;
-use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::batch_inference::{
     PollInferenceResponse, PollPathParams, get_batch_inferences, get_batch_request,
@@ -34,13 +31,9 @@ use tensorzero_core::inference::types::{
 use tensorzero_core::jsonschema_util::JSONSchema;
 use uuid::Uuid;
 
-// ===== HELPER FUNCTIONS =====
+use crate::db::get_test_postgres;
 
-fn create_delegating_connection(
-    clickhouse: ClickHouseConnectionInfo,
-) -> DelegatingDatabaseConnection {
-    DelegatingDatabaseConnection::new(clickhouse, PostgresConnectionInfo::new_disabled())
-}
+// ===== HELPER FUNCTIONS =====
 
 /// Helper function to write 2 rows to the BatchModelInference table
 async fn write_2_batch_model_inference_rows(
@@ -347,9 +340,9 @@ async fn test_write_poll_batch_inference_endpoint(
 }
 make_db_test!(test_write_poll_batch_inference_endpoint);
 
-/// ClickHouse-specific test to verify that BatchRequest has snapshot_hash
-async fn test_batch_request_has_snapshot_hash(clickhouse: ClickHouseConnectionInfo) {
-    let database = create_delegating_connection(clickhouse.clone());
+#[tokio::test]
+async fn test_batch_request_has_snapshot_hash_clickhouse() {
+    let clickhouse = tensorzero_core::db::clickhouse::test_helpers::get_clickhouse().await;
     let batch_id = Uuid::now_v7();
     let batch_params = json!({"baz": "bat"});
     let function_name = "test_function";
@@ -377,7 +370,7 @@ async fn test_batch_request_has_snapshot_hash(clickhouse: ClickHouseConnectionIn
         .into_config_without_writing_for_tests();
 
     write_poll_batch_inference(
-        &database,
+        &clickhouse,
         &batch_request,
         PollBatchInferenceResponse::Pending {
             raw_request: raw_request.clone(),
@@ -388,7 +381,7 @@ async fn test_batch_request_has_snapshot_hash(clickhouse: ClickHouseConnectionIn
     )
     .await
     .unwrap();
-    database.clickhouse.sleep_for_writes_to_be_visible().await;
+    clickhouse.sleep_for_writes_to_be_visible().await;
 
     let batch_request_query = format!(
         "SELECT snapshot_hash FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
@@ -403,7 +396,61 @@ async fn test_batch_request_has_snapshot_hash(clickhouse: ClickHouseConnectionIn
         "BatchRequest should have snapshot_hash"
     );
 }
-make_clickhouse_only_test!(test_batch_request_has_snapshot_hash);
+
+#[tokio::test]
+async fn test_batch_request_has_snapshot_hash_postgres() {
+    let postgres = get_test_postgres().await;
+    let batch_id = Uuid::now_v7();
+    let batch_params = json!({"baz": "bat"});
+    let function_name = "test_function";
+    let variant_name = "test_variant";
+    let model_name = "test_model";
+    let model_provider_name = "test_model_provider";
+    let raw_request = "raw request".to_string();
+    let raw_response = "raw response".to_string();
+    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
+        batch_id,
+        batch_params: &batch_params,
+        function_name,
+        variant_name,
+        model_name,
+        model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
+        status: BatchStatus::Pending,
+        errors: vec![],
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    });
+    let config = Config::new_empty()
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+    write_poll_batch_inference(
+        &postgres,
+        &batch_request,
+        PollBatchInferenceResponse::Pending {
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+        },
+        Arc::from("dummy"),
+        &config,
+    )
+    .await
+    .unwrap();
+
+    let pool = postgres
+        .get_pool()
+        .expect("Postgres pool should be available");
+    let row: (Option<Vec<u8>>,) = sqlx::query_as(
+        "SELECT snapshot_hash FROM tensorzero.batch_requests WHERE batch_id = $1 ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(batch_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert!(row.0.is_some(), "BatchRequest should have snapshot_hash");
+}
 
 async fn test_get_batch_inferences_endpoint(
     database: impl BatchInferenceQueries + TestDatabaseHelpers,
