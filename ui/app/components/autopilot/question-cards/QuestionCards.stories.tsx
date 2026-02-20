@@ -149,7 +149,6 @@ export const SingleMultipleChoice: Story = {
     payload: singleMcPayload,
     isLoading: false,
     onSubmit: () => {},
-    onSkip: () => {},
   },
 };
 
@@ -188,7 +187,6 @@ export const SingleMultiSelect: Story = {
     payload: multiSelectPayload,
     isLoading: false,
     onSubmit: () => {},
-    onSkip: () => {},
   },
 };
 
@@ -207,7 +205,6 @@ export const MultiQuestion: Story = {
     payload: multiQuestionPayload,
     isLoading: false,
     onSubmit: () => {},
-    onSkip: () => {},
   },
 };
 
@@ -234,7 +231,6 @@ function InteractivePending() {
         payload={multiQuestionPayload}
         isLoading={false}
         onSubmit={(_id, responses) => setLastSubmission(responses)}
-        onSkip={() => setLastSubmission(null)}
       />
       {lastSubmission && (
         <pre className="bg-bg-secondary text-fg-primary rounded-md border p-3 text-xs">
