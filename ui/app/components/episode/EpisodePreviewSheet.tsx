@@ -32,35 +32,31 @@ export function EpisodePreviewSheet({
   isOpen,
   onClose,
 }: EpisodePreviewSheetProps) {
-  const fetcher = useFetcher<EpisodeDetailData>();
+  const fetcherKey = episodeId ? `episode-sheet-${episodeId}` : "episode-sheet";
+  const fetcher = useFetcher<EpisodeDetailData>({ key: fetcherKey });
   const { toast } = useToast();
 
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  const lastFetchedEpisodeIdRef = useRef<string | null>(null);
+  const hasFetchedRef = useRef(false);
+  const prevKeyRef = useRef(fetcherKey);
+  if (prevKeyRef.current !== fetcherKey) {
+    prevKeyRef.current = fetcherKey;
+    hasFetchedRef.current = false;
+  }
 
   const fetcherState = fetcher.state;
-  const fetcherDataEpisodeId = fetcher.data?.episode_id;
+  const fetcherData = fetcher.data;
 
   useEffect(() => {
     if (!isOpen || !episodeId) return;
-
-    const episodeIdChanged = lastFetchedEpisodeIdRef.current !== episodeId;
-    lastFetchedEpisodeIdRef.current = episodeId;
-
-    if (
-      !episodeIdChanged &&
-      fetcherDataEpisodeId === episodeId &&
-      fetcherState === "idle"
-    ) {
-      return;
-    }
-
     if (fetcherState !== "idle") return;
+    if (fetcherData) return;
 
+    hasFetchedRef.current = true;
     fetcherRef.current.load(toEpisodeApiUrl(episodeId));
-  }, [isOpen, episodeId, fetcherState, fetcherDataEpisodeId]);
+  }, [isOpen, episodeId, fetcherState, fetcherData]);
 
   const refreshEpisodeData = useCallback(
     (redirectUrl?: string) => {
@@ -83,16 +79,12 @@ export function EpisodePreviewSheet({
     [episodeId, toast],
   );
 
-  // Only use fetcher data when it matches the current episode ID to avoid
-  // briefly showing stale content under the wrong ID during transitions
-  const isDataCurrent = fetcher.data?.episode_id === episodeId;
-  const currentData = isDataCurrent ? fetcher.data : null;
   const hasError =
-    fetcher.state === "idle" &&
-    !currentData &&
+    fetcherState === "idle" &&
+    !fetcherData &&
     episodeId !== null &&
-    lastFetchedEpisodeIdRef.current === episodeId;
-  const showLoading = !currentData && episodeId !== null && !hasError;
+    hasFetchedRef.current;
+  const showLoading = !fetcherData && episodeId !== null && !hasError;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -102,11 +94,11 @@ export function EpisodePreviewSheet({
         className="pt-page-top pb-page-bottom w-full overflow-y-auto border-l-0 px-8 focus:outline-hidden sm:max-w-full md:w-5/6 [&>button.absolute]:hidden"
       >
         <div className="absolute top-8 right-8 z-10 flex items-center gap-5">
-          {currentData && (
+          {fetcherData && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
-                  to={toEpisodeUrl(currentData.episode_id)}
+                  to={toEpisodeUrl(fetcherData.episode_id)}
                   className="text-fg-secondary cursor-pointer rounded-sm transition-colors hover:text-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2"
                   aria-label="Open full page"
                 >
@@ -162,9 +154,9 @@ export function EpisodePreviewSheet({
             </div>
           )}
 
-          {currentData && episodeId && (
+          {fetcherData && episodeId && (
             <EpisodeDetailContent
-              data={currentData}
+              data={fetcherData}
               onFeedbackAdded={refreshEpisodeData}
             />
           )}
