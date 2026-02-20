@@ -41,8 +41,8 @@ export function EntitySheet() {
     case "model_inference":
       return (
         <ModelInferencePreviewSheet
-          modelInferenceId={sheetState.id}
-          isOpen
+          modelInferenceId={activeState.id}
+          isOpen={isOpen}
           onClose={closeSheet}
         />
       );
