@@ -94,29 +94,12 @@ export function useQuestionCardState(
     isStepComplete(idx),
   );
 
-  const handleSkipStep = () => {
-    setSkippedSteps((prev) => {
-      const next = new Set(prev);
-      next.add(activeStep);
-      return next;
-    });
-
-    if (isSingleQuestion) {
-      // Single question: skip is equivalent to "submit as skipped"
-      onSubmit(eventId, {
-        [payload.questions[0].id]: { type: "skipped" },
-      });
-    } else if (!isLastStep) {
-      setActiveStep((s) => s + 1);
-    }
-    // Last step of multi-question: just mark as skipped.
-    // Submit button (gated on allStepsComplete) handles submission.
-  };
-
-  const handleSubmit = () => {
+  const buildResponses = (
+    skipped: Set<number>,
+  ): Record<string, UserQuestionAnswer> => {
     const responses: Record<string, UserQuestionAnswer> = {};
     payload.questions.forEach((question, idx) => {
-      if (skippedSteps.has(idx)) {
+      if (skipped.has(idx)) {
         responses[question.id] = { type: "skipped" };
         return;
       }
@@ -142,7 +125,28 @@ export function useQuestionCardState(
         }
       }
     });
-    onSubmit(eventId, responses);
+    return responses;
+  };
+
+  const handleSkipStep = () => {
+    const newSkipped = new Set(skippedSteps);
+    newSkipped.add(activeStep);
+
+    if (isLastStep) {
+      // Last (or only) step: skip all unanswered intermediates and submit.
+      // Covers both single-question and multi-question cases.
+      payload.questions.forEach((_, idx) => {
+        if (!isStepAnswered(idx)) newSkipped.add(idx);
+      });
+      onSubmit(eventId, buildResponses(newSkipped));
+    } else {
+      setSkippedSteps(newSkipped);
+      setActiveStep((s) => s + 1);
+    }
+  };
+
+  const handleSubmit = () => {
+    onSubmit(eventId, buildResponses(skippedSteps));
   };
 
   const getStepData = (idx: number) => {
