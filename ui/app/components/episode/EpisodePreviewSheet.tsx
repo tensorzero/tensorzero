@@ -66,11 +66,19 @@ export function EpisodePreviewSheet({
     (redirectUrl?: string) => {
       if (!episodeId) return;
       toast.success({ title: "Feedback Added" });
+      // The feedback action returns a page URL for episodes, but we need the API
+      // URL for fetcher.load(). Extract newFeedbackId for ClickHouse polling.
+      let apiUrl = toEpisodeApiUrl(episodeId);
       if (redirectUrl) {
-        fetcherRef.current.load(redirectUrl);
-      } else {
-        fetcherRef.current.load(toEpisodeApiUrl(episodeId));
+        const newFeedbackId = new URL(
+          redirectUrl,
+          window.location.origin,
+        ).searchParams.get("newFeedbackId");
+        if (newFeedbackId) {
+          apiUrl += `?newFeedbackId=${newFeedbackId}`;
+        }
       }
+      fetcherRef.current.load(apiUrl);
     },
     [episodeId, toast],
   );
