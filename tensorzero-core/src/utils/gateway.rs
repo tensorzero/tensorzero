@@ -30,6 +30,7 @@ use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
 use crate::endpoints::openai_compatible::RouterExt;
 use crate::error::{Error, ErrorDetails};
+use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::RateLimitingManager;
@@ -330,6 +331,27 @@ impl GatewayHandle {
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
+        // Validate that when observability is enabled, the correct connection info is set up.
+        if config.gateway.observability.enabled == Some(true) {
+            if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+                if matches!(postgres_connection_info, PostgresConnectionInfo::Disabled) {
+                    return Err(ErrorDetails::AppState {
+                        message:
+                            "A Postgres connection is required when `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE` \
+                                  is enabled and observability is enabled."
+                                .to_string(),
+                    }
+                    .into());
+                }
+            } else if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
+                return Err(ErrorDetails::AppState {
+                    message: "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
+                        .to_string(),
+                }
+                .into());
+            }
+        }
+
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
             &valkey_connection_info,
@@ -490,20 +512,21 @@ pub async fn setup_clickhouse(
     clickhouse_url: Option<String>,
     embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
+    // TODO(#5691): we should stop checking an explicit observability.enabled config when setting up
+    // ClickHouse.
     let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
-        // Observability disabled by config
         (Some(false), _) => {
+            // Observability disabled by config
             tracing::info!(
                 "Disabling observability: `gateway.observability.enabled` is set to false in config."
             );
             ClickHouseConnectionInfo::new_disabled()
         }
-        // Observability enabled but no ClickHouse URL
         (Some(true), None) => {
-            return Err(ErrorDetails::AppState {
-                message: "Missing environment variable TENSORZERO_CLICKHOUSE_URL".to_string(),
-            }
-            .into());
+            // Observability enabled but no ClickHouse URL
+            // This is allowed if Postgres is the primary datastore; we validate after both ClickHouse
+            // and Postgres are initialized.
+            ClickHouseConnectionInfo::new_disabled()
         }
         // Observability enabled and ClickHouse URL provided
         (Some(true), Some(clickhouse_url)) => {
@@ -581,6 +604,7 @@ pub async fn setup_postgres(
     config: &Config,
     postgres_url: Option<&str>,
 ) -> Result<PostgresConnectionInfo, Error> {
+    // TODO(#5691): we should stop checking an explicit postgres.enabled config.
     let postgres_connection_info = match (config.postgres.enabled, postgres_url) {
         // Postgres disabled by config
         (Some(false), _) => {
@@ -899,6 +923,7 @@ mod tests {
     };
     #[tokio::test]
     async fn test_setup_clickhouse() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Disabled observability
         let gateway_config = GatewayConfig {
@@ -936,7 +961,7 @@ mod tests {
             ClickHouseClientType::Disabled
         );
         assert!(!logs_contain(
-            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+            "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"
         ));
 
         // Default observability and no ClickHouse URL
@@ -964,7 +989,7 @@ mod tests {
             ClickHouseClientType::Disabled
         );
         assert!(!logs_contain(
-            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+            "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"
         ));
         assert!(logs_contain(
             "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."
@@ -973,7 +998,8 @@ mod tests {
         // We do not test the case where a ClickHouse URL is provided but observability is default,
         // as this would require a working ClickHouse and we don't have one in unit tests.
 
-        // Observability enabled but ClickHouse URL is missing
+        // Observability enabled but ClickHouse URL is missing returns disabled
+        // (validation happens in `new_with_database_and_http_client`)
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
@@ -1003,12 +1029,13 @@ mod tests {
         };
         let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let err = setup_clickhouse(&unwritten_config, None, false)
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
             .await
-            .unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL")
+            .unwrap();
+        assert_eq!(
+            clickhouse_connection_info.client_type(),
+            ClickHouseClientType::Disabled,
+            "ClickHouse should be disabled when observability is enabled but no URL is provided"
         );
 
         // Bad URL
@@ -1047,6 +1074,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_unhealthy_clickhouse() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Sensible URL that doesn't point to ClickHouse
         let gateway_config = GatewayConfig {
@@ -1181,6 +1209,140 @@ mod tests {
         setup_postgres(config, Some("bad_url"))
             .await
             .expect_err("Postgres setup should fail given a bad URL");
+    }
+
+    #[tokio::test]
+    async fn test_observability_enabled_requires_clickhouse_when_not_postgres_primary() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
+
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: Some(true),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let result = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+        )
+        .await;
+        let err = result
+            .err()
+            .expect("Gateway should fail when observability is enabled but ClickHouse is missing");
+        assert!(
+            err.to_string()
+                .contains("Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"),
+            "error should mention the missing ClickHouse URL: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_observability_enabled_requires_postgres_when_postgres_primary() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
+
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: Some(true),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let result = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+        )
+        .await;
+        let err = result
+            .err()
+            .expect("Gateway should fail when Postgres is primary but disabled");
+        assert!(
+            err.to_string()
+                .contains("ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"),
+            "error should mention the feature flag: {err}"
+        );
+
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
+    }
+
+    #[tokio::test]
+    async fn test_observability_disabled_does_not_require_datastore() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
+
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: Some(false),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let _gateway = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+        )
+        .await
+        .expect("Gateway should start when observability is disabled");
+    }
+
+    #[tokio::test]
+    async fn test_observability_default_does_not_require_datastore() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
+
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: None,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let _gateway = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+        )
+        .await
+        .expect("Gateway should start when observability is default (not explicitly enabled)");
+
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
     }
 
     #[tokio::test]
