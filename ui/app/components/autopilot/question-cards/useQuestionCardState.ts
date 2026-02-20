@@ -28,14 +28,17 @@ export function useQuestionCardState(
   const isFirstStep = activeStep === 0;
   const isLastStep = activeStep === questionCount - 1;
 
-  const handleMcToggle = (questionIndex: number, value: string) => {
-    // Unskip if user starts answering
+  const clearSkip = (questionIndex: number) => {
     setSkippedSteps((prev) => {
       if (!prev.has(questionIndex)) return prev;
       const next = new Set(prev);
       next.delete(questionIndex);
       return next;
     });
+  };
+
+  const handleMcToggle = (questionIndex: number, value: string) => {
+    clearSkip(questionIndex);
     setSelections((prev) => {
       const next = new Map(prev);
       const question = payload.questions[questionIndex];
@@ -58,13 +61,7 @@ export function useQuestionCardState(
   };
 
   const handleFreeTextChange = (questionIndex: number, text: string) => {
-    // Unskip if user starts typing
-    setSkippedSteps((prev) => {
-      if (!prev.has(questionIndex)) return prev;
-      const next = new Set(prev);
-      next.delete(questionIndex);
-      return next;
-    });
+    clearSkip(questionIndex);
     setFreeTexts((prev) => {
       const next = new Map(prev);
       next.set(questionIndex, text);
