@@ -89,7 +89,7 @@ export function EpisodePreviewSheet({
   const currentData = isDataCurrent ? fetcher.data : null;
   const hasError =
     fetcher.state === "idle" &&
-    !fetcher.data &&
+    !currentData &&
     episodeId !== null &&
     lastFetchedEpisodeIdRef.current === episodeId;
   const showLoading = !currentData && episodeId !== null && !hasError;
