@@ -23,6 +23,7 @@ serde_path_to_error.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
 schemars.workspace = true
 sqlx.workspace = true
+tracing.workspace = true
 thiserror = "2"
 anyhow = "1"
 uuid.workspace = true

@@ -343,12 +343,21 @@ fn validate_bundles_with_tsc(out_dir: &Path, bundles: &[(String, String)]) {
         }
         Ok(_) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            assert!(
+                std::env::var("TENSORZERO_CI").as_deref() != Ok("1"),
+                "`tsc` not found at {} but TENSORZERO_CI=1 requires it. Run `pnpm install` to install.",
+                tsc.display()
+            );
             println!(
                 "cargo::warning=tensorzero-ts-types: `tsc` not found at {}, skipping TypeScript bundle validation. Run `pnpm install` to enable.",
                 tsc.display()
             );
         }
         Err(e) => {
+            assert!(
+                std::env::var("TENSORZERO_CI").as_deref() != Ok("1"),
+                "Failed to run `tsc`: {e} but TENSORZERO_CI=1 requires it"
+            );
             println!(
                 "cargo::warning=tensorzero-ts-types: Failed to run `tsc`: {e}, skipping TypeScript bundle validation"
             );
