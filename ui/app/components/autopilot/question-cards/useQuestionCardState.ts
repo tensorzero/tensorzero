@@ -19,6 +19,9 @@ export function useQuestionCardState(
   const [freeTexts, setFreeTexts] = useState<Map<number, string>>(
     () => new Map(),
   );
+  const [skippedSteps, setSkippedSteps] = useState<Set<number>>(
+    () => new Set(),
+  );
 
   const questionCount = payload.questions.length;
   const isSingleQuestion = questionCount === 1;
@@ -26,6 +29,13 @@ export function useQuestionCardState(
   const isLastStep = activeStep === questionCount - 1;
 
   const handleMcToggle = (questionIndex: number, value: string) => {
+    // Unskip if user starts answering
+    setSkippedSteps((prev) => {
+      if (!prev.has(questionIndex)) return prev;
+      const next = new Set(prev);
+      next.delete(questionIndex);
+      return next;
+    });
     setSelections((prev) => {
       const next = new Map(prev);
       const question = payload.questions[questionIndex];
@@ -48,6 +58,13 @@ export function useQuestionCardState(
   };
 
   const handleFreeTextChange = (questionIndex: number, text: string) => {
+    // Unskip if user starts typing
+    setSkippedSteps((prev) => {
+      if (!prev.has(questionIndex)) return prev;
+      const next = new Set(prev);
+      next.delete(questionIndex);
+      return next;
+    });
     setFreeTexts((prev) => {
       const next = new Map(prev);
       next.set(questionIndex, text);
@@ -55,7 +72,7 @@ export function useQuestionCardState(
     });
   };
 
-  const isStepValid = (idx: number): boolean => {
+  const isStepAnswered = (idx: number): boolean => {
     const question = payload.questions[idx];
     switch (question.type) {
       case "multiple_choice": {
@@ -71,11 +88,65 @@ export function useQuestionCardState(
     }
   };
 
-  const allStepsValid = payload.questions.every((_, idx) => isStepValid(idx));
+  const isStepSkipped = (idx: number): boolean => skippedSteps.has(idx);
+
+  const isStepComplete = (idx: number): boolean =>
+    isStepAnswered(idx) || isStepSkipped(idx);
+
+  const allStepsComplete = payload.questions.every((_, idx) =>
+    isStepComplete(idx),
+  );
+
+  const handleSkipStep = () => {
+    setSkippedSteps((prev) => {
+      const next = new Set(prev);
+      next.add(activeStep);
+      return next;
+    });
+
+    if (isSingleQuestion || isLastStep) {
+      // Build responses and submit immediately
+      const responses: Record<string, UserQuestionAnswer> = {};
+      payload.questions.forEach((question, idx) => {
+        if (idx === activeStep || skippedSteps.has(idx)) {
+          responses[question.id] = { type: "skipped" };
+          return;
+        }
+        switch (question.type) {
+          case "multiple_choice": {
+            const selected = selections.get(idx);
+            if (!selected || selected.size === 0) return;
+            responses[question.id] = {
+              type: "multiple_choice",
+              selected: Array.from(selected),
+            };
+            break;
+          }
+          case "free_response":
+            responses[question.id] = {
+              type: "free_response",
+              text: freeTexts.get(idx) ?? "",
+            };
+            break;
+          default: {
+            const _exhaustiveCheck: never = question;
+            return _exhaustiveCheck;
+          }
+        }
+      });
+      onSubmit(eventId, responses);
+    } else {
+      setActiveStep((s) => s + 1);
+    }
+  };
 
   const handleSubmit = () => {
     const responses: Record<string, UserQuestionAnswer> = {};
     payload.questions.forEach((question, idx) => {
+      if (skippedSteps.has(idx)) {
+        responses[question.id] = { type: "skipped" };
+        return;
+      }
       switch (question.type) {
         case "multiple_choice": {
           const selected = selections.get(idx);
@@ -118,8 +189,11 @@ export function useQuestionCardState(
     isSingleQuestion,
     isFirstStep,
     isLastStep,
-    isStepValid,
-    allStepsValid,
+    isStepAnswered,
+    isStepSkipped,
+    isStepComplete,
+    allStepsComplete,
+    handleSkipStep,
     handleSubmit,
     getStepData,
   };
