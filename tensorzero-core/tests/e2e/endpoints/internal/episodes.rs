@@ -24,12 +24,9 @@ async fn test_query_episode_table_bounds() {
     let response: TableBoundsWithCount = resp.json().await.unwrap();
 
     // The fixture should have some episodes
-    assert!(
-        response.count > 0,
-        "Expected at least one episode in fixtures"
-    );
     assert!(response.first_id.is_some(), "Expected first_id to be set");
     assert!(response.last_id.is_some(), "Expected last_id to be set");
+    // Count may or may not be present depending on backend (ClickHouse returns it, Postgres does not)
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -82,7 +79,7 @@ async fn test_query_episode_table_with_pagination() {
     assert!(first_page_resp.status().is_success());
     let first_page: ListEpisodesResponse = first_page_resp.json().await.unwrap();
 
-    if first_page.episodes.len() == 5 && bounds.count > 5 {
+    if first_page.episodes.len() == 5 && bounds.count.unwrap_or(u64::MAX) > 5 {
         // If we have more episodes, test pagination with 'before'
         let last_episode_id = first_page.episodes.last().unwrap().episode_id;
         let second_page_url = get_gateway_endpoint(&format!(

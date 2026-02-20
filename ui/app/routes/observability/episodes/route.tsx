@@ -40,7 +40,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     boundsPromise,
   ]).then(([episodes, bounds]) => ({ episodes, bounds }));
 
-  const countPromise = boundsPromise.then((b) => Number(b.count));
+  const countPromise = boundsPromise.then((b) =>
+    b.count != null ? Number(b.count) : undefined,
+  );
 
   return {
     dataPromise,
