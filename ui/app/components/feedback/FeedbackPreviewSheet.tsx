@@ -32,42 +32,39 @@ export function FeedbackPreviewSheet({
   isOpen,
   onClose,
 }: FeedbackPreviewSheetProps) {
-  const fetcher = useFetcher<FeedbackDetailData>();
+  const fetcherKey = feedbackId
+    ? `feedback-sheet-${feedbackId}`
+    : "feedback-sheet";
+  const fetcher = useFetcher<FeedbackDetailData>({ key: fetcherKey });
 
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  const lastFetchedFeedbackIdRef = useRef<string | null>(null);
+  const hasFetchedRef = useRef(false);
+  const prevKeyRef = useRef(fetcherKey);
+  if (prevKeyRef.current !== fetcherKey) {
+    prevKeyRef.current = fetcherKey;
+    hasFetchedRef.current = false;
+  }
 
   const fetcherState = fetcher.state;
-  const fetcherDataId = fetcher.data?.id;
+  const fetcherData = fetcher.data;
 
   useEffect(() => {
     if (!isOpen || !feedbackId) return;
-
-    const feedbackIdChanged = lastFetchedFeedbackIdRef.current !== feedbackId;
-    lastFetchedFeedbackIdRef.current = feedbackId;
-
-    if (
-      !feedbackIdChanged &&
-      fetcherDataId === feedbackId &&
-      fetcherState === "idle"
-    ) {
-      return;
-    }
-
     if (fetcherState !== "idle") return;
+    if (fetcherData) return;
 
+    hasFetchedRef.current = true;
     fetcherRef.current.load(getFeedbackApiUrl(feedbackId));
-  }, [isOpen, feedbackId, fetcherState, fetcherDataId]);
+  }, [isOpen, feedbackId, fetcherState, fetcherData]);
 
-  const feedbackData = fetcher.data ?? null;
-  const isLoading = fetcher.state === "loading";
   const hasError =
-    fetcher.state === "idle" &&
-    !fetcher.data &&
+    fetcherState === "idle" &&
+    !fetcherData &&
     feedbackId !== null &&
-    lastFetchedFeedbackIdRef.current === feedbackId;
+    hasFetchedRef.current;
+  const showLoading = !fetcherData && feedbackId !== null && !hasError;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -96,7 +93,7 @@ export function FeedbackPreviewSheet({
         </SheetHeader>
 
         <div className="mt-8 flex flex-col gap-8">
-          {isLoading && !feedbackData && (
+          {showLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-fg-muted text-sm">
                 Loading feedback details...
@@ -112,8 +109,8 @@ export function FeedbackPreviewSheet({
             </div>
           )}
 
-          {feedbackData && feedbackId && (
-            <FeedbackDetailContent data={feedbackData} />
+          {fetcherData && feedbackId && (
+            <FeedbackDetailContent data={fetcherData} />
           )}
         </div>
       </SheetContent>
