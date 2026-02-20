@@ -144,6 +144,7 @@ pub enum AutopilotStatus {
     ServerSideProcessing,
     WaitingForToolCallAuthorization,
     WaitingForToolExecution,
+    WaitingForUserQuestionsAnswers,
     WaitingForRetry,
     Failed,
 }

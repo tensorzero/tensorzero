@@ -697,6 +697,8 @@ function getStatusLabel(status: AutopilotStatus): {
       return { text: "Waiting", showEllipsis: false };
     case "waiting_for_tool_execution":
       return { text: "Executing tool", showEllipsis: true };
+    case "waiting_for_user_questions_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_retry":
       return { text: "Something went wrong. Retrying", showEllipsis: true };
     case "failed":
