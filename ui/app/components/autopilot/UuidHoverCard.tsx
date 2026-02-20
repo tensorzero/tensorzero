@@ -45,11 +45,45 @@ export function getHoverCardWidth(type: ResolvedObject["type"]): string {
   }
 }
 
+function hasHoverCard(obj: ResolvedObject): boolean {
+  switch (obj.type) {
+    case "inference":
+    case "episode":
+    case "chat_datapoint":
+    case "json_datapoint":
+    case "boolean_feedback":
+    case "float_feedback":
+    case "comment_feedback":
+    case "demonstration_feedback":
+      return true;
+    case "model_inference":
+      return false;
+    default: {
+      const _exhaustiveCheck: never = obj;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
+function isFeedbackType(
+  type: ResolvedObject["type"],
+): type is
+  | "boolean_feedback"
+  | "float_feedback"
+  | "comment_feedback"
+  | "demonstration_feedback" {
+  return (
+    type === "boolean_feedback" ||
+    type === "float_feedback" ||
+    type === "comment_feedback" ||
+    type === "demonstration_feedback"
+  );
+}
+
 export function UuidHoverCard({ uuid, obj, children }: UuidHoverCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const url = toResolvedObjectUrl(uuid, obj);
 
-  if (!url) {
+  if (!hasHoverCard(obj)) {
     return <>{children}</>;
   }
 
@@ -92,11 +126,12 @@ function HoverCardContent({ uuid, obj, isOpen }: HoverCardContentProps) {
     case "chat_datapoint":
     case "json_datapoint":
       return <DatapointContent uuid={uuid} obj={obj} />;
-    case "model_inference":
     case "boolean_feedback":
     case "float_feedback":
     case "comment_feedback":
     case "demonstration_feedback":
+      return <FeedbackContent uuid={uuid} obj={obj} />;
+    case "model_inference":
       return null;
     default: {
       const _exhaustiveCheck: never = obj;
@@ -205,6 +240,54 @@ function DatapointContent({ uuid, obj }: DatapointContentProps) {
   );
 }
 
+interface FeedbackContentProps {
+  uuid: string;
+  obj: Extract<
+    ResolvedObject,
+    {
+      type:
+        | "boolean_feedback"
+        | "float_feedback"
+        | "comment_feedback"
+        | "demonstration_feedback";
+    }
+  >;
+}
+
+function getFeedbackTypeLabel(
+  type:
+    | "boolean_feedback"
+    | "float_feedback"
+    | "comment_feedback"
+    | "demonstration_feedback",
+): string {
+  switch (type) {
+    case "boolean_feedback":
+      return "Boolean Feedback";
+    case "float_feedback":
+      return "Float Feedback";
+    case "comment_feedback":
+      return "Comment Feedback";
+    case "demonstration_feedback":
+      return "Demonstration Feedback";
+    default: {
+      const _exhaustiveCheck: never = type;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
+function FeedbackContent({ uuid, obj }: FeedbackContentProps) {
+  const typeLabel = getFeedbackTypeLabel(obj.type);
+  return (
+    <div className="flex flex-col gap-4">
+      <TypeHeaderLink uuid={uuid} obj={obj}>
+        {typeLabel}
+      </TypeHeaderLink>
+    </div>
+  );
+}
+
 interface TypeHeaderLinkProps {
   uuid: string;
   obj: ResolvedObject;
@@ -213,7 +296,8 @@ interface TypeHeaderLinkProps {
 
 export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
-  const { openInferenceSheet, openEpisodeSheet } = useEntitySheet();
+  const { openInferenceSheet, openEpisodeSheet, openFeedbackSheet } =
+    useEntitySheet();
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -224,12 +308,29 @@ export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
       } else if (obj.type === "episode") {
         e.preventDefault();
         openEpisodeSheet(uuid);
+      } else if (isFeedbackType(obj.type)) {
+        e.preventDefault();
+        openFeedbackSheet(uuid);
       }
     },
-    [obj.type, uuid, openInferenceSheet, openEpisodeSheet],
+    [obj.type, uuid, openInferenceSheet, openEpisodeSheet, openFeedbackSheet],
   );
 
-  if (!url) return null;
+  if (!url) {
+    if (isFeedbackType(obj.type)) {
+      return (
+        <button
+          type="button"
+          onClick={handleClick}
+          className="text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center text-xs transition-colors"
+        >
+          {children}
+          <ChevronRight className="ml-0.5 h-3 w-3" />
+        </button>
+      );
+    }
+    return null;
+  }
 
   return (
     <Link

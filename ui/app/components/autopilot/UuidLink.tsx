@@ -84,12 +84,30 @@ function IconWithTooltip({
   );
 }
 
+function isFeedbackType(
+  type: ResolvedObject["type"],
+): type is
+  | "boolean_feedback"
+  | "float_feedback"
+  | "comment_feedback"
+  | "demonstration_feedback" {
+  return (
+    type === "boolean_feedback" ||
+    type === "float_feedback" ||
+    type === "comment_feedback" ||
+    type === "demonstration_feedback"
+  );
+}
+
 export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
-  const { openInferenceSheet, openEpisodeSheet } = useEntitySheet();
+  const { openInferenceSheet, openEpisodeSheet, openFeedbackSheet } =
+    useEntitySheet();
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
   const url = obj ? toResolvedObjectUrl(uuid, obj) : null;
+  const isClickableFeedback = obj ? isFeedbackType(obj.type) : false;
+  const isInteractive = Boolean(url) || isClickableFeedback;
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -100,16 +118,19 @@ export function UuidLink({ uuid }: UuidLinkProps) {
       } else if (obj?.type === "episode") {
         e.preventDefault();
         openEpisodeSheet(uuid);
+      } else if (obj && isFeedbackType(obj.type)) {
+        e.preventDefault();
+        openFeedbackSheet(uuid);
       }
     },
-    [obj, uuid, openInferenceSheet, openEpisodeSheet],
+    [obj, uuid, openInferenceSheet, openEpisodeSheet, openFeedbackSheet],
   );
 
   return (
     <code
       className={cn(
         "relative rounded px-1.5 py-0.5 font-mono text-xs font-medium transition-colors duration-300",
-        url ? "bg-orange-50 text-orange-500" : "bg-muted",
+        isInteractive ? "bg-orange-50 text-orange-500" : "bg-muted",
       )}
     >
       {url && obj ? (
@@ -124,6 +145,19 @@ export function UuidLink({ uuid }: UuidLinkProps) {
             </IconWithTooltip>
             {uuid}
           </Link>
+        </UuidHoverCard>
+      ) : isClickableFeedback && obj ? (
+        <UuidHoverCard uuid={uuid} obj={obj}>
+          <button
+            type="button"
+            onClick={handleClick}
+            className="cursor-pointer text-inherit no-underline after:absolute after:inset-0 hover:underline"
+          >
+            <IconWithTooltip label={getEntityLabel(obj.type)}>
+              <EntityIcon type={obj.type} />
+            </IconWithTooltip>
+            {uuid}
+          </button>
         </UuidHoverCard>
       ) : (
         <>
