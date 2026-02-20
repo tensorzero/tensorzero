@@ -14,9 +14,9 @@ use tensorzero::{
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
     FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
     GetInferencesRequest, GetInferencesResponse, InferenceOutput, InferenceResponse,
-    ListDatapointsRequest, ListDatasetsRequest, ListDatasetsResponse, ListInferencesRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
-    WriteConfigResponse,
+    ListDatapointsRequest, ListDatasetsRequest, ListDatasetsResponse, ListEpisodesRequest,
+    ListEpisodesResponse, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
@@ -506,6 +506,17 @@ impl TensorZeroClient for Client {
         )
         .await
         .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    // ========== Episode Operations ==========
+
+    async fn list_episodes(
+        &self,
+        request: ListEpisodesRequest,
+    ) -> Result<ListEpisodesResponse, TensorZeroClientError> {
+        ClientExt::list_episodes(self, request)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
     }
 
     // ========== Optimization Operations ==========
