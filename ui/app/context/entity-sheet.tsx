@@ -48,7 +48,9 @@ const EntitySheetContext = createContext<EntitySheetContextValue | null>(null);
  */
 export function EntitySheetProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const [sheetState, setSheetState] = useState<EntitySheetState>(null);
+  const [sheetState, setSheetState] = useState<EntitySheetState>(
+    parseSheetStateFromUrl,
+  );
 
   // Sync state on browser back/forward
   useEffect(() => {
