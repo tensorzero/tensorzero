@@ -86,15 +86,16 @@ export function InferencePreviewSheet({
     [inferenceId, toast],
   );
 
-  const inferenceData = fetcher.data ?? null;
-  const isLoading = fetcher.state === "loading";
-  // Only show error if we're idle, have no data, but have an inferenceId we should have fetched
-  // This avoids showing error on initial render before the fetch starts
+  // Only use fetcher data when it matches the current inference ID to avoid
+  // briefly showing stale content under the wrong ID during transitions
+  const isDataCurrent = fetcher.data?.inference.inference_id === inferenceId;
+  const currentData = isDataCurrent ? fetcher.data : null;
   const hasError =
     fetcher.state === "idle" &&
     !fetcher.data &&
     inferenceId !== null &&
     lastFetchedInferenceIdRef.current === inferenceId;
+  const showLoading = !currentData && inferenceId !== null && !hasError;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -104,11 +105,11 @@ export function InferencePreviewSheet({
         className="pt-page-top pb-page-bottom w-full overflow-y-auto border-l-0 px-8 focus:outline-hidden sm:max-w-full md:w-5/6 [&>button.absolute]:hidden"
       >
         <div className="absolute top-8 right-8 z-10 flex items-center gap-5">
-          {inferenceData && (
+          {currentData && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
-                  to={toInferenceUrl(inferenceData.inference.inference_id)}
+                  to={toInferenceUrl(currentData.inference.inference_id)}
                   className="text-fg-secondary cursor-pointer rounded-sm transition-colors hover:text-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2"
                   aria-label="Open full page"
                 >
@@ -150,7 +151,7 @@ export function InferencePreviewSheet({
         </SheetHeader>
 
         <div className="mt-8 flex flex-col gap-8">
-          {isLoading && !inferenceData && (
+          {showLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-fg-muted text-sm">
                 Loading inference details...
@@ -166,9 +167,9 @@ export function InferencePreviewSheet({
             </div>
           )}
 
-          {inferenceData && inferenceId && (
+          {currentData && inferenceId && (
             <InferenceDetailContent
-              data={inferenceData}
+              data={currentData}
               onFeedbackAdded={refreshInferenceData}
             />
           )}
