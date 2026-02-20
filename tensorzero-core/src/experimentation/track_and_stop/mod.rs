@@ -81,7 +81,7 @@ mod error;
 pub mod estimate_optimal_probabilities;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TrackAndStopConfig {
     metric: String,
@@ -176,6 +176,14 @@ pub enum TrackAndStopState {
         nursery: Nursery,
         stopped_variant_name: String,
     },
+}
+
+impl Default for TrackAndStopState {
+    fn default() -> Self {
+        Self::Stopped {
+            winner_variant_name: String::new(),
+        }
+    }
 }
 
 /// Round-robin sampler for variants in the cold-start phase.

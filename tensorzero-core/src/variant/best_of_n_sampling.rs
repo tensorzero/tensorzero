@@ -44,7 +44,7 @@ use super::chat_completion::UninitializedChatCompletionConfig;
 use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct BestOfNSamplingConfig {
     weight: Option<f64>,
@@ -98,7 +98,7 @@ pub struct UninitializedBestOfNSamplingConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct BestOfNEvaluatorConfig {
     #[serde(flatten)]

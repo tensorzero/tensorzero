@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tensorzero_core::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -20,7 +20,7 @@ use tensorzero_core::{
 pub const MIN_EXAMPLES: usize = 4;
 
 /// Function configuration with associated static tools for GEPA optimization
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FunctionContext {
     pub function_config: Arc<FunctionConfig>,
     /// Static tools from Config.tools that are referenced by the function

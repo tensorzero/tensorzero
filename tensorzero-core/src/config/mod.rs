@@ -566,12 +566,13 @@ impl MetricConfigType {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum MetricConfigOptimize {
     Min,
+    #[default]
     Max,
 }
 
@@ -1860,7 +1861,7 @@ pub struct UninitializedFunctionConfigJson {
 /// Holds all of the schemas used by a chat completion function.
 /// These are used by variants to construct a `TemplateWithSchema`
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct SchemaData {
     #[serde(flatten)]

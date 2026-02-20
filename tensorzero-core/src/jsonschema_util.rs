@@ -200,7 +200,7 @@ impl JSONSchema {
 /// (e.g., `user_schema`, `assistant_schema`, `system_schema`) or new syntax (e.g., `schemas.<name>`).
 /// This is used to determine whether to show a "Legacy" badge in the UI.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct SchemaWithMetadata {
     pub schema: JSONSchema,

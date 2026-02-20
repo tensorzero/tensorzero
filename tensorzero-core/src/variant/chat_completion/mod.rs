@@ -47,7 +47,7 @@ use super::{
 /// kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
 /// string contents of the input block.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
@@ -62,7 +62,7 @@ pub struct TemplateWithSchema {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ChatCompletionConfig {
     weight: Option<f64>,

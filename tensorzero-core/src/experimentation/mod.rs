@@ -96,7 +96,7 @@ fn check_duplicates_across_map(
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
@@ -119,9 +119,8 @@ impl Default for ExperimentationConfig {
 
 /// Holds the base experimentation config plus namespace-specific configs (loaded version).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[derive(Default)]
 pub struct ExperimentationConfigWithNamespaces {
     /// The base experimentation config used when no namespace is provided
     /// or when the provided namespace doesn't have a specific config
@@ -478,7 +477,7 @@ pub(crate) fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 /// Test-only config that always fails during sampling to test fallback logic
 #[cfg(test)]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AlwaysFailsConfig {
     allowed_variants: Vec<String>,
 }
