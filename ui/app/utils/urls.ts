@@ -40,6 +40,10 @@ export function toEpisodeUrl(episodeId: string): string {
   return `/observability/episodes/${encodeURIComponent(episodeId)}`;
 }
 
+export function toEpisodeApiUrl(episodeId: string): string {
+  return `/api/episode/${encodeURIComponent(episodeId)}`;
+}
+
 // ============================================================================
 // Datasets
 // ============================================================================

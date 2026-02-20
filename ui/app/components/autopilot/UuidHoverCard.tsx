@@ -213,7 +213,7 @@ interface TypeHeaderLinkProps {
 
 export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
-  const { openInferenceSheet } = useEntitySheet();
+  const { openInferenceSheet, openEpisodeSheet } = useEntitySheet();
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -221,9 +221,12 @@ export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
       if (obj.type === "inference") {
         e.preventDefault();
         openInferenceSheet(uuid);
+      } else if (obj.type === "episode") {
+        e.preventDefault();
+        openEpisodeSheet(uuid);
       }
     },
-    [obj.type, uuid, openInferenceSheet],
+    [obj.type, uuid, openInferenceSheet, openEpisodeSheet],
   );
 
   if (!url) return null;

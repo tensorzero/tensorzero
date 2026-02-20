@@ -15,13 +15,13 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
-import { InferencePreviewSheet } from "~/components/inference/InferencePreviewSheet";
 import { Button } from "~/components/ui/button";
 import { Eye } from "lucide-react";
 import { Suspense } from "react";
 import { useLocation, Await } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import type { InferencesData } from "./route";
+import { useEntitySheet } from "~/context/entity-sheet";
 
 function SkeletonRows() {
   return (
@@ -49,13 +49,12 @@ function SkeletonRows() {
   );
 }
 
-function TableRows({
-  data,
-  onOpenSheet,
-}: {
+interface TableRowsProps {
   data: InferencesData;
   onOpenSheet: (inferenceId: string) => void;
-}) {
+}
+
+function TableRows({ data, onOpenSheet }: TableRowsProps) {
   const { inferences } = data;
 
   if (inferences.length === 0) {
@@ -110,55 +109,42 @@ function TableRows({
 
 interface EpisodeInferenceTableProps {
   data: Promise<InferencesData>;
-  onOpenSheet: (inferenceId: string) => void;
-  onCloseSheet: () => void;
-  openSheetInferenceId: string | null;
 }
 
 export default function EpisodeInferenceTable({
   data,
-  onOpenSheet,
-  onCloseSheet,
-  openSheetInferenceId,
 }: EpisodeInferenceTableProps) {
   const location = useLocation();
+  const { openInferenceSheet } = useEntitySheet();
 
   return (
-    <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>ID</TableHead>
-            <TableHead>Function</TableHead>
-            <TableHead>Variant</TableHead>
-            <TableHead>Time</TableHead>
-            <TableHead className="text-center">Preview</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <Suspense key={location.key} fallback={<SkeletonRows />}>
-            <Await
-              resolve={data}
-              errorElement={
-                <TableAsyncErrorState
-                  colSpan={5}
-                  defaultMessage="Failed to load inferences"
-                />
-              }
-            >
-              {(resolvedData) => (
-                <TableRows data={resolvedData} onOpenSheet={onOpenSheet} />
-              )}
-            </Await>
-          </Suspense>
-        </TableBody>
-      </Table>
-
-      <InferencePreviewSheet
-        inferenceId={openSheetInferenceId}
-        isOpen={!!openSheetInferenceId}
-        onClose={onCloseSheet}
-      />
-    </>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>ID</TableHead>
+          <TableHead>Function</TableHead>
+          <TableHead>Variant</TableHead>
+          <TableHead>Time</TableHead>
+          <TableHead className="text-center">Preview</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <Suspense key={location.key} fallback={<SkeletonRows />}>
+          <Await
+            resolve={data}
+            errorElement={
+              <TableAsyncErrorState
+                colSpan={5}
+                defaultMessage="Failed to load inferences"
+              />
+            }
+          >
+            {(resolvedData) => (
+              <TableRows data={resolvedData} onOpenSheet={openInferenceSheet} />
+            )}
+          </Await>
+        </Suspense>
+      </TableBody>
+    </Table>
   );
 }

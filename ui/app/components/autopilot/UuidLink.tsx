@@ -86,7 +86,7 @@ function IconWithTooltip({
 
 export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
-  const { openInferenceSheet } = useEntitySheet();
+  const { openInferenceSheet, openEpisodeSheet } = useEntitySheet();
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
   const url = obj ? toResolvedObjectUrl(uuid, obj) : null;
@@ -97,9 +97,12 @@ export function UuidLink({ uuid }: UuidLinkProps) {
       if (obj?.type === "inference") {
         e.preventDefault();
         openInferenceSheet(uuid);
+      } else if (obj?.type === "episode") {
+        e.preventDefault();
+        openEpisodeSheet(uuid);
       }
     },
-    [obj, uuid, openInferenceSheet],
+    [obj, uuid, openInferenceSheet, openEpisodeSheet],
   );
 
   return (

@@ -11,7 +11,10 @@ import { useLocation } from "react-router";
 const SHEET_PARAM = "sheet";
 const SHEET_ID_PARAM = "sheetId";
 
-type EntitySheetState = { type: "inference"; id: string } | null;
+type EntitySheetState =
+  | { type: "inference"; id: string }
+  | { type: "episode"; id: string }
+  | null;
 
 function parseSheetStateFromUrl(): EntitySheetState {
   const params = new URLSearchParams(window.location.search);
@@ -20,12 +23,16 @@ function parseSheetStateFromUrl(): EntitySheetState {
   if (type === "inference" && id) {
     return { type, id };
   }
+  if (type === "episode" && id) {
+    return { type, id };
+  }
   return null;
 }
 
 interface EntitySheetContextValue {
   sheetState: EntitySheetState;
   openInferenceSheet: (id: string) => void;
+  openEpisodeSheet: (id: string) => void;
   closeSheet: () => void;
 }
 
@@ -73,6 +80,14 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
     setSheetState({ type: "inference", id });
   }, []);
 
+  const openEpisodeSheet = useCallback((id: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set(SHEET_PARAM, "episode");
+    url.searchParams.set(SHEET_ID_PARAM, id);
+    window.history.pushState(null, "", url.toString());
+    setSheetState({ type: "episode", id });
+  }, []);
+
   // Use replaceState (not pushState) so that closing via X doesn't create
   // a new history entry, which would cause back-button cycling between
   // open and closed states.
@@ -86,7 +101,7 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
 
   return (
     <EntitySheetContext.Provider
-      value={{ sheetState, openInferenceSheet, closeSheet }}
+      value={{ sheetState, openInferenceSheet, openEpisodeSheet, closeSheet }}
     >
       {children}
     </EntitySheetContext.Provider>
