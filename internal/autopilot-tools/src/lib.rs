@@ -24,6 +24,7 @@
 //! - `GetFeedbackByVariantTool` - Gets feedback statistics (mean, variance, count) by variant for a function and metric
 //! - `RunEvaluationTool` - Runs an evaluation on a dataset and returns statistics
 //! - `ListInferencesTool` - Lists inferences with filtering and pagination
+//! - `UploadDatasetTool` - Uploads a dataset to S3 as JSONL using multipart upload
 //!
 //! # Test Tools (e2e_tests feature)
 //!
@@ -190,6 +191,9 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
     visitor
         .visit_simple_tool::<tools::GetInferencesTool>()
         .await?;
+
+    // Dataset upload tool
+    visitor.visit_task_tool(tools::UploadDatasetTool).await?;
 
     // Test tools (e2e_tests feature)
     // ------------------------------

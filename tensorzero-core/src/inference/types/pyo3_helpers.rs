@@ -398,51 +398,65 @@ pub fn deserialize_from_stored_sample<'a>(
     if obj.is_instance_of::<Datapoint>() {
         // Extract wire type and convert to storage type
         let wire: Datapoint = obj.extract()?;
-        return match wire {
-            Datapoint::Chat(chat_wire) => {
-                let function_config = match config.get_function(&chat_wire.function_name) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        return Err(tensorzero_error::TensorZeroInternalError::new_err(
-                            e.to_string(),
-                        ));
-                    }
-                };
-                let datapoint = match chat_wire.into_storage_without_file_handling(
-                    &function_config,
-                    &config.tools,
-                    &config.hash,
-                ) {
-                    Ok(d) => d,
-                    Err(e) => {
-                        return Err(tensorzero_error::TensorZeroInternalError::new_err(
-                            e.to_string(),
-                        ));
-                    }
-                };
-                Ok(StoredSampleItem::Datapoint(StoredDatapoint::Chat(
-                    datapoint,
-                )))
-            }
-            Datapoint::Json(json_wire) => {
-                let datapoint =
-                    match json_wire.into_storage_without_file_handling(config.hash.clone()) {
-                        Ok(d) => d,
-                        Err(e) => {
-                            return Err(tensorzero_error::TensorZeroInternalError::new_err(
-                                e.to_string(),
-                            ));
-                        }
-                    };
-                Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
-                    datapoint,
-                )))
-            }
-        };
+        return stored_sample_item_from_datapoint(wire, config);
+    }
+
+    // Generated Python dataclasses (e.g. from `list_datapoints`) are not instances
+    // of the Rust `Datapoint` pyclass, but they still deserialize to the same wire enum.
+    // Try that path before falling back to the generic `StoredSampleItem` deserializer.
+    if let Ok(wire_datapoint) = deserialize_from_pyobj::<Datapoint>(py, obj) {
+        return stored_sample_item_from_datapoint(wire_datapoint, config);
     }
 
     // Fall back to generic deserialization
     deserialize_from_pyobj(py, obj)
+}
+
+fn stored_sample_item_from_datapoint(
+    wire: Datapoint,
+    config: &Config,
+) -> PyResult<StoredSampleItem> {
+    match wire {
+        Datapoint::Chat(chat_wire) => {
+            let function_config = match config.get_function(&chat_wire.function_name) {
+                Ok(f) => f,
+                Err(e) => {
+                    return Err(tensorzero_error::TensorZeroInternalError::new_err(
+                        e.to_string(),
+                    ));
+                }
+            };
+            let datapoint = match chat_wire.into_storage_without_file_handling(
+                &function_config,
+                &config.tools,
+                &config.hash,
+            ) {
+                Ok(d) => d,
+                Err(e) => {
+                    return Err(tensorzero_error::TensorZeroInternalError::new_err(
+                        e.to_string(),
+                    ));
+                }
+            };
+            Ok(StoredSampleItem::Datapoint(StoredDatapoint::Chat(
+                datapoint,
+            )))
+        }
+        Datapoint::Json(json_wire) => {
+            let datapoint = match json_wire.into_storage_without_file_handling(config.hash.clone())
+            {
+                Ok(d) => d,
+                Err(e) => {
+                    return Err(tensorzero_error::TensorZeroInternalError::new_err(
+                        e.to_string(),
+                    ));
+                }
+            };
+            Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
+                datapoint,
+            )))
+        }
+    }
 }
 
 /// In the `experimental_launch_optimization` function, we need to be able to accept

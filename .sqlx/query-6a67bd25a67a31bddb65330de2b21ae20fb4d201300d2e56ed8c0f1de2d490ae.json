@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE tensorzero_auth_api_key\n           SET description = $1, updated_at = NOW()\n           WHERE public_id = $2\n           RETURNING public_id, organization, workspace, description, created_at, disabled_at",
+  "query": "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at from tensorzero_auth_api_key WHERE public_id = $1 AND hash = $2",
   "describe": {
     "columns": [
       {
@@ -68,12 +68,23 @@
             "name": "disabled_at"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "expires_at"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Bpchar"
+        "Bpchar",
+        "Text"
       ]
     },
     "nullable": [
@@ -82,8 +93,9 @@
       false,
       true,
       false,
+      true,
       true
     ]
   },
-  "hash": "aba97737d0a90f98bc608f419687f97f62ed3f827144033c6b3cdf19b158cad6"
+  "hash": "6a67bd25a67a31bddb65330de2b21ae20fb4d201300d2e56ed8c0f1de2d490ae"
 }

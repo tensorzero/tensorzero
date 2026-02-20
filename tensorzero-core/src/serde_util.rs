@@ -505,6 +505,18 @@ where
     serializer.serialize_str(&formatted)
 }
 
+/// Deserializes a value that might be `null`, returning `T::default()` for null.
+/// Use with `#[serde(default, deserialize_with = "deserialize_null_default")]`
+/// for fields that are non-optional in Rust but may appear as `null` in JSON
+/// (e.g. fields with `#[serde(skip_serializing)]` that Python sees as `None`).
+pub fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 /// Helper for serde `skip_serializing_if` - returns true if the Option is None or contains an empty Vec.
 // Signature dictated by Serde
 #[expect(clippy::ref_option)]
@@ -993,5 +1005,41 @@ mod tests {
         let obj = TestSerializeUtcDateTimeRfc3339WithMillis { timestamp: dt };
         let json = serde_json::to_string(&obj).unwrap();
         assert_eq!(json, r#"{"timestamp":"1970-01-01T00:00:00.000Z"}"#);
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct TestNullDefault {
+        #[serde(default, deserialize_with = "deserialize_null_default")]
+        field: String,
+    }
+
+    #[test]
+    fn test_deserialize_null_default_with_value() {
+        let json = r#"{"field": "hello"}"#;
+        let result: TestNullDefault = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            result.field, "hello",
+            "should deserialize a normal string value"
+        );
+    }
+
+    #[test]
+    fn test_deserialize_null_default_with_null() {
+        let json = r#"{"field": null}"#;
+        let result: TestNullDefault = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            result.field, "",
+            "should return default empty string for null"
+        );
+    }
+
+    #[test]
+    fn test_deserialize_null_default_with_absent() {
+        let json = r"{}";
+        let result: TestNullDefault = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            result.field, "",
+            "should return default empty string for absent field"
+        );
     }
 }

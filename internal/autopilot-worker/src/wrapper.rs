@@ -412,6 +412,12 @@ mod tests {
                 params: durable_tools::ListSessionsParams,
             ) -> Result<durable_tools::ListSessionsResponse, TensorZeroClientError>;
 
+            async fn s3_initiate_upload(
+                &self,
+                session_id: Uuid,
+                request: durable_tools::S3UploadRequest,
+            ) -> Result<durable_tools::S3UploadResponse, TensorZeroClientError>;
+
             async fn action(
                 &self,
                 snapshot_hash: SnapshotHash,

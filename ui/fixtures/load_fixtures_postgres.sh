@@ -14,7 +14,6 @@ set -euo pipefail
 # - "json_inference_datapoint_examples.jsonl" (Done)
 # - "chat_inference_datapoint_examples.jsonl" (Done)
 # - "comment_feedback_examples.jsonl" (Done)
-# - "model_inference_cache_e2e.jsonl"
 # - "jaro_winkler_similarity_feedback.jsonl"
 # - "dynamic_evaluation_run_examples.jsonl" (Done)
 # - "dynamic_evaluation_run_episode_examples.jsonl" (Done)

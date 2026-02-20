@@ -36,7 +36,8 @@ pub use embedded::EmbeddedClient;
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
     CreateEventResponse, EventPayload, EventPayloadToolResult, GatewayListEventsResponse,
-    ListEventsParams, ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    ListEventsParams, ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
+    ToolOutcome,
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
@@ -151,6 +152,15 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         params: ListSessionsParams,
     ) -> Result<ListSessionsResponse, TensorZeroClientError>;
+
+    /// Initiate an S3 upload via the Autopilot API.
+    ///
+    /// Returns temporary S3 credentials for uploading data.
+    async fn s3_initiate_upload(
+        &self,
+        session_id: Uuid,
+        request: S3UploadRequest,
+    ) -> Result<S3UploadResponse, TensorZeroClientError>;
 
     /// Execute an action with a historical config snapshot.
     ///

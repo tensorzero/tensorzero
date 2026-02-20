@@ -12,14 +12,10 @@
 
 import { createContext, use } from "react";
 
-export interface FeatureFlags {
-  /** When TENSORZERO_UI_FORCE_CACHE_ON=1, sets `cache_options.enabled = "on"` on all inference calls */
-  FORCE_CACHE_ON: boolean;
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Will gain fields as new feature flags are added
+export interface FeatureFlags {}
 
-export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
-  FORCE_CACHE_ON: false,
-};
+export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {};
 
 const FeatureFlagsContext = createContext<FeatureFlags>(DEFAULT_FEATURE_FLAGS);
 FeatureFlagsContext.displayName = "FeatureFlagsContext";

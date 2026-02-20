@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euxo pipefail
 
-cd $(dirname $0)/provider-proxy-cache
+cd $(dirname $0)/${PROVIDER_PROXY_CACHE_DIR:-provider-proxy-cache}
 
 export AWS_RETRY_MODE=standard
 export AWS_MAX_ATTEMPTS=10

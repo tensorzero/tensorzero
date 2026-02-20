@@ -846,6 +846,29 @@ pub struct ApproveAllToolCallsResponse {
 }
 
 // =============================================================================
+// S3 Upload Types
+// =============================================================================
+
+/// Request body for initiating an S3 upload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct S3UploadRequest {
+    pub tool_call_event_id: Uuid,
+}
+
+/// Response from initiating an S3 upload, containing temporary credentials.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct S3UploadResponse {
+    pub bucket: String,
+    pub key: String,
+    pub region: String,
+    // Credentials can be null when running locally
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+    pub session_token: Option<String>,
+    pub credential_expiration: DateTime<Utc>,
+}
+
+// =============================================================================
 // Error Types
 // =============================================================================
 

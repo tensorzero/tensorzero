@@ -23,7 +23,8 @@ use crate::types::{
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
     GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
     ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCallAuthorizationStatus,
+    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
+    StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
@@ -349,6 +350,31 @@ impl AutopilotClient {
             .await?;
 
         Ok(())
+    }
+
+    // -------------------------------------------------------------------------
+    // S3 Upload Endpoints
+    // -------------------------------------------------------------------------
+
+    /// Initiates an S3 upload by requesting temporary credentials from the Autopilot API.
+    pub async fn s3_initiate_upload(
+        &self,
+        session_id: Uuid,
+        request: S3UploadRequest,
+    ) -> Result<S3UploadResponse, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/aws/s3_initiate_upload"))?;
+        let response = self
+            .http_client
+            .post(url)
+            .headers(self.auth_headers())
+            .json(&request)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let body = response.json().await?;
+        Ok(body)
     }
 
     // -------------------------------------------------------------------------

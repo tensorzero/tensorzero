@@ -28,6 +28,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # This is a workaround for a github limitation - if the check-all-general-checks job
+      # has already failed, then the failure will take priority over the fake status that
+      # we add.
+      - name: Restart general.yml if it failed for this PR
+        if: github.event.action == 'labeled'
+        continue-on-error: true
+        run: |
+          # Find the latest general.yml run for this PR's head commit
+          RUN_ID=$(gh run list \
+            --workflow=general.yml \
+            --commit=${{ github.event.pull_request.head.sha }} \
+            --limit=1 \
+            --json databaseId,conclusion \
+            --jq '.[0] | select(.conclusion == "failure") | .databaseId')
+
+          if [ -n "$RUN_ID" ]; then
+            echo "Restarting failed general.yml run: $RUN_ID"
+            gh run rerun "$RUN_ID"
+          else
+            echo "No failed general.yml run found for this commit"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Attach a 'check-all-general-jobs-passed' status to the PR
         # Note that GitHub doesn't let you remove a commit status, so we don't do anything if the label is removed.
         # Pushing a new commit to the PR will trigger a new 'general.yml' run, which will become the latest status
