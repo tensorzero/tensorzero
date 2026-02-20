@@ -83,13 +83,16 @@ export function EpisodePreviewSheet({
     [episodeId, toast],
   );
 
-  const episodeData = fetcher.data ?? null;
-  const isLoading = fetcher.state === "loading";
+  // Only use fetcher data when it matches the current episode ID to avoid
+  // briefly showing stale content under the wrong ID during transitions
+  const isDataCurrent = fetcher.data?.episode_id === episodeId;
+  const currentData = isDataCurrent ? fetcher.data : null;
   const hasError =
     fetcher.state === "idle" &&
     !fetcher.data &&
     episodeId !== null &&
     lastFetchedEpisodeIdRef.current === episodeId;
+  const showLoading = !currentData && episodeId !== null && !hasError;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -99,11 +102,11 @@ export function EpisodePreviewSheet({
         className="pt-page-top pb-page-bottom w-full overflow-y-auto border-l-0 px-8 focus:outline-hidden sm:max-w-full md:w-5/6 [&>button.absolute]:hidden"
       >
         <div className="absolute top-8 right-8 z-10 flex items-center gap-5">
-          {episodeData && (
+          {currentData && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
-                  to={toEpisodeUrl(episodeData.episode_id)}
+                  to={toEpisodeUrl(currentData.episode_id)}
                   className="text-fg-secondary cursor-pointer rounded-sm transition-colors hover:text-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2"
                   aria-label="Open full page"
                 >
@@ -143,7 +146,7 @@ export function EpisodePreviewSheet({
         </SheetHeader>
 
         <div className="mt-8 flex flex-col gap-8">
-          {isLoading && !episodeData && (
+          {showLoading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-fg-muted text-sm">
                 Loading episode details...
@@ -159,9 +162,9 @@ export function EpisodePreviewSheet({
             </div>
           )}
 
-          {episodeData && episodeId && (
+          {currentData && episodeId && (
             <EpisodeDetailContent
-              data={episodeData}
+              data={currentData}
               onFeedbackAdded={refreshEpisodeData}
             />
           )}
