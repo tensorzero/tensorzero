@@ -146,7 +146,7 @@ export async function loadFileDataForInput(input: Input): Promise<Input> {
   );
 
   return {
-    system: input.system,
+    system: input.system ?? undefined,
     messages: resolvedMessages,
   };
 }
@@ -259,7 +259,7 @@ export async function loadFileDataForStoredInput(
   );
 
   return {
-    system: input.system,
+    system: input.system ?? undefined,
     messages: resolvedMessages,
   };
 }
