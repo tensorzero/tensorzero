@@ -138,23 +138,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-      // Derive pending user questions: user_questions events without a matching user_questions_answers.
-      const answeredQuestionEventIds = new Set<string>();
-      for (const event of events) {
-        if (event.payload.type === "user_questions_answers") {
-          answeredQuestionEventIds.add(event.payload.user_questions_event_id);
-        }
-      }
-      const pendingUserQuestions = events
-        .filter(
-          (e) =>
-            e.payload.type === "user_questions" &&
-            !answeredQuestionEventIds.has(e.id),
-        )
-        .sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        );
+      // Sort pending user questions by creation time (oldest first for queue)
+      const pendingUserQuestions = (response.pending_user_questions ?? []).sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
       return {
         events,
         hasMoreEvents,
