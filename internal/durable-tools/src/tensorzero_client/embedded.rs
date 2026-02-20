@@ -11,8 +11,9 @@ use tensorzero::{
     CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
     GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
     InferenceOutput, InferenceResponse, ListDatapointsRequest, ListDatasetsRequest,
-    ListDatasetsResponse, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
-    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
+    ListDatasetsResponse, ListEpisodesRequest, ListEpisodesResponse, ListInferencesRequest,
+    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
+    WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::db::ConfigQueries;
@@ -176,6 +177,7 @@ impl TensorZeroClient for EmbeddedClient {
 
     async fn s3_initiate_upload(
         &self,
+        session_id: Uuid,
         request: S3UploadRequest,
     ) -> Result<S3UploadResponse, TensorZeroClientError> {
         let autopilot_client = self
@@ -184,7 +186,7 @@ impl TensorZeroClient for EmbeddedClient {
             .as_ref()
             .ok_or(TensorZeroClientError::AutopilotUnavailable)?;
 
-        s3_initiate_upload(autopilot_client, request)
+        s3_initiate_upload(autopilot_client, session_id, request)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
@@ -412,6 +414,28 @@ impl TensorZeroClient for EmbeddedClient {
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
+    // ========== Episode Operations ==========
+
+    async fn list_episodes(
+        &self,
+        request: ListEpisodesRequest,
+    ) -> Result<ListEpisodesResponse, TensorZeroClientError> {
+        let episodes = tensorzero_core::endpoints::episodes::internal::list_episodes(
+            &self.app_state.get_delegating_database(),
+            &self.app_state.config,
+            request.limit,
+            request.before,
+            request.after,
+            request.function_name,
+            request.filters,
+        )
+        .await
+        .map_err(|e| {
+            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+        })?;
+        Ok(ListEpisodesResponse { episodes })
+    }
+
     // ========== Optimization Operations ==========
 
     async fn launch_optimization_workflow(
@@ -464,7 +488,13 @@ impl TensorZeroClient for EmbeddedClient {
     ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError> {
         self.app_state
             .get_delegating_database()
-            .get_feedback_by_variant(&metric_name, &function_name, variant_names.as_ref())
+            .get_feedback_by_variant(
+                &metric_name,
+                &function_name,
+                variant_names.as_ref(),
+                None,
+                None,
+            )
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })

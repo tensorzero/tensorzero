@@ -14,9 +14,9 @@ use tensorzero::{
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse, DeleteDatapointsResponse,
     FeedbackParams, FeedbackResponse, GetConfigResponse, GetDatapointsResponse,
     GetInferencesRequest, GetInferencesResponse, InferenceOutput, InferenceResponse,
-    ListDatapointsRequest, ListDatasetsRequest, ListDatasetsResponse, ListInferencesRequest,
-    TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
-    WriteConfigResponse,
+    ListDatapointsRequest, ListDatasetsRequest, ListDatasetsResponse, ListEpisodesRequest,
+    ListEpisodesResponse, ListInferencesRequest, TensorZeroError, UpdateDatapointRequest,
+    UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
@@ -282,13 +282,16 @@ impl TensorZeroClient for Client {
 
     async fn s3_initiate_upload(
         &self,
+        session_id: Uuid,
         request: S3UploadRequest,
     ) -> Result<S3UploadResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 let url = http
                     .base_url
-                    .join("internal/autopilot/v1/aws/s3_initiate_upload")
+                    .join(&format!(
+                        "internal/autopilot/v1/sessions/{session_id}/aws/s3_initiate_upload"
+                    ))
                     .map_err(|e: url::ParseError| {
                         TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
                     })?;
@@ -328,6 +331,7 @@ impl TensorZeroClient for Client {
 
                 tensorzero_core::endpoints::internal::autopilot::s3_initiate_upload(
                     autopilot_client,
+                    session_id,
                     request,
                 )
                 .await
@@ -504,6 +508,17 @@ impl TensorZeroClient for Client {
         .map_err(TensorZeroClientError::TensorZero)
     }
 
+    // ========== Episode Operations ==========
+
+    async fn list_episodes(
+        &self,
+        request: ListEpisodesRequest,
+    ) -> Result<ListEpisodesResponse, TensorZeroClientError> {
+        ClientExt::list_episodes(self, request)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
     // ========== Optimization Operations ==========
 
     async fn launch_optimization_workflow(
@@ -649,7 +664,13 @@ impl TensorZeroClient for Client {
                 .handle
                 .app_state
                 .get_delegating_database()
-                .get_feedback_by_variant(&metric_name, &function_name, variant_names.as_ref())
+                .get_feedback_by_variant(
+                    &metric_name,
+                    &function_name,
+                    variant_names.as_ref(),
+                    None,
+                    None,
+                )
                 .await
                 .map_err(|e| {
                     TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })

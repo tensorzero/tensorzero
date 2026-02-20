@@ -30,7 +30,7 @@ pub struct ListEpisodesParams {
 
 /// Request body for the POST episode table endpoint
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ListEpisodesRequest {
     /// Maximum number of episodes to return (max 100)
@@ -116,6 +116,12 @@ pub async fn list_episodes(
     function_name: Option<String>,
     filters: Option<InferenceFilter>,
 ) -> Result<Vec<EpisodeByIdRow>, Error> {
+    if limit == 0 {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "Limit must be at least 1".to_string(),
+        }
+        .into());
+    }
     if limit > 100 {
         return Err(ErrorDetails::InvalidRequest {
             message: "Limit cannot exceed 100".to_string(),
