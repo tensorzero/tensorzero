@@ -793,8 +793,18 @@ function getStatusLabel(status: AutopilotStatus): {
   }
 }
 
-function StatusIndicator({ status }: { status: AutopilotStatus }) {
-  const { text, showEllipsis } = getStatusLabel(status);
+function StatusIndicator({
+  status,
+  hasPendingQuestions,
+}: {
+  status: AutopilotStatus;
+  hasPendingQuestions: boolean;
+}) {
+  const label = getStatusLabel(status);
+  const { text, showEllipsis } =
+    hasPendingQuestions && status.status === "server_side_processing"
+      ? { text: "Waiting for your response", showEllipsis: false }
+      : label;
   return (
     <Divider>
       {text}
@@ -896,7 +906,14 @@ export default function EventStream({
       ))}
 
       {/* Status indicator at the bottom */}
-      {status && <StatusIndicator status={status} />}
+      {status && (
+        <StatusIndicator
+          status={status}
+          hasPendingQuestions={Boolean(
+            pendingUserQuestionIds && pendingUserQuestionIds.size > 0,
+          )}
+        />
+      )}
     </div>
   );
 }
