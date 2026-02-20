@@ -64,32 +64,120 @@ fn build_feedback_by_variant_query(
     );
     qb.push_bind(metric_name);
 
-    if let Some(ns) = namespace {
-        // Namespace-filtered: include inference IDs and episode IDs from inferences
-        // that match the namespace tag
+    if let Some(limit) = max_samples_per_variant {
+        // Close feedback CTE, then build numbered CTE with the inference query
+        // inlined as a subquery (avoids materializing all inferences in a separate CTE).
+        // Order by f.id DESC (feedback record UUID, v7 = chronological) to match ClickHouse's
+        // ORDER BY id_uint DESC, ensuring both databases select the same most-recent feedback.
+        qb.push(
+            r"
+    )
+    ,numbered AS (
+        SELECT
+            i.variant_name,
+            f.value,
+            ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.id DESC) as rn
+        FROM feedback f
+        JOIN (",
+        );
+
+        push_inference_subquery(&mut qb, function_name, namespace);
+
+        qb.push(
+            r"
+        ) i ON f.target_id = i.id
+        WHERE 1=1",
+        );
+
+        if !variant_names.is_empty() {
+            qb.push(" AND i.variant_name = ANY(");
+            qb.push_bind(variant_names);
+            qb.push(")");
+        }
+
+        qb.push(
+            r"
+    )
+    SELECT
+        variant_name,
+        AVG(value)::REAL as mean,
+        VAR_SAMP(value)::REAL as variance,
+        COUNT(*)::BIGINT as count
+    FROM numbered
+    WHERE rn <= ",
+        );
+        qb.push_bind(limit as i64);
+        qb.push(" GROUP BY variant_name");
+    } else {
+        // No sample limit: build inferences CTE, then aggregate directly
         qb.push(
             r"
     ),
-    inferences AS (
+    inferences AS (",
+        );
+
+        push_inference_subquery(&mut qb, function_name, namespace);
+
+        qb.push(
+            r"
+    )
+    SELECT
+        i.variant_name,
+        AVG(f.value)::REAL as mean,
+        VAR_SAMP(f.value)::REAL as variance,
+        COUNT(*)::BIGINT as count
+    FROM feedback f
+    JOIN inferences i ON f.target_id = i.id
+    WHERE 1=1",
+        );
+
+        if !variant_names.is_empty() {
+            qb.push(" AND i.variant_name = ANY(");
+            qb.push_bind(variant_names);
+            qb.push(")");
+        }
+
+        qb.push(" GROUP BY i.variant_name");
+    }
+
+    qb
+}
+
+/// Pushes the inference subquery SQL (chat + json inferences, plus episode-level if namespace
+/// is set) into the QueryBuilder. Used both as a CTE body and as an inline subquery.
+fn push_inference_subquery(
+    qb: &mut QueryBuilder<sqlx::Postgres>,
+    function_name: &str,
+    namespace: Option<&str>,
+) {
+    qb.push(
+        r"
         SELECT id, variant_name
         FROM tensorzero.chat_inferences
         WHERE function_name = ",
-        );
-        qb.push_bind(function_name);
+    );
+    qb.push_bind(function_name);
+
+    if let Some(ns) = namespace {
         qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
         qb.push_bind(ns);
         qb.push(")");
-        qb.push(
-            r"
+    }
+
+    qb.push(
+        r"
         UNION ALL
         SELECT id, variant_name
         FROM tensorzero.json_inferences
         WHERE function_name = ",
-        );
-        qb.push_bind(function_name);
+    );
+    qb.push_bind(function_name);
+
+    if let Some(ns) = namespace {
         qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
         qb.push_bind(ns);
         qb.push(")");
+
         // Episode-level: only include episodes where all inferences belong to a single variant,
         // matching ClickHouse's `WHERE length(unique_variants) = 1` in the materialized view.
         qb.push(
@@ -122,91 +210,7 @@ fn build_feedback_by_variant_query(
         GROUP BY episode_id
         HAVING COUNT(DISTINCT variant_name) = 1",
         );
-    } else {
-        // No namespace filter: standard inference-level join
-        qb.push(
-            r"
-    ),
-    inferences AS (
-        SELECT id, variant_name
-        FROM tensorzero.chat_inferences
-        WHERE function_name = ",
-        );
-        qb.push_bind(function_name);
-        qb.push(
-            r"
-        UNION ALL
-        SELECT id, variant_name
-        FROM tensorzero.json_inferences
-        WHERE function_name = ",
-        );
-        qb.push_bind(function_name);
     }
-
-    qb.push(
-        r"
-    )",
-    );
-
-    if let Some(limit) = max_samples_per_variant {
-        // Use ROW_NUMBER() to limit samples per variant before aggregating
-        // Order by f.id DESC (feedback record UUID, v7 = chronological) to match ClickHouse's
-        // ORDER BY id_uint DESC, ensuring both databases select the same most-recent feedback.
-        qb.push(
-            r",
-    numbered AS (
-        SELECT
-            i.variant_name,
-            f.value,
-            ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.id DESC) as rn
-        FROM feedback f
-        JOIN inferences i ON f.target_id = i.id
-        WHERE 1=1",
-        );
-
-        if !variant_names.is_empty() {
-            qb.push(" AND i.variant_name = ANY(");
-            qb.push_bind(variant_names);
-            qb.push(")");
-        }
-
-        qb.push(
-            r"
-    )
-    SELECT
-        variant_name,
-        AVG(value)::REAL as mean,
-        VAR_SAMP(value)::REAL as variance,
-        COUNT(*)::BIGINT as count
-    FROM numbered
-    WHERE rn <= ",
-        );
-        qb.push_bind(limit as i64);
-        qb.push(" GROUP BY variant_name");
-    } else {
-        // No sample limit: aggregate directly
-        qb.push(
-            r"
-    SELECT
-        i.variant_name,
-        AVG(f.value)::REAL as mean,
-        VAR_SAMP(f.value)::REAL as variance,
-        COUNT(*)::BIGINT as count
-    FROM feedback f
-    JOIN inferences i ON f.target_id = i.id
-    WHERE 1=1",
-        );
-
-        if !variant_names.is_empty() {
-            qb.push(" AND i.variant_name = ANY(");
-            qb.push_bind(variant_names);
-            qb.push(")");
-        }
-
-        qb.push(" GROUP BY i.variant_name");
-    }
-
-    qb
 }
 
 /// Builds a query for cumulative feedback time series.
@@ -1759,23 +1763,22 @@ mod tests {
                 SELECT id, target_id, value
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
-            ),
-            inferences AS (
-                SELECT id, variant_name
-                FROM tensorzero.chat_inferences
-                WHERE function_name = $3
-                UNION ALL
-                SELECT id, variant_name
-                FROM tensorzero.json_inferences
-                WHERE function_name = $4
-            ),
-            numbered AS (
+            )
+            ,numbered AS (
                 SELECT
                     i.variant_name,
                     f.value,
                     ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.id DESC) as rn
                 FROM feedback f
-                JOIN inferences i ON f.target_id = i.id
+                JOIN (
+                    SELECT id, variant_name
+                    FROM tensorzero.chat_inferences
+                    WHERE function_name = $3
+                    UNION ALL
+                    SELECT id, variant_name
+                    FROM tensorzero.json_inferences
+                    WHERE function_name = $4
+                ) i ON f.target_id = i.id
                 WHERE 1=1
             )
             SELECT
@@ -1813,36 +1816,35 @@ mod tests {
                 SELECT id, target_id, value
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
-            ),
-            inferences AS (
-                SELECT id, variant_name
-                FROM tensorzero.chat_inferences
-                WHERE function_name = $3 AND tags @> jsonb_build_object('tensorzero::namespace', $4)
-                UNION ALL
-                SELECT id, variant_name
-                FROM tensorzero.json_inferences
-                WHERE function_name = $5 AND tags @> jsonb_build_object('tensorzero::namespace', $6)
-                UNION ALL
-                SELECT episode_id AS id, MIN(variant_name) AS variant_name
-                FROM (
-                    SELECT episode_id, variant_name
-                    FROM tensorzero.chat_inferences
-                    WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IS NOT NULL
-                    UNION ALL
-                    SELECT episode_id, variant_name
-                    FROM tensorzero.json_inferences
-                    WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IS NOT NULL
-                ) episode_inferences
-                GROUP BY episode_id
-                HAVING COUNT(DISTINCT variant_name) = 1
-            ),
-            numbered AS (
+            )
+            ,numbered AS (
                 SELECT
                     i.variant_name,
                     f.value,
                     ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.id DESC) as rn
                 FROM feedback f
-                JOIN inferences i ON f.target_id = i.id
+                JOIN (
+                    SELECT id, variant_name
+                    FROM tensorzero.chat_inferences
+                    WHERE function_name = $3 AND tags @> jsonb_build_object('tensorzero::namespace', $4)
+                    UNION ALL
+                    SELECT id, variant_name
+                    FROM tensorzero.json_inferences
+                    WHERE function_name = $5 AND tags @> jsonb_build_object('tensorzero::namespace', $6)
+                    UNION ALL
+                    SELECT episode_id AS id, MIN(variant_name) AS variant_name
+                    FROM (
+                        SELECT episode_id, variant_name
+                        FROM tensorzero.chat_inferences
+                        WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IS NOT NULL
+                        UNION ALL
+                        SELECT episode_id, variant_name
+                        FROM tensorzero.json_inferences
+                        WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IS NOT NULL
+                    ) episode_inferences
+                    GROUP BY episode_id
+                    HAVING COUNT(DISTINCT variant_name) = 1
+                ) i ON f.target_id = i.id
                 WHERE 1=1 AND i.variant_name = ANY($11)
             )
             SELECT
