@@ -1238,7 +1238,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredChatInferenceDatabas
             inference_params: inference_params.map(|v| v.0),
             processing_time_ms: processing_time_ms.map(|v| v as u64),
             ttft_ms: ttft_ms.map(|v| v as u64),
-            snapshot_hash: snapshot_hash.map(|h| h.to_string()),
+            snapshot_hash: snapshot_hash.map(|h| h.to_hex_string()),
         })
     }
 }
@@ -1281,7 +1281,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredJsonInference {
             inference_params: inference_params.map(|v| v.0),
             processing_time_ms: processing_time_ms.map(|v| v as u64),
             ttft_ms: ttft_ms.map(|v| v as u64),
-            snapshot_hash: snapshot_hash.map(|h| h.to_string()),
+            snapshot_hash: snapshot_hash.map(|h| h.to_hex_string()),
         })
     }
 }
@@ -1562,7 +1562,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for InferenceMetadata {
             variant_name: row.try_get("variant_name")?,
             episode_id: row.try_get("episode_id")?,
             function_type: row.try_get("function_type")?,
-            snapshot_hash: snapshot_hash.map(|h| h.to_string()),
+            snapshot_hash: snapshot_hash.map(|h| h.to_hex_string()),
         })
     }
 }
