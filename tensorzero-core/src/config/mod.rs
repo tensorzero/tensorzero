@@ -682,8 +682,13 @@ impl ConfigFileGlob {
     }
 
     pub fn new(glob: String) -> Result<Self, Error> {
-        // Build a matcher from the glob pattern
-        let matcher = globset::Glob::new(&glob)
+        // Build a matcher from the glob pattern.
+        // We enable `literal_separator` so that `*` and `?` do not match `/`.
+        // Without `literal_separator`, a glob like `/app/config/*.toml` would
+        // match both `/app/config/foo.toml` and `/app/config/somedir/foo.toml`
+        let matcher = globset::GlobBuilder::new(&glob)
+            .literal_separator(true)
+            .build()
             .map_err(|e| {
                 Error::new(ErrorDetails::Glob {
                     glob: glob.to_string(),
