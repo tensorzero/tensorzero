@@ -172,15 +172,15 @@ json_mode = "strict"
 
 [functions.judge_answer]
 type = "json"
-system_schema = "../../../../ui/fixtures/config/functions/judge_answer/system_schema.json"
-user_schema = "../../../../ui/fixtures/config/functions/judge_answer/user_schema.json"
-output_schema = "../../../../ui/fixtures/config/functions/judge_answer/output_schema.json"
+system_schema = "../../../fixtures/config/functions/judge_answer/system_schema.json"
+user_schema = "../../../fixtures/config/functions/judge_answer/user_schema.json"
+output_schema = "../../../fixtures/config/functions/judge_answer/output_schema.json"
 
 [functions.judge_answer.variants."gpt-4.1-mini"]
 type = "chat_completion"
 model = "openai::gpt-4.1-mini"
-system_template = "../../../../ui/fixtures/config/functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
-user_template = "../../../../ui/fixtures/config/functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
+system_template = "../../../fixtures/config/functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
+user_template = "../../../fixtures/config/functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
 retries = { num_retries = 4, max_delay_s = 10 }
 json_mode = "strict"
 
@@ -681,27 +681,27 @@ json_mode = "strict"
 
 [functions.generate_secret]
 type = "json"
-output_schema = "../../../../ui/fixtures/config/functions/generate_secret/output_schema.json"
+output_schema = "../../../fixtures/config/functions/generate_secret/output_schema.json"
 
 [functions.generate_secret.variants.baseline]
 weight = 1
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
-system_template = "../../../../ui/fixtures/config/functions/generate_secret/baseline/system_template.minijinja"
+system_template = "../../../fixtures/config/functions/generate_secret/baseline/system_template.minijinja"
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
 temperature = 1.5
 
 [functions.ask_question]
 type = "json"
-output_schema = "../../../../ui/fixtures/config/functions/ask_question/output_schema.json"
-system_schema = "../../../../ui/fixtures/config/functions/ask_question/system_schema.json"
+output_schema = "../../../fixtures/config/functions/ask_question/output_schema.json"
+system_schema = "../../../fixtures/config/functions/ask_question/system_schema.json"
 
 [functions.ask_question.variants.baseline]
 type = "chat_completion"
 weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
-system_template = "../../../../ui/fixtures/config/functions/ask_question/baseline/system_template.minijinja"
+system_template = "../../../fixtures/config/functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
 
@@ -709,7 +709,7 @@ retries = { num_retries = 4, max_delay_s = 10 }
 type = "chat_completion"
 weight = 0
 model = "openai::gpt-4.1-nano-2025-04-14"
-system_template = "../../../../ui/fixtures/config/functions/ask_question/baseline/system_template.minijinja"
+system_template = "../../../fixtures/config/functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
 
@@ -717,19 +717,19 @@ retries = { num_retries = 4, max_delay_s = 10 }
 type = "chat_completion"
 weight = 0
 model = "openai::gpt-4.1-mini-2025-04-14"
-system_template = "../../../../ui/fixtures/config/functions/ask_question/baseline/system_template.minijinja"
+system_template = "../../../fixtures/config/functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.answer_question]
 type = "chat"
-system_schema = "../../../../ui/fixtures/config/functions/answer_question/system_schema.json"
+system_schema = "../../../fixtures/config/functions/answer_question/system_schema.json"
 
 [functions.answer_question.variants.baseline]
 type = "chat_completion"
 weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
-system_template = "../../../../ui/fixtures/config/functions/answer_question/baseline/system_template.minijinja"
+system_template = "../../../fixtures/config/functions/answer_question/baseline/system_template.minijinja"
 # for honesty
 temperature = 0.5
 retries = { num_retries = 4, max_delay_s = 10 }
@@ -761,12 +761,12 @@ max_tokens = 100
 
 [functions.compact_context]
 type = "chat"
-system_schema = "../../../../ui/fixtures/config/functions/compact_context/system_schema.json"
+system_schema = "../../../fixtures/config/functions/compact_context/system_schema.json"
 
 [functions.compact_context.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_template = "../../../../ui/fixtures/config/functions/compact_context/baseline/system_template.minijinja"
+system_template = "../../../fixtures/config/functions/compact_context/baseline/system_template.minijinja"
 retries = { num_retries = 4, max_delay_s = 10 }
 
 # Variant fallback: error variant (candidate, always sampled first) -> good variant (fallback)

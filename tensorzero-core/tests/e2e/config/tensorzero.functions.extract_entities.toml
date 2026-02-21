@@ -17,7 +17,7 @@ json_mode = "strict"
 [functions.extract_entities.variants.gpt4o_mini_initial_prompt]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
-system_template = "../../../../ui/fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
+system_template = "../../../fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
 temperature = 0
@@ -25,7 +25,7 @@ temperature = 0
 [functions.extract_entities.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
-system_template = "../../../../ui/fixtures/config/functions/extract_entities/baseline/system_template.minijinja"
+system_template = "../../../fixtures/config/functions/extract_entities/baseline/system_template.minijinja"
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
 temperature = 0
