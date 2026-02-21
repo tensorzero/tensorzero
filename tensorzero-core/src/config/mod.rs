@@ -1835,6 +1835,18 @@ pub struct UninitializedSchemas {
     inner: HashMap<String, UninitializedSchema>,
 }
 
+impl UninitializedSchemas {
+    /// Constructs `UninitializedSchemas` from a map of schema names to path data.
+    pub fn from_paths(paths: HashMap<String, ResolvedTomlPathData>) -> Self {
+        Self {
+            inner: paths
+                .into_iter()
+                .map(|(k, path)| (k, UninitializedSchema { path }))
+                .collect(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
