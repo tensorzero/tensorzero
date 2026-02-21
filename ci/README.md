@@ -5,7 +5,7 @@
 A Github merge queue looks at the required status checks for the repository when determining if a merge queue job passed.
 Unfortunately, the required status checks are also used for PR CI (to determine if you can even try to merge the PR).
 If we want to require any merge-queue-specific jobs (e.g. tests on an external provider like Buildkite), we need to add a corresponding
-'dummy' job for PR CI that always succeeds (which will report the needed status check to Github).
+`dummy` job for PR CI that always succeeds (which will report the needed status check to Github).
 
 Additionally, since the required status checks is a repository-level setting, it's tricky to add new Github Actions jobs as part
 of a PR. Adding the job to the required status checks before the PR merges will cause all other PRS to become stuck
@@ -14,7 +14,7 @@ PR even if the newly-added job fails
 
 ## Our approach
 
-We have two 'top-level' statuses:
+We have two top-level statuses:
 
 - check-all-general-jobs-passed
 - merge-checks-buildkite
@@ -34,12 +34,12 @@ This configuration ensures that both PR CI and merge queue jobs will always have
 
 ## Adding a new required CI job
 
-- Create a new job in 'general.yml' (optionally as a nested workflow invocation)
-- Add the job name to the 'needs' array in 'check-all-general-jobs-passed' inside 'general.yml'
+- Create a new job in `general.yml` (optionally as a nested workflow invocation)
+- Add the job name to the `needs` array in `check-all-general-jobs-passed` inside `general.yml`
 - If the job should only run as part of the merge queue (not PR CI), add an
   `if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'` condition to your job definition
 
-Our 'check-all-general-jobs-passed' job allows jobs to be skipped when running in PR CI, but does not allow _any_ skips
+Our `check-all-general-jobs-passed` job allows jobs to be skipped when running in PR CI, but does not allow _any_ skips
 when running in the merge queue. As a result, your new job will always be required to pass in the merge queue,
 but you're free to customize exactly when it runs in PR CI (e.g. a changed-file filter) to save time and money.
 

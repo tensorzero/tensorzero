@@ -1254,7 +1254,7 @@ jobs:
 
   build-live-tests-container:
     uses: ./.github/workflows/build-live-tests-container.yml
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -1390,6 +1390,7 @@ jobs:
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
   live-tests:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     needs:
       [
         build-gateway-container,
@@ -1405,6 +1406,7 @@ jobs:
     secrets: inherit
 
   client-tests:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     needs:
       [
         build-gateway-container,
