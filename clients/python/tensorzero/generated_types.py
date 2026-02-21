@@ -1693,6 +1693,7 @@ class StoredJsonInference:
     output: JsonInferenceOutput | None = None
     output_schema: Any | None = None
     processing_time_ms: int | None = None
+    snapshot_hash: str | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
     ttft_ms: int | None = None
 
@@ -2050,6 +2051,7 @@ class StoredChatInference:
     """
     Provider-specific tool configurations
     """
+    snapshot_hash: str | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
     tool_choice: ToolChoice | None = None
     """

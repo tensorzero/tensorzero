@@ -24,6 +24,7 @@ export type StoredChatInference = {
   inference_params?: InferenceParams;
   processing_time_ms?: bigint;
   ttft_ms?: bigint;
+  snapshot_hash?: string;
   /**
    * A subset of static tools configured for the function that the inference is allowed to use. Optional.
    * If not provided, all static tools are allowed.

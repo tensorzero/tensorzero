@@ -263,7 +263,8 @@ fn build_list_evaluation_runs_query(limit: u32, offset: u32) -> QueryBuilder<sql
                 function_name,
                 variant_name,
                 id,
-                created_at
+                created_at,
+                snapshot_hash
             FROM tensorzero.chat_inferences
             WHERE tags ? 'tensorzero::evaluation_run_id'
             AND NOT function_name LIKE 'tensorzero::%'
@@ -275,7 +276,8 @@ fn build_list_evaluation_runs_query(limit: u32, offset: u32) -> QueryBuilder<sql
                 function_name,
                 variant_name,
                 id,
-                created_at
+                created_at,
+                snapshot_hash
             FROM tensorzero.json_inferences
             WHERE tags ? 'tensorzero::evaluation_run_id'
             AND NOT function_name LIKE 'tensorzero::%'
@@ -286,7 +288,8 @@ fn build_list_evaluation_runs_query(limit: u32, offset: u32) -> QueryBuilder<sql
             (ARRAY_AGG(function_name))[1] as function_name,
             (ARRAY_AGG(variant_name))[1] as variant_name,
             (ARRAY_AGG(dataset_name))[1] as dataset_name,
-            MAX(created_at) as last_inference_timestamp
+            MAX(created_at) as last_inference_timestamp,
+            encode((ARRAY_AGG(snapshot_hash))[1], 'hex') as snapshot_hash
         FROM all_eval_inferences
         GROUP BY evaluation_run_id
         ORDER BY evaluation_run_id::UUID DESC
@@ -754,7 +757,8 @@ mod tests {
                     function_name,
                     variant_name,
                     id,
-                    created_at
+                    created_at,
+                    snapshot_hash
                 FROM tensorzero.chat_inferences
                 WHERE tags ? 'tensorzero::evaluation_run_id'
                 AND NOT function_name LIKE 'tensorzero::%'
@@ -766,7 +770,8 @@ mod tests {
                     function_name,
                     variant_name,
                     id,
-                    created_at
+                    created_at,
+                    snapshot_hash
                 FROM tensorzero.json_inferences
                 WHERE tags ? 'tensorzero::evaluation_run_id'
                 AND NOT function_name LIKE 'tensorzero::%'
@@ -777,7 +782,8 @@ mod tests {
                 (ARRAY_AGG(function_name))[1] as function_name,
                 (ARRAY_AGG(variant_name))[1] as variant_name,
                 (ARRAY_AGG(dataset_name))[1] as dataset_name,
-                MAX(created_at) as last_inference_timestamp
+                MAX(created_at) as last_inference_timestamp,
+                encode((ARRAY_AGG(snapshot_hash))[1], 'hex') as snapshot_hash
             FROM all_eval_inferences
             GROUP BY evaluation_run_id
             ORDER BY evaluation_run_id::UUID DESC
