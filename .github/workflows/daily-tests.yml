@@ -105,7 +105,7 @@ jobs:
   # See: https://github.com/tensorzero/tensorzero/issues/5380
   notify-on-failure:
     permissions: {}
-    if: always() && github.event_name == 'schedule' && (needs.live-tests.result == 'failure' || needs.client-tests.result == 'failure' || needs.live-batch-tests.result == 'failure')
+    if: always() && github.event_name == 'schedule' && (needs.live-tests.result != 'success' || needs.client-tests.result != 'success' || needs.live-batch-tests.result != 'success')
     needs: [live-tests, client-tests, live-batch-tests]
     runs-on: ubuntu-latest
     steps:
