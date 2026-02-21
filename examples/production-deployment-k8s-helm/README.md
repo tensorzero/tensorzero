@@ -65,6 +65,7 @@ The following table lists the configurable parameters of the chart and their def
 
 | Parameter                    | Description                      | Default                                                                |
 | ---------------------------- | -------------------------------- | ---------------------------------------------------------------------- |
+| `gateway.annotations`        | Annotations for gateway Deployment | `{}`                                                                 |
 | `gateway.replicaCount`       | Number of gateway replicas       | `1`                                                                    |
 | `gateway.serviceAccountName` | Service account for gateway pods | `""`                                                                   |
 | `gateway.image.repository`   | Gateway image repository         | `tensorzero/gateway`                                                   |
@@ -78,6 +79,36 @@ The following table lists the configurable parameters of the chart and their def
 | `gateway.ingress.enabled`    | Enable gateway ingress           | `true`                                                                 |
 | `gateway.ingress.className`  | Gateway ingress class            | `traefik-ingress-controller-v3`                                        |
 | `gateway.ingress.hosts`      | Gateway ingress hosts            | `tensorzero-gateway.local`                                             |
+
+### Gateway configuration from Secret
+
+By default, the chart mounts `tensorzero.toml` from a `ConfigMap`.
+If you prefer to manage `tensorzero.toml` via a Kubernetes `Secret` (or an external secrets operator), set:
+
+```yaml
+configFromExternalSecret:
+  enabled: true
+  secretName: tensorzero-secret
+  mountPath: /app/config-secret/
+gateway:
+  args:
+    - --config-file=/app/config-secret/tensorzero.toml # must match a secret key in the referenced secret
+```
+
+### Extra objects
+
+If you need the chart to render additional Kubernetes objects (for example `ExternalSecret` / `SealedSecret` resources), you can pass them via `extraObjects`.
+
+```yaml
+extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: tensorzero-secret
+    stringData:
+      tensorzero.toml: |
+        # your config here
+```
 
 ### UI Configuration
 

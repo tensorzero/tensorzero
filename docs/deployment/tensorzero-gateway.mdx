@@ -72,6 +72,8 @@ You can use it to run TensorZero in Kubernetes.
 
 The chart is available on [ArtifactHub](https://artifacthub.io/packages/helm/tensorzero/tensorzero).
 
+The chart supports mounting `tensorzero.toml` from a `Secret` (see `configFromExternalSecret`) and rendering additional objects like `ExternalSecret` / `SealedSecret` resources (see `extraObjects`).
+
 </Accordion>
 
 <Accordion title="Build from source">
