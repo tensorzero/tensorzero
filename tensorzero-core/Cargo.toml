@@ -55,6 +55,7 @@ futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
+json-pointer = { workspace = true }
 jsonschema = "0.42.1"
 jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
@@ -66,6 +67,7 @@ object_store = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 reqwest-sse-stream = { workspace = true }
+rust_decimal = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

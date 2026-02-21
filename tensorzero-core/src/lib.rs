@@ -5,6 +5,7 @@
 pub mod cache;
 pub mod client; // Rust client for TensorZero
 pub mod config; // TensorZero config file
+pub mod cost; // cost configuration for model and embedding providers
 pub mod db;
 pub mod embeddings; // embedding inference
 pub mod endpoints; // API endpoints
