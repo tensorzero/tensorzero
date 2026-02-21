@@ -1,20 +1,10 @@
-name: Merge Queue Checks
-run-name: Merge Queue Checks for ${{ github.ref }}
+name: Client Tests
 
-# This workflow is called from 'general.yml' (so that it can depend on artifacts from other jobs)
-# It is *not* invoked directly via a 'merge_group' event, so checking for 'github.event_name == 'merge_group' will not work
 on:
-  workflow_dispatch:
   workflow_call:
+  workflow_dispatch:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
-
-# When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
-# Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
-# Note that the event will be 'merge_group' when general.yml calls this workflow via a 'workflow_call' event
-concurrency:
-  group: ${{ github.event_name == 'merge_group' && format('merge-queue-{0}-{1}', github.workflow, github.ref) || github.run_id }}
-  cancel-in-progress: true
 
 env:
   CARGO_INCREMENTAL: 0
@@ -57,12 +47,12 @@ env:
   TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
   TENSORZERO_MOCK_PROVIDER_API_TAG: sha-${{ github.sha }}
   TENSORZERO_CI: 1
-  # Nextest filter expression for flaky tests to skip (e.g. "test(hyperbolic)|test(tgi)")
   CARGO_NEXTEST_FLAKY_TESTS: ${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}
 
 jobs:
-  # Build containers when triggered directly (not from general.yml which already builds them)
-  # When called from general.yml, github.event_name is 'merge_group' so this is skipped
+  # Build containers for standalone runs (schedule/workflow_dispatch).
+  # When called from general.yml via workflow_call, these are skipped
+  # because the caller already built and uploaded the container artifacts.
   build-gateway-e2e-container:
     if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     uses: ./.github/workflows/build-gateway-e2e-container.yml
@@ -106,147 +96,6 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-  build-live-tests-container:
-    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
-    uses: ./.github/workflows/build-live-tests-container.yml
-    permissions:
-      contents: read
-      id-token: write
-    secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
-
-  live-tests:
-    needs:
-      [
-        build-gateway-e2e-container,
-        build-gateway-container,
-        build-fixtures-container,
-        build-provider-proxy-container,
-        build-live-tests-container,
-      ]
-    # Run even when build-gateway-e2e-container is skipped (merge_group case)
-    if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
-    name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
-    runs-on: ubuntu-latest
-    permissions:
-      # Permission to checkout the repository
-      contents: read
-      # Permission to download artifacts
-      actions: read
-    timeout-minutes: 45
-    strategy:
-      matrix:
-        batch_writes: [true, false]
-      # Don't fail-fast for manual/cron runs, so that we get the full picture of what broke
-      fail-fast: ${{ github.event_name == 'merge_group' }}
-
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Cleanup disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-
-      - name: Download gateway container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-gateway-container
-
-      - name: Download provider-proxy container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-provider-proxy-container
-
-      - name: Download gateway-e2e container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-gateway-e2e-container
-
-      - name: Download live-tests container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-live-tests-container
-
-      - name: Download fixtures container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-fixtures-container
-
-      - name: Load container images
-        run: |
-          docker load < gateway-container.tar
-          docker load < provider-proxy-container.tar
-          docker load < gateway-e2e-container.tar
-          docker load < live-tests-container.tar
-          docker load < fixtures-container.tar
-          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
-
-      - name: Restore provider-proxy cache
-        if: github.event_name != 'schedule'
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
-        with:
-          path: ./ci/provider-proxy-cache/
-          key: provider-proxy-cache-${{ github.run_id }}
-          restore-keys: provider-proxy-cache-
-
-      - name: Download provider-proxy cache
-        # When running as a cron job, don't use the provider-proxy cache.
-        # The cron job is used to gather information about provider flakiness.
-        if: github.event_name != 'schedule'
-        run: |
-          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/download-provider-proxy-cache.sh
-
-      - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Write GCP JWT key to file
-        env:
-          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
-        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
-
-      - name: Pull images referenced by the compose file
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
-
-      - name: Run live tests container via Docker Compose
-        run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm -e TENSORZERO_CI=1 -e TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1 live-tests
-
-      - name: Print live tests logs
-        if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
-
-      - name: Check e2e logs for impossible error messages
-        run: |
-          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs gateway)
-          if [ -z "$LOGS" ]; then
-            echo "ERROR: Gateway logs are empty"
-            exit 1
-          fi
-          grep --invert-match -i "please file a bug report" <<< "$LOGS"
-
-      # # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
-      # # For now, we only check for deprecation warnings after running the Rust e2e tests
-      # TODO - re-enable this: https://github.com/tensorzero/tensorzero/issues/3989
-      # - name: Check e2e logs for deprecation warnings (gateway e2e tests only)
-      #   run: |
-      #     LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
-      #     if [ -z "$LOGS" ]; then
-      #       echo "ERROR: Gateway logs are empty"
-      #       exit 1
-      #     fi
-      #     ! grep -i "Deprecation Warning" "$LOGS"
-
-      - name: Upload provider-proxy cache
-        # Only upload the cache when we're running from a 'good' run
-        # (running from the merge queue via `general.yml` or a cron job)
-        # This prevents manual workflow runs from modifying the cache
-        if: github.event_name == 'merge_group' || github.event_name == 'schedule'
-        run: |
-          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
-
   client-tests:
     needs:
       [
@@ -256,14 +105,12 @@ jobs:
         build-fixtures-container,
         build-provider-proxy-container,
       ]
-    # Run even when build jobs are skipped (merge_group case where general.yml already built them)
+    # Run even when build jobs are skipped (workflow_call case where caller already built them)
     if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
     name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
     runs-on: ubuntu-latest
     permissions:
-      # Permission to checkout the repository
       contents: read
-      # Permission to download artifacts
       actions: read
     timeout-minutes: 45
     strategy:
@@ -607,34 +454,25 @@ jobs:
         run: cat vllm_gpt_oss_modal_logs.txt
 
       - name: Upload client-tests provider-proxy cache
-        # Only upload the cache when we're running from a 'good' run
-        # (running from the merge queue via 'workflow_call' from general.yml, or a cron job)
-        # This prevents manual workflow runs from modifying the cache
+        # Only upload the cache from trusted runs (merge queue or cron)
         if: github.event_name == 'merge_group' || github.event_name == 'schedule'
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/upload-provider-proxy-cache.sh
 
-  # See 'ci/README.md' at the repository root for more details.
-  check-all-tests-passed:
+  # Post to Slack on failure for scheduled (cron) runs only.
+  # Scheduled runs bypass the provider-proxy cache to detect provider flakiness.
+  # See: https://github.com/tensorzero/tensorzero/issues/5380
+  notify-on-failure:
     permissions: {}
-    if: always() && github.repository == 'tensorzero/tensorzero'
-    needs: [client-tests, live-tests]
+    if: always() && github.event_name == 'schedule' && needs.client-tests.result == 'failure'
+    needs: [client-tests]
     runs-on: ubuntu-latest
     steps:
-      # When running in the merge queue, jobs should never be skipped.
-      # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (github.event_name != 'pull_request' && contains(needs.*.result, 'skipped')) }}
-        run: exit 1
-
-      # Post to Slack on failure for scheduled (cron) runs only.
-      # Scheduled runs bypass the provider-proxy cache to detect provider flakiness.
-      # See: https://github.com/tensorzero/tensorzero/issues/5380
-      - name: Post to Slack on failure (scheduled runs only)
-        if: failure() && github.event_name == 'schedule'
+      - name: Post to Slack on failure
         uses: slackapi/slack-github-action@v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           payload: |
             channel: C09DM0RGDFG
-            text: "Live provider tests failed (scheduled run, no cache): <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            text: "Client tests failed (scheduled run, no cache): <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"

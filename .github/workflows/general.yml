@@ -1254,7 +1254,7 @@ jobs:
 
   build-live-tests-container:
     uses: ./.github/workflows/build-live-tests-container.yml
-    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -1389,7 +1389,22 @@ jobs:
           docker compose -f examples/production-deployment/docker-compose.yml down
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
-  run-merge-queue-checks:
+  live-tests:
+    needs:
+      [
+        build-gateway-container,
+        build-gateway-e2e-container,
+        build-fixtures-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
+      ]
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/live-tests.yml
+    secrets: inherit
+
+  client-tests:
     needs:
       [
         build-gateway-container,
@@ -1397,16 +1412,11 @@ jobs:
         build-mock-provider-api-container,
         build-fixtures-container,
         build-provider-proxy-container,
-        build-live-tests-container,
       ]
-    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
-      # Permission to checkout the repository
       contents: read
-      # Permission to fetch GitHub OIDC token authentication
-      id-token: write
-      actions: write
-    uses: ./.github/workflows/merge-queue.yml
+      actions: read
+    uses: ./.github/workflows/client-tests.yml
     secrets: inherit
 
   minikube:
@@ -1484,7 +1494,8 @@ jobs:
         ui-tests,
         ui-tests-e2e,
         mock-optimization-tests,
-        run-merge-queue-checks,
+        live-tests,
+        client-tests,
         autopilot-e2e,
       ]
     runs-on: ubuntu-latest
