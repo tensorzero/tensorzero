@@ -340,7 +340,7 @@ impl JobHandle for TogetherSFTJobHandle {
                 let model_provider = UninitializedModelProvider {
                     config: UninitializedProviderConfig::Together {
                         model_name: model_name.clone(),
-                        parse_think_blocks: true,
+                        parse_think_blocks: None,
                         api_key_location: None,
                     },
                     extra_headers: None,

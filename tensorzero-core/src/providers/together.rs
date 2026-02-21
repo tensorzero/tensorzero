@@ -76,23 +76,13 @@ pub struct TogetherProvider {
     model_name: String,
     #[serde(skip)]
     credentials: TogetherCredentials,
-    parse_think_blocks: bool,
-}
-
-pub fn default_parse_think_blocks() -> bool {
-    true
 }
 
 impl TogetherProvider {
-    pub fn new(
-        model_name: String,
-        credentials: TogetherCredentials,
-        parse_think_blocks: bool,
-    ) -> Self {
+    pub fn new(model_name: String, credentials: TogetherCredentials) -> Self {
         TogetherProvider {
             model_name,
             credentials,
-            parse_think_blocks,
         }
     }
 
@@ -250,7 +240,6 @@ impl InferenceProvider for TogetherProvider {
                 },
                 raw_request: raw_request.clone(),
                 generic_request: request,
-                parse_think_blocks: self.parse_think_blocks,
                 model_inference_id,
             }
             .try_into()?)
@@ -323,13 +312,7 @@ impl InferenceProvider for TogetherProvider {
             request_builder,
         )
         .await?;
-        let stream = stream_together(
-            event_source,
-            start_time,
-            self.parse_think_blocks,
-            model_inference_id,
-        )
-        .peekable();
+        let stream = stream_together(event_source, start_time, model_inference_id).peekable();
         Ok((stream, raw_request))
     }
 
@@ -790,7 +773,6 @@ struct TogetherResponseWithMetadata<'a> {
     raw_response: String,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
-    parse_think_blocks: bool,
     model_inference_id: Uuid,
 }
 
@@ -803,7 +785,6 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             raw_response,
             raw_request,
             generic_request,
-            parse_think_blocks,
             model_inference_id,
         } = value;
         if response.choices.len() != 1 {
@@ -844,12 +825,8 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             }));
         }
         if let Some(raw_text) = message.content {
-            let (clean_text, extracted_reasoning) = process_think_blocks(
-                &raw_text,
-                parse_think_blocks,
-                PROVIDER_TYPE,
-                ApiType::ChatCompletions,
-            )?;
+            let (clean_text, extracted_reasoning) =
+                process_think_blocks(&raw_text, true, PROVIDER_TYPE, ApiType::ChatCompletions)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
                     text: Some(reasoning),
@@ -904,7 +881,6 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
 fn stream_together(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
-    parse_think_blocks: bool,
     model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
@@ -949,7 +925,6 @@ fn stream_together(
                                 latency,
                                 &mut tool_call_ids,
                                 &mut thinking_state,
-                                parse_think_blocks,
                                 model_inference_id,
                                 PROVIDER_TYPE,
                             )
@@ -966,15 +941,13 @@ fn stream_together(
 ///
 /// This function handles the conversion of Together chat chunks into TensorZero chunks.
 /// It processes the content and tool calls from the Together response, updating the tool call IDs and names.
-/// If parsing think blocks is enabled, it also processes the thinking state and extracts reasoning.
-#[expect(clippy::too_many_arguments)]
+/// It also processes the thinking state and extracts reasoning from `<think>` tags.
 fn together_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: TogetherChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     thinking_state: &mut ThinkingState,
-    parse_think_blocks: bool,
     model_inference_id: Uuid,
     provider_type: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
@@ -1014,37 +987,27 @@ fn together_to_tensorzero_chunk(
                 extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
             }));
         }
-        if let Some(text) = choice.delta.content {
-            if parse_think_blocks {
-                if !thinking_state.update(&text, PROVIDER_TYPE, ApiType::ChatCompletions)? {
-                    match thinking_state {
-                        ThinkingState::Normal | ThinkingState::Finished => {
-                            content.push(ContentBlockChunk::Text(TextChunk {
-                                text,
-                                id: thinking_state.get_id(),
-                            }));
-                        }
-                        ThinkingState::Thinking => {
-                            content.push(ContentBlockChunk::Thought(ThoughtChunk {
-                                text: Some(text),
-                                signature: None,
-                                summary_id: None,
-                                summary_text: None,
-                                id: thinking_state.get_id(),
-                                provider_type: Some(PROVIDER_TYPE.to_string()),
-                                extra_data: Some(
-                                    serde_json::json!({"reasoning_format": "think_tags"}),
-                                ),
-                            }));
-                        }
-                    }
+        if let Some(text) = choice.delta.content
+            && !thinking_state.update(&text, PROVIDER_TYPE, ApiType::ChatCompletions)?
+        {
+            match thinking_state {
+                ThinkingState::Normal | ThinkingState::Finished => {
+                    content.push(ContentBlockChunk::Text(TextChunk {
+                        text,
+                        id: thinking_state.get_id(),
+                    }));
                 }
-            } else {
-                // Just add the text verbatim if we're not parsing think blocks.
-                content.push(ContentBlockChunk::Text(TextChunk {
-                    text,
-                    id: "0".to_string(),
-                }));
+                ThinkingState::Thinking => {
+                    content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some(text),
+                        signature: None,
+                        summary_id: None,
+                        summary_text: None,
+                        id: thinking_state.get_id(),
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
+                    }));
+                }
             }
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
@@ -1260,7 +1223,6 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
             together_response_with_metadata.try_into().unwrap();
@@ -1310,7 +1272,6 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
             together_response_with_metadata.try_into().unwrap();
@@ -1361,7 +1322,6 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
             together_response_with_metadata.try_into().unwrap();
@@ -1439,7 +1399,6 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
 
         let inference_response: ProviderInferenceResponse = metadata.try_into().unwrap();
@@ -1468,39 +1427,6 @@ mod tests {
         if let ContentBlockOutput::Text(text) = &inference_response.output[1] {
             assert_eq!(text.text, "This is the answer".to_string());
         }
-
-        // With parsing disabled
-        let metadata = TogetherResponseWithMetadata {
-            response: response_with_thinking,
-            raw_response: "test_response".to_string(),
-            latency: Latency::NonStreaming {
-                response_time: Duration::from_secs(0),
-            },
-            raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request)
-                    .await
-                    .unwrap(),
-            )
-            .unwrap(),
-            generic_request: &generic_request,
-            model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: false,
-        };
-
-        let inference_response: ProviderInferenceResponse = metadata.try_into().unwrap();
-
-        // We should have one content block with the raw text
-        assert_eq!(inference_response.output.len(), 1);
-        assert!(matches!(
-            inference_response.output[0],
-            ContentBlockOutput::Text(_)
-        ));
-        if let ContentBlockOutput::Text(text) = &inference_response.output[0] {
-            assert_eq!(
-                text.text,
-                "<think>This is the reasoning process</think>This is the answer"
-            );
-        }
     }
 
     #[tokio::test]
@@ -1521,14 +1447,12 @@ mod tests {
         let mut tool_call_ids = Vec::new();
         let mut thinking_state = ThinkingState::Normal;
 
-        // With parsing enabled
         let result = together_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1558,7 +1482,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1593,7 +1516,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1623,7 +1545,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1661,7 +1582,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1699,7 +1619,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1738,7 +1657,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1779,7 +1697,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1825,7 +1742,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             model_inference_id,
             PROVIDER_TYPE,
         )
@@ -1878,7 +1794,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1904,7 +1819,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1941,48 +1855,12 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
         .unwrap();
         assert!(message.content.is_empty());
         assert!(matches!(thinking_state, ThinkingState::Finished));
-    }
-
-    #[test]
-    fn test_together_to_tensorzero_chunk_without_think_parsing() {
-        let chunk = TogetherChatChunk {
-            choices: vec![TogetherChatChunkChoice {
-                delta: TogetherDelta {
-                    content: Some("Hello <think>should not parse</think>".to_string()),
-                    reasoning: None,
-                    tool_calls: None,
-                },
-                finish_reason: Some(TogetherFinishReason::Stop),
-            }],
-            usage: None,
-        };
-        let mut tool_call_ids = vec![];
-        let mut thinking_state = ThinkingState::Normal;
-        let message = together_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
-            chunk,
-            Duration::from_millis(50),
-            &mut tool_call_ids,
-            &mut thinking_state,
-            false,
-            Uuid::now_v7(),
-            PROVIDER_TYPE,
-        )
-        .unwrap();
-        assert_eq!(
-            message.content,
-            vec![ContentBlockChunk::Text(TextChunk {
-                text: "Hello <think>should not parse</think>".to_string(),
-                id: "0".to_string(),
-            })]
-        );
     }
 
     #[test]
@@ -2062,7 +1940,6 @@ mod tests {
             raw_request: "{}".to_string(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
         let result: ProviderInferenceResponse = metadata.try_into().unwrap();
         assert_eq!(
@@ -2138,7 +2015,6 @@ mod tests {
             raw_request: "{}".to_string(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
         let result: ProviderInferenceResponse = metadata.try_into().unwrap();
         assert_eq!(
@@ -2212,7 +2088,6 @@ mod tests {
             raw_request: "{}".to_string(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
         let result: ProviderInferenceResponse = metadata.try_into().unwrap();
         assert_eq!(
@@ -2273,7 +2148,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
