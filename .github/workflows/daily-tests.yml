@@ -1,5 +1,5 @@
-name: Scheduled Tests
-run-name: Scheduled Tests (no cache)
+name: Daily Tests
+run-name: Daily Tests
 
 # Runs live-tests, client-tests, and batch-tests daily.
 # Live/client tests run without provider-proxy cache to detect provider flakiness.
