@@ -74,7 +74,7 @@ pub enum ThinkingState {
 // "1" and "3" are both Thought blocks but carry different `reasoning_format`
 // metadata (`think_tags` vs `reasoning_field`). If a provider streams both in one
 // response, distinct IDs prevent them from being incorrectly merged.
-pub const THINK_CHUNK_ID: u64 = 1;
+pub const THINK_CHUNK_ID: &str = "1";
 pub const REASONING_FIELD_CHUNK_ID: &str = "3";
 
 impl ThinkingState {
