@@ -15,6 +15,7 @@ use crate::{
     http::TensorzeroHttpClient,
     inference::types::{
         Usage,
+        extra_headers::UnfilteredInferenceExtraHeaders,
         usage::{ApiType, RawResponseEntry},
     },
     rate_limiting::{RateLimitingManager, ScopeInfo},
@@ -40,6 +41,8 @@ pub struct EmbeddingsParams {
     pub cache_options: CacheParamsOptions,
     #[serde(default, rename = "tensorzero::include_raw_response")]
     pub include_raw_response: bool,
+    #[serde(default)]
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 #[instrument(name = "embeddings", skip_all, fields(model, num_inputs))]
@@ -108,8 +111,14 @@ pub async fn embeddings(
         include_raw_response: params.include_raw_response,
         include_aggregated_response: false, // not supported for embeddings endpoint
     };
+    let dynamic_extra_headers = params.extra_headers.filter_for_embeddings();
     let response = embedding_model
-        .embed(&request, &params.model_name, &clients)
+        .embed(
+            &request,
+            &params.model_name,
+            &clients,
+            dynamic_extra_headers,
+        )
         .await?;
     let usage = response.usage_considering_cached();
     let tensorzero_raw_response = if params.include_raw_response && !response.cached {
@@ -205,6 +214,7 @@ mod tests {
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
             include_raw_response: false,
+            extra_headers: Default::default(),
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -244,6 +254,7 @@ mod tests {
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
             include_raw_response: false,
+            extra_headers: Default::default(),
         };
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();

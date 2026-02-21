@@ -15,6 +15,7 @@ use crate::embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput};
 use crate::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams as EmbeddingParams};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
+use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::usage::RawResponseEntry;
 
 const TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX: &str = "tensorzero::embedding_model_name::";
@@ -38,6 +39,8 @@ pub struct OpenAICompatibleEmbeddingParams {
     pub tensorzero_cache_options: Option<CacheParamsOptions>,
     #[serde(default, rename = "tensorzero::include_raw_response")]
     pub tensorzero_include_raw_response: bool,
+    #[serde(default, rename = "tensorzero::extra_headers")]
+    pub tensorzero_extra_headers: UnfilteredInferenceExtraHeaders,
 }
 
 fn serialize_inference_credentials<S>(
@@ -78,6 +81,7 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
             dryrun: params.tensorzero_dryrun,
             cache_options: params.tensorzero_cache_options.unwrap_or_default(),
             include_raw_response: params.tensorzero_include_raw_response,
+            extra_headers: params.tensorzero_extra_headers,
         })
     }
 }
@@ -149,6 +153,7 @@ mod tests {
             tensorzero_dryrun: None,
             tensorzero_cache_options: None,
             tensorzero_include_raw_response: false,
+            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
         assert_eq!(param.model_name, "text-embedding-ada-002");
@@ -171,6 +176,7 @@ mod tests {
             tensorzero_dryrun: None,
             tensorzero_cache_options: None,
             tensorzero_include_raw_response: false,
+            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
         };
         let param: EmbeddingParams = openai_embedding_params.try_into().unwrap();
         assert_eq!(param.model_name, "text-embedding-ada-002");
