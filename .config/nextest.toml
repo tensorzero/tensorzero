@@ -104,6 +104,12 @@ slow-timeout = { period = "60s", terminate-after = 4 }
 retries = 0
 
 [[profile.default.overrides]]
+filter = 'test(test_prometheus_metrics_overhead)'
+# Prevent any other tests from running concurrently, to avoid inflating
+# the overhead metric due to CPU load from concurrent tests
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
 filter = 'test(test_variant_failover)'
 # This test makes lots of requests, so give it extra time for the slower Github runners.
 slow-timeout = { period = "60s", terminate-after = 2 }
