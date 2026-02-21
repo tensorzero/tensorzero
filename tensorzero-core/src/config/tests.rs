@@ -3310,25 +3310,86 @@ async fn test_config_file_glob_integration() {
 
     // Create directory structure
     let config_dir = temp_dir.path().join("config");
-    std::fs::create_dir(&config_dir).unwrap();
+    let sub_dir = config_dir.join("subdir");
+    std::fs::create_dir_all(&sub_dir).unwrap();
 
     // Create some test files
     std::fs::write(config_dir.join("base.toml"), "[test]\nkey = \"base\"").unwrap();
     std::fs::write(config_dir.join("dev.toml"), "[test]\nkey = \"dev\"").unwrap();
     std::fs::write(config_dir.join("README.md"), "# README").unwrap();
+    // Create a .toml file in a subdirectory — should NOT be matched by *.toml
+    std::fs::write(sub_dir.join("nested.toml"), "[test]\nkey = \"nested\"").unwrap();
 
     // Test glob pattern matching
     let glob_pattern = format!("{}/*.toml", config_dir.display());
     let config_glob = ConfigFileGlob::new(glob_pattern).unwrap();
 
-    // Should match 2 .toml files, not the .md file
-    assert_eq!(config_glob.paths.len(), 2);
+    // Should match only 2 top-level .toml files, not the .md file or the nested .toml
+    assert_eq!(
+        config_glob.paths.len(),
+        2,
+        "*.toml should only match files in the immediate directory, not subdirectories"
+    );
     assert!(
         config_glob
             .paths
             .iter()
-            .all(|p| p.extension().unwrap() == "toml")
+            .all(|p| p.extension().unwrap() == "toml"),
+        "All matched files should have .toml extension"
     );
+}
+
+/// Test that `*.toml` does not match files inside Kubernetes ConfigMap hidden
+/// timestamped directories. Kubernetes mounts ConfigMaps with a symlink structure:
+///
+/// ```text
+/// /app/config/
+/// ├── ..2026_02_21_00_33_52.1026899871/   ← real directory with actual files
+/// │   ├── app.toml
+/// │   └── db.toml
+/// ├── ..data -> ..2026_02_21_00_33_52.1026899871  ← symlink
+/// ├── app.toml -> ..data/app.toml                 ← symlink
+/// └── db.toml -> ..data/db.toml                   ← symlink
+/// ```
+///
+/// Without `literal_separator(true)`, `*.toml` would match files inside the
+/// hidden directory, causing every config key to be loaded twice.
+#[tokio::test]
+async fn test_config_file_glob_ignores_k8s_configmap_hidden_dirs() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_dir = temp_dir.path().join("config");
+    std::fs::create_dir(&config_dir).unwrap();
+
+    // Simulate Kubernetes ConfigMap hidden timestamped directory
+    let hidden_dir = config_dir.join("..2026_02_21_00_33_52.1026899871");
+    std::fs::create_dir(&hidden_dir).unwrap();
+
+    // Create files in the hidden directory (the "real" files in K8s)
+    std::fs::write(hidden_dir.join("app.toml"), "[app]\nkey = \"value\"").unwrap();
+    std::fs::write(hidden_dir.join("db.toml"), "[db]\nkey = \"value\"").unwrap();
+
+    // Create top-level files (in K8s these would be symlinks, but for this test
+    // we use real files since the glob behavior is the same either way)
+    std::fs::write(config_dir.join("app.toml"), "[app]\nkey = \"value\"").unwrap();
+    std::fs::write(config_dir.join("db.toml"), "[db]\nkey = \"value\"").unwrap();
+
+    let glob_pattern = format!("{}/*.toml", config_dir.display());
+    let config_glob = ConfigFileGlob::new(glob_pattern).unwrap();
+
+    // Should match only the 2 top-level files, not the 2 files in the hidden directory
+    assert_eq!(
+        config_glob.paths.len(),
+        2,
+        "*.toml should not match files inside K8s ConfigMap hidden timestamped directories"
+    );
+    // Verify none of the matched paths contain the hidden directory
+    for path in &config_glob.paths {
+        let path_str = path.display().to_string();
+        assert!(
+            !path_str.contains("..2026"),
+            "Matched path `{path_str}` should not be inside the hidden timestamped directory"
+        );
+    }
 }
 
 #[tokio::test]
@@ -3345,12 +3406,48 @@ async fn test_config_file_glob_recursive() {
     std::fs::write(base_dir.join("base.toml"), "[test]\nkey = \"base\"").unwrap();
     std::fs::write(sub_dir.join("nested.toml"), "[test]\nkey = \"nested\"").unwrap();
 
-    // Test recursive glob pattern
+    // Test recursive glob pattern — ** should still match across path separators
     let glob_pattern = format!("{}/**/*.toml", base_dir.display());
     let config_glob = ConfigFileGlob::new(glob_pattern).unwrap();
 
-    // Should match both files
-    assert_eq!(config_glob.paths.len(), 2);
+    // Should match both files (** crosses directories even with literal_separator)
+    assert_eq!(
+        config_glob.paths.len(),
+        2,
+        "**/*.toml should match files in subdirectories"
+    );
+}
+
+/// Verify that `*` does not match path separators (literal_separator behavior),
+/// while `**` still does. This is the core semantic distinction that prevents
+/// Kubernetes ConfigMap hidden directory issues.
+#[test]
+fn test_glob_star_does_not_cross_directories() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let base_dir = temp_dir.path().join("dir");
+    let sub_dir = base_dir.join("sub");
+    std::fs::create_dir_all(&sub_dir).unwrap();
+
+    std::fs::write(base_dir.join("a.toml"), "").unwrap();
+    std::fs::write(sub_dir.join("b.toml"), "").unwrap();
+
+    // Single * should only match top-level
+    let single_star = format!("{}/*.toml", base_dir.display());
+    let glob_single = ConfigFileGlob::new(single_star).unwrap();
+    assert_eq!(
+        glob_single.paths.len(),
+        1,
+        "Single * should not cross directory boundaries"
+    );
+
+    // Double ** should match recursively
+    let double_star = format!("{}/**/*.toml", base_dir.display());
+    let glob_double = ConfigFileGlob::new(double_star).unwrap();
+    assert_eq!(
+        glob_double.paths.len(),
+        2,
+        "** should match across directory boundaries"
+    );
 }
 
 /// Test that built-in functions are automatically loaded
