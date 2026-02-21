@@ -1401,6 +1401,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      id-token: write
     uses: ./.github/workflows/live-tests.yml
     secrets: inherit
 
@@ -1416,6 +1417,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      id-token: write
     uses: ./.github/workflows/client-tests.yml
     secrets: inherit
 
