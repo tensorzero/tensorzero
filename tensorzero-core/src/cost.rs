@@ -2,7 +2,9 @@ use json_pointer::JsonPointer;
 use rust_decimal::Decimal;
 
 use crate::error::{Error, ErrorDetails};
-use tensorzero_types::{UninitializedCostConfig, UninitializedCostConfigEntry};
+use tensorzero_types::{
+    CostPointerConfig, UninitializedCostConfig, UninitializedCostConfigEntry, UninitializedCostRate,
+};
 
 /// Decimal type alias for cost values.
 pub type Cost = Decimal;
@@ -55,54 +57,50 @@ pub fn load_cost_config(config: UninitializedCostConfig) -> Result<CostConfig, E
     config.into_iter().map(load_cost_config_entry).collect()
 }
 
-fn load_cost_config_entry(entry: UninitializedCostConfigEntry) -> Result<CostConfigEntry, Error> {
-    let pointer = match (
-        entry.pointer.pointer,
-        entry.pointer.pointer_nonstreaming,
-        entry.pointer.pointer_streaming,
+fn parse_pointer_config(config: CostPointerConfig) -> Result<NormalizedCostPointerConfig, Error> {
+    match (
+        config.pointer,
+        config.pointer_nonstreaming,
+        config.pointer_streaming,
     ) {
         (Some(pointer), None, None) => {
             validate_pointer(&pointer)?;
-            NormalizedCostPointerConfig::Unified { pointer }
+            Ok(NormalizedCostPointerConfig::Unified { pointer })
         }
         (None, Some(pointer_nonstreaming), Some(pointer_streaming)) => {
             validate_pointer(&pointer_nonstreaming)?;
             validate_pointer(&pointer_streaming)?;
-            NormalizedCostPointerConfig::Split {
+            Ok(NormalizedCostPointerConfig::Split {
                 pointer_nonstreaming,
                 pointer_streaming,
-            }
+            })
         }
-        (None, None, None) => {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "must specify either `pointer` or both `pointer_nonstreaming` and `pointer_streaming`".to_string(),
-            }));
-        }
-        _ => {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "invalid pointer configuration: specify either `pointer` alone, or both `pointer_nonstreaming` and `pointer_streaming`".to_string(),
-            }));
-        }
-    };
+        _ => Err(Error::new(ErrorDetails::Config {
+            message: "invalid pointer configuration: specify either `pointer` alone, or both `pointer_nonstreaming` and `pointer_streaming`".to_string(),
+        })),
+    }
+}
 
-    let cost_per_unit = match (entry.rate.cost_per_million, entry.rate.cost_per_unit) {
-        (Some(_), Some(_)) => {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "cannot specify both `cost_per_million` and `cost_per_unit`".to_string(),
-            }));
-        }
-        (None, None) => {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "must specify either `cost_per_million` or `cost_per_unit`".to_string(),
-            }));
-        }
+fn parse_rate(rate: UninitializedCostRate) -> Result<CostRate, Error> {
+    let cost_per_unit = match (rate.cost_per_million, rate.cost_per_unit) {
         (Some(cost_per_million), None) => cost_per_million / Decimal::from(1_000_000),
         (None, Some(cost_per_unit)) => cost_per_unit,
+        _ => {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "must specify exactly one of `cost_per_million` or `cost_per_unit`"
+                    .to_string(),
+            }));
+        }
     };
+    Ok(CostRate { cost_per_unit })
+}
 
+fn load_cost_config_entry(entry: UninitializedCostConfigEntry) -> Result<CostConfigEntry, Error> {
+    let pointer = parse_pointer_config(entry.pointer)?;
+    let rate = parse_rate(entry.rate)?;
     Ok(CostConfigEntry {
         pointer,
-        rate: CostRate { cost_per_unit },
+        rate,
         required: entry.required,
     })
 }
@@ -110,7 +108,6 @@ fn load_cost_config_entry(entry: UninitializedCostConfigEntry) -> Result<CostCon
 #[cfg(test)]
 mod tests {
     use serde::Deserialize;
-    use tensorzero_types::{CostPointerConfig, UninitializedCostRate};
 
     use super::*;
 
@@ -303,7 +300,7 @@ pointer = "/usage/tokens"
             load_cost_config(wrapper.cost).expect_err("should fail when neither rate is specified");
         let msg = err.to_string();
         assert!(
-            msg.contains("must specify either"),
+            msg.contains("must specify exactly one of"),
             "error should mention missing rate: {msg}"
         );
     }
@@ -321,8 +318,8 @@ cost_per_million = 3.0
             load_cost_config(wrapper.cost).expect_err("should fail when no pointer is specified");
         let msg = err.to_string();
         assert!(
-            msg.contains("must specify either `pointer`"),
-            "error should mention missing pointer: {msg}"
+            msg.contains("invalid pointer configuration"),
+            "error should mention invalid pointer configuration: {msg}"
         );
     }
 
@@ -383,8 +380,8 @@ cost_per_unit = 0.5
             .expect_err("should reject config with both rates specified");
         let msg = err.to_string();
         assert!(
-            msg.contains("cannot specify both"),
-            "error should mention both rates: {msg}"
+            msg.contains("must specify exactly one of"),
+            "error should mention rate requirement: {msg}"
         );
     }
 
