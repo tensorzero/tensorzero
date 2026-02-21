@@ -1142,3 +1142,67 @@ gateway_url = "http://0.0.0.0:19999"
         "Synthetic entry should have provider_type 'tensorzero::relay'"
     );
 }
+
+/// Test that relay mid-stream errors include raw_chunk when include_raw_response is true.
+/// Uses dummy::err_in_stream which starts streaming successfully then errors at chunk 3.
+#[tokio::test]
+async fn test_relay_raw_response_streaming_mid_stream_error() {
+    let downstream_config = "";
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let mut stream = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::err_in_stream",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true,
+            "include_raw_response": true
+        }))
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut got_successful_chunk = false;
+    let mut got_error_with_raw_chunk = false;
+
+    while let Some(event) = stream.next().await {
+        let event = event.unwrap();
+        let Event::Message(message) = event else {
+            continue;
+        };
+        if message.data == "[DONE]" {
+            break;
+        }
+
+        let chunk: Value = serde_json::from_str(&message.data).unwrap();
+
+        if chunk.get("error").is_some() {
+            // This is the mid-stream error event — check for raw_chunk
+            if chunk.get("raw_chunk").is_some() {
+                got_error_with_raw_chunk = true;
+            }
+        } else {
+            got_successful_chunk = true;
+        }
+    }
+
+    assert!(
+        got_successful_chunk,
+        "Should have received at least one successful chunk before the mid-stream error"
+    );
+    assert!(
+        got_error_with_raw_chunk,
+        "Mid-stream error event should include raw_chunk when include_raw_response=true"
+    );
+}
