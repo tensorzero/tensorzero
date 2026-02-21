@@ -866,6 +866,14 @@ extra_body = [
     { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
 ]
 
+# Anthropic Claude Sonnet 4.6
+[models."claude-sonnet-4-6"]
+routing = ["anthropic"]
+
+[models."claude-sonnet-4-6".providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-6"
+
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
