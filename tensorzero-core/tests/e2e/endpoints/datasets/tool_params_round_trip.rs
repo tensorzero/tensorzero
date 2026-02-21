@@ -3,15 +3,15 @@
 //! This test suite verifies that DynamicToolParams correctly round-trips through
 //! the datapoint create/update/retrieve flow. Key differences from inference tests:
 //! 1. Datapoint updates create NEW IDs and stale old datapoints
-//! 2. Tests use direct ClickHouse insertion then HTTP retrieval
+//! 2. Tests use direct database insertion then HTTP retrieval
 //! 3. Tests cover both get_datapoints (by ID) and list_datapoints (pagination)
 //! 4. Update API uses Option<Option<DynamicToolParams>> for omit/null/value
 
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::time::Duration;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::inference::types::{
@@ -28,11 +28,11 @@ use crate::common::get_gateway_endpoint;
 
 /// Test 5.1: Full datapoint tool params round-trip
 ///
-/// Creates a datapoint via ClickHouse with full DynamicToolParams, then retrieves
+/// Creates a datapoint via database with full DynamicToolParams, then retrieves
 /// it via the get_datapoints HTTP API to verify tool partitioning works correctly.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_full_tool_params_round_trip() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let http_client = Client::new();
     let dataset_name = format!("test-dp-tools-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
@@ -87,7 +87,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
         Some(false),
     ));
 
-    // Create datapoint via ClickHouse
+    // Create datapoint via database
     let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: dataset_name.clone(),
         function_name: "weather_helper".to_string(),
@@ -122,7 +122,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -192,7 +192,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
 /// stales the old datapoint, and correctly converts the new tool_params.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_update_tool_params() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let http_client = Client::new();
     let dataset_name = format!("test-dp-update-{}", Uuid::now_v7());
     let original_id = Uuid::now_v7();
@@ -250,7 +250,7 @@ async fn test_datapoint_update_tool_params() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -298,11 +298,11 @@ async fn test_datapoint_update_tool_params() {
     assert_ne!(new_id, original_id, "Should create a new datapoint ID");
 
     // Wait for writes
-    clickhouse.flush_pending_writes().await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Verify old datapoint is staled
-    let old_datapoint = clickhouse
+    let old_datapoint = database
         .get_datapoint(&tensorzero::GetDatapointParams {
             dataset_name: dataset_name.clone(),
             datapoint_id: original_id,
@@ -350,7 +350,7 @@ async fn test_datapoint_update_tool_params() {
 /// they all appear correctly in the list_datapoints endpoint response.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_datapoints_with_tool_params() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let http_client = Client::new();
     let dataset_name = format!("test-list-tools-{}", Uuid::now_v7());
 
@@ -504,10 +504,7 @@ async fn test_list_datapoints_with_tool_params() {
         snapshot_hash: None,
     });
 
-    clickhouse
-        .insert_datapoints(&[dp1, dp2, dp3])
-        .await
-        .unwrap();
+    database.insert_datapoints(&[dp1, dp2, dp3]).await.unwrap();
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -574,7 +571,7 @@ async fn test_list_datapoints_with_tool_params() {
 /// Mirrors test_inference_only_static_tools but for datapoints.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_only_static_tools() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let http_client = Client::new();
     let dataset_name = format!("test-dp-static-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
@@ -627,7 +624,7 @@ async fn test_datapoint_only_static_tools() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -665,7 +662,7 @@ async fn test_datapoint_only_static_tools() {
 /// Mirrors test_inference_only_dynamic_tools but for datapoints.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_only_dynamic_tools() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let http_client = Client::new();
     let dataset_name = format!("test-dp-dynamic-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
@@ -731,7 +728,7 @@ async fn test_datapoint_only_dynamic_tools() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -775,7 +772,7 @@ async fn test_datapoint_only_dynamic_tools() {
 /// - Set to value: updates tool_params
 #[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_tool_params_three_states() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let http_client = Client::new();
     let dataset_name = format!("test-dp-three-states-{}", Uuid::now_v7());
 
@@ -828,7 +825,7 @@ async fn test_datapoint_tool_params_three_states() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
@@ -859,7 +856,7 @@ async fn test_datapoint_tool_params_three_states() {
         .parse()
         .unwrap();
 
-    clickhouse.flush_pending_writes().await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let resp1 = http_client
@@ -904,7 +901,7 @@ async fn test_datapoint_tool_params_three_states() {
         .parse()
         .unwrap();
 
-    clickhouse.flush_pending_writes().await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let resp2 = http_client
@@ -980,7 +977,7 @@ async fn test_datapoint_tool_params_three_states() {
         .parse()
         .unwrap();
 
-    clickhouse.flush_pending_writes().await;
+    database.flush_pending_writes().await;
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let resp3 = http_client
@@ -1015,7 +1012,7 @@ async fn test_datapoint_tool_params_three_states() {
 /// Verifies handling when a datapoint has no tool_params at all.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_no_tool_params() {
-    let clickhouse = get_clickhouse().await;
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let http_client = Client::new();
     let dataset_name = format!("test-dp-no-tools-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
@@ -1047,7 +1044,7 @@ async fn test_datapoint_no_tool_params() {
         snapshot_hash: None,
     });
 
-    clickhouse
+    database
         .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();

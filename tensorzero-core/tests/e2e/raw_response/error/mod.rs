@@ -9,6 +9,7 @@ mod best_of_n_sampling;
 mod cache;
 mod dicl;
 mod embeddings;
+mod json_functions;
 mod mixture_of_n;
 mod non_streaming;
 mod streaming_mid_stream;

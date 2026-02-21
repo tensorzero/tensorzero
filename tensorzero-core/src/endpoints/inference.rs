@@ -911,7 +911,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 
         let result = result?;
 
-        if !dryrun {
+        if !dryrun && config.gateway.observability.writes_enabled() {
             // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
             let result_to_write = result.clone();
             let extra_body = inference_config.extra_body.clone();
@@ -1364,7 +1364,7 @@ fn create_stream(
 
         yield Ok(prepare_response_chunk(&metadata, chunk));
 
-        if !metadata.dryrun {
+        if !metadata.dryrun && config.gateway.observability.writes_enabled() {
             // IMPORTANT: The following code will not be reached if the stream is interrupted.
             // Only do things that would be ok to skip in that case.
             //

@@ -888,9 +888,15 @@ pub(super) enum AnthropicSystemBlock<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct AnthropicThinkingConfig {
-    r#type: &'static str,
-    budget_tokens: i32,
+#[serde(untagged)]
+enum AnthropicThinkingConfig {
+    Enabled {
+        r#type: &'static str,
+        budget_tokens: i32,
+    },
+    Adaptive {
+        r#type: &'static str,
+    },
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -904,6 +910,8 @@ pub enum AnthropicOutputFormat {
 pub struct AnthropicOutputConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     format: Option<AnthropicOutputFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effort: Option<String>,
 }
 
 #[derive(Debug, Default, PartialEq, Serialize)]
@@ -1013,6 +1021,7 @@ impl<'a> AnthropicRequestBody<'a> {
                         format: Some(AnthropicOutputFormat::JsonSchema {
                             schema: schema.clone(),
                         }),
+                        effort: None,
                     })
                 }
                 ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
@@ -1020,7 +1029,7 @@ impl<'a> AnthropicRequestBody<'a> {
             stop_sequences: request.borrow_stop_sequences(),
         };
 
-        apply_inference_params(&mut anthropic_request, &request.inference_params_v2);
+        apply_inference_params(&mut anthropic_request, &request.inference_params_v2)?;
 
         Ok(anthropic_request)
     }
@@ -1029,7 +1038,7 @@ impl<'a> AnthropicRequestBody<'a> {
 fn apply_inference_params(
     request: &mut AnthropicRequestBody,
     inference_params: &ChatCompletionInferenceParamsV2,
-) {
+) -> Result<(), Error> {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
         service_tier,
@@ -1037,12 +1046,26 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
-        );
+    if reasoning_effort.is_some() && thinking_budget_tokens.is_some() {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "Cannot specify both `reasoning_effort` and `thinking_budget_tokens` for Anthropic. Use `reasoning_effort` for adaptive thinking or `thinking_budget_tokens` for manual thinking.".to_string(),
+        }
+        .into());
+    }
+
+    if let Some(effort) = reasoning_effort {
+        request.thinking = Some(AnthropicThinkingConfig::Adaptive { r#type: "adaptive" });
+        match &mut request.output_config {
+            Some(config) => {
+                config.effort = Some(effort.clone());
+            }
+            None => {
+                request.output_config = Some(AnthropicOutputConfig {
+                    format: None,
+                    effort: Some(effort.clone()),
+                });
+            }
+        }
     }
 
     // Map service_tier values to Anthropic-compatible values
@@ -1061,7 +1084,7 @@ fn apply_inference_params(
     }
 
     if let Some(budget_tokens) = thinking_budget_tokens {
-        request.thinking = Some(AnthropicThinkingConfig {
+        request.thinking = Some(AnthropicThinkingConfig::Enabled {
             r#type: "enabled",
             budget_tokens: *budget_tokens,
         });
@@ -1070,6 +1093,8 @@ fn apply_inference_params(
     if verbosity.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
+
+    Ok(())
 }
 
 /// Returns the default max_tokens for a given Anthropic model name, or an error if unknown.
@@ -1088,6 +1113,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
         || model_name == "claude-sonnet-4-0"
         || model_name.starts_with("claude-haiku-4-5")
         || model_name.starts_with("claude-sonnet-4-5")
+        || model_name.starts_with("claude-sonnet-4-6")
         || model_name.starts_with("claude-opus-4-5")
     {
         Ok(64_000)
@@ -3604,10 +3630,10 @@ mod tests {
     }
 
     #[test]
-    fn test_anthropic_apply_inference_params_called() {
+    fn test_anthropic_apply_inference_params_thinking_budget_tokens() {
         let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
-            reasoning_effort: Some("high".to_string()),
+            reasoning_effort: None,
             service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
@@ -3619,26 +3645,123 @@ mod tests {
             ..Default::default()
         };
 
-        apply_inference_params(&mut request, &inference_params);
-
-        // Test that reasoning_effort warns with tip about thinking_budget_tokens
-        assert!(logs_contain(
-            "Anthropic does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
-        ));
+        apply_inference_params(&mut request, &inference_params).unwrap();
 
         // Test that thinking_budget_tokens is applied correctly
         assert_eq!(
             request.thinking,
-            Some(AnthropicThinkingConfig {
+            Some(AnthropicThinkingConfig::Enabled {
                 r#type: "enabled",
                 budget_tokens: 1024,
-            })
+            }),
+            "thinking_budget_tokens should set enabled thinking mode"
         );
 
         // Test that verbosity warns
-        assert!(logs_contain(
-            "Anthropic does not support the inference parameter `verbosity`"
-        ));
+        assert!(
+            logs_contain("Anthropic does not support the inference parameter `verbosity`"),
+            "verbosity should produce a warning"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_apply_inference_params_reasoning_effort() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("low".to_string()),
+            service_tier: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+        };
+        let mut request = AnthropicRequestBody {
+            model: "claude-sonnet-4-6",
+            messages: vec![],
+            max_tokens: 2048,
+            ..Default::default()
+        };
+
+        apply_inference_params(&mut request, &inference_params).unwrap();
+
+        // Test that reasoning_effort sets adaptive thinking
+        assert_eq!(
+            request.thinking,
+            Some(AnthropicThinkingConfig::Adaptive { r#type: "adaptive" }),
+            "reasoning_effort should set adaptive thinking mode"
+        );
+
+        // Test that output_config has the effort value
+        assert_eq!(
+            request.output_config,
+            Some(AnthropicOutputConfig {
+                format: None,
+                effort: Some("low".to_string()),
+            }),
+            "reasoning_effort should set effort in output_config"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_apply_inference_params_reasoning_effort_with_json_strict() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("medium".to_string()),
+            service_tier: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+        };
+        // Simulate a request that already has output_config set from JSON strict mode
+        let mut request = AnthropicRequestBody {
+            model: "claude-sonnet-4-6",
+            messages: vec![],
+            max_tokens: 2048,
+            output_config: Some(AnthropicOutputConfig {
+                format: Some(AnthropicOutputFormat::JsonSchema {
+                    schema: serde_json::json!({"type": "object"}),
+                }),
+                effort: None,
+            }),
+            ..Default::default()
+        };
+
+        apply_inference_params(&mut request, &inference_params).unwrap();
+
+        // Test that both format and effort are set
+        assert_eq!(
+            request.output_config,
+            Some(AnthropicOutputConfig {
+                format: Some(AnthropicOutputFormat::JsonSchema {
+                    schema: serde_json::json!({"type": "object"}),
+                }),
+                effort: Some("medium".to_string()),
+            }),
+            "reasoning_effort should merge effort into existing output_config with format"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_apply_inference_params_mutual_exclusivity() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            service_tier: None,
+            thinking_budget_tokens: Some(1024),
+            verbosity: None,
+        };
+        let mut request = AnthropicRequestBody {
+            model: "claude-sonnet-4-6",
+            messages: vec![],
+            max_tokens: 2048,
+            ..Default::default()
+        };
+
+        let result = apply_inference_params(&mut request, &inference_params);
+        assert!(
+            result.is_err(),
+            "should error when both reasoning_effort and thinking_budget_tokens are provided"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Cannot specify both `reasoning_effort` and `thinking_budget_tokens`"),
+            "error message should mention mutual exclusivity"
+        );
     }
 
     #[tokio::test]

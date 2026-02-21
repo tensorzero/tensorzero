@@ -470,9 +470,21 @@ fn stream_anthropic(
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct GCPVertexAnthropicThinkingConfig {
-    r#type: &'static str,
-    budget_tokens: i32,
+#[serde(untagged)]
+enum GCPVertexAnthropicThinkingConfig {
+    Enabled {
+        r#type: &'static str,
+        budget_tokens: i32,
+    },
+    Adaptive {
+        r#type: &'static str,
+    },
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+struct GCPVertexAnthropicOutputConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effort: Option<String>,
 }
 
 #[derive(Debug, Default, PartialEq, Serialize)]
@@ -482,6 +494,8 @@ struct GCPVertexAnthropicRequestBody<'a> {
     max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_config: Option<GCPVertexAnthropicOutputConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     // This is the system message
     system: Option<Vec<AnthropicSystemBlock<'a>>>,
@@ -502,7 +516,7 @@ struct GCPVertexAnthropicRequestBody<'a> {
 fn apply_inference_params(
     request: &mut GCPVertexAnthropicRequestBody,
     inference_params: &ChatCompletionInferenceParamsV2,
-) {
+) -> Result<(), Error> {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
         service_tier,
@@ -510,16 +524,22 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
-        );
+    if reasoning_effort.is_some() && thinking_budget_tokens.is_some() {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "Cannot specify both `reasoning_effort` and `thinking_budget_tokens` for GCP Vertex Anthropic. Use `reasoning_effort` for adaptive thinking or `thinking_budget_tokens` for manual thinking.".to_string(),
+        }
+        .into());
+    }
+
+    if let Some(effort) = reasoning_effort {
+        request.thinking = Some(GCPVertexAnthropicThinkingConfig::Adaptive { r#type: "adaptive" });
+        request.output_config = Some(GCPVertexAnthropicOutputConfig {
+            effort: Some(effort.clone()),
+        });
     }
 
     if let Some(budget_tokens) = thinking_budget_tokens {
-        request.thinking = Some(GCPVertexAnthropicThinkingConfig {
+        request.thinking = Some(GCPVertexAnthropicThinkingConfig::Enabled {
             r#type: "enabled",
             budget_tokens: *budget_tokens,
         });
@@ -532,6 +552,8 @@ fn apply_inference_params(
     if verbosity.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
+
+    Ok(())
 }
 
 impl<'a> GCPVertexAnthropicRequestBody<'a> {
@@ -594,6 +616,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             messages,
             max_tokens,
             stream: Some(request.stream),
+            output_config: None,
             system,
             temperature: request.temperature,
             thinking: None,
@@ -606,7 +629,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         apply_inference_params(
             &mut gcp_vertex_anthropic_request,
             &request.inference_params_v2,
-        );
+        )?;
 
         Ok(gcp_vertex_anthropic_request)
     }
@@ -631,6 +654,7 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
     } else if model_id.starts_with("claude-sonnet-4@")
         || model_id.starts_with("claude-haiku-4-5@")
         || model_id.starts_with("claude-sonnet-4-5@")
+        || model_id.starts_with("claude-sonnet-4-6@")
         || model_id.starts_with("claude-opus-4-5@")
     {
         Ok(64_000)
@@ -1758,35 +1782,86 @@ mod tests {
     }
 
     #[test]
-    fn test_gcp_vertex_anthropic_apply_inference_params_called() {
+    fn test_gcp_vertex_anthropic_apply_inference_params_thinking_budget_tokens() {
         let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
-            reasoning_effort: Some("high".to_string()),
+            reasoning_effort: None,
             service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };
         let mut request = GCPVertexAnthropicRequestBody::default();
 
-        apply_inference_params(&mut request, &inference_params);
-
-        // Test that reasoning_effort warns with tip about thinking_budget_tokens
-        assert!(logs_contain(
-            "GCP Vertex Anthropic does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
-        ));
+        apply_inference_params(&mut request, &inference_params).unwrap();
 
         // Test that thinking_budget_tokens is applied correctly
         assert_eq!(
             request.thinking,
-            Some(GCPVertexAnthropicThinkingConfig {
+            Some(GCPVertexAnthropicThinkingConfig::Enabled {
                 r#type: "enabled",
                 budget_tokens: 1024,
-            })
+            }),
+            "thinking_budget_tokens should set enabled thinking mode"
         );
 
         // Test that verbosity warns
-        assert!(logs_contain(
-            "GCP Vertex Anthropic does not support the inference parameter `verbosity`, so it will be ignored."
-        ));
+        assert!(
+            logs_contain(
+                "GCP Vertex Anthropic does not support the inference parameter `verbosity`, so it will be ignored."
+            ),
+            "verbosity should produce a warning"
+        );
+    }
+
+    #[test]
+    fn test_gcp_vertex_anthropic_apply_inference_params_reasoning_effort() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("low".to_string()),
+            service_tier: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+        };
+        let mut request = GCPVertexAnthropicRequestBody::default();
+
+        apply_inference_params(&mut request, &inference_params).unwrap();
+
+        // Test that reasoning_effort sets adaptive thinking
+        assert_eq!(
+            request.thinking,
+            Some(GCPVertexAnthropicThinkingConfig::Adaptive { r#type: "adaptive" }),
+            "reasoning_effort should set adaptive thinking mode"
+        );
+
+        // Test that output_config has the effort value
+        assert_eq!(
+            request.output_config,
+            Some(GCPVertexAnthropicOutputConfig {
+                effort: Some("low".to_string()),
+            }),
+            "reasoning_effort should set effort in output_config"
+        );
+    }
+
+    #[test]
+    fn test_gcp_vertex_anthropic_apply_inference_params_mutual_exclusivity() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            service_tier: None,
+            thinking_budget_tokens: Some(1024),
+            verbosity: None,
+        };
+        let mut request = GCPVertexAnthropicRequestBody::default();
+
+        let result = apply_inference_params(&mut request, &inference_params);
+        assert!(
+            result.is_err(),
+            "should error when both reasoning_effort and thinking_budget_tokens are provided"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Cannot specify both `reasoning_effort` and `thinking_budget_tokens`"),
+            "error message should mention mutual exclusivity"
+        );
     }
 }

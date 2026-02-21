@@ -17,7 +17,7 @@ use crate::config::{
     Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
 };
 use crate::db::TimeWindow;
-use crate::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
+use crate::db::clickhouse::query_builder::{OrderByTerm, OrderDirection};
 use crate::db::inferences::{
     CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
     CountInferencesWithFeedbackParams, FunctionInferenceCount, FunctionInfo,
@@ -26,8 +26,7 @@ use crate::db::inferences::{
     VariantThroughput,
 };
 use crate::db::postgres::inference_filter_helpers::{MetricJoinRegistry, apply_inference_filter};
-use crate::db::query_helpers::json_double_escape_string_without_quotes;
-use crate::db::query_helpers::uuid_to_datetime;
+use crate::db::query_helpers::{json_double_escape_string_without_quotes, uuid_to_datetime};
 use crate::endpoints::inference::InferenceParams;
 use crate::endpoints::stored_inferences::v1::types::{
     FloatComparisonOperator, TagComparisonOperator, TimeComparisonOperator,
@@ -571,9 +570,6 @@ pub(super) fn build_insert_chat_inferences_query(
     );
 
     query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
-        let snapshot_hash_bytes: Option<Vec<u8>> =
-            row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
-
         b.push_bind(row.id)
             .push_bind(&row.function_name)
             .push_bind(&row.variant_name)
@@ -581,7 +577,7 @@ pub(super) fn build_insert_chat_inferences_query(
             .push_bind(row.processing_time_ms.map(|v| v as i32))
             .push_bind(row.ttft_ms.map(|v| v as i32))
             .push_bind(Json::from(&row.tags))
-            .push_bind(snapshot_hash_bytes)
+            .push_bind(row.snapshot_hash.as_ref())
             .push_bind(created_at);
     });
 
@@ -654,9 +650,6 @@ pub(super) fn build_insert_json_inferences_query(
     );
 
     query_builder.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
-        let snapshot_hash_bytes: Option<Vec<u8>> =
-            row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
-
         b.push_bind(row.id)
             .push_bind(&row.function_name)
             .push_bind(&row.variant_name)
@@ -664,7 +657,7 @@ pub(super) fn build_insert_json_inferences_query(
             .push_bind(row.processing_time_ms.map(|v| v as i32))
             .push_bind(row.ttft_ms.map(|v| v as i32))
             .push_bind(Json::from(&row.tags))
-            .push_bind(snapshot_hash_bytes)
+            .push_bind(row.snapshot_hash.as_ref())
             .push_bind(created_at);
     });
 
@@ -704,17 +697,46 @@ pub(super) fn build_insert_json_inference_data_query(
 
 // ===== Helper types =====
 
+/// A single ORDER BY term.
+enum OrderByTermResolved {
+    /// A static column expression like "i.created_at" or "metric_alias.value".
+    Column(String),
+}
+
 /// Result of building ORDER BY clause, including any required JOINs.
 struct OrderByResult {
-    /// The ORDER BY clause (e.g., " ORDER BY i.created_at DESC, i.id DESC").
-    order_by_clause: String,
+    /// Validated ORDER BY terms with their direction (e.g., "DESC NULLS LAST").
+    terms: Vec<(OrderByTermResolved, String)>,
+    /// The id tie-breaker clause, e.g., "i.id DESC".
+    id_tiebreaker: String,
     /// JOIN clauses needed for metric ordering.
     metric_joins: String,
 }
 
+impl OrderByResult {
+    /// Pushes the ORDER BY clause onto the query builder.
+    fn push_order_by(&self, qb: &mut QueryBuilder<sqlx::Postgres>) {
+        qb.push(" ORDER BY ");
+        for (i, (term, direction)) in self.terms.iter().enumerate() {
+            if i > 0 {
+                qb.push(", ");
+            }
+            match term {
+                OrderByTermResolved::Column(expr) => {
+                    qb.push(format!("{expr} {direction}"));
+                }
+            }
+        }
+        if !self.terms.is_empty() {
+            qb.push(", ");
+        }
+        qb.push(&self.id_tiebreaker);
+    }
+}
+
 /// Builds the ORDER BY clause based on params.
 /// For "After" pagination, we invert the direction since we'll reverse results in memory.
-/// Returns both the ORDER BY clause and any required metric JOINs.
+/// Returns both the ORDER BY terms and any required metric JOINs.
 fn build_order_by_clause(
     params: &ListInferencesParams<'_>,
     config: &Config,
@@ -732,43 +754,37 @@ fn build_order_by_clause(
         OrderDirection::Desc // Default: most recent first
     };
 
-    let mut order_clauses = Vec::new();
+    let mut terms = Vec::new();
     let mut join_registry = MetricJoinRegistry::new();
 
     // Add user-specified ordering if present
     if let Some(order_by) = params.order_by {
         for o in order_by {
-            let column = match &o.term {
-                OrderByTerm::Timestamp => "i.created_at".to_string(),
+            let term = match &o.term {
+                OrderByTerm::Timestamp => OrderByTermResolved::Column("i.created_at".to_string()),
                 OrderByTerm::Metric { name } => {
-                    // Look up metric config to determine table and join column
                     let metric_config = config.metrics.get(name).ok_or_else(|| {
                         Error::new(ErrorDetails::InvalidMetricName {
                             metric_name: name.clone(),
                         })
                     })?;
 
-                    // All metric types (Float, Boolean) are orderable
-
-                    // Register the join and get the alias
                     let alias = join_registry.register_metric_join(
                         name,
                         metric_config.r#type,
                         metric_config.level.clone(),
                     );
-                    format!("{alias}.value")
+                    OrderByTermResolved::Column(format!("{alias}.value"))
                 }
+                // TODO(#6441): Implement proper search relevance ordering for Postgres.
                 OrderByTerm::SearchRelevance => {
+                    // Validate that search_query_experimental is provided
                     if params.search_query_experimental.is_none() {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: "ORDER BY search_relevance requires search_query_experimental to be provided".to_string(),
                         }));
                     }
-                    // For Postgres, we don't have a term frequency column
-                    // This is a known limitation compared to ClickHouse
-                    return Err(Error::new(ErrorDetails::PostgresQuery {
-                        message: "ORDER BY search_relevance is not yet supported for Postgres inference queries".to_string(),
-                    }));
+                    OrderByTermResolved::Column("i.id".to_string())
                 }
             };
 
@@ -778,20 +794,19 @@ fn build_order_by_clause(
                 o.direction
             };
 
-            // Add NULLS LAST to handle NULL metric values gracefully
-            order_clauses.push(format!(
-                "{} {} NULLS LAST",
-                column,
-                effective_direction.to_clickhouse_direction()
+            terms.push((
+                term,
+                format!(
+                    "{} NULLS LAST",
+                    effective_direction.to_clickhouse_direction()
+                ),
             ));
         }
     }
 
-    // Always add id as tie-breaker for deterministic ordering
-    order_clauses.push(format!("i.id {}", id_direction.to_clickhouse_direction()));
-
     Ok(OrderByResult {
-        order_by_clause: format!(" ORDER BY {}", order_clauses.join(", ")),
+        terms,
+        id_tiebreaker: format!("i.id {}", id_direction.to_clickhouse_direction()),
         metric_joins: join_registry.get_joins_sql(),
     })
 }
@@ -932,7 +947,7 @@ fn build_chat_inferences_query(
         query_builder.push(&order_by_result.metric_joins);
     }
 
-    query_builder.push(" WHERE 1=1");
+    query_builder.push(" WHERE TRUE");
 
     // Add filters
     if let Some(function_name) = params.function_name {
@@ -959,9 +974,9 @@ fn build_chat_inferences_query(
     // Apply inference filter (e.g., DemonstrationFeedback, metric filters, etc.)
     apply_inference_filter(&mut query_builder, params.filters, config)?;
 
-    // Apply search query filter
     if let Some(search_query) = params.search_query_experimental {
-        let search_pattern = format!("%{search_query}%");
+        let json_escaped_query = json_double_escape_string_without_quotes(search_query)?;
+        let search_pattern = format!("%{json_escaped_query}%");
         query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
         query_builder.push(" OR io.output::text ILIKE ");
@@ -983,7 +998,7 @@ fn build_chat_inferences_query(
     }
 
     // Add ORDER BY clause
-    query_builder.push(&order_by_result.order_by_clause);
+    order_by_result.push_order_by(&mut query_builder);
 
     // Add LIMIT
     query_builder.push(" LIMIT ");
@@ -1073,7 +1088,7 @@ fn build_json_inferences_query(
         query_builder.push(&order_by_result.metric_joins);
     }
 
-    query_builder.push(" WHERE 1=1");
+    query_builder.push(" WHERE TRUE");
 
     // Add filters
     if let Some(function_name) = params.function_name {
@@ -1100,9 +1115,9 @@ fn build_json_inferences_query(
     // Apply inference filter (e.g., DemonstrationFeedback, metric filters, etc.)
     apply_inference_filter(&mut query_builder, params.filters, config)?;
 
-    // Apply search query filter
     if let Some(search_query) = params.search_query_experimental {
-        let search_pattern = format!("%{search_query}%");
+        let json_escaped_query = json_double_escape_string_without_quotes(search_query)?;
+        let search_pattern = format!("%{json_escaped_query}%");
         query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
         query_builder.push(" OR io.output::text ILIKE ");
@@ -1124,7 +1139,7 @@ fn build_json_inferences_query(
     }
 
     // Add ORDER BY clause
-    query_builder.push(&order_by_result.order_by_clause);
+    order_by_result.push_order_by(&mut query_builder);
 
     // Add LIMIT
     query_builder.push(" LIMIT ");
@@ -1286,40 +1301,12 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredJsonInference {
     }
 }
 
-/// Validates ORDER BY terms for UNION ALL queries (when function_name is not specified).
-/// Returns an error if ORDER BY metric or search_relevance is used, as these are not supported
-/// for cross-table queries.
-fn validate_union_order_by(order_by: Option<&[OrderBy]>) -> Result<(), Error> {
-    if let Some(order_by) = order_by {
-        for o in order_by {
-            if matches!(o.term, OrderByTerm::Metric { .. }) {
-                return Err(Error::new(ErrorDetails::InvalidRequest {
-                    message: "ORDER BY metric is not supported when querying without function_name"
-                        .to_string(),
-                }));
-            }
-            if matches!(o.term, OrderByTerm::SearchRelevance) {
-                return Err(Error::new(ErrorDetails::PostgresQuery {
-                    message:
-                        "ORDER BY search_relevance is not yet supported for Postgres inference queries"
-                            .to_string(),
-                }));
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Builds a query for inferences from both tables using UNION ALL.
 /// Returns a QueryBuilder that can be executed against a Postgres connection.
 fn build_inferences_union_query(
     config: &Config,
     params: &ListInferencesParams<'_>,
 ) -> Result<QueryBuilder<sqlx::Postgres>, Error> {
-    // For UNION ALL, we don't support ORDER BY metric since each subquery would need its own JOINs
-    // and the metric values need to be consistent across both tables
-    validate_union_order_by(params.order_by)?;
-
     // Build ORDER BY clause for the inner and outer queries
     let should_invert_directions =
         matches!(params.pagination, Some(PaginationParams::After { .. }));
@@ -1335,17 +1322,36 @@ fn build_inferences_union_query(
 
     let mut order_clauses = Vec::new();
 
-    // Add user-specified ordering if present
-    // Only Timestamp is allowed here; Metric and SearchRelevance are rejected above
     if let Some(order_by) = params.order_by {
         for o in order_by {
+            let column = match &o.term {
+                OrderByTerm::Timestamp => "timestamp",
+                // TODO(#6441): Implement proper search relevance ordering for Postgres.
+                OrderByTerm::SearchRelevance => {
+                    if params.search_query_experimental.is_none() {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message:
+                                "ORDER BY search_relevance requires search_query_experimental to be provided"
+                                    .to_string(),
+                        }));
+                    }
+                    "id"
+                }
+                OrderByTerm::Metric { name } => {
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: format!(
+                            "ORDER BY metric `{name}` is not supported when querying without function_name"
+                        ),
+                    }));
+                }
+            };
             let effective_direction = if should_invert_directions {
                 o.direction.inverted()
             } else {
                 o.direction
             };
             order_clauses.push(format!(
-                "timestamp {} NULLS LAST",
+                "{column} {} NULLS LAST",
                 effective_direction.to_clickhouse_direction()
             ));
         }
@@ -1409,11 +1415,15 @@ fn build_inferences_union_query(
                 io.extra_body,
                 io.inference_params,
                 i.processing_time_ms,
-                i.ttft_ms
+                i.ttft_ms"
+    ));
+
+    query_builder.push(format!(
+        r"
             FROM tensorzero.chat_inferences i
             LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             {demo_join}
-            WHERE 1=1"
+            WHERE TRUE"
     ));
 
     // Add chat filters
@@ -1447,11 +1457,15 @@ fn build_inferences_union_query(
                 io.extra_body,
                 io.inference_params,
                 i.processing_time_ms,
-                i.ttft_ms
+                i.ttft_ms"
+    ));
+
+    query_builder.push(format!(
+        r"
             FROM tensorzero.json_inferences i
             LEFT JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at
             {demo_join}
-            WHERE 1=1"
+            WHERE TRUE"
     ));
 
     // Add json filters
@@ -1522,7 +1536,8 @@ fn apply_union_filters(
 
     // Apply search query filter (input/output are in IO tables)
     if let Some(search_query) = params.search_query_experimental {
-        let search_pattern = format!("%{search_query}%");
+        let json_escaped_query = json_double_escape_string_without_quotes(search_query)?;
+        let search_pattern = format!("%{json_escaped_query}%");
         query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
         query_builder.push(" OR io.output::text ILIKE ");
@@ -1550,15 +1565,9 @@ fn apply_union_filters(
 
 /// Manual implementation of FromRow for InferenceMetadata to handle UNION ALL queries.
 /// Converts `snapshot_hash` bytes to string via SnapshotHash.
-///
-/// TODO(shuyangli): come up with a nice way to do the snapshot_hash conversion so we don't
-/// need to manually impl sqlx::FromRow. Because the origin type is Vec<u8> and the destination
-/// type is String, we can't/shouldn't directly impl TryFrom<Vec<u8>> for String.
 impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for InferenceMetadata {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
-        let snapshot_hash_bytes: Option<Vec<u8>> = row.try_get("snapshot_hash")?;
-        let snapshot_hash =
-            snapshot_hash_bytes.map(|bytes| SnapshotHash::from_bytes(&bytes).to_string());
+        let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
 
         Ok(InferenceMetadata {
             id: row.try_get("id")?,
@@ -1566,7 +1575,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for InferenceMetadata {
             variant_name: row.try_get("variant_name")?,
             episode_id: row.try_get("episode_id")?,
             function_type: row.try_get("function_type")?,
-            snapshot_hash,
+            snapshot_hash: snapshot_hash.map(|h| h.to_string()),
         })
     }
 }
@@ -1649,10 +1658,9 @@ async fn count_single_table_inferences(
     // Apply inference filter (e.g., DemonstrationFeedback, metric filters, etc.)
     apply_inference_filter(&mut query_builder, params.filters, config)?;
 
-    // Apply search query filter (input/output are in IO tables)
     if let Some(search_query) = params.search_query_experimental {
-        let json_escaped_text_query = json_double_escape_string_without_quotes(search_query)?;
-        let search_pattern = format!("%{json_escaped_text_query}%");
+        let json_escaped_query = json_double_escape_string_without_quotes(search_query)?;
+        let search_pattern = format!("%{json_escaped_query}%");
         query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
         query_builder.push(" OR io.output::text ILIKE ");
@@ -1830,10 +1838,9 @@ fn apply_count_filters(
     // Apply inference filter (e.g., DemonstrationFeedback, metric filters, etc.)
     apply_inference_filter(query_builder, params.filters, config)?;
 
-    // Apply search query filter (input/output are in IO tables)
     if let Some(search_query) = params.search_query_experimental {
-        let json_escaped_text_query = json_double_escape_string_without_quotes(search_query)?;
-        let search_pattern = format!("%{json_escaped_text_query}%");
+        let json_escaped_query = json_double_escape_string_without_quotes(search_query)?;
+        let search_pattern = format!("%{json_escaped_query}%");
         query_builder.push(" AND (io.input::text ILIKE ");
         query_builder.push_bind(search_pattern.clone());
         query_builder.push(" OR io.output::text ILIKE ");
@@ -2047,7 +2054,7 @@ mod tests {
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
             LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
-            WHERE 1=1 AND i.function_name = $1
+            WHERE TRUE AND i.function_name = $1
             ORDER BY i.id DESC
             LIMIT $2 OFFSET $3
             ",
@@ -2104,7 +2111,7 @@ mod tests {
                 FROM tensorzero.demonstration_feedback
                 ORDER BY inference_id, created_at DESC
             ) AS demo_f ON i.id = demo_f.inference_id
-            WHERE 1=1 AND i.function_name = $1
+            WHERE TRUE AND i.function_name = $1
             ORDER BY i.id DESC
             LIMIT $2 OFFSET $3
             ",
@@ -2155,7 +2162,7 @@ mod tests {
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
             LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
-            WHERE 1=1 AND i.function_name = $1 AND i.id < $2
+            WHERE TRUE AND i.function_name = $1 AND i.id < $2
             ORDER BY i.id DESC
             LIMIT $3 OFFSET $4
             ",
@@ -2206,7 +2213,7 @@ mod tests {
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
             LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
-            WHERE 1=1 AND i.function_name = $1 AND i.id > $2
+            WHERE TRUE AND i.function_name = $1 AND i.id > $2
             ORDER BY i.id ASC
             LIMIT $3 OFFSET $4
             ",
@@ -2256,7 +2263,7 @@ mod tests {
                 i.ttft_ms
             FROM tensorzero.chat_inferences i
             LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
-            WHERE 1=1 AND i.function_name = $1
+            WHERE TRUE AND i.function_name = $1
             AND (io.input::text ILIKE $2 OR io.output::text ILIKE $3)
             ORDER BY i.id DESC
             LIMIT $4 OFFSET $5
@@ -2303,7 +2310,7 @@ mod tests {
                 i.ttft_ms
             FROM tensorzero.json_inferences i
             LEFT JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at
-            WHERE 1=1 AND i.function_name = $1
+            WHERE TRUE AND i.function_name = $1
             ORDER BY i.id DESC
             LIMIT $2 OFFSET $3
             ",
@@ -2356,7 +2363,7 @@ mod tests {
                     i.ttft_ms
                 FROM tensorzero.chat_inferences i
                 LEFT JOIN tensorzero.chat_inference_data io ON io.id = i.id AND io.created_at = i.created_at
-                WHERE 1=1 ORDER BY id DESC LIMIT $1)
+                WHERE TRUE ORDER BY id DESC LIMIT $1)
                 UNION ALL
                 (SELECT
                     'json'::text as inference_type,
@@ -2380,7 +2387,7 @@ mod tests {
                     i.ttft_ms
                 FROM tensorzero.json_inferences i
                 LEFT JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at
-                WHERE 1=1 ORDER BY id DESC LIMIT $2)
+                WHERE TRUE ORDER BY id DESC LIMIT $2)
             ) AS combined
             ORDER BY id DESC LIMIT $3 OFFSET $4
             ",
@@ -2416,13 +2423,15 @@ mod tests {
             Err(e) => e,
         };
         assert!(
-            err.to_string().contains("ORDER BY metric is not supported"),
+            err.to_string().contains(
+                "ORDER BY metric `some_metric` is not supported when querying without function_name"
+            ),
             "Error message should indicate metric ordering is not supported: {err}"
         );
     }
 
     #[test]
-    fn test_build_inferences_union_query_rejects_search_relevance_order() {
+    fn test_build_inferences_union_query_rejects_search_relevance_without_query() {
         let config = make_test_config();
         let order_by = [OrderBy {
             term: OrderByTerm::SearchRelevance,
@@ -2444,13 +2453,13 @@ mod tests {
 
         let result = build_inferences_union_query(&config, &params);
         let err = match result {
-            Ok(_) => panic!("UNION query should reject search_relevance ordering"),
+            Ok(_) => panic!("UNION query should reject search_relevance without search_query"),
             Err(e) => e,
         };
         assert!(
             err.to_string()
-                .contains("ORDER BY search_relevance is not yet supported"),
-            "Error message should indicate search_relevance ordering is not supported: {err}"
+                .contains("ORDER BY search_relevance requires search_query_experimental"),
+            "Error message should indicate search_query is required: {err}"
         );
     }
 
