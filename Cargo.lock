@@ -6907,6 +6907,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.28",
  "reqwest-sse-stream",
+ "rustls",
  "schemars 1.2.1",
  "secrecy",
  "serde",
