@@ -103,9 +103,7 @@ use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
     RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
 };
-use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string, serialize_json_string,
-};
+use crate::serde_util::{deserialize_optional_json_string, serialize_optional_json_string};
 use crate::tool::{
     InferenceResponseToolCall, InferenceResponseToolCallExt, ToolCall, ToolCallConfig,
     ToolCallConfigDatabaseInsert, ToolResult, deserialize_optional_tool_info,
@@ -136,7 +134,7 @@ pub use streams::{
     ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk, InferenceResultChunk,
     InferenceResultStream, JsonInferenceResultChunk, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
-    UnknownChunk, collect_chunks,
+    UnknownChunk, collect_chunks, stream_with_deadline,
 };
 pub use usage::{ApiType, RawResponseEntry, RawUsageEntry, Usage};
 
@@ -1219,9 +1217,10 @@ impl ModelInput {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
 pub enum FinishReason {
     Stop,
     StopSequence,
@@ -1307,6 +1306,7 @@ pub struct ModelInferenceResponse {
     pub usage: Usage,
     pub provider_latency: Latency,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
     /// Raw usage entries for `include_raw_usage` feature.
@@ -1314,6 +1314,9 @@ pub struct ModelInferenceResponse {
     /// Raw response entries passed through from gateway relay.
     /// When present, these should be used instead of generating new entries.
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
+    /// Raw response entries from failed provider attempts during fallback.
+    /// Populated when a model has multiple providers and earlier ones fail before a later one succeeds.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1335,6 +1338,7 @@ pub struct ModelInferenceResponseWithMetadata {
     pub usage: Usage,
     pub latency: Latency,
     pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub model_name: Arc<str>,
     pub cached: bool,
     pub finish_reason: Option<FinishReason>,
@@ -1343,6 +1347,8 @@ pub struct ModelInferenceResponseWithMetadata {
     /// Raw response entries passed through from relay.
     /// When present, these should be used instead of generating new entries.
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
+    /// Raw response entries from failed provider attempts during fallback.
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1481,52 +1487,52 @@ pub enum TaggedInferenceDatabaseInsert {
     Json(JsonInferenceDatabaseInsert),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub output: Vec<ContentBlockChatOutput>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub input: Option<StoredInput>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(deserialize_with = "deserialize_optional_tool_info")]
     #[serde(flatten)]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub inference_params: InferenceParams,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub inference_params: Option<InferenceParams>,
     pub processing_time_ms: Option<u32>,
     pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
-    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
-    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub extra_body: Option<UnfilteredInferenceExtraBody>,
     #[serde(default)]
     pub snapshot_hash: Option<SnapshotHash>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct JsonInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub output: JsonInferenceOutput,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub input: Option<StoredInput>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<JsonInferenceOutput>,
     // We at one point wrote empty auxiliary content to the database as "" but now write it as []
     // In either case, we want to deserialize it as [] if empty
-    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
-    pub auxiliary_content: Vec<ContentBlockOutput>,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub inference_params: InferenceParams,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub auxiliary_content: Option<Vec<ContentBlockOutput>>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub inference_params: Option<InferenceParams>,
     pub processing_time_ms: Option<u32>,
-    pub output_schema: Value,
+    pub output_schema: Option<Value>,
     pub ttft_ms: Option<u32>,
     pub tags: HashMap<String, String>,
-    #[serde(deserialize_with = "deserialize_defaulted_json_string")]
-    pub extra_body: UnfilteredInferenceExtraBody,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub extra_body: Option<UnfilteredInferenceExtraBody>,
     #[serde(default)]
     pub snapshot_hash: Option<SnapshotHash>,
 }
@@ -1551,21 +1557,21 @@ pub enum InferenceDatabaseInsert {
 pub struct StoredModelInference {
     pub id: Uuid,
     pub inference_id: Uuid,
-    pub raw_request: String,
-    pub raw_response: String,
+    pub raw_request: Option<String>,
+    pub raw_response: Option<String>,
     pub system: Option<String>,
     /// Input messages - stored as JSON string in ClickHouse
     #[serde(
-        serialize_with = "serialize_json_string",
-        deserialize_with = "deserialize_json_string"
+        serialize_with = "serialize_optional_json_string",
+        deserialize_with = "deserialize_optional_json_string"
     )]
-    pub input_messages: Vec<StoredRequestMessage>,
+    pub input_messages: Option<Vec<StoredRequestMessage>>,
     /// Output content blocks - stored as JSON string in ClickHouse
     #[serde(
-        serialize_with = "serialize_json_string",
-        deserialize_with = "deserialize_json_string"
+        serialize_with = "serialize_optional_json_string",
+        deserialize_with = "deserialize_optional_json_string"
     )]
-    pub output: Vec<ContentBlockOutput>,
+    pub output: Option<Vec<ContentBlockOutput>>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub response_time_ms: Option<u32>,
@@ -1624,6 +1630,7 @@ impl ModelInferenceResponse {
     pub fn new(
         provider_inference_response: ProviderInferenceResponse,
         model_provider_name: Arc<str>,
+        provider_type: Arc<str>,
         cached: bool,
     ) -> Self {
         Self {
@@ -1637,9 +1644,11 @@ impl ModelInferenceResponse {
             provider_latency: provider_inference_response.provider_latency,
             finish_reason: provider_inference_response.finish_reason,
             model_provider_name,
+            provider_type,
             cached,
             raw_usage: provider_inference_response.raw_usage,
             relay_raw_response: provider_inference_response.relay_raw_response,
+            failed_raw_response: vec![],
         }
     }
 
@@ -1647,6 +1656,7 @@ impl ModelInferenceResponse {
         cache_lookup: CacheData<NonStreamingCacheData>,
         request: &ModelInferenceRequest<'_>,
         model_provider_name: &str,
+        provider_type: Arc<str>,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -1664,10 +1674,12 @@ impl ModelInferenceResponse {
             },
             finish_reason: cache_lookup.finish_reason,
             model_provider_name: Arc::from(model_provider_name),
+            provider_type,
             cached: true,
             // TensorZero cache hits are excluded from raw_usage and raw_response lists
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }
     }
 }
@@ -1687,10 +1699,12 @@ impl ModelInferenceResponseWithMetadata {
             latency: model_inference_response.provider_latency,
             finish_reason: model_inference_response.finish_reason,
             model_provider_name: model_inference_response.model_provider_name,
+            provider_type: model_inference_response.provider_type,
             model_name,
             cached: model_inference_response.cached,
             raw_usage: model_inference_response.raw_usage,
             relay_raw_response: model_inference_response.relay_raw_response,
+            failed_raw_response: model_inference_response.failed_raw_response,
         }
     }
 }
@@ -1747,10 +1761,10 @@ impl StoredModelInference {
         Ok(Self {
             id: Uuid::now_v7(),
             inference_id,
-            raw_request: result.raw_request,
-            raw_response: result.raw_response,
+            raw_request: Some(result.raw_request),
+            raw_response: Some(result.raw_response),
             system: result.system,
-            output: result.output,
+            output: Some(result.output),
             input_tokens,
             output_tokens,
             response_time_ms: latency_ms,
@@ -1759,7 +1773,7 @@ impl StoredModelInference {
             model_name: result.model_name.to_string(),
             cached: result.cached,
             finish_reason: result.finish_reason,
-            input_messages: stored_input_messages,
+            input_messages: Some(stored_input_messages),
             snapshot_hash: Some(snapshot_hash),
             // timestamp is a materialized column, not set during insert
             timestamp: None,
@@ -1811,10 +1825,12 @@ impl InferenceResult {
         }
     }
 
-    pub async fn get_serialized_model_inferences(
+    /// Get the model inferences as `StoredModelInference` structs ready for database insertion.
+    /// Any errors during construction are logged and the result is skipped.
+    pub async fn get_model_inferences(
         &self,
         snapshot_hash: SnapshotHash,
-    ) -> Vec<serde_json::Value> {
+    ) -> Vec<StoredModelInference> {
         let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
@@ -1823,31 +1839,22 @@ impl InferenceResult {
         join_all(model_inference_responses.iter().map(|r| {
             let snapshot_hash = snapshot_hash.clone();
             async move {
-                let model_inference =
-                    StoredModelInference::new(r.clone(), inference_id, snapshot_hash).await;
-                let model_inference = match model_inference {
-                    Ok(model_inference) => model_inference,
+                match StoredModelInference::new(r.clone(), inference_id, snapshot_hash).await {
+                    Ok(model_inference) => Some(model_inference),
                     Err(e) => {
                         ErrorDetails::Serialization {
                             message: format!("Failed to construct StoredModelInference: {e:?}"),
                         }
                         .log();
-                        return Default::default();
-                    }
-                };
-                match serde_json::to_value(model_inference) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        ErrorDetails::Serialization {
-                            message: format!("Failed to serialize StoredModelInference: {e:?}"),
-                        }
-                        .log();
-                        Default::default()
+                        None
                     }
                 }
             }
         }))
         .await
+        .into_iter()
+        .flatten()
+        .collect()
     }
 
     /// Aggregates the usage of all model inference results, considering cached results.
@@ -1998,7 +2005,7 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: StoredInput,
+        input: Option<StoredInput>,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -2015,12 +2022,12 @@ impl ChatInferenceDatabaseInsert {
             episode_id: metadata.episode_id,
             input,
             tool_params,
-            inference_params,
-            output: chat_result.content,
+            inference_params: Some(inference_params),
+            output: Some(chat_result.content),
             processing_time_ms,
             tags: metadata.tags,
             ttft_ms: metadata.ttft_ms,
-            extra_body: metadata.extra_body,
+            extra_body: Some(metadata.extra_body),
             snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
@@ -2029,7 +2036,7 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: StoredInput,
+        input: Option<StoredInput>,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -2051,13 +2058,13 @@ impl JsonInferenceDatabaseInsert {
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
             input,
-            auxiliary_content,
-            inference_params,
-            output,
+            auxiliary_content: Some(auxiliary_content),
+            inference_params: Some(inference_params),
+            output: Some(output),
             processing_time_ms,
-            output_schema: json_result.output_schema,
+            output_schema: Some(json_result.output_schema),
             tags: metadata.tags,
-            extra_body: metadata.extra_body,
+            extra_body: Some(metadata.extra_body),
             ttft_ms: metadata.ttft_ms,
             snapshot_hash: Some(metadata.snapshot_hash),
         }
@@ -2329,10 +2336,12 @@ mod tests {
             },
             finish_reason: None,
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2379,10 +2388,12 @@ mod tests {
             },
             finish_reason: Some(FinishReason::Stop),
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2432,10 +2443,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2481,10 +2494,12 @@ mod tests {
             },
             finish_reason: Some(FinishReason::ToolCall),
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2550,10 +2565,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2637,10 +2654,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2733,10 +2752,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2785,10 +2806,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2861,10 +2884,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2919,10 +2944,12 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test_model".into(),
             cached: false,
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -3117,10 +3144,12 @@ mod tests {
                 },
                 finish_reason: None,
                 model_provider_name: "test_provider".into(),
+                provider_type: Arc::from("dummy"),
                 model_name: "test_model".into(),
                 cached,
                 raw_usage: None,
                 relay_raw_response: None,
+                failed_raw_response: vec![],
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly
@@ -3354,11 +3383,13 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test".into(),
             cached: false,
             finish_reason: Some(FinishReason::Stop),
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let response_middle = ModelInferenceResponseWithMetadata {
@@ -3373,11 +3404,13 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test".into(),
             cached: false,
             finish_reason: Some(FinishReason::ToolCall),
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         let response_newest = ModelInferenceResponseWithMetadata {
@@ -3392,11 +3425,13 @@ mod tests {
                 response_time: Duration::default(),
             },
             model_provider_name: "test".into(),
+            provider_type: Arc::from("dummy"),
             model_name: "test".into(),
             cached: false,
             finish_reason: Some(FinishReason::Length),
             raw_usage: None,
             relay_raw_response: None,
+            failed_raw_response: vec![],
         };
 
         // Test: passing results in order newest-first should still return newest's finish_reason

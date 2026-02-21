@@ -226,6 +226,7 @@ pub fn convert_to_optimizer_status(
                     providers: HashMap::from([(model_name.clone().into(), model_provider)]),
                     timeouts: TimeoutsConfig::default(),
                     skip_relay: None,
+                    namespace: None,
                 }),
             }
         }
@@ -260,8 +261,9 @@ impl Display for GCPVertexGeminiFineTuningJobStatus {
 mod tests {
     use crate::{
         inference::types::{
-            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            ContentBlockChatOutput, FunctionType, ModelInput, ResolvedContentBlock,
+            ResolvedRequestMessage, Role, StoredInput, StoredInputMessage,
+            StoredInputMessageContent, System, Text,
         },
         stored_inference::{RenderedSample, StoredOutput},
         tool::DynamicToolParams,
@@ -277,6 +279,7 @@ mod tests {
         })]);
         let inference = RenderedSample {
             function_name: "test".to_string(),
+            function_type: FunctionType::Chat,
             input: ModelInput {
                 system: Some("You are a helpful assistant named Dr. M.M. Patel.".to_string()),
                 messages: vec![ResolvedRequestMessage {

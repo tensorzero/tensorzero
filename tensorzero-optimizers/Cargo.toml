@@ -44,6 +44,9 @@ reqwest = { workspace = true }
 object_store = { workspace = true }
 mime = { workspace = true }
 
+# Database
+sqlx = { workspace = true }
+
 # Tracing and logging
 tracing = { workspace = true }
 
@@ -56,7 +59,7 @@ tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 evaluations = { path = "../evaluations" }
 minijinja = { workspace = true }
 paste = "1.0.15"
-tempfile = "3.21.0"
+tempfile = { workspace = true }
 base64 = "0.22.1"
 tokio-stream = { workspace = true }
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
@@ -69,11 +72,6 @@ required-features = ["optimization_tests"]
 [[test]]
 name = "optimization-mock"
 path = "tests/mock_tests.rs"
-required-features = ["e2e_tests"]
-
-[[test]]
-name = "e2e_dicl"
-path = "tests/e2e/dicl.rs"
 required-features = ["e2e_tests"]
 
 [[test]]

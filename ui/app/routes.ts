@@ -39,6 +39,10 @@ export default [
     ...prefix("tensorzero", [
       route("inference", "routes/api/tensorzero/inference.ts"),
       route("status", "routes/api/tensorzero/status.ts"),
+      route(
+        "resolve_uuid/:uuid",
+        "routes/api/tensorzero/resolve_uuid.route.ts",
+      ),
     ]),
 
     route(
@@ -72,6 +76,18 @@ export default [
     route(
       "autopilot/sessions/:session_id/actions/interrupt",
       "routes/api/autopilot/sessions/$session_id/actions/interrupt.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/config-apply/apply",
+      "routes/api/autopilot/sessions/$session_id/config-apply/apply.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/config-apply/apply-all",
+      "routes/api/autopilot/sessions/$session_id/config-apply/apply-all.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/actions/approve_all",
+      "routes/api/autopilot/sessions/$session_id/actions/approve_all.route.ts",
     ),
   ]),
 

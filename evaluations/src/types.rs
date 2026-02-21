@@ -12,8 +12,8 @@ use tensorzero_core::{
         ClientInferenceParams, FeedbackParams, FeedbackResponse, InferenceOutput, TensorZeroError,
     },
     config::UninitializedVariantInfo,
-    db::clickhouse::BatchWriterHandle,
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::BatchWriterHandle,
+    db::delegating_connection::DelegatingDatabaseQueries,
     error::Error,
     evaluations::{EvaluationConfig, EvaluationFunctionConfigTable},
     inference::types::storage::StoragePath,
@@ -106,6 +106,7 @@ impl EvaluationsInferenceExecutor for AppStateInferenceExecutor {
             &self.app_state.http_client,
             self.app_state.clickhouse_connection_info.clone(),
             self.app_state.postgres_connection_info.clone(),
+            self.app_state.cache_manager.clone(),
             self.app_state.deferred_tasks.clone(),
             self.app_state.rate_limiting_manager.clone(),
             endpoint_params,
@@ -165,8 +166,8 @@ pub struct EvaluationCoreArgs {
     /// `GatewayInferenceExecutor` when running inside the gateway.
     pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
 
-    /// ClickHouse client for database operations
-    pub clickhouse_client: ClickHouseConnectionInfo,
+    /// Database connection for dataset and evaluation queries
+    pub db: Arc<dyn DelegatingDatabaseQueries>,
 
     /// The evaluation configuration (pre-resolved by caller)
     pub evaluation_config: Arc<EvaluationConfig>,
@@ -216,9 +217,9 @@ pub struct EvaluationStreamResult {
     pub receiver: mpsc::Receiver<EvaluationUpdate>,
     pub run_info: RunInfo,
     pub evaluation_config: Arc<EvaluationConfig>,
-    /// The join handle for the ClickHouse batch writer.
-    /// The caller may want to wait for the batch writer to finish.
-    pub batcher_join_handle: Option<BatchWriterHandle>,
+    /// Join handles for batch writers (ClickHouse, Postgres, etc.).
+    /// The caller may want to wait for these to finish.
+    pub batcher_join_handles: Vec<BatchWriterHandle>,
 }
 
 /// Parameters for running an evaluation using the app state directly.

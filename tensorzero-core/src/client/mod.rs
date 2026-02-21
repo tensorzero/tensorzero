@@ -391,7 +391,7 @@ pub enum ClientBuilderError {
     NotHTTPGateway,
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
-    #[error("Failed to configure PostgreSQL: {0}")]
+    #[error("Failed to configure Postgres: {0}")]
     Postgres(TensorZeroError),
     #[error("Authentication is not supported in embedded gateway mode: {0}")]
     AuthNotSupportedInEmbeddedMode(TensorZeroError),
@@ -470,6 +470,8 @@ pub enum ClientBuilderMode {
         postgres_connection_info: PostgresConnectionInfo,
         /// Already-initialized Valkey connection
         valkey_connection_info: ValkeyConnectionInfo,
+        /// Already-initialized Valkey connection for caching (may be same as `valkey_connection_info`)
+        valkey_cache_connection_info: ValkeyConnectionInfo,
         /// Pre-configured HTTP client for model inference
         http_client: TensorzeroHttpClient,
         /// A timeout for all TensorZero gateway processing.
@@ -597,7 +599,7 @@ impl ClientBuilder {
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = match postgres_config {
                     Some(PostgresConfig::Url(url)) => {
-                        setup_postgres(&config, Some(url.clone())).await.map_err(|e| {
+                        setup_postgres(&config, Some(url)).await.map_err(|e| {
                             ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
                         })?
                     }
@@ -607,12 +609,15 @@ impl ClientBuilder {
                     })?
                 };
 
-                // Set up Valkey connection from explicit URL
+                // Set up Valkey connection from explicit URL.
+                // Embedded gateways use the same Valkey instance for both rate limiting and caching.
+                // TODO: support a dedicated cache Valkey URL for embedded gateways.
                 let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
                     ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
                         source: e.into(),
                     })
                 })?;
+                let valkey_cache_connection_info = valkey_connection_info.clone();
 
                 let http_client = if self.http_client.is_some() {
                     return Err(ClientBuilderError::HTTPClientBuild(
@@ -634,6 +639,7 @@ impl ClientBuilder {
                                 clickhouse_connection_info,
                                 postgres_connection_info,
                                 valkey_connection_info,
+                                valkey_cache_connection_info,
                                 http_client,
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
@@ -655,6 +661,7 @@ impl ClientBuilder {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info,
+                valkey_cache_connection_info,
                 http_client,
                 timeout,
             } => {
@@ -680,6 +687,7 @@ impl ClientBuilder {
                                 })?,
                                 postgres_connection_info.clone(),
                                 valkey_connection_info.clone(),
+                                valkey_cache_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
@@ -776,15 +784,18 @@ impl ClientBuilder {
         Self::validate_embedded_gateway_config(&config, false)?;
 
         // Setup Postgres with runtime URL
-        let postgres_connection_info =
-            setup_postgres(&config, postgres_url).await.map_err(|e| {
+        let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref())
+            .await
+            .map_err(|e| {
                 ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
             })?;
 
-        // Setup Valkey with runtime URL
+        // Setup Valkey with runtime URL.
+        // Config snapshot clients use the same Valkey instance for both rate limiting and caching.
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
             ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other { source: e.into() })
         })?;
+        let valkey_cache_connection_info = valkey_connection_info.clone();
 
         // Use HTTP client from config (now overlaid from live_config)
         let http_client = config.http_client.clone();
@@ -795,6 +806,7 @@ impl ClientBuilder {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
+            valkey_cache_connection_info,
             http_client,
             timeout,
         });
@@ -1147,6 +1159,7 @@ impl Client {
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         gateway.handle.app_state.postgres_connection_info.clone(),
+                        gateway.handle.app_state.cache_manager.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
                         gateway.handle.app_state.rate_limiting_manager.clone(),
                         params.try_into().map_err(err_to_http)?,
@@ -1275,7 +1288,8 @@ mod tests {
     use crate::feature_flags;
     use tempfile::NamedTempFile;
     #[tokio::test]
-    async fn test_missing_clickhouse() {
+    async fn test_gateway_fails_to_start_with_observability_and_missing_clickhouse_url() {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
@@ -1291,9 +1305,55 @@ mod tests {
         .expect_err("ClientBuilder should have failed");
         let err_msg = err.to_string();
         assert!(
-            err_msg.contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"),
+            err_msg.contains("Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"),
             "Bad error message: {err_msg}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_gateway_fails_to_start_with_observability_and_missing_postgres_url_and_postgres_primary()
+     {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
+        // With Postgres as primary datastore and observability enabled,
+        // the gateway should fail to start without a Postgres connection.
+        let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
+            clickhouse_url: None,
+            postgres_config: None,
+            valkey_url: None,
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .expect_err("Should fail without Postgres when it is the primary datastore and observability is enabled");
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"),
+            "error should mention the feature flag: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_gateway_starts_with_observability_and_postgres_connection_and_postgres_primary() {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
+        // With Postgres as primary datastore and a Postgres connection provided,
+        // the gateway should start even without ClickHouse.
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
+            clickhouse_url: None,
+            postgres_config: Some(PostgresConfig::ExistingConnectionInfo(
+                PostgresConnectionInfo::new_mock(true),
+            )),
+            valkey_url: None,
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .expect("Embedded gateway should start with Postgres when it is the primary datastore");
     }
 
     #[tokio::test]
@@ -1357,6 +1417,7 @@ mod tests {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             http_client,
             timeout: None,
         })
@@ -1409,6 +1470,7 @@ mod tests {
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             http_client,
             timeout: None,
         })
@@ -1431,12 +1493,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_log_no_clickhouse() {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(PathBuf::from(
-                "../examples/haiku-hidden-preferences/config/tensorzero.toml",
-            )),
+            config_file: Some(PathBuf::from("tests/e2e/config/tensorzero.models.toml")),
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
@@ -1457,6 +1518,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_log_no_config() {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,

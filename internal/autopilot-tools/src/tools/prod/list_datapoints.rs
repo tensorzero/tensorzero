@@ -13,7 +13,9 @@ use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_datapoints tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListDatapointsToolParams {
     /// The name of the dataset to list datapoints from.
     pub dataset_name: String,
@@ -33,6 +35,16 @@ impl ToolMetadata for ListDatapointsTool {
     type Output = GetDatapointsResponse;
     type LlmParams = ListDatapointsToolParams;
 
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::LIST_DATAPOINTS_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::GET_DATAPOINTS_RESPONSE
+    }
+
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("list_datapoints")
     }
@@ -42,6 +54,10 @@ impl ToolMetadata for ListDatapointsTool {
             "List datapoints in a dataset with optional filtering and pagination. \
              Can filter by function name, tags, time ranges, and order results.",
         )
+    }
+
+    fn strict(&self) -> bool {
+        false // Filter children are recursive arbitrary objects
     }
 
     fn parameters_schema(&self) -> ToolResult<Schema> {
@@ -67,7 +83,7 @@ impl ToolMetadata for ListDatapointsTool {
                 },
                 "filter": {
                     "description": "Optional filter to apply when querying datapoints. Supports filtering by tags, time, and logical combinations (AND/OR/NOT).",
-                    "oneOf": [
+                    "anyOf": [
                         {
                             "type": "object",
                             "description": "Filter by tag key-value pair.",
@@ -81,7 +97,8 @@ impl ToolMetadata for ListDatapointsTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "key", "value", "comparison_operator"]
+                            "required": ["type", "key", "value", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -95,7 +112,8 @@ impl ToolMetadata for ListDatapointsTool {
                                     "description": "Comparison operator."
                                 }
                             },
-                            "required": ["type", "time", "comparison_operator"]
+                            "required": ["type", "time", "comparison_operator"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -104,7 +122,8 @@ impl ToolMetadata for ListDatapointsTool {
                                 "type": { "const": "and" },
                                 "children": { "type": "array", "description": "Array of filters to AND together.", "items": { "type": "object" } }
                             },
-                            "required": ["type", "children"]
+                            "required": ["type", "children"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -113,7 +132,8 @@ impl ToolMetadata for ListDatapointsTool {
                                 "type": { "const": "or" },
                                 "children": { "type": "array", "description": "Array of filters to OR together.", "items": { "type": "object" } }
                             },
-                            "required": ["type", "children"]
+                            "required": ["type", "children"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -122,7 +142,8 @@ impl ToolMetadata for ListDatapointsTool {
                                 "type": { "const": "not" },
                                 "child": { "type": "object", "description": "Filter to negate." }
                             },
-                            "required": ["type", "child"]
+                            "required": ["type", "child"],
+                            "additionalProperties": false
                         }
                     ]
                 },
@@ -144,7 +165,8 @@ impl ToolMetadata for ListDatapointsTool {
                                 "description": "The ordering direction."
                             }
                         },
-                        "required": ["by", "direction"]
+                        "required": ["by", "direction"],
+                        "additionalProperties": false
                     }
                 },
                 "search_query_experimental": {
@@ -152,7 +174,8 @@ impl ToolMetadata for ListDatapointsTool {
                     "description": "EXPERIMENTAL: Text query for case-insensitive substring search over input and output. Requires exact substring match. May be slow without other filters."
                 }
             },
-            "required": ["dataset_name"]
+            "required": ["dataset_name"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

@@ -120,17 +120,29 @@ pub fn tensorzero_derive(input: TokenStream) -> TokenStream {
     // Remove all non-`#[serde]` attributes from the variant - these might reference
     // other derive macros (e.g. `#[strum]`0. We're not applying any derive macros
     // to our new enum, so we need to avoid copying over other attributes to prevent errors.
+    // Also convert unit variants to empty struct variants, because serde's externally-tagged
+    // format expects `{"variant": {}}` for struct variants but `"variant"` for unit variants.
+    // Since we always produce `{"variant": {}}` from the internally-tagged input, we need
+    // the generated enum to use struct variants with no fields.
     let mut stripped_variants = data.variants.clone();
     for variant in &mut stripped_variants {
         variant.attrs.retain(|attr| attr.path().is_ident("serde"));
         for field in &mut variant.fields {
             field.attrs.retain(|attr| attr.path().is_ident("serde"));
         }
+        if matches!(variant.fields, Fields::Unit) {
+            variant.fields = Fields::Named(syn::FieldsNamed {
+                brace_token: syn::token::Brace::default(),
+                named: Punctuated::new(),
+            });
+        }
     }
 
     // Build up match arms that looks like:
     // MyEnum::MyVariant(field1, field2) => __TensorZeroDerive_::MyVariant(field1, field2)
-    let match_arms = stripped_variants.iter().map(|variant| {
+    // For unit variants (converted to empty struct in the generated enum):
+    // __TensorZeroDerive_::MyVariant {} => Ok(MyEnum::MyVariant)
+    let match_arms = data.variants.iter().map(|variant| {
         let variant_ident = &variant.ident;
         match &variant.fields {
             Fields::Named(_) => {
@@ -151,7 +163,7 @@ pub fn tensorzero_derive(input: TokenStream) -> TokenStream {
             }
             Fields::Unit => {
                 quote! {
-                    #new_ident::#variant_ident => Ok(#ident::#variant_ident)
+                    #new_ident::#variant_ident {} => Ok(#ident::#variant_ident)
                 }
             }
         }

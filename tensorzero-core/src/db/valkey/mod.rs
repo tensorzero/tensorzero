@@ -1,4 +1,7 @@
+pub mod cache;
 mod rate_limiting;
+#[cfg(test)]
+mod tests;
 
 use std::time::Duration;
 
@@ -47,13 +50,34 @@ impl ValkeyConnectionInfo {
         })
     }
 
+    /// Creates a new connection to Valkey for caching only.
+    /// Unlike `new()`, this does NOT load rate limiting Lua functions
+    /// or run key migrations, since the cache instance doesn't need them.
+    pub async fn new_cache_only(valkey_url: &str) -> Result<Self, Error> {
+        let client = Client::open(valkey_url).map_err(|e| {
+            Error::new(ErrorDetails::ValkeyConnection {
+                message: format!("Failed to create Valkey client: {e}"),
+            })
+        })?;
+
+        let connection = ConnectionManager::new(client).await.map_err(|e| {
+            Error::new(ErrorDetails::ValkeyConnection {
+                message: format!("Failed to connect to Valkey: {e}"),
+            })
+        })?;
+
+        Ok(Self::Enabled {
+            connection: Box::new(connection),
+        })
+    }
+
     pub fn new_disabled() -> Self {
         Self::Disabled
     }
 
     pub fn get_connection(&self) -> Option<&ConnectionManager> {
         match self {
-            Self::Enabled { connection } => Some(connection),
+            Self::Enabled { connection, .. } => Some(connection),
             Self::Disabled => None,
         }
     }
@@ -105,7 +129,7 @@ impl HealthCheckable for ValkeyConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
-            Self::Enabled { connection } => {
+            Self::Enabled { connection, .. } => {
                 let check = async {
                     let mut conn = connection.clone();
                     let _: String = conn.ping().await.map_err(|e| {

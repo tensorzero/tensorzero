@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
 
 /// Parameters for the create_datapoints_from_inferences tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CreateDatapointsFromInferencesToolParams {
     /// The name of the dataset to create datapoints in.
     pub dataset_name: String,
@@ -32,6 +34,16 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
     type SideInfo = AutopilotSideInfo;
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsFromInferencesToolParams;
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::CREATE_DATAPOINTS_FROM_INFERENCES_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::CREATE_DATAPOINTS_RESPONSE
+    }
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("create_datapoints_from_inferences")
@@ -100,7 +112,6 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
                                 "limit": {
                                     "type": "integer",
                                     "description": "Maximum number of inferences to use.",
-                                    "minimum": 1
                                 },
                                 "output_source": {
                                     "type": "string",

@@ -14,7 +14,9 @@ use tensorzero::{CreateDatapointRequest, CreateDatapointsResponse};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the create_datapoints tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CreateDatapointsToolParams {
     /// The name of the dataset to create datapoints in.
     pub dataset_name: String,
@@ -34,6 +36,16 @@ impl ToolMetadata for CreateDatapointsTool {
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsToolParams;
 
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::CREATE_DATAPOINTS_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::CREATE_DATAPOINTS_RESPONSE
+    }
+
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("create_datapoints")
     }
@@ -43,6 +55,10 @@ impl ToolMetadata for CreateDatapointsTool {
             "Create datapoints in a dataset. Datapoints can be Chat or Json type. \
              Autopilot tags are automatically added for tracking.",
         )
+    }
+
+    fn strict(&self) -> bool {
+        false // Datapoints have arbitrary input/output objects
     }
 
     fn parameters_schema(&self) -> ToolResult<Schema> {
@@ -87,11 +103,13 @@ impl ToolMetadata for CreateDatapointsTool {
                                 "description": "Optional tags for the datapoint."
                             }
                         },
-                        "required": ["type", "function_name", "input"]
+                        "required": ["type", "function_name", "input"],
+                        "additionalProperties": false
                     }
                 }
             },
-            "required": ["dataset_name", "datapoints"]
+            "required": ["dataset_name", "datapoints"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

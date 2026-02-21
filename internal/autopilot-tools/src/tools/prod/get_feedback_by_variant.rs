@@ -18,7 +18,9 @@ use tensorzero_core::db::feedback::FeedbackByVariant;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_feedback_by_variant tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetFeedbackByVariantToolParams {
     /// The name of the metric to query.
     pub metric_name: String,
@@ -42,6 +44,16 @@ impl ToolMetadata for GetFeedbackByVariantTool {
     type SideInfo = AutopilotSideInfo;
     type Output = Vec<FeedbackByVariant>;
     type LlmParams = GetFeedbackByVariantToolParams;
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::GET_FEEDBACK_BY_VARIANT_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::FEEDBACK_BY_VARIANT
+    }
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("get_feedback_by_variant")
@@ -74,7 +86,8 @@ impl ToolMetadata for GetFeedbackByVariantTool {
                     "description": "Optional filter for specific variants. If not provided, all variants are included."
                 }
             },
-            "required": ["metric_name", "function_name"]
+            "required": ["metric_name", "function_name"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

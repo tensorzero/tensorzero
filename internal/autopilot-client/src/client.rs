@@ -21,8 +21,10 @@ use crate::reject_missing_tool::reject_missing_tool;
 use crate::types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
-    GatewayListEventsResponse, GatewayStreamUpdate, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCallAuthorizationStatus,
+    GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
+    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
+    StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
@@ -351,6 +353,31 @@ impl AutopilotClient {
     }
 
     // -------------------------------------------------------------------------
+    // S3 Upload Endpoints
+    // -------------------------------------------------------------------------
+
+    /// Initiates an S3 upload by requesting temporary credentials from the Autopilot API.
+    pub async fn s3_initiate_upload(
+        &self,
+        session_id: Uuid,
+        request: S3UploadRequest,
+    ) -> Result<S3UploadResponse, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/aws/s3_initiate_upload"))?;
+        let response = self
+            .http_client
+            .post(url)
+            .headers(self.auth_headers())
+            .json(&request)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let body = response.json().await?;
+        Ok(body)
+    }
+
+    // -------------------------------------------------------------------------
     // Health Endpoints
     // -------------------------------------------------------------------------
 
@@ -528,13 +555,53 @@ impl AutopilotClient {
         Ok(event)
     }
 
+    /// Lists config writes (write_config tool calls) for a session.
+    ///
+    /// Returns `GatewayListConfigWritesResponse` which uses `GatewayEvent` - a narrower type
+    /// that excludes `NotAvailable` authorization status.
+    pub async fn list_config_writes(
+        &self,
+        session_id: Uuid,
+        params: ListConfigWritesParams,
+    ) -> Result<GatewayListConfigWritesResponse, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/config-writes"))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .query(&params)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let body: ListConfigWritesResponse = response.json().await?;
+
+        // Convert events to gateway types
+        let config_writes = body
+            .config_writes
+            .into_iter()
+            .map(|event| {
+                event
+                    .try_into()
+                    .map_err(|e| AutopilotError::Internal(format!("Event conversion failed: {e}")))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(GatewayListConfigWritesResponse { config_writes })
+    }
+
     /// Creates an event in a session.
     ///
     /// Use `Uuid::nil()` as the `session_id` to create a new session.
+    ///
+    /// If `beta_tools` is non-empty, they are forwarded as the `tensorzero-beta-tools`
+    /// header (comma-separated) to the remote autopilot server.
     pub async fn create_event(
         &self,
         session_id: Uuid,
         request: CreateEventRequest,
+        beta_tools: &[String],
     ) -> Result<CreateEventResponse, AutopilotError> {
         let tool_call_event_id = match &request.payload {
             EventPayload::ToolCallAuthorization(auth) => match auth.status {
@@ -564,10 +631,17 @@ impl AutopilotClient {
         let url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events"))?;
+        let mut headers = self.auth_headers();
+        if !beta_tools.is_empty() {
+            let value = beta_tools.join(",");
+            if let Ok(value) = HeaderValue::from_str(&value) {
+                headers.insert("tensorzero-beta-tools", value);
+            }
+        }
         let response = self
             .http_client
             .post(url)
-            .headers(self.auth_headers())
+            .headers(headers)
             .json(&request)
             .send()
             .await?;

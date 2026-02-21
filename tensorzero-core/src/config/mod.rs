@@ -1,4 +1,7 @@
-use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
+use crate::experimentation::{
+    ExperimentationConfig, ExperimentationConfigWithNamespaces,
+    UninitializedExperimentationConfigWithNamespaces,
+};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 use crate::relay::TensorzeroRelay;
@@ -37,9 +40,7 @@ use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::span_map::SpanMap;
-use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
-use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, get_function};
@@ -65,6 +66,7 @@ use std::error::Error as StdError;
 
 pub mod built_in;
 pub mod gateway;
+pub mod namespace;
 pub mod path;
 pub mod provider_types;
 pub mod rate_limiting;
@@ -74,6 +76,8 @@ pub mod stored;
 #[cfg(test)]
 mod tests;
 pub mod unwritten;
+
+pub use namespace::Namespace;
 
 tokio::task_local! {
     /// When set, we skip performing credential validation in model providers
@@ -140,6 +144,9 @@ pub struct StreamingTimeouts {
     #[serde(default)]
     /// The time allowed for the first token to be produced.
     pub ttft_ms: Option<u64>,
+    #[serde(default)]
+    /// The total time allowed for the entire streaming request to complete.
+    pub total_ms: Option<u64>,
 }
 
 /// Configures the timeouts for both streaming and non-streaming requests.
@@ -159,7 +166,11 @@ impl TimeoutsConfig {
     pub fn validate(&self, global_outbound_http_timeout: &Duration) -> Result<(), Error> {
         let TimeoutsConfig {
             non_streaming: NonStreamingTimeouts { total_ms },
-            streaming: StreamingTimeouts { ttft_ms },
+            streaming:
+                StreamingTimeouts {
+                    ttft_ms,
+                    total_ms: streaming_total_ms,
+                },
         } = self;
 
         let global_ms = global_outbound_http_timeout.num_milliseconds();
@@ -181,6 +192,23 @@ impl TimeoutsConfig {
                     "The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
                 ),
             }));
+        }
+        if let Some(streaming_total_ms) = streaming_total_ms
+            && Duration::milliseconds(*streaming_total_ms as i64) > *global_outbound_http_timeout
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "The `timeouts.streaming.total_ms` value `{streaming_total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"
+                ),
+            }));
+        }
+        if let Some(ttft_ms) = ttft_ms
+            && let Some(streaming_total_ms) = streaming_total_ms
+            && streaming_total_ms < ttft_ms
+        {
+            tracing::warn!(
+                "The `timeouts.streaming.total_ms` value `{streaming_total_ms}` is less than `timeouts.streaming.ttft_ms` value `{ttft_ms}`. The `total_ms` timeout may fire before the `ttft_ms` timeout."
+            );
         }
 
         Ok(())
@@ -365,6 +393,14 @@ pub struct ObservabilityConfig {
     pub disable_automatic_migrations: bool,
 }
 
+impl ObservabilityConfig {
+    /// Returns true when observability writes (inferences, feedback) should be persisted.
+    /// Defaults to true when `enabled` is not explicitly set.
+    pub fn writes_enabled(&self) -> bool {
+        self.enabled.unwrap_or(true)
+    }
+}
+
 fn default_flush_interval_ms() -> u64 {
     100
 }
@@ -385,6 +421,10 @@ pub struct BatchWritesConfig {
     pub flush_interval_ms: u64,
     #[serde(default = "default_max_rows")]
     pub max_rows: usize,
+    /// Optional override for Postgres batch size. Defaults to `max_rows` when unset.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_rows_postgres: Option<usize>,
 }
 
 impl Default for BatchWritesConfig {
@@ -394,6 +434,7 @@ impl Default for BatchWritesConfig {
             __force_allow_embedded_batch_writes: false,
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
+            max_rows_postgres: None,
         }
     }
 }
@@ -675,6 +716,12 @@ impl ConfigFileGlob {
             _private: (),
         })
     }
+
+    /// Returns the base path extracted from the glob pattern.
+    /// This is the longest literal path prefix before any glob metacharacters.
+    pub fn base_path(&self) -> PathBuf {
+        extract_base_path_from_glob(&self.glob)
+    }
 }
 
 /// Extract the base path from a glob pattern.
@@ -779,6 +826,7 @@ impl RuntimeOverlay {
             global_outbound_http_timeout,
             relay,
             metrics,
+            cache,
         } = &config.gateway;
 
         Self {
@@ -802,6 +850,7 @@ impl RuntimeOverlay {
                 ),
                 relay: relay.as_ref().map(|relay| relay.original_config.clone()),
                 metrics: metrics.clone(),
+                cache: cache.clone(),
             },
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
@@ -1188,6 +1237,10 @@ impl Config {
     /// let config = unwritten_config.into_config(&clickhouse).await?;
     /// ```
     async fn load_from_toml(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
+        let is_config_snapshot = match &input {
+            ConfigInput::Snapshot { .. } => true,
+            ConfigInput::Fresh(_) => false,
+        };
         let mut templates = TemplateConfig::new();
         let ProcessedConfigInput {
             tools,
@@ -1222,6 +1275,7 @@ impl Config {
                     &provider_types,
                     &provider_type_default_credentials,
                     relay_mode,
+                    is_config_snapshot,
                 )
                 .await
                 .map(|c| (name, c))
@@ -1378,6 +1432,14 @@ impl Config {
             }
             .into());
         }
+        if let Some(max_rows_postgres) = self.gateway.observability.batch_writes.max_rows_postgres
+            && max_rows_postgres == 0
+        {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes Postgres max rows must be greater than 0".to_string(),
+            }
+            .into());
+        }
         // Validate each function
         // Note: We don't check for tensorzero:: prefix here because:
         // 1. Built-in functions are allowed to have this prefix
@@ -1421,6 +1483,8 @@ impl Config {
             }
             model.validate(model_name, &self.gateway.global_outbound_http_timeout)?;
         }
+
+        namespace::validate_namespaced_model_usage(&self.functions, &self.models)?;
 
         for embedding_model_name in self.embedding_models.table.keys() {
             if embedding_model_name.starts_with("tensorzero::") {
@@ -1542,87 +1606,6 @@ pub enum ConfigInput {
         snapshot: Box<ConfigSnapshot>,
         runtime_overlay: Box<RuntimeOverlay>,
     },
-}
-
-/// Writes the config snapshot to the `ConfigSnapshot` table.
-/// Takes special care to retain the created_at if there was already a row
-/// that had the same hash. Tags are merged with existing tags using mapUpdate.
-///
-/// This function is gated behind the `TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1` feature flag.
-/// If the env var is not set to "1", the write is skipped.
-pub async fn write_config_snapshot(
-    clickhouse: &ClickHouseConnectionInfo,
-    snapshot: ConfigSnapshot,
-) -> Result<(), Error> {
-    // Define the row structure for serialization
-    #[derive(Serialize)]
-    struct ConfigSnapshotRow<'a> {
-        config: &'a str,
-        extra_templates: &'a HashMap<String, String>,
-        hash: SnapshotHash,
-        tensorzero_version: &'static str,
-        tags: &'a HashMap<String, String>,
-    }
-
-    // Get the pre-computed hash
-    let version_hash = snapshot.hash.clone();
-
-    // Serialize StoredConfig to TOML for storage
-    let config_string = toml::to_string(&snapshot.config).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize config snapshot: {e}"),
-        })
-    })?;
-
-    // Create the row
-    let row = ConfigSnapshotRow {
-        config: &config_string,
-        extra_templates: &snapshot.extra_templates,
-        hash: version_hash.clone(),
-        tensorzero_version: TENSORZERO_VERSION,
-        tags: &snapshot.tags,
-    };
-
-    // Serialize to JSON
-    let json_data = serde_json::to_string(&row).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize config snapshot: {e}"),
-        })
-    })?;
-
-    // Create the external data info
-    let external_data = ExternalDataInfo {
-        external_data_name: "new_data".to_string(),
-        structure: "config String, extra_templates Map(String, String), hash String, tensorzero_version String, tags Map(String, String)".to_string(),
-        format: "JSONEachRow".to_string(),
-        data: json_data,
-    };
-
-    // Create the query with subquery to preserve created_at and merge tags
-    // We use any() aggregate function to handle the case when no row exists (returns default value)
-    let query = format!(
-        r"INSERT INTO ConfigSnapshot
-(config, extra_templates, hash, tensorzero_version, tags, created_at, last_used)
-SELECT
-    new_data.config,
-    new_data.extra_templates,
-    toUInt256(new_data.hash) as hash,
-    new_data.tensorzero_version,
-    mapUpdate(
-        (SELECT any(tags) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')),
-        new_data.tags
-    ) as tags,
-    ifNull((SELECT any(created_at) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')), now64()) as created_at,
-    now64() as last_used
-FROM new_data"
-    );
-
-    // Execute the query
-    clickhouse
-        .run_query_with_external_data(external_data, query)
-        .await?;
-
-    Ok(())
 }
 
 #[cfg(feature = "pyo3")]
@@ -1856,7 +1839,7 @@ pub struct UninitializedFunctionConfigChat {
     pub parallel_tool_calls: Option<bool>,
     #[serde(default)]
     pub description: Option<String>,
-    pub experimentation: Option<UninitializedExperimentationConfig>,
+    pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1871,7 +1854,7 @@ pub struct UninitializedFunctionConfigJson {
     pub output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
     pub description: Option<String>,
-    pub experimentation: Option<UninitializedExperimentationConfig>,
+    pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -2010,6 +1993,7 @@ fn propagate_timeout_s_to_candidates(
             },
             streaming: StreamingTimeouts {
                 ttft_ms: Some(timeout_ms),
+                total_ms: None,
             },
         };
 
@@ -2094,9 +2078,12 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics))
+                    .map(|config| config.load(&variants, metrics, function_name))
                     .transpose()?
-                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
+                    .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
+                        base: ExperimentationConfig::legacy_from_variants_map(&variants),
+                        namespaces: std::collections::HashMap::new(),
+                    });
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     schemas: schema_data,
@@ -2188,9 +2175,12 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics))
+                    .map(|config| config.load(&variants, metrics, function_name))
                     .transpose()?
-                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
+                    .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
+                        base: ExperimentationConfig::legacy_from_variants_map(&variants),
+                        namespaces: std::collections::HashMap::new(),
+                    });
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: schema_data,
@@ -2330,7 +2320,8 @@ pub struct PostgresConfig {
     pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
-    /// Retention period in days for inference tables (chat_inferences, json_inferences).
+    /// Retention period in days for inference metadata tables
+    /// (chat_inferences, json_inferences, model_inferences — monthly partitions).
     /// If set, old partitions beyond this age will be dropped by pg_cron.
     /// If not set, partitions are retained indefinitely.
     ///
@@ -2339,7 +2330,12 @@ pub struct PostgresConfig {
     ///   partitions older than this value on its next daily run. This is irreversible.
     /// - Clients are responsible for managing their own data backups before enabling retention.
     /// - Recommend testing in non-production first and starting with a longer period.
-    pub inference_retention_days: Option<u32>,
+    pub inference_metadata_retention_days: Option<u32>,
+    /// Retention period in days for inference data tables
+    /// (chat_inference_data, json_inference_data, model_inference_data — daily partitions).
+    /// `inference_retention_days` is accepted as a deprecated alias.
+    #[serde(alias = "inference_retention_days")]
+    pub inference_data_retention_days: Option<u32>,
 }
 
 fn default_connection_pool_size() -> u32 {
@@ -2351,7 +2347,8 @@ impl Default for PostgresConfig {
         Self {
             enabled: None,
             connection_pool_size: 20,
-            inference_retention_days: None,
+            inference_metadata_retention_days: None,
+            inference_data_retention_days: None,
         }
     }
 }

@@ -1,4 +1,8 @@
-import type { ModelLatencyDatapoint, TimeWindow } from "~/types/tensorzero";
+import type {
+  GetModelLatencyResponse,
+  ModelLatencyDatapoint,
+  TimeWindow,
+} from "~/types/tensorzero";
 import {
   Line,
   LineChart,
@@ -8,7 +12,9 @@ import {
   Tooltip,
 } from "recharts";
 import React, { useState, useMemo } from "react";
-import { Await } from "react-router";
+import { Await, useAsyncError, isRouteErrorResponse } from "react-router";
+import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import { AlertCircle } from "lucide-react";
 import { CHART_COLORS } from "~/utils/chart";
 import {
   Select,
@@ -24,11 +30,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-} from "~/components/ui/chart";
+import { ChartContainer, ChartLegend } from "~/components/ui/chart";
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 type LatencyMetric = "response_time_ms" | "ttft_ms";
@@ -89,6 +91,23 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
 
 const MARGIN = { top: 12, right: 16, bottom: 28, left: 56 };
 
+function ModelLatencyError() {
+  const error = useAsyncError();
+  let message = "Failed to load latency data";
+  if (isRouteErrorResponse(error)) {
+    message = typeof error.data === "string" ? error.data : message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+  return (
+    <SectionErrorNotice
+      icon={AlertCircle}
+      title="Error loading latency data"
+      description={message}
+    />
+  );
+}
+
 function LatencyTimeWindowSelector({
   value,
   onValueChange,
@@ -143,57 +162,56 @@ export function LatencyQuantileChart({
   );
 
   return (
-    <ChartContainer config={chartConfig} className="h-80 w-full">
-      <LineChart accessibilityLayer data={data} margin={MARGIN}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis
-          dataKey="percentile"
-          domain={[0, 1]}
-          tickLine={false}
-          tickMargin={10}
-          axisLine={true}
-          ticks={[
-            0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0,
-          ]}
-          tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-        />
-        <YAxis
-          scale="log"
-          domain={["dataMin", "dataMax"]}
-          tickLine={false}
-          tickMargin={10}
-          axisLine={true}
-          tickFormatter={(v) => `${v}ms`}
-        />
-
-        <Tooltip
-          content={<CustomTooltipContent />}
-          cursor={{
-            stroke: "#666666",
-            strokeDasharray: "3 3",
-            strokeWidth: 2,
-          }}
-        />
-
-        <ChartLegend
-          content={<ChartLegendContent className="font-mono text-xs" />}
-        />
-
-        {modelNames.map((name, index) => (
-          <Line
-            key={name}
-            type="monotone"
-            dataKey={name}
-            name={name}
-            stroke={CHART_COLORS[index % CHART_COLORS.length]}
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-            isAnimationActive={false}
+    <>
+      <ChartContainer config={chartConfig}>
+        <LineChart accessibilityLayer data={data} margin={MARGIN}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis
+            dataKey="percentile"
+            domain={[0, 1]}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={true}
+            ticks={[
+              0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0,
+            ]}
+            tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
           />
-        ))}
-      </LineChart>
-    </ChartContainer>
+          <YAxis
+            scale="log"
+            domain={["dataMin", "dataMax"]}
+            tickLine={false}
+            tickMargin={10}
+            axisLine={true}
+            tickFormatter={(v) => `${v}ms`}
+          />
+
+          <Tooltip
+            content={<CustomTooltipContent />}
+            cursor={{
+              stroke: "#666666",
+              strokeDasharray: "3 3",
+              strokeWidth: 2,
+            }}
+          />
+
+          {modelNames.map((name, index) => (
+            <Line
+              key={name}
+              type="monotone"
+              dataKey={name}
+              name={name}
+              stroke={CHART_COLORS[index % CHART_COLORS.length]}
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+          ))}
+        </LineChart>
+      </ChartContainer>
+      <ChartLegend items={modelNames} colors={CHART_COLORS} />
+    </>
   );
 }
 
@@ -237,11 +255,9 @@ function transformLatencyData(
 }
 
 export function ModelLatency({
-  modelLatencyDataPromise,
-  quantiles,
+  modelLatencyResponsePromise,
 }: {
-  modelLatencyDataPromise: Promise<ModelLatencyDatapoint[]>;
-  quantiles: number[];
+  modelLatencyResponsePromise: Promise<GetModelLatencyResponse>;
 }) {
   const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
     "latencyTimeGranularity",
@@ -259,7 +275,7 @@ export function ModelLatency({
             Quantiles of latency metrics by model
           </CardDescription>
         </div>
-        <div className="flex flex-col justify-center gap-2">
+        <div className="flex items-center gap-2">
           <LatencyTimeWindowSelector
             value={timeGranularity}
             onValueChange={onTimeGranularityChange}
@@ -280,12 +296,15 @@ export function ModelLatency({
       </CardHeader>
       <CardContent>
         <React.Suspense fallback={<div>Loading latency data...</div>}>
-          <Await resolve={modelLatencyDataPromise}>
-            {(latencyData) => (
+          <Await
+            resolve={modelLatencyResponsePromise}
+            errorElement={<ModelLatencyError />}
+          >
+            {(response) => (
               <LatencyQuantileChart
-                latencyData={latencyData}
+                latencyData={response.data}
                 selectedMetric={selectedMetric}
-                quantiles={quantiles}
+                quantiles={response.quantiles}
               />
             )}
           </Await>

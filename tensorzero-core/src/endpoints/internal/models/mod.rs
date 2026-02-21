@@ -10,7 +10,8 @@ use axum::Json;
 use axum::extract::{Query, State};
 use tracing::instrument;
 
-use crate::db::SelectQueries;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::model_inferences::ModelInferenceQueries;
 use crate::endpoints::internal::models::types::{
     GetModelLatencyQueryParams, GetModelUsageQueryParams,
 };
@@ -25,10 +26,12 @@ use crate::utils::gateway::{AppState, AppStateData};
 pub async fn count_models_handler(
     State(app_state): AppState,
 ) -> Result<Json<CountModelsResponse>, Error> {
-    let count = app_state
-        .clickhouse_connection_info
-        .count_distinct_models_used()
-        .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+
+    let count = database.count_distinct_models_used().await?;
 
     Ok(Json(CountModelsResponse { model_count: count }))
 }
@@ -42,8 +45,12 @@ pub async fn get_model_usage_handler(
     State(app_state): AppState,
     Query(params): Query<GetModelUsageQueryParams>,
 ) -> Result<Json<GetModelUsageResponse>, Error> {
-    let data = app_state
-        .clickhouse_connection_info
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+
+    let data = database
         .get_model_usage_timeseries(params.time_window, params.max_periods)
         .await?;
 
@@ -59,10 +66,17 @@ pub async fn get_model_latency_handler(
     State(app_state): AppState,
     Query(params): Query<GetModelLatencyQueryParams>,
 ) -> Result<Json<GetModelLatencyResponse>, Error> {
-    let data = app_state
-        .clickhouse_connection_info
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+
+    let quantiles = database
+        .get_model_latency_quantile_function_inputs()
+        .to_vec();
+    let data = database
         .get_model_latency_quantiles(params.time_window)
         .await?;
 
-    Ok(Json(GetModelLatencyResponse { data }))
+    Ok(Json(GetModelLatencyResponse { quantiles, data }))
 }

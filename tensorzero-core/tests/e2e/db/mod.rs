@@ -38,15 +38,21 @@ macro_rules! make_clickhouse_only_test {
 }
 
 mod bandit_queries;
+mod batch_inference_endpoint_internals;
 mod batch_inference_queries;
+mod cache_queries;
+mod config_queries;
 mod dataset_queries;
+mod dicl_queries;
+mod episode_queries;
 mod evaluation_queries;
 mod feedback_queries;
 mod inference_count_queries;
 mod inference_queries;
+mod model_inference_queries;
+mod model_provider_statistics_queries;
 mod postgres;
 mod rate_limit_queries;
-mod select_queries;
 mod workflow_evaluation_queries;
 
 // ===== CONNECTION HELPERS =====
@@ -56,11 +62,11 @@ pub async fn get_test_postgres() -> PostgresConnectionInfo {
         .expect("Environment variable TENSORZERO_POSTGRES_URL must be set");
 
     let start = std::time::Instant::now();
-    println!("Connecting to PostgreSQL");
+    println!("Connecting to Postgres");
     let pool = PgPoolOptions::new()
         .connect(&postgres_url)
         .await
-        .expect("Failed to connect to PostgreSQL");
-    println!("Connected to PostgreSQL in {:?}", start.elapsed());
+        .expect("Failed to connect to Postgres");
+    println!("Connected to Postgres in {:?}", start.elapsed());
     PostgresConnectionInfo::new_with_pool(pool)
 }

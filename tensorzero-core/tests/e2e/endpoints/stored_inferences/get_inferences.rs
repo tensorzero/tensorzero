@@ -41,9 +41,11 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
 pub async fn test_output_source_defaults_to_inference() {
     let http_client = Client::new();
 
-    // Test list_inferences without output_source - should succeed and default to "inference"
+    // Test list_inferences without output_source - should succeed and default to "inference".
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "limit": 1
     });
 
@@ -574,9 +576,11 @@ async fn test_list_combined_time_and_tag_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_json_only() {
-    // First, list some JSON inference IDs
+    // First, list some JSON inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "extract_entities",
+        "variant_name": "baseline",
         "output_source": "inference",
         "limit": 3
     });
@@ -609,9 +613,11 @@ pub async fn test_get_by_ids_json_only() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_chat_only() {
-    // First, list some Chat inference IDs
+    // First, list some Chat inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "output_source": "inference",
         "limit": 2
     });
@@ -655,17 +661,21 @@ pub async fn test_get_by_ids_unknown_id_returns_empty() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_mixed_types() {
-    // Get some JSON inference IDs
+    // Get some JSON inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let json_request = json!({
         "function_name": "extract_entities",
+        "variant_name": "baseline",
         "output_source": "inference",
         "limit": 2
     });
     let json_res = list_inferences(json_request).await.unwrap();
 
-    // Get some Chat inference IDs
+    // Get some Chat inference IDs.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let chat_request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "output_source": "inference",
         "limit": 2
     });
@@ -723,9 +733,11 @@ pub async fn test_get_by_ids_empty_list() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_duplicate_ids() {
-    // First, get one inference ID
+    // First, get one inference ID.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let list_request = json!({
         "function_name": "extract_entities",
+        "variant_name": "baseline",
         "output_source": "inference",
         "limit": 1
     });
@@ -870,7 +882,8 @@ async fn test_search_query_with_other_filters() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_search_query_order_by_search_relevance() {
-    // Test ordering by term frequency in descending order
+    // ClickHouse uses term frequency and Postgres uses pg_trgm similarity() for ranking,
+    // so ordering may differ between backends. We only check that results are returned.
     let request = json!({
         "function_name": "answer_question",
         "output_source": "inference",
@@ -888,25 +901,21 @@ async fn test_search_query_order_by_search_relevance() {
 
     assert!(!res.is_empty(), "Expected results for 'canister' query");
 
-    // Verify that results are ordered by search relevance (currently term frequency) in descending order
-    let mut prev_relevance = None;
     for inference in &res {
-        assert_eq!(inference["function_name"], "answer_question");
+        assert_eq!(
+            inference["function_name"], "answer_question",
+            "All results should belong to the requested function"
+        );
         let input_string = serde_json::to_string(&inference["input"])
             .unwrap()
             .to_lowercase();
         let output_string = serde_json::to_string(&inference["output"])
             .unwrap()
             .to_lowercase();
-        let relevance =
-            input_string.matches("canister").count() + output_string.matches("canister").count();
-        if let Some(prev) = &prev_relevance {
-            assert!(
-                relevance <= *prev,
-                "Search relevance should be in descending order. Got: {relevance} > {prev}"
-            );
-            prev_relevance = Some(relevance);
-        }
+        assert!(
+            input_string.contains("canister") || output_string.contains("canister"),
+            "Each result should contain the search term in input or output"
+        );
     }
 }
 
@@ -1350,7 +1359,11 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
     };
 
     // Assert the extra_body is correctly returned
-    let extra_body = inference.extra_body.as_slice();
+    let extra_body = inference
+        .extra_body
+        .as_ref()
+        .expect("extra_body should be present")
+        .as_slice();
     assert_eq!(extra_body.len(), 2);
 
     // Check the first extra_body entry (Always variant with pointer and value)
@@ -1372,7 +1385,11 @@ pub async fn test_get_by_ids_with_extra_body_and_inference_params() {
     }
 
     // Assert the inference_params are correctly returned
-    let chat_completion_params = &inference.inference_params.chat_completion;
+    let chat_completion_params = &inference
+        .inference_params
+        .as_ref()
+        .expect("inference_params should be present")
+        .chat_completion;
     assert_eq!(chat_completion_params.temperature, Some(0.7));
     assert_eq!(chat_completion_params.max_tokens, Some(100));
     assert_eq!(chat_completion_params.seed, Some(42));
@@ -1444,7 +1461,11 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
     };
 
     // Assert the extra_body is correctly returned
-    let extra_body = inference.extra_body.as_slice();
+    let extra_body = inference
+        .extra_body
+        .as_ref()
+        .expect("extra_body should be present")
+        .as_slice();
     assert_eq!(extra_body.len(), 2);
 
     // Check the first extra_body entry (Always variant with pointer and value)
@@ -1466,7 +1487,11 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
     }
 
     // Assert the inference_params are correctly returned
-    let chat_completion_params = &inference.inference_params.chat_completion;
+    let chat_completion_params = &inference
+        .inference_params
+        .as_ref()
+        .expect("inference_params should be present")
+        .chat_completion;
     assert_eq!(chat_completion_params.temperature, Some(0.5));
     assert_eq!(chat_completion_params.max_tokens, Some(200));
     assert_eq!(chat_completion_params.top_p, Some(0.9));

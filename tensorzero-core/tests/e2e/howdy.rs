@@ -27,7 +27,9 @@ use tokio::time::Duration;
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_deployment_id() {
     let clickhouse = get_clickhouse().await;
-    let deployment_id = get_deployment_id(&clickhouse).await.unwrap();
+    let deployment_id = get_deployment_id(&clickhouse, &PostgresConnectionInfo::Disabled)
+        .await
+        .unwrap();
     println!("deployment_id: {deployment_id}");
     assert!(!deployment_id.is_empty());
 }
@@ -56,6 +58,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         clickhouse,
         PostgresConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,
+        ValkeyConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
         HashSet::new(), // available_tools
@@ -70,7 +73,9 @@ async fn test_get_howdy_report() {
     let (clickhouse, _guard) = get_clean_clickhouse(true).await;
     let client = get_embedded_client(clickhouse.clone()).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    let deployment_id = get_deployment_id(&clickhouse).await.unwrap();
+    let deployment_id = get_deployment_id(&clickhouse, &PostgresConnectionInfo::Disabled)
+        .await
+        .unwrap();
     let howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
     assert_eq!(howdy_report.inference_count, "0");
     assert_eq!(howdy_report.feedback_count, "0");

@@ -12,8 +12,8 @@ use tracing::instrument;
 
 use crate::config::UninitializedConfig;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use crate::config::write_config_snapshot;
 use crate::db::ConfigQueries;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -54,10 +54,11 @@ pub async fn get_live_config_handler(
     State(app_state): AppState,
 ) -> Result<Json<GetConfigResponse>, Error> {
     let hash = app_state.config.hash.clone();
-    let snapshot = app_state
-        .clickhouse_connection_info
-        .get_config_snapshot(hash)
-        .await?;
+    let db = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let snapshot = db.get_config_snapshot(hash).await?;
 
     Ok(Json(GetConfigResponse::from_snapshot(snapshot)?))
 }
@@ -77,10 +78,11 @@ pub async fn get_config_by_hash_handler(
         })
     })?;
 
-    let snapshot = app_state
-        .clickhouse_connection_info
-        .get_config_snapshot(snapshot_hash)
-        .await?;
+    let db = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let snapshot = db.get_config_snapshot(snapshot_hash).await?;
 
     Ok(Json(GetConfigResponse::from_snapshot(snapshot)?))
 }
@@ -100,7 +102,9 @@ pub struct WriteConfigRequest {
 }
 
 /// Response from writing a config snapshot.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct WriteConfigResponse {
     /// The hash identifying this config version.
     pub hash: String,
@@ -122,7 +126,11 @@ pub async fn write_config_handler(
 
     let hash = snapshot.hash.to_string();
 
-    write_config_snapshot(&app_state.clickhouse_connection_info, snapshot).await?;
+    let db = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    db.write_config_snapshot(&snapshot).await?;
 
     Ok(Json(WriteConfigResponse { hash }))
 }

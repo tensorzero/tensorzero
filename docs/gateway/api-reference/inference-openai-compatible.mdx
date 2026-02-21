@@ -535,7 +535,7 @@ If a content block has type `input_audio`, it must have the following additional
 
 The TensorZero-specific content block types are:
 
-- `tensorzero::raw_text`: Bypasses templates and schemas, sending text directly to the model. Useful for testing prompts or dynamic injection without configuration changes. Must have a `value` field containing the text.
+- `tensorzero::raw_text`: Bypasses templates and schemas, sending text directly to the model. Useful for testing prompts or dynamic injection without configuration changes. Must have a `value` field containing the text. Only works for user and assistant messages; for system messages, it is treated as plain text and will not bypass templates.
 - `tensorzero::template`: Explicitly specify a template to use. Must have `name` and `arguments` fields.
 
 #### `model`
@@ -804,6 +804,20 @@ You should generally not set this field, and instead let the TensorZero gateway 
 This field is primarily used for testing or debugging purposes.
 
 This field should be provided as an extra body parameter in the request body.
+
+### Request Headers
+
+You can attach custom OTLP trace metadata to individual inference requests using HTTP headers.
+This allows you to extend TensorZero's OpenTelemetry integration with per-request metadata useful for other observability solutions.
+When using the OpenAI client SDKs, pass these as `extra_headers`.
+
+| Header prefix                             | Description                                                                                                                                           |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tensorzero-otlp-traces-extra-header-`    | Custom headers to include in OTLP trace exports. Merged with static headers from `export.otlp.traces.extra_headers` (dynamic values take precedence). |
+| `tensorzero-otlp-traces-extra-attribute-` | Custom span attributes to attach to OTLP trace exports.                                                                                               |
+| `tensorzero-otlp-traces-extra-resource-`  | Custom resource attributes to attach to OTLP trace exports.                                                                                           |
+
+See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces) for more details and examples.
 
 ### Response
 

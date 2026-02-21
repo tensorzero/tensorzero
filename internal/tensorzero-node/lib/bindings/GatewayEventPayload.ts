@@ -4,6 +4,9 @@ import type { EventPayloadMessage } from "./EventPayloadMessage";
 import type { EventPayloadStatusUpdate } from "./EventPayloadStatusUpdate";
 import type { EventPayloadToolCall } from "./EventPayloadToolCall";
 import type { EventPayloadToolResult } from "./EventPayloadToolResult";
+import type { EventPayloadUserQuestions } from "./EventPayloadUserQuestions";
+import type { EventPayloadUserQuestionsAnswers } from "./EventPayloadUserQuestionsAnswers";
+import type { EventPayloadVisualization } from "./EventPayloadVisualization";
 import type { GatewayEventPayloadToolCallAuthorization } from "./GatewayEventPayloadToolCallAuthorization";
 
 /**
@@ -20,4 +23,7 @@ export type GatewayEventPayload =
       type: "tool_call_authorization";
     } & GatewayEventPayloadToolCallAuthorization)
   | ({ type: "tool_result" } & EventPayloadToolResult)
+  | ({ type: "visualization" } & EventPayloadVisualization)
+  | ({ type: "user_questions" } & EventPayloadUserQuestions)
+  | ({ type: "user_questions_answers" } & EventPayloadUserQuestionsAnswers)
   | { type: "unknown" };

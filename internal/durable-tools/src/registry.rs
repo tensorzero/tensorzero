@@ -23,7 +23,7 @@ impl TryFrom<&dyn ErasedTool> for Tool {
             name: tool.name().to_string(),
             description: tool.description().to_string(),
             parameters: serde_json::to_value(tool.parameters_schema()?)?,
-            strict: false,
+            strict: tool.strict(),
         }))
     }
 }
@@ -40,6 +40,9 @@ pub trait ErasedTool: Send + Sync {
 
     /// Get the JSON Schema for the tool's parameters.
     fn parameters_schema(&self) -> ToolResult<Schema>;
+
+    /// Whether or not to use 'strict mode' when providing our tool schema to LLMs
+    fn strict(&self) -> bool;
 
     /// Get the tool's execution timeout.
     fn timeout(&self) -> Duration;
@@ -102,21 +105,16 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
         self.0.timeout()
     }
 
+    fn strict(&self) -> bool {
+        self.0.strict()
+    }
+
     fn is_durable(&self) -> bool {
         true
     }
 
     fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
-        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
-            .map_err(|e| NonControlToolError::InvalidParams {
-                message: format!("llm_params: {e}"),
-            })?;
-        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
-            NonControlToolError::InvalidParams {
-                message: format!("side_info: {e}"),
-            }
-        })?;
-        Ok(())
+        self.0.validate_params(llm_params, side_info)
     }
 }
 
@@ -138,21 +136,16 @@ impl<T: SimpleTool> ErasedTool for T {
         ToolMetadata::timeout(self)
     }
 
+    fn strict(&self) -> bool {
+        ToolMetadata::strict(self)
+    }
+
     fn is_durable(&self) -> bool {
         false
     }
 
     fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
-        let _: <T as ToolMetadata>::LlmParams = serde_json::from_value(llm_params.clone())
-            .map_err(|e| NonControlToolError::InvalidParams {
-                message: format!("llm_params: {e}"),
-            })?;
-        let _: T::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
-            NonControlToolError::InvalidParams {
-                message: format!("side_info: {e}"),
-            }
-        })?;
-        Ok(())
+        ToolMetadata::validate_params(self, llm_params, side_info)
     }
 }
 

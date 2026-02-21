@@ -1,7 +1,7 @@
 #![expect(clippy::print_stdout)]
 
 use futures::StreamExt;
-use rand::Rng;
+use rand::RngExt;
 use reqwest::Client;
 use reqwest_sse_stream::Event;
 use reqwest_sse_stream::RequestBuilderExt;
@@ -9,8 +9,8 @@ use serde_json::Value;
 use serde_json::json;
 use std::time::Duration;
 use tensorzero::CacheParamsOptions;
+use tensorzero::ClientExt;
 use tensorzero::ClientInferenceParams;
-use tensorzero::ContentBlockChunk;
 use tensorzero::DynamicToolParams;
 use tensorzero::FunctionTool;
 use tensorzero::InferenceOutput;
@@ -19,341 +19,87 @@ use tensorzero::Input;
 use tensorzero::InputMessage;
 use tensorzero::InputMessageContent;
 use tensorzero::Tool;
-use tensorzero_core::cache::CacheData;
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::cache::CacheValidationInfo;
-use tensorzero_core::cache::NonStreamingCacheData;
-use tensorzero_core::cache::cache_lookup_streaming;
-use tensorzero_core::cache::start_cache_write_streaming;
-use tensorzero_core::inference::types::ContentBlock;
 use tensorzero_core::inference::types::ContentBlockChatOutput;
-use tensorzero_core::inference::types::ContentBlockOutput;
-use tensorzero_core::inference::types::FinishReason;
-use tensorzero_core::inference::types::ProviderInferenceResponseChunk;
 use tensorzero_core::inference::types::Text;
-use tensorzero_core::inference::types::TextChunk;
 use tensorzero_core::tool::InferenceResponseToolCall;
 use uuid::Uuid;
 
-use tensorzero_core::cache::ModelProviderRequest;
-use tensorzero_core::cache::cache_lookup;
-use tensorzero_core::cache::start_cache_write;
-use tensorzero_core::inference::types::Latency;
 use tensorzero_core::inference::types::Role;
-use tensorzero_core::inference::types::Usage;
-use tensorzero_core::inference::types::{
-    FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-};
-use tensorzero_core::inference::types::{RequestMessage, StoredContentBlock, StoredRequestMessage};
+use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
 
 use crate::common::get_gateway_endpoint;
 use tensorzero::test_helpers::{
-    make_embedded_gateway_e2e_with_unique_db, make_http_gateway_with_unique_db,
+    make_embedded_gateway_e2e_with_unique_db,
+    make_embedded_gateway_e2e_with_unique_db_all_backends,
+    make_http_gateway_openai_only_with_unique_db,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
-/// This test does a cache read then write then read again to ensure that
-/// the cache is working as expected.
-/// Then, it reads with a short max age to ensure that the cache is not
-/// returning stale data.
-#[tokio::test]
-async fn test_cache_write_and_read() {
-    let clickhouse_connection_info = get_clickhouse().await;
-    // Generate a random seed to guarantee a fresh cache key
-    let seed = rand::random::<u32>();
-    let max_age_s = 10;
-    let model_inference_request = ModelInferenceRequest {
-        inference_id: Uuid::now_v7(),
-        messages: vec![RequestMessage {
-            role: Role::User,
-            content: vec![ContentBlock::Text(Text {
-                text: "test message".to_string(),
-            })],
-        }],
-        system: Some("test system".to_string()),
-        tool_config: None,
-        temperature: None,
-        top_p: None,
-        presence_penalty: None,
-        frequency_penalty: None,
-        max_tokens: None,
-        seed: Some(seed),
-        stream: false,
-        json_mode: ModelInferenceRequestJsonMode::Off,
-        function_type: FunctionType::Chat,
-        output_schema: None,
-        extra_body: Default::default(),
-        ..Default::default()
-    };
-    let model_provider_request = ModelProviderRequest {
-        request: &model_inference_request,
-        model_name: "test_model",
-        provider_name: "test_provider",
-        otlp_config: &Default::default(),
-        model_inference_id: Uuid::now_v7(),
-    };
-
-    // Read (should be None)
-    let result = cache_lookup(
-        &clickhouse_connection_info,
-        model_provider_request,
-        Some(max_age_s),
-    )
-    .await
-    .unwrap();
-    assert!(result.is_none());
-
-    // Write
-    start_cache_write(
-        &clickhouse_connection_info,
-        model_provider_request.get_cache_key().unwrap(),
-        CacheData {
-            output: NonStreamingCacheData {
-                blocks: vec![ContentBlockOutput::Text(Text {
-                    text: "my test content".to_string(),
-                })],
-            },
-            raw_request: "raw request".to_string(),
-            raw_response: "raw response".to_string(),
-            input_tokens: Some(10),
-            output_tokens: Some(16),
-            finish_reason: Some(FinishReason::Stop),
-        },
-        CacheValidationInfo { tool_config: None },
-    )
-    .unwrap();
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Read (should be Some)
-    let result = cache_lookup(
-        &clickhouse_connection_info,
-        model_provider_request,
-        Some(max_age_s),
-    )
-    .await
-    .unwrap();
-    assert!(result.is_some());
-    let result = result.unwrap();
-    assert_eq!(
-        result.output,
-        [ContentBlockOutput::Text(Text {
-            text: "my test content".to_string(),
-        })]
-    );
-    assert_eq!(result.raw_request, "raw request");
-    assert_eq!(result.raw_response, "raw response");
-    assert_eq!(
-        result.usage,
-        Usage {
-            input_tokens: Some(10),
-            output_tokens: Some(16),
-        }
-    );
-    assert_eq!(*result.model_provider_name, *"test_provider");
-    assert_eq!(result.system, Some("test system".to_string()));
-    assert_eq!(
-        result.input_messages,
-        vec![RequestMessage {
-            role: Role::User,
-            content: vec![ContentBlock::Text(Text {
-                text: "test message".to_string(),
-            })],
-        }]
-    );
-    assert_eq!(
-        result.usage,
-        Usage {
-            input_tokens: Some(10),
-            output_tokens: Some(16),
-        }
-    );
-    assert_eq!(
-        result.provider_latency,
-        Latency::NonStreaming {
-            response_time: Duration::from_secs(0)
-        }
-    );
-    assert!(result.cached);
-
-    // Read (should be None)
-    tokio::time::sleep(Duration::from_secs(2)).await;
-    let result = cache_lookup(&clickhouse_connection_info, model_provider_request, Some(0))
-        .await
-        .unwrap();
-    assert!(result.is_none());
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CacheBackend {
+    Clickhouse,
+    Valkey,
 }
 
-/// This test does a cache read then write then read again to ensure that
-/// the cache is working as expected.
-/// Then, it reads with a short max age to ensure that the cache is not
-/// returning stale data.
-#[tokio::test]
-async fn test_cache_stream_write_and_read() {
-    let clickhouse_connection_info = get_clickhouse().await;
-    // Generate a random seed to guarantee a fresh cache key
-    let seed = rand::random::<u32>();
-    let max_age_s = 10;
-    let model_inference_request = ModelInferenceRequest {
-        inference_id: Uuid::now_v7(),
-        messages: vec![RequestMessage {
-            role: Role::User,
-            content: vec![ContentBlock::Text(Text {
-                text: "test message".to_string(),
-            })],
-        }],
-        system: Some("test system".to_string()),
-        tool_config: None,
-        temperature: None,
-        top_p: None,
-        presence_penalty: None,
-        frequency_penalty: None,
-        max_tokens: None,
-        seed: Some(seed),
-        stream: true,
-        json_mode: ModelInferenceRequestJsonMode::Off,
-        function_type: FunctionType::Chat,
-        output_schema: None,
-        extra_body: Default::default(),
-        ..Default::default()
+/// Generates test variants for each cache backend (ClickHouse and Valkey).
+macro_rules! make_cache_tests {
+    ($test_name:ident) => {
+        paste::paste! {
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$test_name _clickhouse>]() {
+                $test_name(CacheBackend::Clickhouse).await;
+            }
+
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$test_name _valkey>]() {
+                $test_name(CacheBackend::Valkey).await;
+            }
+        }
     };
-    let model_provider_request = ModelProviderRequest {
-        request: &model_inference_request,
-        model_name: "test_model",
-        provider_name: "test_provider",
-        otlp_config: &Default::default(),
-        model_inference_id: Uuid::now_v7(),
-    };
+}
 
-    // Read (should be None)
-    let result = cache_lookup_streaming(
-        &clickhouse_connection_info,
-        model_provider_request,
-        Some(max_age_s),
-    )
-    .await
-    .unwrap();
-    assert!(result.is_none());
-
-    let initial_chunks = vec![
-        ProviderInferenceResponseChunk {
-            content: vec![ContentBlockChunk::Text(TextChunk {
-                id: "0".to_string(),
-                text: "test content".to_string(),
-            })],
-            usage: Some(Usage {
-                input_tokens: Some(20),
-                output_tokens: Some(40),
-            }),
-            raw_usage: None,
-            raw_response: "raw response".to_string(),
-            provider_latency: Duration::from_secs(999),
-            finish_reason: None,
-        },
-        ProviderInferenceResponseChunk {
-            content: vec![ContentBlockChunk::Text(TextChunk {
-                id: "1".to_string(),
-                text: "test content 2".to_string(),
-            })],
-            usage: Some(Usage {
-                input_tokens: Some(100),
-                output_tokens: Some(200),
-            }),
-            raw_usage: None,
-            raw_response: "raw response 2".to_string(),
-            provider_latency: Duration::from_secs(999),
-            finish_reason: Some(FinishReason::Stop),
-        },
-    ];
-
-    // Write
-    start_cache_write_streaming(
-        &clickhouse_connection_info,
-        model_provider_request.get_cache_key().unwrap(),
-        initial_chunks.clone(),
-        "raw request",
-        &Usage {
-            input_tokens: Some(1),
-            output_tokens: Some(2),
-        },
-        None,
-    )
-    .unwrap();
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Read (should be Some)
-    let result = cache_lookup_streaming(
-        &clickhouse_connection_info,
-        model_provider_request,
-        Some(max_age_s),
-    )
-    .await
-    .unwrap();
-    assert!(result.is_some());
-    let result = result.unwrap();
-    let chunks = result.stream.map(|c| c.unwrap()).collect::<Vec<_>>().await;
-    assert_eq!(chunks.len(), 2);
-    for (i, chunk) in chunks.into_iter().enumerate() {
-        let ProviderInferenceResponseChunk {
-            content,
-            usage,
-            raw_response,
-            provider_latency,
-            finish_reason,
-            ..
-        } = &chunk;
-        assert_eq!(content, &initial_chunks[i].content);
-        if i == 0 {
-            assert_eq!(
-                usage,
-                &Some(Usage {
-                    input_tokens: Some(20),
-                    output_tokens: Some(40),
-                })
+/// Creates a gateway configured to use the specified cache backend.
+///
+/// - `CacheBackend::Clickhouse`: default mode (ClickHouse as primary datastore)
+/// - `CacheBackend::Valkey`: sets `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=true`,
+///   uses Postgres + Valkey connections
+async fn make_cache_test_gateway(backend: CacheBackend, db_prefix: &str) -> tensorzero::Client {
+    match backend {
+        CacheBackend::Clickhouse => make_embedded_gateway_e2e_with_unique_db(db_prefix).await,
+        CacheBackend::Valkey => {
+            // Must be set before the first flag access (OnceLock caches on first read)
+            tensorzero_unsafe_helpers::set_env_var_tests_only(
+                "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE",
+                "true",
             );
-        } else {
-            assert_eq!(
-                usage,
-                &Some(Usage {
-                    input_tokens: Some(100),
-                    output_tokens: Some(200),
-                })
-            );
-        };
-        assert_eq!(raw_response, &initial_chunks[i].raw_response);
-        assert_eq!(provider_latency, &Duration::from_secs(0));
-        if i == 0 {
-            assert_eq!(finish_reason, &None);
-        } else {
-            assert_eq!(finish_reason, &Some(FinishReason::Stop));
+            make_embedded_gateway_e2e_with_unique_db_all_backends(db_prefix).await
         }
     }
-
-    // Read (should be None)
-    tokio::time::sleep(Duration::from_secs(2)).await;
-    let result =
-        cache_lookup_streaming(&clickhouse_connection_info, model_provider_request, Some(0))
-            .await
-            .unwrap();
-    assert!(result.is_none());
 }
-#[tokio::test]
-pub async fn test_dont_cache_invalid_tool_call() {
-    let logs_contain = tensorzero_core::utils::testing::capture_logs();
-    let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
+
+fn is_batched_writes_enabled() -> bool {
+    match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
         Ok(value) => value == "true",
         Err(_) => false,
-    };
-    if is_batched_writes {
-        // Skip test if batched writes are enabled
-        // The message is logged from the batch writer tokio task, which may run
-        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured)
-        // We cannot use the single-threaded tokio runtime here, since we need to call 'block_in_place'
-        // from GatewayHandle
+    }
+}
+
+make_cache_tests!(test_dont_cache_invalid_tool_call);
+
+async fn test_dont_cache_invalid_tool_call(backend: CacheBackend) {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
+    if is_batched_writes_enabled() {
+        // Skip test if batched writes are enabled.
+        // The message is logged from the batch writer tokio task, which may run on
+        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured).
+        // We cannot use the single-threaded tokio runtime here, since we need to call `block_in_place`
+        // from `GatewayHandle`.
         return;
     }
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_cache_test_gateway(backend, "dont_cache_invalid_tool_call").await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::invalid_tool_arguments".to_string()),
@@ -375,35 +121,43 @@ pub async fn test_dont_cache_invalid_tool_call() {
     client.inference(params.clone()).await.unwrap();
 
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    let clickhouse = get_clickhouse().await;
-    assert!(logs_contain("Skipping cache write"));
+    assert!(
+        logs_contain("Skipping cache write"),
+        "Expected log message about skipping cache write"
+    );
 
     // Run again, and check that we get a cache miss
     let res = client.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(res) = res else {
         panic!("Expected non-streaming inference response");
     };
-    let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
-        .await
-        .unwrap();
-    assert_eq!(model_inference.get("cached").unwrap(), false);
+
+    // ClickHouse-specific: verify the `cached` column in model_inference
+    if backend == CacheBackend::Clickhouse {
+        let clickhouse = &client
+            .get_app_state_data()
+            .unwrap()
+            .clickhouse_connection_info;
+        let model_inference = select_model_inference_clickhouse(clickhouse, res.inference_id())
+            .await
+            .unwrap();
+        assert_eq!(
+            model_inference.get("cached").unwrap(),
+            false,
+            "Second inference should not be cached"
+        );
+    }
 }
-#[tokio::test]
-pub async fn test_dont_cache_tool_call_schema_error() {
+
+make_cache_tests!(test_dont_cache_tool_call_schema_error);
+
+async fn test_dont_cache_tool_call_schema_error(backend: CacheBackend) {
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
-    let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
-        Ok(value) => value == "true",
-        Err(_) => false,
-    };
-    if is_batched_writes {
-        // Skip test if batched writes are enabled
-        // The message is logged from the batch writer tokio task, which may run
-        // a different thread when the multi-threaded tokio runtime is used (and fail to be captured)
-        // We cannot use the single-threaded tokio runtime here, since we need to call 'block_in_place'
-        // from GatewayHandle
+    if is_batched_writes_enabled() {
+        // Skip test if batched writes are enabled (same reason as above)
         return;
     }
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_cache_test_gateway(backend, "dont_cache_tool_call_schema_error").await;
     let randomness = Uuid::now_v7();
     let params = ClientInferenceParams {
         model_name: Some("dummy::tool".to_string()),
@@ -454,18 +208,32 @@ pub async fn test_dont_cache_tool_call_schema_error() {
     );
 
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    let clickhouse = get_clickhouse().await;
-    assert!(logs_contain("Skipping cache write"));
+    assert!(
+        logs_contain("Skipping cache write"),
+        "Expected log message about skipping cache write"
+    );
 
     // Run again, and check that we get a cache miss
     let res = client.inference(params).await.unwrap();
     let InferenceOutput::NonStreaming(res) = res else {
         panic!("Expected non-streaming inference response");
     };
-    let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
-        .await
-        .unwrap();
-    assert_eq!(model_inference.get("cached").unwrap(), false);
+
+    // ClickHouse-specific: verify the `cached` column in model_inference
+    if backend == CacheBackend::Clickhouse {
+        let clickhouse = &client
+            .get_app_state_data()
+            .unwrap()
+            .clickhouse_connection_info;
+        let model_inference = select_model_inference_clickhouse(clickhouse, res.inference_id())
+            .await
+            .unwrap();
+        assert_eq!(
+            model_inference.get("cached").unwrap(),
+            false,
+            "Second inference should not be cached"
+        );
+    }
 }
 
 #[tokio::test]
@@ -755,14 +523,14 @@ pub async fn check_test_streaming_cache_with_err(
     full_content
 }
 
-/// Tests that cached streaming responses only have usage on the final chunk (TensorZero native API)
-#[tokio::test(flavor = "multi_thread")]
-async fn test_streaming_cache_usage_only_in_final_chunk_native() {
+make_cache_tests!(test_streaming_cache_usage_only_in_final_chunk_native);
+
+async fn test_streaming_cache_usage_only_in_final_chunk_native(backend: CacheBackend) {
     use serde_json::Map;
     use tensorzero::InferenceResponseChunk;
     use tensorzero_core::inference::types::System;
 
-    let client = make_embedded_gateway_e2e_with_unique_db("cache_usage_final_chunk").await;
+    let client = make_cache_test_gateway(backend, "cache_usage_final_chunk").await;
 
     let input = "cache_usage_test: Tell me a story";
 
@@ -878,7 +646,7 @@ async fn test_streaming_cache_usage_only_in_final_chunk_native() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
     let (base_url, _shutdown_handle) =
-        make_http_gateway_with_unique_db("cache_usage_final_chunk_openai").await;
+        make_http_gateway_openai_only_with_unique_db("cache_usage_final_chunk_openai").await;
 
     let input = "cache_usage_openai_test: Tell me a story";
 

@@ -30,11 +30,11 @@ use tensorzero_core::{
         Config, TimeoutsConfig,
         provider_types::{FireworksSFTConfig as FireworksProviderSFTConfig, ProviderTypesConfig},
     },
-    db::clickhouse::ClickHouseConnectionInfo,
+    db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
-    inference::types::ContentBlock,
+    inference::types::{ContentBlock, usage::ApiType},
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     model_table::{FireworksKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{
@@ -75,7 +75,7 @@ impl Optimizer for FireworksSFTConfig {
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
-        _clickhouse_connection_info: &ClickHouseConnectionInfo,
+        _db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Get provider-level configuration
@@ -190,6 +190,7 @@ impl Optimizer for FireworksSFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
             })
@@ -203,6 +204,7 @@ impl Optimizer for FireworksSFTConfig {
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                 raw_response: None,
             })
@@ -217,6 +219,7 @@ impl Optimizer for FireworksSFTConfig {
                     raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Other,
                 })
             })?;
 
@@ -228,6 +231,7 @@ impl Optimizer for FireworksSFTConfig {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
             })
         })?;
 
@@ -273,6 +277,7 @@ impl JobHandle for FireworksSFTJobHandle {
                     raw_request: None,
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Other,
                 })
             })?;
             // TODO - start using this as the TensorZero model name
@@ -283,6 +288,7 @@ impl JobHandle for FireworksSFTJobHandle {
                     raw_request: None,
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::Other,
                 })
             })?;
             let completed_output = OptimizationJobInfo::Completed {
@@ -304,6 +310,7 @@ impl JobHandle for FireworksSFTJobHandle {
                     )]),
                     timeouts: TimeoutsConfig::default(),
                     skip_relay: None,
+                    namespace: None,
                 }),
             };
             if !self.deploy_after_training {
@@ -581,6 +588,7 @@ async fn poll_dataset_read(
                     DisplayOrDebugGateway::new(e)
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
             })
@@ -589,6 +597,7 @@ async fn poll_dataset_read(
         Error::new(ErrorDetails::InferenceClient {
             status_code: e.status(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
             message: format!(
@@ -606,6 +615,7 @@ async fn poll_dataset_read(
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
         })
     })?;
     Ok(response.state == "READY")
@@ -644,6 +654,7 @@ async fn create_and_upload_dataset<'a>(
                 status_code: e.status(),
                 message: format!("Error creating dataset: {}", DisplayOrDebugGateway::new(e)),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
             })
@@ -654,6 +665,7 @@ async fn create_and_upload_dataset<'a>(
             status_code: e.status(),
             message: format!("Error creating dataset: {}", DisplayOrDebugGateway::new(e)),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
         })
@@ -663,6 +675,7 @@ async fn create_and_upload_dataset<'a>(
             status_code: Some(status),
             message: "Error creating dataset".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: Some(raw_response),
         }));
@@ -707,6 +720,7 @@ async fn create_and_upload_dataset<'a>(
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
         })
@@ -719,6 +733,7 @@ async fn create_and_upload_dataset<'a>(
                 res.status()
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: res.text().await.ok(),
         }));
@@ -749,6 +764,7 @@ async fn get_model(
                 status_code: e.status(),
                 message: format!("Error getting model: {}", DisplayOrDebugGateway::new(e)),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
             })
@@ -761,6 +777,7 @@ async fn get_model(
             status_code: e.status(),
             message: format!("Error getting model: {}", DisplayOrDebugGateway::new(e)),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
         })
@@ -774,6 +791,7 @@ async fn get_model(
             raw_request: None,
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
         })
     })?;
     Ok(Some(model))
@@ -820,6 +838,7 @@ async fn deploy_or_poll_model(
                 status_code: e.status(),
                 message: format!("Error deploying model: {}", DisplayOrDebugGateway::new(e)),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
                 raw_request: None,
                 raw_response: None,
             })
@@ -830,6 +849,7 @@ async fn deploy_or_poll_model(
             status_code: e.status(),
             message: format!("Error deploying model: {}", DisplayOrDebugGateway::new(e)),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
         })
@@ -844,6 +864,7 @@ async fn deploy_or_poll_model(
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::Other,
             })
         })?;
     Ok(response.state)
@@ -870,6 +891,7 @@ async fn poll_job(
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
         })
@@ -882,6 +904,7 @@ async fn poll_job(
                 DisplayOrDebugGateway::new(e)
             ),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
             raw_request: None,
             raw_response: None,
         })
@@ -895,6 +918,7 @@ async fn poll_job(
             raw_request: None,
             raw_response: Some(raw_response.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type: ApiType::Other,
         })
     })?;
     Ok(job)

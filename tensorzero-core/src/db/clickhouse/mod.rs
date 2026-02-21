@@ -10,35 +10,36 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::config::BatchWritesConfig;
-use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
+use crate::db::HealthCheckable;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::clickhouse_client::DisabledClickHouseClient;
 use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
-use crate::db::{ConfigQueries, HealthCheckable};
 use crate::error::DelayedError;
 use crate::error::{Error, ErrorDetails};
 
-// Export this so evaluations crate can wait for it.
-pub use crate::db::clickhouse::batching::BatchWriterHandle;
+// Re-export for backwards compatibility.
+pub use crate::db::BatchWriterHandle;
 
 pub use clickhouse_client::ClickHouseClient;
 pub use table_name::TableName;
 
-#[cfg(any(test, feature = "pyo3"))]
-use crate::db::clickhouse::clickhouse_client::FakeClickHouseClient;
-
 mod batch_inference;
 mod batching;
-pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
+mod cache_queries;
+pub mod clickhouse_client;
+pub mod config_queries;
 pub mod dataset_queries;
+mod deployment_queries;
+pub mod dicl_queries;
+mod episode_queries;
 pub mod evaluation_queries;
 pub mod feedback;
-pub mod inference_count;
+mod howdy_queries;
 pub mod inference_queries;
 pub mod migration_manager;
 pub mod model_inferences;
 pub mod query_builder;
-mod select_queries;
+mod resolve_uuid;
 mod table_name;
 pub mod workflow_evaluation_queries;
 
@@ -134,13 +135,6 @@ impl ClickHouseConnectionInfo {
         Self { inner }
     }
 
-    #[cfg(any(test, feature = "pyo3"))]
-    pub fn new_fake() -> Self {
-        Self {
-            inner: Arc::new(FakeClickHouseClient::new(true)),
-        }
-    }
-
     pub async fn recreate(&self) -> Result<Self, Error> {
         Ok(Self {
             inner: self.inner.recreate().await?,
@@ -190,6 +184,15 @@ impl ClickHouseConnectionInfo {
         self.inner.write_batched_internal(rows_json?, table).await
     }
 
+    /// Like `write_batched`, but takes pre-serialized JSON strings instead of serializable rows.
+    pub async fn write_batched_raw(
+        &self,
+        rows: Vec<String>,
+        table: TableName,
+    ) -> Result<(), Error> {
+        self.inner.write_batched_internal(rows, table).await
+    }
+
     /// Write rows to ClickHouse without, without using our batched write implementation.
     /// The provided rows will have been sent to ClickHouse when this function completes.
     pub async fn write_non_batched<T: Serialize + Send + Sync>(
@@ -201,29 +204,6 @@ impl ClickHouseConnectionInfo {
         self.inner
             .write_non_batched_internal(rows_json.into_owned(), table)
             .await
-    }
-
-    /// Test helper: reads from the table `table` in our mock DB and returns an element that has (serialized) `column` equal to `value`.
-    /// Returns None if no such element is found.
-    #[cfg(test)]
-    #[expect(clippy::missing_panics_doc)]
-    pub async fn read(&self, table: &str, column: &str, value: &str) -> Option<serde_json::Value> {
-        // Only FakeClickHouseClient supports this
-        let inner_any = &self.inner as &dyn std::any::Any;
-        if let Some(fake) = inner_any.downcast_ref::<FakeClickHouseClient>() {
-            let data = fake.data.read().await;
-            let table = data.get(table).unwrap();
-            for row in table {
-                if let Some(value_in_row) = row.get(column)
-                    && value_in_row.as_str() == Some(value)
-                {
-                    return Some(row.clone());
-                }
-            }
-            None
-        } else {
-            panic!("read() is only supported on FakeClickHouseClient")
-        }
     }
 
     pub fn is_cluster_configured(&self) -> bool {
@@ -320,7 +300,6 @@ impl Display for ClickHouseConnectionInfo {
             ClickHouseClientType::Production => {
                 write!(f, "enabled (database = {})", self.database())
             }
-            ClickHouseClientType::Fake => write!(f, "fake"),
             ClickHouseClientType::Disabled => write!(f, "disabled"),
         }
     }
@@ -331,46 +310,6 @@ impl Display for ClickHouseConnectionInfo {
 impl HealthCheckable for ClickHouseConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         self.inner.health().await
-    }
-}
-
-impl ConfigQueries for ClickHouseConnectionInfo {
-    async fn get_config_snapshot(
-        &self,
-        snapshot_hash: SnapshotHash,
-    ) -> Result<ConfigSnapshot, Error> {
-        #[derive(Deserialize)]
-        struct ConfigSnapshotRow {
-            config: String,
-            extra_templates: HashMap<String, String>,
-            #[serde(default)]
-            tags: HashMap<String, String>,
-        }
-
-        let hash_str = snapshot_hash.to_string();
-        let query = format!(
-            "SELECT config, extra_templates, tags \
-             FROM ConfigSnapshot FINAL \
-             WHERE hash = toUInt256('{hash_str}') \
-             LIMIT 1 \
-             FORMAT JSONEachRow"
-        );
-
-        let response = self.run_query_synchronous_no_params(query).await?;
-
-        if response.response.is_empty() {
-            return Err(Error::new(ErrorDetails::ConfigSnapshotNotFound {
-                snapshot_hash: hash_str,
-            }));
-        }
-
-        let row: ConfigSnapshotRow = serde_json::from_str(&response.response).map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseDeserialization {
-                message: e.to_string(),
-            })
-        })?;
-
-        ConfigSnapshot::from_stored(&row.config, row.extra_templates, row.tags, &snapshot_hash)
     }
 }
 

@@ -9,7 +9,7 @@ use tensorzero::{
     ClientExt, ClientInferenceParams, File, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent, Role, UrlFile,
 };
-use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
+use tensorzero_core::cache::{CacheEnabledMode, CacheManager, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
@@ -142,7 +142,7 @@ async fn get_providers() -> E2ETestProviders {
     let input_audio_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
         variant_name: "openai".to_string(),
-        model_name: "gpt-4o-audio-preview".into(),
+        model_name: "gpt-audio-mini".into(),
         model_provider_name: "openai".into(),
         credentials: HashMap::new(),
     }];
@@ -1284,6 +1284,7 @@ async fn test_embedding_request() {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
+        cache_manager: CacheManager::new(Arc::new(clickhouse.clone())),
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,
@@ -1298,6 +1299,7 @@ async fn test_embedding_request() {
         relay: None,
         include_raw_usage: false,
         include_raw_response: false,
+        include_aggregated_response: false,
     };
     let response = model_config
         .embed(&request, &model_name, &clients)
@@ -1435,6 +1437,7 @@ async fn test_embedding_sanity_check() {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
+        cache_manager: CacheManager::new(Arc::new(clickhouse.clone())),
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,
@@ -1449,6 +1452,7 @@ async fn test_embedding_sanity_check() {
         relay: None,
         include_raw_usage: false,
         include_raw_response: false,
+        include_aggregated_response: false,
     };
 
     // Compute all 3 embeddings concurrently

@@ -84,6 +84,24 @@ bind_address = "0.0.0.0:3000"
 # ...
 ```
 
+### `cache.valkey.ttl_s`
+
+- **Type:** integer
+- **Required:** no (default: `86400` = 24 hours)
+
+The time-to-live (TTL) in seconds for inference cache entries stored in Valkey.
+By default, cache entries expire after 24 hours (86400 seconds).
+This setting only applies when Valkey is available (i.e. `TENSORZERO_VALKEY_URL` is set); otherwise, the inference cache uses ClickHouse.
+
+```toml title="tensorzero.toml"
+[gateway.cache.valkey]
+ttl_s = 86400  # 24 hours (default)
+```
+
+If you use a single Valkey instance for both rate limiting and caching, see [Inference Caching](/gateway/guides/inference-caching#cache-backend) for recommended TTL settings.
+
+See [Inference Caching](/gateway/guides/inference-caching) for more details.
+
 ### `debug`
 
 - **Type:** boolean
@@ -170,7 +188,7 @@ By default, all HTTP requests will timeout after 15 minutes (900,000 ms).
 This timeout is intentionally set high to accommodate slow model responses, but you can customize it based on your requirements.
 
 The `global_outbound_http_timeout_ms` acts as an upper bound for all more specific timeout configurations in your system.
-Any variant-level timeouts (e.g., `timeouts.non_streaming.total_ms`, `timeouts.streaming.ttft_ms`), provider-level timeouts, or embedding model timeouts must be less than or equal to this global timeout.
+Any variant-level timeouts (e.g., `timeouts.non_streaming.total_ms`, `timeouts.streaming.ttft_ms`, `timeouts.streaming.total_ms`), provider-level timeouts, or embedding model timeouts must be less than or equal to this global timeout.
 
 <Warning>
 
@@ -178,19 +196,19 @@ Setting this value too low may cause legitimate requests to timeout before recei
 
 </Warning>
 
-### `metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`
+### `metrics.tensorzero_inference_latency_overhead_seconds_buckets`
 
 - **Type:** array of floats
-- **Required:** no (default: disabled)
+- **Required:** no (default: `[0.001, 0.01, 0.1]`)
 
-Enable the `tensorzero_inference_latency_overhead_seconds_histogram` Prometheus metric with the specified histogram buckets.
+Configures the histogram buckets for the `tensorzero_inference_latency_overhead_seconds` Prometheus metric.
 This metric tracks the latency overhead introduced by TensorZero on HTTP requests.
 
 The buckets must be in strictly ascending order and contain at least one value.
 
 ```toml title="tensorzero.toml"
 [gateway.metrics]
-tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
+tensorzero_inference_latency_overhead_seconds_buckets = [0.001, 0.005, 0.01, 0.05, 0.1]
 ```
 
 See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
@@ -227,6 +245,7 @@ The `batch_writes` object supports the following fields:
 - `enabled` (boolean): Must be set to `true` to enable batch writes
 - `flush_interval_ms` (integer, optional): Maximum time in milliseconds to wait before flushing a batch (default: `100`)
 - `max_rows` (integer, optional): Maximum number of rows to collect before flushing a batch (default: `1000`)
+- `max_rows_postgres` (integer, optional): Maximum number of rows to collect before flushing a Postgres batch (default: `max_rows`)
 
 ```toml tensorzero.toml
 [gateway]
@@ -396,14 +415,18 @@ The edge gateway must have the necessary provider credentials configured to make
 
 The `timeouts` object allows you to set granular timeouts for requests to this model.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [models.model_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -430,6 +453,24 @@ routing = ["openai", "azure"]
 # ...
 
 [models.gpt-4o.providers.azure]
+# ...
+```
+
+### `discard_unknown_chunks`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+When set to `true`, the gateway will silently discard streaming chunks with unknown or unsupported types instead of forwarding them.
+A warning is emitted for each discarded chunk.
+
+By default (`false`), unknown chunks are forwarded in the stream as-is.
+This is useful when a model provider introduces new chunk types that TensorZero doesn't yet support, and you'd prefer to drop them rather than receive unrecognized data.
+
+```toml title="tensorzero.toml"
+[models.my-model.providers.my-provider]
+# ...
+discard_unknown_chunks = true
 # ...
 ```
 
@@ -562,14 +603,18 @@ Intelligence-Level: AGI
 
 The `timeouts` object allows you to set granular timeouts for individual requests to a model provider.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [models.model_name.providers.provider_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -578,7 +623,7 @@ If you're using an advanced variant type that performs multiple requests, the ti
 If you've defined retries and fallbacks, the timeout will apply to each retry and fallback separately.
 This setting is particularly useful if you'd like to retry or fallback on a request that's taking too long.
 
-You can also set timeouts at the model level and provider level.
+You can also set timeouts at the model level and variant level.
 Multiple timeouts can be active simultaneously.
 
 Separately, you can set a global timeout for the entire inference request using the TensorZero client's `timeout` field (or simply killing the request if you're using a different client).
@@ -657,23 +702,27 @@ api_base = "https://example.com/v1/messages"
 # ...
 ```
 
-##### `beta_structured_outputs`
+##### `provider_tools`
 
-- **Type:** boolean
-- **Required:** no (default: `false`)
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
 
-Enables strict validation for tool parameters when using tools with `strict = true`.
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., Anthropic's web search tool).
 
-When enabled:
+Each object in the array should contain the provider-specific tool configuration as defined by Anthropic's API.
 
-- Adds the `anthropic-beta: structured-outputs-2025-11-13` header to requests
-- For tools with `strict = true`, forwards the `strict` parameter to enable strict validation
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
 
-<Note>
-
-For JSON functions with `json_mode = "strict"`, TensorZero automatically uses Anthropic's structured outputs feature without this setting. This setting is only needed for strict tool parameter validation.
-
-</Note>
+```toml title="tensorzero.toml"
+[models.claude-sonnet-4-5.providers.anthropic]
+# ...
+type = "anthropic"
+model_name = "claude-sonnet-4-5"
+provider_tools = [{type = "web_search_20250305", name = "web_search"}]
+# ...
+```
 
 </Accordion>
 
@@ -692,7 +741,28 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-When specified, `secret_access_key` must also be provided. Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+When specified, `secret_access_key` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
+You can't combine this field with `api_key`.
+
+##### `api_key`
+
+- **Type:** string
+- **Required:** no
+
+API key for bearer token authentication. When set, TensorZero uses `Authorization: Bearer <token>` instead of AWS SigV4 signing.
+
+The supported locations are:
+
+- `env::VAR_NAME` - read from environment variable at startup
+- `dynamic::key_name` - resolve at request time from `credentials` field
+
+If neither `api_key` nor IAM credentials are configured, TensorZero checks for `AWS_BEARER_TOKEN_BEDROCK` environment variable first.
+If found, it uses bearer token authentication.
+Otherwise, it falls back to the AWS SDK credential chain.
+
+You can't combine this field with IAM credentials like `access_key_id`.
 
 ##### `endpoint_url`
 
@@ -804,6 +874,11 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
+When specified, `access_key_id` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
+You can't combine this field with `api_key`.
+
 ##### `session_token`
 
 - **Type:** string
@@ -817,7 +892,10 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-Must use the same source type as `access_key_id` and `secret_access_key`.
+When specified, `access_key_id` and `secret_access_key` must also be provided.
+All three fields must use the same source type (all `env::`, all `dynamic::`, or all `sdk`).
+
+You can't combine this field with `api_key`.
 
 </Accordion>
 
@@ -836,7 +914,8 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-When specified, `secret_access_key` must also be provided. Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+When specified, `secret_access_key` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
 
 ##### `endpoint_name`
 
@@ -971,6 +1050,9 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
+When specified, `access_key_id` must also be provided.
+Both fields must use the same source type (both `env::`, both `dynamic::`, or both `sdk`).
+
 ##### `session_token`
 
 - **Type:** string
@@ -984,7 +1066,8 @@ The supported locations are:
 - `dynamic::key_name` - resolve at request time from `credentials` field
 - `sdk` - use AWS SDK default credential chain
 
-Must use the same source type as `access_key_id` and `secret_access_key`.
+When specified, `access_key_id` and `secret_access_key` must also be provided.
+All three fields must use the same source type (all `env::`, all `dynamic::`, or all `sdk`).
 
 </Accordion>
 
@@ -1007,7 +1090,7 @@ The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
 api_key_location = "dynamic::azure_api_key"
@@ -1026,10 +1109,10 @@ Defines the deployment ID of the Azure OpenAI deployment.
 See <a href="https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models" target="_blank">Azure OpenAI's documentation</a> for the list of available models.
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
+deployment_id = "gpt-5-mini"
 # ...
 ```
 
@@ -1041,7 +1124,7 @@ deployment_id = "gpt4o-mini-20240718"
 Defines the endpoint of the Azure OpenAI deployment (protocol and hostname).
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
 endpoint = "https://<your-endpoint>.openai.azure.com"
@@ -1222,6 +1305,30 @@ project_id = "your-project-id"
 # ...
 ```
 
+##### `provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., Anthropic's web search tool).
+
+Each object in the array should contain the provider-specific tool configuration as defined by Anthropic's API.
+
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
+
+```toml title="tensorzero.toml"
+[models.claude-sonnet-4-5.providers.gcp_vertex]
+# ...
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "your-project-id"
+provider_tools = [{type = "web_search_20250305", name = "web_search"}]
+# ...
+```
+
 </Accordion>
 
 <Accordion title='type: "gcp_vertex_gemini"'>
@@ -1391,6 +1498,24 @@ model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 # ...
 ```
 
+##### `reasoning_format`
+
+- **Type:** string
+- **Required:** no (default: none)
+
+When set to `"parsed"`, Groq will return structured reasoning content (thinking) separately from the main response.
+This should only be set for reasoning models that support the `reasoning_format` parameter (e.g. `qwen/qwen3-32b`).
+Non-reasoning models will reject requests with this parameter.
+
+```toml title="tensorzero.toml"
+[models.qwen3_32b.providers.groq]
+# ...
+type = "groq"
+model_name = "qwen/qwen3-32b"
+reasoning_format = "parsed"
+# ...
+```
+
 </Accordion>
 
 <Accordion title='type: "hyperbolic"'>
@@ -1472,6 +1597,23 @@ See [Mistral's documentation](https://docs.mistral.ai/getting-started/models/) f
 # ...
 type = "mistral"
 model_name = "open-mistral-nemo-2407"
+# ...
+```
+
+##### `prompt_mode`
+
+- **Type:** string
+- **Required:** no
+
+Controls reasoning behavior for Mistral's Magistral reasoning models.
+Set to `"reasoning"` to enable reasoning output with models like `magistral-small-latest` and `magistral-medium-latest`.
+
+```toml title="tensorzero.toml"
+[models.magistral_small.providers.mistral]
+# ...
+type = "mistral"
+model_name = "magistral-small-latest"
+prompt_mode = "reasoning"
 # ...
 ```
 
@@ -1979,6 +2121,29 @@ extra_body = [
 ]
 ```
 
+### `extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_headers` field allows you to set or overwrite the request headers that TensorZero sends to an embedding model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `name` (string): The name of the header to modify
+- One of the following:
+  - `value` (string): The value of the header
+  - `delete = true`: Deletes the header from the request, if present
+
+```toml title="tensorzero.toml"
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+type = "openai"
+extra_headers = [
+  { name = "X-Custom-Header", value = "custom-value" }
+]
+```
+
 ### `timeout_ms`
 
 - **Type:** integer
@@ -2214,9 +2379,7 @@ credential_location = "dynamic::gcp_credentials_path"
 - **Type:** object
 - **Required:** no (default: `null`)
 
-The `batch` object allows you to configure batch processing for GCP Vertex models.
-Today we support batch inference through GCP Vertex using Google cloud storage as documented [here](https://cloud.google.com/vertex-ai/docs/tabular-data/classification-regression/get-batch-predictions#api:-cloud-storage).
-To do this you must also have object_storage (see the [object_storage](#object_storage) section) configured using GCP.
+The `batch` object allows you to configure [batch inference](/gateway/guides/batch-inference/) for GCP Vertex Gemini models using Google Cloud Storage.
 
 ```toml title="tensorzero.toml"
 [provider_types.gcp_vertex_gemini.batch]
@@ -2590,9 +2753,8 @@ assistant_template = "./functions/draft-email/prompt-v1/assistant_template.minij
 - **Type:** string
 - **Required:** no
 
-Defines a description of the function.
-
-In the future, this description will inform automated optimization recipes.
+An optional description of the function.
+It helps TensorZero Autopilot understand the intent behind the function.
 
 ```toml title="tensorzero.toml"
 [functions.extract_data]
@@ -3123,6 +3285,7 @@ presence_penalty = 0.5
 
 Controls the reasoning effort level for reasoning models.
 
+For Anthropic, this enables adaptive thinking (`thinking.type: "adaptive"`) with the specified effort level via `output_config.effort`.
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingLevel`.
 
 <Warning>
@@ -3131,11 +3294,11 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
-<Tip>
+<Warning>
 
-Some providers (e.g. Anthropic) support `thinking_budget_tokens` instead.
+For Anthropic, `reasoning_effort` and `thinking_budget_tokens` are mutually exclusive. Use `reasoning_effort` for adaptive thinking or `thinking_budget_tokens` for manual thinking.
 
-</Tip>
+</Warning>
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3246,7 +3409,7 @@ temperature = 0.5
 
 Controls the thinking budget in tokens for reasoning models.
 
-For Anthropic, this value corresponds to `thinking.budget_tokens`.
+For Anthropic, this value corresponds to `thinking.budget_tokens` (manual thinking mode with `thinking.type: "enabled"`).
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingBudget`.
 
 <Warning>
@@ -3255,9 +3418,15 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
+<Warning>
+
+For Anthropic, `thinking_budget_tokens` and `reasoning_effort` are mutually exclusive. Use `thinking_budget_tokens` for manual thinking or `reasoning_effort` for adaptive thinking.
+
+</Warning>
+
 <Tip>
 
-Some providers (e.g. OpenAI) support `reasoning_effort` instead.
+Some providers (e.g. OpenAI) support `reasoning_effort` instead. For Anthropic, both `reasoning_effort` and `thinking_budget_tokens` are supported but cannot be used together.
 
 </Tip>
 
@@ -3275,14 +3444,18 @@ thinking_budget_tokens = 10000
 
 The `timeouts` object allows you to set granular timeouts for requests using this variant.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [functions.function_name.variants.variant_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -3409,14 +3582,18 @@ type = "experimental_best_of_n"
 
 The `timeouts` object allows you to set granular timeouts for requests using this variant.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [functions.function_name.variants.variant_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -3483,14 +3660,18 @@ type = "experimental_mixture_of_n"
 
 The `timeouts` object allows you to set granular timeouts for requests using this variant.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [functions.function_name.variants.variant_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -3883,14 +4064,18 @@ temperature = 0.5
 
 The `timeouts` object allows you to set granular timeouts for requests using this variant.
 
-You can define timeouts for non-streaming and streaming requests separately: `timeouts.non_streaming.total_ms` corresponds to the total request duration and `timeouts.streaming.ttft_ms` corresponds to the time to first token (TTFT).
+You can define timeouts for non-streaming and streaming requests separately:
 
-For example, the following configuration sets a 15-second timeout for non-streaming requests and a 3-second timeout for streaming requests (TTFT):
+- `timeouts.non_streaming.total_ms` — the total time allowed for a non-streaming request.
+- `timeouts.streaming.ttft_ms` — the time allowed to receive the first token (TTFT) in a streaming request.
+- `timeouts.streaming.total_ms` — the total time allowed for the entire streaming request (measured from request start).
+
+For example, the following configuration sets a 15-second timeout for non-streaming requests, a 3-second TTFT timeout, and a 60-second total timeout for streaming requests:
 
 ```toml
 [functions.function_name.variants.variant_name]
 # ...
-timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
+timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000, streaming.total_ms = 60000 }
 # ...
 ```
 
@@ -4293,6 +4478,21 @@ For example, periods are not allowed in basic strings, so you can define `beats-
 # ...
 ```
 
+### `description`
+
+- **Type:** string
+- **Required:** no
+
+An optional description of the metric.
+It helps TensorZero Autopilot understand the intent behind the metric.
+
+```toml title="tensorzero.toml"
+[metrics.task-completed]
+# ...
+description = "Whether the task was completed successfully"
+# ...
+```
+
 ### `level`
 
 - **Type:** string
@@ -4542,30 +4742,30 @@ There are no additional fields available for this type.
 
 ## `[postgres]`
 
-The `[postgres]` section defines the configuration for PostgreSQL connectivity.
+The `[postgres]` section defines the configuration for Postgres connectivity.
 
-PostgreSQL is required for certain TensorZero features including [adaptive experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
-PostgreSQL can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey-redis) is recommended for high-throughput deployments.
-You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environment variable.
+Postgres is required for certain TensorZero features including [adaptive experimentation](/experimentation/run-adaptive-ab-tests/) and [authentication](/operations/set-up-auth-for-tensorzero).
+Postgres can also be used for [rate limiting](/operations/enforce-custom-rate-limits/), though [Valkey](/deployment/valkey-redis) is recommended for high-throughput deployments.
+You can connect to Postgres by setting the `TENSORZERO_POSTGRES_URL` environment variable.
 
 ### `connection_pool_size`
 
 - **Type:** integer
 - **Required:** no (default: `20`)
 
-Defines the maximum number of connections in the PostgreSQL connection pool.
+Defines the maximum number of connections in the Postgres connection pool.
 
 ### `enabled`
 
 - **Type:** boolean
 - **Required:** no (default: `null`)
 
-Enable PostgreSQL connectivity.
-If `true`, the gateway will throw an error on startup if it fails to connect to PostgreSQL (requires `TENSORZERO_POSTGRES_URL` environment variable).
-If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
-If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
+Enable Postgres connectivity.
+If `true`, the gateway will throw an error on startup if it fails to connect to Postgres (requires `TENSORZERO_POSTGRES_URL` environment variable).
+If `false`, the gateway will not use Postgres even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
+If omitted, the gateway will connect to Postgres if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable Postgres with a warning.
 
-If you have features that require PostgreSQL (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
+If you have features that require Postgres (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
 
 ## `[rate_limiting]`
 

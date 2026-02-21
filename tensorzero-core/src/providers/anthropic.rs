@@ -131,7 +131,6 @@ pub struct AnthropicProvider {
     api_base: Option<Url>,
     #[serde(skip)]
     credentials: AnthropicCredentials,
-    beta_structured_outputs: bool,
     provider_tools: Vec<Value>,
 }
 
@@ -140,7 +139,6 @@ impl AnthropicProvider {
         model_name: String,
         api_base: Option<Url>,
         credentials: AnthropicCredentials,
-        beta_structured_outputs: bool,
         provider_tools: Vec<Value>,
     ) -> Self {
         // Check and normalize api_base if provided
@@ -153,7 +151,6 @@ impl AnthropicProvider {
             model_name,
             api_base: normalized_api_base,
             credentials,
-            beta_structured_outputs,
             provider_tools,
         }
     }
@@ -281,13 +278,7 @@ impl InferenceProvider for AnthropicProvider {
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(
-            AnthropicRequestBody::new(
-                &self.model_name,
-                request,
-                self.beta_structured_outputs,
-                &all_provider_tools,
-            )
-            .await?,
+            AnthropicRequestBody::new(&self.model_name, request, &all_provider_tools).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -303,20 +294,14 @@ impl InferenceProvider for AnthropicProvider {
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_url = self.messages_url()?;
-        let mut builder = http_client
+        let builder = http_client
             .post(request_url.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
-        // Add beta header for json_mode=strict (for output_format) OR beta_structured_outputs (for strict tools)
-        if matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict)
-            || self.beta_structured_outputs
-        {
-            builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
-        }
-
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -336,6 +321,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
@@ -348,6 +334,7 @@ impl InferenceProvider for AnthropicProvider {
                         DisplayOrDebugGateway::new(e)
                     ),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
                 })
@@ -371,11 +358,17 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error fetching response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
-            handle_anthropic_error(response_code, raw_request, response_text)
+            handle_anthropic_error(
+                response_code,
+                raw_request,
+                response_text,
+                ApiType::ChatCompletions,
+            )
         }
     }
 
@@ -396,13 +389,7 @@ impl InferenceProvider for AnthropicProvider {
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
         let request_body = serde_json::to_value(
-            AnthropicRequestBody::new(
-                &self.model_name,
-                request,
-                self.beta_structured_outputs,
-                &all_provider_tools,
-            )
-            .await?,
+            AnthropicRequestBody::new(&self.model_name, request, &all_provider_tools).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -415,20 +402,14 @@ impl InferenceProvider for AnthropicProvider {
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
         let request_url = self.messages_url()?;
-        let mut builder = http_client
+        let builder = http_client
             .post(request_url.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
-        // Add beta header for json_mode=strict (for output_format) OR beta_structured_outputs (for strict tools)
-        if matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict)
-            || self.beta_structured_outputs
-        {
-            builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
-        }
-
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -447,7 +428,13 @@ impl InferenceProvider for AnthropicProvider {
             model_inference_id,
         )
         .peekable();
-        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
+        let chunk = peek_first_chunk(
+            &mut stream,
+            &raw_request,
+            PROVIDER_TYPE,
+            ApiType::ChatCompletions,
+        )
+        .await?;
         if needs_json_prefill(request) {
             prefill_json_chunk_response(chunk);
         }
@@ -502,7 +489,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), *e, None).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), ApiType::ChatCompletions, *e, None).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -514,6 +501,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                api_type: ApiType::ChatCompletions,
                                 raw_request: Some(raw_request.to_string()),
                                 raw_response: Some(message.data.clone()),
                             }));
@@ -621,13 +609,13 @@ pub(super) struct AnthropicFunctionTool<'a> {
 }
 
 impl<'a> AnthropicFunctionTool<'a> {
-    pub fn new(tool: &'a FunctionToolConfig, beta_structured_outputs: bool) -> Self {
+    pub fn new(tool: &'a FunctionToolConfig, supports_strict_mode: bool) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
         Self {
             name: tool.name(),
             description: Some(tool.description()),
             input_schema: tool.parameters(),
-            strict: beta_structured_outputs.then_some(tool.strict()),
+            strict: supports_strict_mode.then_some(tool.strict()),
         }
     }
 }
@@ -648,7 +636,7 @@ pub(super) enum AnthropicTool<'a> {
 pub(super) fn build_anthropic_tools<'a>(
     tool_config: Option<&'a Cow<'a, ToolCallConfig>>,
     provider_tools: &'a [Value],
-    beta_structured_outputs: bool,
+    supports_strict_mode: bool,
 ) -> Result<Option<Vec<AnthropicTool<'a>>>, Error> {
     // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
     // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
@@ -661,10 +649,7 @@ pub(super) fn build_anthropic_tools<'a>(
             let mut all_tools: Vec<AnthropicTool<'a>> = c
                 .strict_tools_available()?
                 .map(|tool| {
-                    AnthropicTool::Function(AnthropicFunctionTool::new(
-                        tool,
-                        beta_structured_outputs,
-                    ))
+                    AnthropicTool::Function(AnthropicFunctionTool::new(tool, supports_strict_mode))
                 })
                 .collect();
             all_tools.extend(provider_tools.iter().map(AnthropicTool::Provider));
@@ -744,6 +729,7 @@ impl<'a> AnthropicMessageContent<'a> {
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: provider_type.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     })
@@ -754,6 +740,7 @@ impl<'a> AnthropicMessageContent<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: provider_type.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     }));
@@ -901,9 +888,15 @@ pub(super) enum AnthropicSystemBlock<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct AnthropicThinkingConfig {
-    r#type: &'static str,
-    budget_tokens: i32,
+#[serde(untagged)]
+enum AnthropicThinkingConfig {
+    Enabled {
+        r#type: &'static str,
+        budget_tokens: i32,
+    },
+    Adaptive {
+        r#type: &'static str,
+    },
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -911,6 +904,14 @@ struct AnthropicThinkingConfig {
 #[serde(rename_all = "snake_case")]
 pub enum AnthropicOutputFormat {
     JsonSchema { schema: Value },
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct AnthropicOutputConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<AnthropicOutputFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effort: Option<String>,
 }
 
 #[derive(Debug, Default, PartialEq, Serialize)]
@@ -921,7 +922,7 @@ struct AnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    output_format: Option<AnthropicOutputFormat>,
+    output_config: Option<AnthropicOutputConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     // This is the system message
     system: Option<Vec<AnthropicSystemBlock<'a>>>,
@@ -958,7 +959,6 @@ impl<'a> AnthropicRequestBody<'a> {
     async fn new(
         model_name: &'a str,
         request: &'a ModelInferenceRequest<'_>,
-        beta_structured_outputs: bool,
         provider_tools: &'a [Value],
     ) -> Result<AnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
@@ -988,11 +988,7 @@ impl<'a> AnthropicRequestBody<'a> {
             messages
         };
 
-        let tools = build_anthropic_tools(
-            request.tool_config.as_ref(),
-            provider_tools,
-            beta_structured_outputs,
-        )?;
+        let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools, true)?;
 
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
@@ -1019,21 +1015,21 @@ impl<'a> AnthropicRequestBody<'a> {
             service_tier: None, // handled below
             tool_choice,
             tools,
-            // Always use output_format for json_mode=strict (not gated by beta_structured_outputs)
-            output_format: match request.json_mode {
+            output_config: match request.json_mode {
                 ModelInferenceRequestJsonMode::Strict => {
-                    request
-                        .output_schema
-                        .map(|schema| AnthropicOutputFormat::JsonSchema {
+                    request.output_schema.map(|schema| AnthropicOutputConfig {
+                        format: Some(AnthropicOutputFormat::JsonSchema {
                             schema: schema.clone(),
-                        })
+                        }),
+                        effort: None,
+                    })
                 }
                 ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
             },
             stop_sequences: request.borrow_stop_sequences(),
         };
 
-        apply_inference_params(&mut anthropic_request, &request.inference_params_v2);
+        apply_inference_params(&mut anthropic_request, &request.inference_params_v2)?;
 
         Ok(anthropic_request)
     }
@@ -1042,7 +1038,7 @@ impl<'a> AnthropicRequestBody<'a> {
 fn apply_inference_params(
     request: &mut AnthropicRequestBody,
     inference_params: &ChatCompletionInferenceParamsV2,
-) {
+) -> Result<(), Error> {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
         service_tier,
@@ -1050,12 +1046,26 @@ fn apply_inference_params(
         verbosity,
     } = inference_params;
 
-    if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(
-            PROVIDER_NAME,
-            "reasoning_effort",
-            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
-        );
+    if reasoning_effort.is_some() && thinking_budget_tokens.is_some() {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "Cannot specify both `reasoning_effort` and `thinking_budget_tokens` for Anthropic. Use `reasoning_effort` for adaptive thinking or `thinking_budget_tokens` for manual thinking.".to_string(),
+        }
+        .into());
+    }
+
+    if let Some(effort) = reasoning_effort {
+        request.thinking = Some(AnthropicThinkingConfig::Adaptive { r#type: "adaptive" });
+        match &mut request.output_config {
+            Some(config) => {
+                config.effort = Some(effort.clone());
+            }
+            None => {
+                request.output_config = Some(AnthropicOutputConfig {
+                    format: None,
+                    effort: Some(effort.clone()),
+                });
+            }
+        }
     }
 
     // Map service_tier values to Anthropic-compatible values
@@ -1074,7 +1084,7 @@ fn apply_inference_params(
     }
 
     if let Some(budget_tokens) = thinking_budget_tokens {
-        request.thinking = Some(AnthropicThinkingConfig {
+        request.thinking = Some(AnthropicThinkingConfig::Enabled {
             r#type: "enabled",
             budget_tokens: *budget_tokens,
         });
@@ -1083,6 +1093,8 @@ fn apply_inference_params(
     if verbosity.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
+
+    Ok(())
 }
 
 /// Returns the default max_tokens for a given Anthropic model name, or an error if unknown.
@@ -1101,6 +1113,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
         || model_name == "claude-sonnet-4-0"
         || model_name.starts_with("claude-haiku-4-5")
         || model_name.starts_with("claude-sonnet-4-5")
+        || model_name.starts_with("claude-sonnet-4-6")
         || model_name.starts_with("claude-opus-4-5")
     {
         Ok(64_000)
@@ -1117,6 +1130,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
             ),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }))
@@ -1220,6 +1234,7 @@ fn convert_to_output(
                             DisplayOrDebugGateway::new(e)
                         ),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                         raw_request: None,
                         raw_response: Some(serde_json::to_string(&input).unwrap_or_default()),
                     })
@@ -1404,6 +1419,7 @@ pub(super) fn handle_anthropic_error(
     response_code: StatusCode,
     raw_request: String,
     raw_response: String,
+    api_type: ApiType,
 ) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
@@ -1412,6 +1428,7 @@ pub(super) fn handle_anthropic_error(
         | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
             raw_request: Some(raw_request),
             raw_response: Some(raw_response.clone()),
             message: raw_response,
@@ -1423,6 +1440,7 @@ pub(super) fn handle_anthropic_error(
             raw_response: Some(raw_response.clone()),
             message: raw_response,
             provider_type: PROVIDER_TYPE.to_string(),
+            api_type,
             raw_request: Some(raw_request),
         }
         .into()),
@@ -1520,6 +1538,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                         "Got InputJsonDelta chunk from Anthropic for index {index} without a preceding ToolUse ContentBlockStart"
                     ),
                     provider_type: provider_type.to_string(),
+                    api_type: ApiType::ChatCompletions,
                     raw_request: None,
                     raw_response: None,
                 }))?;
@@ -1643,6 +1662,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
             provider_type: provider_type.to_string(),
+            api_type: ApiType::ChatCompletions,
             raw_request: None,
             raw_response: None,
         }
@@ -1883,14 +1903,14 @@ mod tests {
             parameters: JSONSchema::compile_background(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool, false);
+        let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool, true);
         assert_eq!(
             anthropic_tool,
             AnthropicFunctionTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
-                strict: None,
+                strict: Some(false),
             }
         );
     }
@@ -2045,7 +2065,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false, &[]).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         let error = anthropic_request_body.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -2079,7 +2099,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false, &[]).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -2135,7 +2155,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false, &[]).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -2205,7 +2225,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false, &[]).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         assert!(anthropic_request_body.is_ok());
         // Convert messages asynchronously
         let expected_messages = try_join_all(inference_request.messages.iter().map(|m| {
@@ -2265,7 +2285,7 @@ mod tests {
             ..Default::default()
         };
         let anthropic_request_body =
-            AnthropicRequestBody::new(&model, &inference_request, false, &[]).await;
+            AnthropicRequestBody::new(&model, &inference_request, &[]).await;
         assert!(anthropic_request_body.is_ok());
         let result = anthropic_request_body.unwrap();
         assert_eq!(result.messages.len(), 3); // Original 2 messages + JSON prefill
@@ -2323,105 +2343,105 @@ mod tests {
         };
 
         let model = "claude-opus-4-1-20250805".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-20250219".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-1".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku-20240307".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-haiku-4-5-20251001".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-5-20250929".to_string();
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-ballad-latest".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-4-5-haiku-20260101".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false, &[]).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
     }
 
@@ -2432,6 +2452,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2441,6 +2462,7 @@ mod tests {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
             }
@@ -2450,6 +2472,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2459,6 +2482,7 @@ mod tests {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
             }
@@ -2468,6 +2492,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2477,6 +2502,7 @@ mod tests {
                 message: "raw response".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
             }
@@ -2486,6 +2512,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2496,6 +2523,7 @@ mod tests {
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
@@ -2503,6 +2531,7 @@ mod tests {
             response_code,
             "raw request".to_string(),
             "raw response".to_string(),
+            ApiType::ChatCompletions,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2513,6 +2542,7 @@ mod tests {
                 raw_request: Some("raw request".to_string()),
                 raw_response: Some("raw response".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
     }
@@ -2851,6 +2881,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
 
@@ -3000,6 +3031,7 @@ mod tests {
                 raw_request: None,
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
         );
 
@@ -3183,7 +3215,6 @@ mod tests {
             "claude".to_string(),
             Some(custom_url.clone()),
             AnthropicCredentials::None,
-            false,
             vec![],
         );
 
@@ -3205,7 +3236,6 @@ mod tests {
             "claude".to_string(),
             None,
             AnthropicCredentials::None,
-            false,
             vec![],
         );
 
@@ -3329,7 +3359,6 @@ mod tests {
             "claude".to_string(),
             Some(url_with_messages),
             AnthropicCredentials::None,
-            false,
             vec![],
         );
 
@@ -3601,10 +3630,10 @@ mod tests {
     }
 
     #[test]
-    fn test_anthropic_apply_inference_params_called() {
+    fn test_anthropic_apply_inference_params_thinking_budget_tokens() {
         let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
-            reasoning_effort: Some("high".to_string()),
+            reasoning_effort: None,
             service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
@@ -3616,26 +3645,123 @@ mod tests {
             ..Default::default()
         };
 
-        apply_inference_params(&mut request, &inference_params);
-
-        // Test that reasoning_effort warns with tip about thinking_budget_tokens
-        assert!(logs_contain(
-            "Anthropic does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
-        ));
+        apply_inference_params(&mut request, &inference_params).unwrap();
 
         // Test that thinking_budget_tokens is applied correctly
         assert_eq!(
             request.thinking,
-            Some(AnthropicThinkingConfig {
+            Some(AnthropicThinkingConfig::Enabled {
                 r#type: "enabled",
                 budget_tokens: 1024,
-            })
+            }),
+            "thinking_budget_tokens should set enabled thinking mode"
         );
 
         // Test that verbosity warns
-        assert!(logs_contain(
-            "Anthropic does not support the inference parameter `verbosity`"
-        ));
+        assert!(
+            logs_contain("Anthropic does not support the inference parameter `verbosity`"),
+            "verbosity should produce a warning"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_apply_inference_params_reasoning_effort() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("low".to_string()),
+            service_tier: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+        };
+        let mut request = AnthropicRequestBody {
+            model: "claude-sonnet-4-6",
+            messages: vec![],
+            max_tokens: 2048,
+            ..Default::default()
+        };
+
+        apply_inference_params(&mut request, &inference_params).unwrap();
+
+        // Test that reasoning_effort sets adaptive thinking
+        assert_eq!(
+            request.thinking,
+            Some(AnthropicThinkingConfig::Adaptive { r#type: "adaptive" }),
+            "reasoning_effort should set adaptive thinking mode"
+        );
+
+        // Test that output_config has the effort value
+        assert_eq!(
+            request.output_config,
+            Some(AnthropicOutputConfig {
+                format: None,
+                effort: Some("low".to_string()),
+            }),
+            "reasoning_effort should set effort in output_config"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_apply_inference_params_reasoning_effort_with_json_strict() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("medium".to_string()),
+            service_tier: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+        };
+        // Simulate a request that already has output_config set from JSON strict mode
+        let mut request = AnthropicRequestBody {
+            model: "claude-sonnet-4-6",
+            messages: vec![],
+            max_tokens: 2048,
+            output_config: Some(AnthropicOutputConfig {
+                format: Some(AnthropicOutputFormat::JsonSchema {
+                    schema: serde_json::json!({"type": "object"}),
+                }),
+                effort: None,
+            }),
+            ..Default::default()
+        };
+
+        apply_inference_params(&mut request, &inference_params).unwrap();
+
+        // Test that both format and effort are set
+        assert_eq!(
+            request.output_config,
+            Some(AnthropicOutputConfig {
+                format: Some(AnthropicOutputFormat::JsonSchema {
+                    schema: serde_json::json!({"type": "object"}),
+                }),
+                effort: Some("medium".to_string()),
+            }),
+            "reasoning_effort should merge effort into existing output_config with format"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_apply_inference_params_mutual_exclusivity() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            service_tier: None,
+            thinking_budget_tokens: Some(1024),
+            verbosity: None,
+        };
+        let mut request = AnthropicRequestBody {
+            model: "claude-sonnet-4-6",
+            messages: vec![],
+            max_tokens: 2048,
+            ..Default::default()
+        };
+
+        let result = apply_inference_params(&mut request, &inference_params);
+        assert!(
+            result.is_err(),
+            "should error when both reasoning_effort and thinking_budget_tokens are provided"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Cannot specify both `reasoning_effort` and `thinking_budget_tokens`"),
+            "error message should mention mutual exclusivity"
+        );
     }
 
     #[tokio::test]
@@ -3691,7 +3817,7 @@ mod tests {
         let tools: Vec<AnthropicFunctionTool> = tool_config
             .strict_tools_available()
             .unwrap()
-            .map(|tool| AnthropicFunctionTool::new(tool, false))
+            .map(|tool| AnthropicFunctionTool::new(tool, true))
             .collect();
 
         // Verify only the allowed tool is included

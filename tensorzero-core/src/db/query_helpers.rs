@@ -1,4 +1,7 @@
-use crate::error::Error;
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+
+use crate::error::{Error, ErrorDetails};
 
 /// Escapes a string for JSON, without the surrounding quotes.
 ///
@@ -19,6 +22,21 @@ pub fn json_escape_string_without_quotes(s: &str) -> Result<String, Error> {
 pub fn json_double_escape_string_without_quotes(s: &str) -> Result<String, Error> {
     let json_escaped = json_escape_string_without_quotes(s)?;
     json_escape_string_without_quotes(&json_escaped)
+}
+
+/// Converts a UUIDv7 to a DateTime<Utc> by extracting its embedded timestamp.
+pub fn uuid_to_datetime(uuid: Uuid) -> Result<DateTime<Utc>, Error> {
+    let timestamp = uuid.get_timestamp().ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidUuid {
+            raw_uuid: uuid.to_string(),
+        })
+    })?;
+    let (secs, nanos) = timestamp.to_unix();
+    DateTime::from_timestamp(secs as i64, nanos).ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidUuid {
+            raw_uuid: uuid.to_string(),
+        })
+    })
 }
 
 #[cfg(test)]

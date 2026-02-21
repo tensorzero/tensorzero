@@ -95,18 +95,18 @@ services:
         condition: service_healthy
 
   ui:
-    image: tensorzero/ui
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
+    command: --config-file /app/config/tensorzero.toml
+    volumes:
+      - ./config:/app/config
+    image: tensorzero/ui
     env_file:
       - ${ENV_FILE:-.env}
     ports:
       - "4000:4000"
     depends_on:
-      clickhouse:
-        condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
       gateway:

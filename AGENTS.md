@@ -4,6 +4,7 @@
 - If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` (from root), then rebuild the NAPI bindings with `pnpm --filter=tensorzero-node build`. Run `cargo check` first to catch compilation errors.
 - If you change a signature of a struct, function, and so on, use `grep` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
 - Place crate imports at the top of the file or module using `use crate::...`. Avoid imports inside functions or tests. Avoid long inline crate paths.
+- Run tests with `cargo nextest`.
 - Once you're done with your work, make sure to:
   - Run `cargo fmt`.
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
@@ -36,7 +37,8 @@
   - Use `QueryBuilder` only when the query structure is dynamic (e.g., optional WHERE clauses, dynamic table names, conditional JOINs, pagination with optional before/after).
   - For columns that sqlx infers as nullable but are guaranteed non-null by your query logic, use type overrides: `SELECT column as "column!"` to get a non-optional type.
   - For aggregates that should be non-null, use the same pattern: `SELECT COUNT(*)::BIGINT as "total!"`.
-- After adding or modifying `sqlx::query!` / `sqlx::query_as!` / `sqlx::query_scalar!` macros, run `cargo sqlx prepare --workspace` to regenerate the query cache. This requires a running Postgres database with up-to-date migrations. The generated `.sqlx` directory must be committed to version control.
+- After adding or modifying `sqlx::query!` / `sqlx::query_as!` / `sqlx::query_scalar!` macros, run `cargo sqlx prepare --workspace -- --all-features --all-targets` to regenerate the query cache. This requires a running Postgres database with up-to-date migrations. The generated `.sqlx` directory must be committed to version control.
+- Prefer "Postgres" instead of "PostgreSQL" in comments, error messages, docs, etc.
 
 # Python Dependencies
 

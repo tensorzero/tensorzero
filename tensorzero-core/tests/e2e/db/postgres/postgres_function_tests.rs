@@ -5,6 +5,75 @@ use chrono::{Days, TimeZone, Utc};
 use sqlx::QueryBuilder;
 use uuid::{NoContext, Timestamp, Uuid};
 
+/// Tests that the Postgres `uint128_to_uuid` function correctly converts a UInt128 decimal
+/// representation (as exported by ClickHouse) back to a UUID.
+///
+/// ClickHouse stores UUIDs as UInt128 internally, and when exporting to JSON/CSV, it
+/// represents them as decimal strings. This function reverses that conversion.
+#[tokio::test]
+async fn test_uint128_to_uuid_known_value() {
+    let conn = get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    // Known UUID from fixture data: 01968d04-142c-7e53-8ea7-3a3255b518dc
+    let expected_uuid = Uuid::parse_str("01968d04-142c-7e53-8ea7-3a3255b518dc").unwrap();
+
+    // Convert UUID to UInt128 decimal representation (big-endian interpretation)
+    let uint128_value = expected_uuid.as_u128();
+    let uint128_decimal = uint128_value.to_string();
+
+    // Call the Postgres function
+    let result_uuid: Uuid = sqlx::query_scalar("SELECT tensorzero.uint128_to_uuid($1::NUMERIC)")
+        .bind(&uint128_decimal)
+        .fetch_one(pool)
+        .await
+        .expect("uint128_to_uuid query should succeed");
+
+    assert_eq!(
+        result_uuid, expected_uuid,
+        "uint128_to_uuid should correctly convert UInt128 decimal back to UUID"
+    );
+}
+
+/// Tests that uint128_to_uuid works with zero.
+#[tokio::test]
+async fn test_uint128_to_uuid_zero() {
+    let conn = get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    let result_uuid: Uuid = sqlx::query_scalar("SELECT tensorzero.uint128_to_uuid(0::NUMERIC)")
+        .fetch_one(pool)
+        .await
+        .expect("uint128_to_uuid query should succeed");
+
+    assert_eq!(
+        result_uuid,
+        Uuid::nil(),
+        "uint128_to_uuid(0) should return the nil UUID"
+    );
+}
+
+/// Tests that uint128_to_uuid works with max value (all bits set).
+#[tokio::test]
+async fn test_uint128_to_uuid_max() {
+    let conn = get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    let max_uint128 = u128::MAX.to_string();
+
+    let result_uuid: Uuid = sqlx::query_scalar("SELECT tensorzero.uint128_to_uuid($1::NUMERIC)")
+        .bind(&max_uint128)
+        .fetch_one(pool)
+        .await
+        .expect("uint128_to_uuid query should succeed");
+
+    assert_eq!(
+        result_uuid,
+        Uuid::max(),
+        "uint128_to_uuid(MAX) should return the max UUID (all 1s)"
+    );
+}
+
 /// Tests that the Postgres `uuid_v7_to_timestamp` function extracts the same timestamp
 /// that Rust's `uuid` crate encodes into a UUIDv7.
 #[tokio::test]
@@ -16,8 +85,8 @@ async fn test_uuid_v7_to_timestamp() {
     let rust_uuid = Uuid::now_v7();
 
     // Extract timestamp using Postgres function
-    let (postgres_timestamp,): (chrono::DateTime<Utc>,) =
-        sqlx::query_as("SELECT tensorzero.uuid_v7_to_timestamp($1::uuid)")
+    let postgres_timestamp: chrono::DateTime<Utc> =
+        sqlx::query_scalar("SELECT tensorzero.uuid_v7_to_timestamp($1::uuid)")
             .bind(rust_uuid)
             .fetch_one(pool)
             .await
@@ -55,8 +124,8 @@ async fn test_uuid_v7_to_timestamp_known_value() {
     let rust_uuid = Uuid::new_v7(Timestamp::from_unix(NoContext, secs, nanos));
 
     // Extract timestamp using Postgres function
-    let (postgres_timestamp,): (chrono::DateTime<Utc>,) =
-        sqlx::query_as("SELECT tensorzero.uuid_v7_to_timestamp($1::uuid)")
+    let postgres_timestamp: chrono::DateTime<Utc> =
+        sqlx::query_scalar("SELECT tensorzero.uuid_v7_to_timestamp($1::uuid)")
             .bind(rust_uuid)
             .fetch_one(pool)
             .await
@@ -107,8 +176,8 @@ async fn test_create_partitions() {
         .expect("create_partitions should succeed");
 
     // Verify partitions were created for days 0..7 (8 partitions)
-    let (partition_count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
+    let partition_count: i64 = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*)::BIGINT FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
     )
     .bind(format!("{TEST_PARTITIONED_TABLE}_%"))
     .fetch_one(pool)
@@ -130,7 +199,7 @@ async fn test_create_partitions() {
             partition_date.format("%Y_%m_%d")
         );
 
-        let (exists,): (bool,) = sqlx::query_as(
+        let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename = $1)",
         )
         .bind(&expected_partition)
@@ -216,8 +285,8 @@ async fn test_drop_old_partitions() {
     }
 
     // Verify all 6 partitions exist
-    let (initial_count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
+    let initial_count: i64 = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*)::BIGINT FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
     )
     .bind(format!("{TEST_RETENTION_TABLE}_%"))
     .fetch_one(pool)
@@ -244,8 +313,8 @@ async fn test_drop_old_partitions() {
         .expect("drop_old_partitions should succeed");
 
     // Verify old partitions were dropped (only 3 recent should remain)
-    let (final_count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
+    let final_count: i64 = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*)::BIGINT FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
     )
     .bind(format!("{TEST_RETENTION_TABLE}_%"))
     .fetch_one(pool)
@@ -260,7 +329,7 @@ async fn test_drop_old_partitions() {
     // Verify the old partitions are gone
     for date in &old_dates {
         let partition_name = format!("{}_{}", TEST_RETENTION_TABLE, date.format("%Y_%m_%d"));
-        let (exists,): (bool,) = sqlx::query_as(
+        let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename = $1)",
         )
         .bind(&partition_name)
@@ -277,7 +346,7 @@ async fn test_drop_old_partitions() {
     // Verify recent partitions still exist
     for date in &recent_dates {
         let partition_name = format!("{}_{}", TEST_RETENTION_TABLE, date.format("%Y_%m_%d"));
-        let (exists,): (bool,) = sqlx::query_as(
+        let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename = $1)",
         )
         .bind(&partition_name)
@@ -372,8 +441,8 @@ async fn test_drop_old_partitions_skips_when_retention_not_configured() {
     }
 
     // Verify all 3 partitions exist before calling drop_old_partitions
-    let (initial_count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
+    let initial_count: i64 = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*)::BIGINT FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
     )
     .bind(format!("{TEST_NO_RETENTION_TABLE}_%"))
     .fetch_one(pool)
@@ -391,8 +460,8 @@ async fn test_drop_old_partitions_skips_when_retention_not_configured() {
         .expect("drop_old_partitions should succeed even without retention config");
 
     // Verify all partitions still exist (nothing was dropped)
-    let (final_count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
+    let final_count: i64 = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*)::BIGINT FROM pg_tables WHERE schemaname = 'tensorzero' AND tablename LIKE $1",
     )
     .bind(format!("{TEST_NO_RETENTION_TABLE}_%"))
     .fetch_one(pool)

@@ -1,6 +1,6 @@
 ---
 title: Set up TensorZero Autopilot
-description: Learn how to set up TensorZero Autopilot on your self-hosted TensorZero deployme.
+description: Learn how to set up TensorZero Autopilot on your self-hosted TensorZero deployment.
 ---
 
 TensorZero Autopilot is an automated AI engineer that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests.
@@ -8,7 +8,7 @@ It's an optional complementary service that runs on top of your self-hosted Tens
 
 <Note>
 
-TensorZero Autopilot is currently in a private beta. [Join the waitlist →](https://tensorzerodotcom.notion.site/2d87520bbad380c9ad0dd19566b3bc91)
+TensorZero Autopilot is currently in a private beta. [Join the waitlist →](https://www.tensorzero.com/autopilot-waitlist)
 
 </Note>
 
@@ -52,6 +52,35 @@ Learn more about how to:
 - [Deploy Postgres](/deployment/postgres)
 
 </Tip>
+
+</Step>
+
+<Step title="Allow TensorZero Autopilot to edit your local configuration (optional)">
+
+TensorZero Autopilot can edit your local TensorZero configuration.
+
+When this feature is enabled, an "Apply changes" button appears in the UI, allowing you to easily apply any configuration changes proposed by Autopilot.
+
+<Warning>
+
+We recommend enabling this feature only in a local setup.
+Do not enable this feature if the TensorZero UI is shared by multiple users.
+
+</Warning>
+
+To enable it, mount the configuration directory as a writable volume and pass the `--config-file` flag to the TensorZero UI container.
+For example:
+
+```yaml
+# ...
+ui:
+  image: tensorzero/ui
+  # ...
+  command: --config-file /app/config/tensorzero.toml
+  volumes:
+    - ./config:/app/config
+  # ...
+```
 
 </Step>
 

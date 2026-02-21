@@ -8,7 +8,7 @@ use durable_tools::{NonControlToolError, TaskTool, ToolContext, ToolMetadata, To
 
 use crate::error::AutopilotToolError;
 
-use autopilot_client::OptimizationWorkflowSideInfo;
+use autopilot_client::AutopilotSideInfo;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::db::inferences::InferenceOutputSource;
@@ -19,7 +19,9 @@ use tensorzero_core::optimization::{
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LaunchOptimizationWorkflowToolParams {
     /// The function name to optimize.
     pub function_name: String,
@@ -50,7 +52,9 @@ pub struct LaunchOptimizationWorkflowToolParams {
 }
 
 /// Response from the optimization workflow tool.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LaunchOptimizationWorkflowToolOutput {
     /// The final job info (Completed or Failed).
     pub result: OptimizationJobInfo,
@@ -65,9 +69,19 @@ pub struct LaunchOptimizationWorkflowToolOutput {
 pub struct LaunchOptimizationWorkflowTool;
 
 impl ToolMetadata for LaunchOptimizationWorkflowTool {
-    type SideInfo = OptimizationWorkflowSideInfo;
+    type SideInfo = AutopilotSideInfo;
     type Output = LaunchOptimizationWorkflowToolOutput;
     type LlmParams = LaunchOptimizationWorkflowToolParams;
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::LAUNCH_OPTIMIZATION_WORKFLOW_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::LAUNCH_OPTIMIZATION_WORKFLOW_TOOL_OUTPUT
+    }
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("launch_optimization_workflow")
@@ -155,7 +169,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Suffix for the fine-tuned model name in OpenAI."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -207,7 +222,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Whether to deploy the model after training."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -243,7 +259,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Display name for the tuned model."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -279,7 +296,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Suffix for the fine-tuned model name."
                                 }
                             },
-                            "required": ["type", "model"]
+                            "required": ["type", "model"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -327,7 +345,8 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Whether to append to existing variants. Default: false."
                                 }
                             },
-                            "required": ["type", "embedding_model", "variant_name", "function_name"]
+                            "required": ["type", "embedding_model", "variant_name", "function_name"],
+                            "additionalProperties": false
                         },
                         {
                             "type": "object",
@@ -388,12 +407,14 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                                     "description": "Max tokens for analysis/mutation model calls."
                                 }
                             },
-                            "required": ["type", "function_name", "evaluation_name", "analysis_model", "mutation_model"]
+                            "required": ["type", "function_name", "evaluation_name", "analysis_model", "mutation_model"],
+                            "additionalProperties": false
                         }
                     ]
                 }
             },
-            "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"]
+            "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
@@ -403,10 +424,15 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
             .into()
         })
     }
+
+    fn strict(&self) -> bool {
+        false // Too many optional parameters for anthropic
+    }
 }
 
 #[async_trait]
 impl TaskTool for LaunchOptimizationWorkflowTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
@@ -438,8 +464,8 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
             .await?;
 
         // Step 2: Poll until completion
-        let poll_interval = Duration::from_secs(side_info.poll_interval_secs);
-        let max_wait_secs = side_info.max_wait_secs as i64;
+        let poll_interval = Duration::from_secs(side_info.optimization.poll_interval_secs);
+        let max_wait_secs = side_info.optimization.max_wait_secs as i64;
         let start = ctx.now().await?;
         let mut iteration = 0u32;
 

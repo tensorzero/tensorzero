@@ -322,11 +322,12 @@ export function prepareInferenceActionRequest(
     credentials: new Map(),
     cache_options: {
       max_age_s: null,
-      enabled: "on",
+      enabled: "off",
     },
     include_original_response: false, // deprecated
     include_raw_response: false,
     include_raw_usage: false,
+    include_aggregated_response: false,
   };
 
   // Prepare request based on source and function type
@@ -428,6 +429,35 @@ export type VariantResponseInfo =
       output?: JsonInferenceOutput;
       usage?: InferenceUsage;
     };
+
+/**
+ * Extracts the demonstration value from inference output.
+ * For JSON inferences, returns the parsed output.
+ * For chat inferences, returns the raw output array.
+ */
+export function extractDemonstrationValue(
+  output: ContentBlockChatOutput[] | JsonInferenceOutput,
+) {
+  // JSON output has 'parsed' property, chat output is an array
+  if ("parsed" in output) {
+    return output.parsed;
+  }
+  return output;
+}
+
+/**
+ * Prepares demonstration feedback value from variant output.
+ * Returns the parsed output for JSON inferences, or the raw output for chat inferences.
+ */
+export function prepareDemonstrationFromVariantOutput(
+  variantOutput: VariantResponseInfo,
+) {
+  const output = variantOutput.output;
+  if (output === undefined) {
+    return undefined;
+  }
+  return extractDemonstrationValue(output);
+}
 
 function convertTemplate(
   template: PathWithContents | null,

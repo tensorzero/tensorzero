@@ -212,7 +212,7 @@ pub use tensorzero_client::MockTensorZeroClient;
 pub use tensorzero_client::{
     CreateEventGatewayRequest, CreateEventResponse, EventPayload, EventPayloadToolResult,
     GatewayListEventsResponse, ListEventsParams, ListSessionsParams, ListSessionsResponse,
-    ToolOutcome,
+    S3UploadRequest, S3UploadResponse, ToolOutcome,
 };
 
 // Re-export datapoint types for CRUD operations

@@ -18,7 +18,9 @@ use tensorzero_core::config::snapshot::SnapshotHash;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the inference tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceToolParams {
     /// The function name to call. Exactly one of function_name or model_name required.
     #[serde(default)]
@@ -54,6 +56,16 @@ impl ToolMetadata for InferenceTool {
     type Output = InferenceResponse;
     type LlmParams = InferenceToolParams;
 
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::INFERENCE_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::INFERENCE_RESPONSE
+    }
+
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("inference")
     }
@@ -83,7 +95,7 @@ impl ToolMetadata for InferenceTool {
                     "properties": {
                         "system": {
                             "description": "System prompt (string or array of content blocks)",
-                            "oneOf": [
+                            "anyOf": [
                                 { "type": "string" },
                                 { "type": "array", "items": { "type": "object" } }
                             ]
@@ -97,17 +109,19 @@ impl ToolMetadata for InferenceTool {
                                     "role": { "type": "string", "enum": ["user", "assistant"] },
                                     "content": {
                                         "description": "Message content (string or array of content blocks)",
-                                        "oneOf": [
+                                        "anyOf": [
                                             { "type": "string" },
                                             { "type": "array", "items": { "type": "object" } }
                                         ]
                                     }
                                 },
-                                "required": ["role", "content"]
+                                "required": ["role", "content"],
+                                "additionalProperties": false
                             }
                         }
                     },
-                    "required": ["messages"]
+                    "required": ["messages"],
+                    "additionalProperties": false
                 },
                 "params": {
                     "type": "object",
@@ -119,9 +133,11 @@ impl ToolMetadata for InferenceTool {
                                 "temperature": { "type": "number", "description": "Sampling temperature (0.0-2.0)" },
                                 "max_tokens": { "type": "integer", "description": "Maximum tokens to generate" },
                                 "seed": { "type": "integer", "description": "Random seed for reproducibility" }
-                            }
+                            },
+                            "additionalProperties": false
                         }
-                    }
+                    },
+                    "additionalProperties": false
                 },
                 "variant_name": {
                     "type": "string",
@@ -132,7 +148,8 @@ impl ToolMetadata for InferenceTool {
                     "description": "Output schema override for JSON functions (optional)"
                 }
             },
-            "required": ["input"]
+            "required": ["input"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
@@ -141,6 +158,10 @@ impl ToolMetadata for InferenceTool {
             }
             .into()
         })
+    }
+
+    fn strict(&self) -> bool {
+        false // We need an arbitrary object for 'output_schema'
     }
 
     fn timeout(&self) -> Duration {

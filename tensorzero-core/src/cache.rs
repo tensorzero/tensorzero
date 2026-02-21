@@ -1,11 +1,17 @@
-use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use crate::config::OtlpConfig;
-use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::config::gateway::ModelInferenceCacheConfig;
+use crate::db::cache::CacheQueries;
+use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::valkey::ValkeyConnectionInfo;
+use crate::db::valkey::cache::ValkeyCacheClient;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
+use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -20,6 +26,83 @@ use serde::de::{DeserializeOwned, IgnoredAny};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use uuid::Uuid;
+
+/// Manager for cache operations, wrapping a `dyn CacheQueries` backend.
+#[derive(Clone)]
+pub struct CacheManager {
+    client: Arc<dyn CacheQueries>,
+}
+
+impl CacheManager {
+    pub fn new(client: Arc<dyn CacheQueries>) -> Self {
+        Self { client }
+    }
+
+    /// Select the appropriate cache backend.
+    ///
+    /// When Postgres is the primary datastore, uses Valkey if available,
+    /// otherwise falls back to ClickHouse. When ClickHouse is the primary
+    /// datastore, uses ClickHouse directly.
+    pub fn new_from_connections(
+        valkey_connection_info: &ValkeyConnectionInfo,
+        clickhouse_connection_info: &ClickHouseConnectionInfo,
+        cache_config: &ModelInferenceCacheConfig,
+    ) -> Self {
+        if !ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+            return Self::new(Arc::new(clickhouse_connection_info.clone()));
+        }
+        match valkey_connection_info {
+            ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
+                ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+            )),
+            ValkeyConnectionInfo::Disabled => {
+                tracing::warn!(
+                    "Postgres is the primary datastore, but `TENSORZERO_VALKEY_URL` is not set; falling back to ClickHouse for cache writes if configured."
+                );
+                Self::new(Arc::new(clickhouse_connection_info.clone()))
+            }
+        }
+    }
+
+    /// Create a disabled cache manager (no-op: lookups return `None`, writes succeed immediately).
+    /// TODO(shuyangli): It's not test-only because tensorzero-optimizers/src/dicl.rs uses it; validate if this is appropriate.
+    pub fn disabled() -> Self {
+        Self::new(Arc::new(DisabledCacheQueries))
+    }
+}
+
+#[async_trait]
+impl CacheQueries for CacheManager {
+    async fn cache_lookup(
+        &self,
+        cache_key: &CacheKey,
+        max_age_s: Option<u32>,
+    ) -> Result<Option<String>, Error> {
+        self.client.cache_lookup(cache_key, max_age_s).await
+    }
+
+    async fn cache_write(&self, cache_key: &CacheKey, data: &str) -> Result<(), Error> {
+        self.client.cache_write(cache_key, data).await
+    }
+}
+
+/// No-op cache backend: lookups return `None`, writes succeed immediately.
+struct DisabledCacheQueries;
+
+#[async_trait]
+impl CacheQueries for DisabledCacheQueries {
+    async fn cache_lookup(
+        &self,
+        _cache_key: &CacheKey,
+        _max_age_s: Option<u32>,
+    ) -> Result<Option<String>, Error> {
+        Ok(None)
+    }
+
+    async fn cache_write(&self, _cache_key: &CacheKey, _data: &str) -> Result<(), Error> {
+        Ok(())
+    }
+}
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(
@@ -39,9 +122,9 @@ use uuid::Uuid;
 #[clap(rename_all = "snake_case")]
 pub enum CacheEnabledMode {
     On,
+    #[default]
     Off,
     ReadOnly,
-    #[default]
     WriteOnly,
 }
 
@@ -212,18 +295,7 @@ impl ModelProviderRequest<'_> {
     }
 }
 
-// The full row written to ClickHouse
-#[derive(Debug, Serialize)]
-struct FullCacheRow<T: CacheOutput> {
-    short_cache_key: u64,
-    long_cache_key: String,
-    // We flatten this so that the fields map directly to columns in the ClickHouse table
-    #[serde(flatten)]
-    data: CacheData<T>,
-}
-
-/// The underlying cached input/output data. These are the fields that we actually retrieve from
-/// ClickHouse when going a cache fetch
+/// The underlying cached input/output data.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CacheData<T: CacheOutput> {
     pub output: T,
@@ -306,37 +378,50 @@ pub struct EmbeddingCacheData {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct NonStreamingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
     pub blocks: Vec<ContentBlockOutput>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct StreamingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
+    #[serde(
+        serialize_with = "serialize_json_string",
+        deserialize_with = "deserialize_json_string"
+    )]
     pub chunks: Vec<CachedProviderInferenceResponseChunk>,
 }
 
-fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
-    row: FullCacheRow<T>,
-    clickhouse_client: ClickHouseConnectionInfo,
+fn spawn_maybe_cache_write<
+    T: Serialize + CacheOutput + Send + Sync + 'static,
+    C: CacheQueries + Clone + 'static,
+>(
+    cache_key: CacheKey,
+    cache_data: CacheData<T>,
+    cache_manager: C,
     cache_validation_info: CacheValidationInfo,
 ) {
     spawn_ignoring_shutdown(async move {
-        if row
-            .data
+        if cache_data
             .output
             .should_write_to_cache(cache_validation_info)
             .await
         {
-            if let Err(e) = clickhouse_client
-                .write_batched(&[row], TableName::ModelInferenceCache)
-                .await
-            {
+            let data_json = match serde_json::to_string(&cache_data) {
+                Ok(json) => json,
+                Err(e) => {
+                    tracing::warn!("Failed to serialize cache data: {e}");
+                    return;
+                }
+            };
+            if let Err(e) = cache_manager.cache_write(&cache_key, &data_json).await {
                 tracing::warn!("Failed to write to cache: {e}");
             }
         } else {
-            warn_discarded_cache_write(&row.data.raw_response);
+            warn_discarded_cache_write(&cache_data.raw_response);
         }
     });
 }
@@ -356,24 +441,17 @@ pub struct CacheValidationInfo {
 }
 
 // This doesn't block
-pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
-    clickhouse_client: &ClickHouseConnectionInfo,
+pub fn start_cache_write<
+    T: Serialize + CacheOutput + Send + Sync + 'static,
+    C: CacheQueries + Clone + 'static,
+>(
+    cache_manager: &C,
     cache_key: CacheKey,
     cache_data: CacheData<T>,
     cache_validation_info: CacheValidationInfo,
 ) -> Result<(), Error> {
-    let short_cache_key = cache_key.get_short_key()?;
-    let long_cache_key = cache_key.get_long_key();
-    let clickhouse_client = clickhouse_client.clone();
-    spawn_maybe_cache_write(
-        FullCacheRow {
-            short_cache_key,
-            long_cache_key,
-            data: cache_data,
-        },
-        clickhouse_client,
-        cache_validation_info,
-    );
+    let cache_manager = cache_manager.clone();
+    spawn_maybe_cache_write(cache_key, cache_data, cache_manager, cache_validation_info);
     Ok(())
 }
 
@@ -388,16 +466,14 @@ pub struct CachedProviderInferenceResponseChunk {
 }
 
 // This starts a trailing write to the cache (without blocking the http response)
-pub fn start_cache_write_streaming(
-    clickhouse_client: &ClickHouseConnectionInfo,
+pub fn start_cache_write_streaming<C: CacheQueries + Clone + 'static>(
+    cache_manager: &C,
     cache_key: CacheKey,
     chunks: Vec<ProviderInferenceResponseChunk>,
     raw_request: &str,
     usage: &Usage,
     tool_config: Option<ToolCallConfig>,
 ) -> Result<(), Error> {
-    let short_cache_key = cache_key.get_short_key()?;
-    let long_cache_key = cache_key.get_long_key();
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     let mut finish_reason = None;
@@ -418,141 +494,94 @@ pub fn start_cache_write_streaming(
             .collect(),
     };
     let raw_request = raw_request.to_string();
-    let clickhouse_client = clickhouse_client.clone();
+    let cache_manager = cache_manager.clone();
     spawn_maybe_cache_write(
-        FullCacheRow {
-            short_cache_key,
-            long_cache_key,
-            data: CacheData {
-                output,
-                raw_request,
-                raw_response: String::new(),
-                input_tokens,
-                output_tokens,
-                finish_reason,
-            },
+        cache_key,
+        CacheData {
+            output,
+            raw_request,
+            raw_response: String::new(),
+            input_tokens,
+            output_tokens,
+            finish_reason,
         },
-        clickhouse_client,
+        cache_manager,
         CacheValidationInfo { tool_config },
     );
     Ok(())
 }
 
 pub async fn embedding_cache_lookup(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    cache_manager: &impl CacheQueries,
     request: &EmbeddingModelProviderRequest<'_>,
     max_age_s: Option<u32>,
+    provider_type: Arc<str>,
 ) -> Result<Option<EmbeddingModelResponse>, Error> {
     let result = cache_lookup_inner::<EmbeddingCacheData>(
-        clickhouse_connection_info,
+        cache_manager,
         request.get_cache_key()?,
         max_age_s,
     )
     .await?;
-    Ok(result.map(|result| EmbeddingModelResponse::from_cache(result, request)))
+    Ok(result.map(|result| EmbeddingModelResponse::from_cache(result, request, provider_type)))
 }
 
 pub async fn cache_lookup(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    cache_manager: &impl CacheQueries,
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
+    provider_type: Arc<str>,
 ) -> Result<Option<ModelInferenceResponse>, Error> {
     let result = cache_lookup_inner::<NonStreamingCacheData>(
-        clickhouse_connection_info,
+        cache_manager,
         request.get_cache_key()?,
         max_age_s,
     )
     .await?;
     Ok(result.map(|result| {
-        ModelInferenceResponse::from_cache(result, request.request, request.provider_name)
+        ModelInferenceResponse::from_cache(
+            result,
+            request.request,
+            request.provider_name,
+            provider_type,
+        )
     }))
 }
 
 pub async fn cache_lookup_streaming(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    cache_manager: &impl CacheQueries,
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
+    provider_type: Arc<str>,
 ) -> Result<Option<StreamResponse>, Error> {
-    let result = cache_lookup_inner(
-        clickhouse_connection_info,
-        request.get_cache_key()?,
-        max_age_s,
-    )
-    .await?;
+    let result = cache_lookup_inner(cache_manager, request.get_cache_key()?, max_age_s).await?;
     Ok(result.map(|result| {
         StreamResponse::from_cache(
             result,
             Arc::from(request.provider_name),
+            provider_type,
             request.model_inference_id,
         )
     }))
 }
 
 pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    cache_manager: &impl CacheQueries,
     cache_key: CacheKey,
     max_age_s: Option<u32>,
 ) -> Result<Option<CacheData<T>>, Error> {
-    // NOTE: the short cache key is just so the ClickHouse index can be as efficient as possible
-    // but we always check against the long cache key before returning a result
-    let short_cache_key = cache_key.get_short_key()?.to_string();
-    let long_cache_key = cache_key.get_long_key();
-    // The clickhouse query args look like rust format string args, but they're not.
-    let query = if max_age_s.is_some() {
-        r"
-            SELECT
-                output,
-                raw_request,
-                raw_response,
-                input_tokens,
-                output_tokens,
-                finish_reason
-            FROM ModelInferenceCache
-            WHERE short_cache_key = {short_cache_key:UInt64}
-                AND long_cache_key = {long_cache_key:String}
-                AND timestamp > subtractSeconds(now(), {lookback_s:UInt32})
-            ORDER BY timestamp DESC
-            LIMIT 1
-            FORMAT JSONEachRow
-        "
-    } else {
-        r"
-            SELECT
-                output,
-                raw_request,
-                raw_response,
-                input_tokens,
-                output_tokens,
-                finish_reason
-            FROM ModelInferenceCache
-            WHERE short_cache_key = {short_cache_key:UInt64}
-                AND long_cache_key = {long_cache_key:String}
-            ORDER BY timestamp DESC
-            LIMIT 1
-            FORMAT JSONEachRow
-        "
-    };
-    let mut query_params = HashMap::from([
-        ("short_cache_key", short_cache_key.as_str()),
-        ("long_cache_key", long_cache_key.as_str()),
-    ]);
-    let lookback_str;
-    if let Some(lookback) = max_age_s {
-        lookback_str = lookback.to_string();
-        query_params.insert("lookback_s", lookback_str.as_str());
+    let response = cache_manager.cache_lookup(&cache_key, max_age_s).await?;
+    match response {
+        None => Ok(None),
+        Some(json) => {
+            let result: CacheData<T> = serde_json::from_str(&json).map_err(|e| {
+                Error::new(ErrorDetails::Cache {
+                    message: format!("Failed to deserialize output: {e}"),
+                })
+            })?;
+            Ok(Some(result))
+        }
     }
-    let result = clickhouse_connection_info
-        .run_query_synchronous(query.to_string(), &query_params)
-        .await?;
-    if result.response.is_empty() {
-        return Ok(None);
-    }
-    let result: CacheData<T> = serde_json::from_str(&result.response).map_err(|e| {
-        Error::new(ErrorDetails::Cache {
-            message: format!("Failed to deserialize output: {e}"),
-        })
-    })?;
-    Ok(Some(result))
 }
 
 #[cfg(test)]
@@ -563,6 +592,24 @@ mod tests {
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
 
     use super::*;
+
+    #[tokio::test]
+    async fn test_disabled_returns_none() {
+        let cache = CacheManager::disabled();
+        let key = CacheKey::from(blake3::hash(b"test"));
+        let result = cache.cache_lookup(&key, None).await.unwrap();
+        assert!(result.is_none(), "disabled backend should return None");
+    }
+
+    #[tokio::test]
+    async fn test_disabled_write_succeeds() {
+        let cache = CacheManager::disabled();
+        let key = CacheKey::from(blake3::hash(b"test"));
+        cache
+            .cache_write(&key, r#"{"output":"test"}"#)
+            .await
+            .expect("disabled backend write should succeed");
+    }
 
     /// This test ensures that if we make a small change to the ModelInferenceRequest,
     /// the cache key will change.

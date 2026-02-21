@@ -29,6 +29,8 @@ services:
       context: ../..
       dockerfile: gateway/Dockerfile
       target: gateway
+      args:
+        PROFILE: dev
     volumes:
       - ./config:/app/config:ro
       # Mount GCP JWT key file (optional - only needed for GCP providers)
@@ -111,7 +113,6 @@ services:
     environment:
       TENSORZERO_GATEWAY_URL: ${TENSORZERO_GATEWAY_URL:-http://gateway:3000}
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
-      VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
     env_file:
       - .env
     ports:
@@ -144,16 +145,12 @@ services:
         PNPM_VERSION: ${PNPM_VERSION:-9}
     environment:
       # Test environment variables
-      BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
-      BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       TENSORZERO_CI: ${TENSORZERO_CI:-1}
       # Playwright specific
       TENSORZERO_PLAYWRIGHT_BASE_URL: http://ui:4000
       # API endpoints
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       TENSORZERO_GATEWAY_URL: http://gateway:3000
-      # Force cache on for tests
-      VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro

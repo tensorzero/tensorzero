@@ -9,4 +9,6 @@ mod inference_count;
 mod inference_metadata;
 mod model_inferences;
 mod models;
+mod resolve_uuid;
+mod ui_config;
 mod workflow_evaluations;

@@ -10,7 +10,7 @@ export type UninitializedProviderConfig =
       model_name: string;
       api_base: string | null;
       api_key_location: string | null;
-      beta_structured_outputs: boolean;
+      beta_structured_outputs?: boolean;
       provider_tools: Array<JsonValue>;
     }
   | {
@@ -22,6 +22,11 @@ export type UninitializedProviderConfig =
        */
       allow_auto_detect_region: boolean;
       endpoint_url: string | null;
+      /**
+       * API key for bearer token authentication (alternative to IAM credentials).
+       * If set, uses `Authorization: Bearer <token>` instead of SigV4 signing.
+       */
+      api_key: string | null;
       access_key_id: string | null;
       secret_access_key: string | null;
       session_token: string | null;
@@ -68,7 +73,12 @@ export type UninitializedProviderConfig =
       model_name: string;
       api_key_location: string | null;
     }
-  | { type: "groq"; model_name: string; api_key_location: string | null }
+  | {
+      type: "groq";
+      model_name: string;
+      api_key_location: string | null;
+      reasoning_format?: string;
+    }
   | { type: "hyperbolic"; model_name: string; api_key_location: string | null }
   | {
       type: "fireworks";
@@ -76,7 +86,12 @@ export type UninitializedProviderConfig =
       api_key_location: string | null;
       parse_think_blocks: boolean;
     }
-  | { type: "mistral"; model_name: string; api_key_location: string | null }
+  | {
+      type: "mistral";
+      model_name: string;
+      api_key_location: string | null;
+      prompt_mode?: string;
+    }
   | {
       type: "openai";
       model_name: string;

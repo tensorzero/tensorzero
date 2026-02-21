@@ -1097,8 +1097,8 @@ class DatapointOrderBySearchRelevance:
     Relevance score of the search query in the input and output of the datapoint.
     Requires a search query (experimental). If it's not provided, we return an error.
 
-    Current relevance metric is very rudimentary (just term frequency), but we plan
-    to improve it in the future.
+    NOTE: Relevance ordering is not yet implemented for Postgres and currently
+    falls back to id ordering. See TODO(#6441).
     """
 
     direction: OrderDirection
@@ -1295,8 +1295,8 @@ class OrderBySearchRelevance:
     Relevance score of the search query in the input and output of the item.
     Requires a search query (experimental). If it's not provided, we return an error.
 
-    Current relevance metric is very rudimentary (just term frequency), but we plan
-    to improve it in the future.
+    NOTE: Relevance ordering is not yet implemented for Postgres and currently
+    falls back to id ordering. See TODO(#6441).
     """
 
     direction: OrderDirection
@@ -1684,14 +1684,14 @@ class StoredJsonInference:
     episode_id: str
     function_name: str
     inference_id: str
-    inference_params: InferenceParams
-    input: StoredInput
-    output: JsonInferenceOutput
-    output_schema: Any
     timestamp: str
     variant_name: str
     dispreferred_outputs: list[JsonInferenceOutput] | None = field(default_factory=lambda: [])
-    extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
+    extra_body: UnfilteredInferenceExtraBody | None = None
+    inference_params: InferenceParams | None = None
+    input: StoredInput | None = None
+    output: JsonInferenceOutput | None = None
+    output_schema: Any | None = None
     processing_time_ms: int | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
     ttft_ms: int | None = None
@@ -2023,9 +2023,6 @@ class StoredChatInference:
     episode_id: str
     function_name: str
     inference_id: str
-    inference_params: InferenceParams
-    input: StoredInput
-    output: list[ContentBlockChatOutput]
     timestamp: str
     variant_name: str
     additional_tools: list[Tool] | None = None
@@ -2039,7 +2036,10 @@ class StoredChatInference:
     If not provided, all static tools are allowed.
     """
     dispreferred_outputs: list[list[ContentBlockChatOutput]] | None = field(default_factory=lambda: [])
-    extra_body: UnfilteredInferenceExtraBody | None = field(default_factory=lambda: [])
+    extra_body: UnfilteredInferenceExtraBody | None = None
+    inference_params: InferenceParams | None = None
+    input: StoredInput | None = None
+    output: list[ContentBlockChatOutput] | None = None
     parallel_tool_calls: bool | None = None
     """
     Whether to use parallel tool calls in the inference. Optional.

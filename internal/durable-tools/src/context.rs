@@ -28,32 +28,35 @@ pub enum ToolHandle {
 }
 
 /// Type alias for the Durable client with `ToolAppState`.
-pub type DurableClient = Durable<ToolAppState>;
+pub type DurableClient<S> = Durable<ToolAppState<S>>;
 
 /// Application state passed to all tools via durable's `State` type parameter.
 ///
 /// This is cloned and passed to each task execution by the durable worker.
 #[derive(Clone)]
-pub struct ToolAppState {
+pub struct ToolAppState<S = ()> {
     /// Database connection pool for database operations.
     pool: PgPool,
     /// Tool registry for looking up and calling other tools.
     tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
     /// TensorZero client for calling inference and autopilot operations.
     t0_client: Arc<dyn TensorZeroClient>,
+    extra_state: S,
 }
 
-impl ToolAppState {
+impl<S> ToolAppState<S> {
     /// Create a new application state.
     pub fn new(
         pool: PgPool,
         tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
         t0_client: Arc<dyn TensorZeroClient>,
+        extra_state: S,
     ) -> Self {
         Self {
             pool,
             tool_registry,
             t0_client,
+            extra_state,
         }
     }
 
@@ -68,25 +71,30 @@ impl ToolAppState {
     pub fn t0_client(&self) -> &Arc<dyn TensorZeroClient> {
         &self.t0_client
     }
+
+    /// Get a reference to the extra state.
+    pub fn extra_state(&self) -> &S {
+        &self.extra_state
+    }
 }
 
 /// Context provided to `TaskTool` execution.
 ///
 /// Wraps durable's `TaskContext` and provides access to the application context
 /// along with helper methods for calling other tools and checkpointing operations.
-pub struct ToolContext<'a> {
-    task_ctx: &'a mut TaskContext<ToolAppState>,
-    app_state: &'a ToolAppState,
+pub struct ToolContext<'a, S: Clone + Send + Sync + 'static = ()> {
+    task_ctx: &'a mut TaskContext<ToolAppState<S>>,
+    app_state: &'a ToolAppState<S>,
     episode_id: Uuid,
     /// Counter for generating unique tool call identifiers.
     tool_call_counter: u32,
 }
 
-impl<'a> ToolContext<'a> {
+impl<'a, S: Clone + Send + Sync + 'static> ToolContext<'a, S> {
     /// Create a new tool context.
     pub fn new(
-        task_ctx: &'a mut TaskContext<ToolAppState>,
-        app_ctx: &'a ToolAppState,
+        task_ctx: &'a mut TaskContext<ToolAppState<S>>,
+        app_ctx: &'a ToolAppState<S>,
         episode_id: Uuid,
     ) -> Self {
         Self {
@@ -155,10 +163,15 @@ impl<'a> ToolContext<'a> {
         self.app_state.tool_registry.read().await
     }
 
+    /// Get access to the 'extra_side' provided when building the 'DurableClient'
+    pub fn extra_state(&self) -> &S {
+        &self.app_state.extra_state
+    }
+
     /// Get mutable access to the underlying durable `TaskContext`.
     ///
     /// Use this for advanced operations not exposed by `ToolContext`.
-    pub fn task_ctx(&mut self) -> &mut TaskContext<ToolAppState> {
+    pub fn task_ctx(&mut self) -> &mut TaskContext<ToolAppState<S>> {
         self.task_ctx
     }
 
@@ -175,7 +188,7 @@ impl<'a> ToolContext<'a> {
         &mut self,
         base_name: &str,
         params: P,
-        f: fn(P, ToolAppState) -> Fut,
+        f: fn(P, ToolAppState<S>) -> Fut,
     ) -> ToolResult<T>
     where
         P: Serialize,

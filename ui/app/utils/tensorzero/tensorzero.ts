@@ -91,6 +91,7 @@ import type {
   VariantPerformancesResponse,
   ClientInferenceParams,
   InferenceResponse,
+  ResolveUuidResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -284,54 +285,6 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetModelLatencyResponse;
-  }
-
-  /**
-   * Inserts a datapoint from an existing inference with a given ID and setting for where to get the output from.
-   * @param datasetName - The name of the dataset to insert the datapoint into
-   * @param inferenceId - The ID of the existing inference to use as a base
-   * @param outputKind - How to handle the output field: inherit from inference, use demonstration, or none
-   * @returns A promise that resolves with the created datapoint response containing the new ID
-   * @throws Error if validation fails or the request fails
-   */
-  async createDatapointFromInferenceLegacy(
-    datasetName: string,
-    inferenceId: string,
-    outputKind: "inherit" | "demonstration" | "none" = "inherit",
-    functionName: string,
-    variantName: string,
-    episodeId: string,
-  ): Promise<DatapointResponse> {
-    if (!datasetName || typeof datasetName !== "string") {
-      throw new Error("Dataset name must be a non-empty string");
-    }
-
-    if (!inferenceId || typeof inferenceId !== "string") {
-      throw new Error("Inference ID must be a non-empty string");
-    }
-
-    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints`;
-
-    const request = {
-      inference_id: inferenceId,
-      output: outputKind,
-      function_name: functionName,
-      variant_name: variantName,
-      episode_id: episodeId,
-    };
-
-    const response = await this.fetch(endpoint, {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-
-    const body = await response.json();
-    return DatapointResponseSchema.parse(body);
   }
 
   /**
@@ -1862,6 +1815,22 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as OptimizationJobInfo;
+  }
+
+  /**
+   * Resolves a UUID to determine what type(s) of object it represents.
+   * @param id - The UUID to resolve
+   * @returns A promise that resolves with the resolved object types
+   * @throws Error if the request fails
+   */
+  async resolveUuid(id: string): Promise<ResolveUuidResponse> {
+    const endpoint = `/internal/resolve_uuid/${encodeURIComponent(id)}`;
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ResolveUuidResponse;
   }
 }
 

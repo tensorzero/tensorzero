@@ -14,7 +14,9 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_latest_feedback_by_metric tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetLatestFeedbackByMetricToolParams {
     /// The target ID (inference ID) to get feedback for.
     pub target_id: Uuid,
@@ -30,6 +32,16 @@ impl ToolMetadata for GetLatestFeedbackByMetricTool {
     type SideInfo = AutopilotSideInfo;
     type Output = LatestFeedbackIdByMetricResponse;
     type LlmParams = GetLatestFeedbackByMetricToolParams;
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::GET_LATEST_FEEDBACK_BY_METRIC_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::LATEST_FEEDBACK_ID_BY_METRIC_RESPONSE
+    }
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("get_latest_feedback_by_metric")
@@ -53,7 +65,8 @@ impl ToolMetadata for GetLatestFeedbackByMetricTool {
                     "description": "The target ID (inference ID) to get feedback for."
                 }
             },
-            "required": ["target_id"]
+            "required": ["target_id"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

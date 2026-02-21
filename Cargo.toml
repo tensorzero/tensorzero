@@ -21,13 +21,17 @@ members = [
     "internal/durable-tools",
     "internal/tensorzero-types",
     "internal/tensorzero-types-providers",
-    "internal/autopilot-worker", "internal/reqwest-sse-stream",
+    "internal/autopilot-worker",
+    "internal/reqwest-sse-stream",
+    "internal/config-applier",
+    "internal/tensorzero-config-paths",
+    "internal/tensorzero-ts-types",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2026.1.8"
-rust-version = "1.88.0"
+version = "2026.2.1"
+rust-version = "1.93.0"
 license = "Apache-2.0"
 edition = "2024"
 
@@ -40,7 +44,7 @@ reqwest = { version = "0.12.28", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-uuid = { version = "1.20.0", features = ["serde", "v7"] }
+uuid = { version = "1.21.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "0.9.11", features = ["preserve_order"] }
@@ -50,13 +54,14 @@ http = "1.4.0"
 infer = "0.19.0"
 tokio-stream = "0.1.15"
 tokio = { version = "1.48.0", features = ["full"] }
+tokio-util = { version = "0.7.17", features = ["rt"] }
 tracing = { version = "0.1.43", features = ["log"] }
 pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
-anyhow = "1.0.99"
+anyhow = "1.0.101"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.55", features = ["derive"] }
-futures = "0.3.30"
+clap = { version = "4.5.59", features = ["derive", "env"] }
+futures = "0.3.32"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
 sse-stream = "0.2.1"
@@ -70,10 +75,12 @@ minijinja = { version = "2.15.1", features = [
     "unstable_machinery",
 ] }
 url = { version = "2.5.8", features = ["serde"] }
-google-cloud-auth = "1.4.0"
+google-cloud-auth = "1.6.0"
 object_store = { version = "0.13.1", features = ["serde", "aws", "gcp"] }
-rand = "0.9.1"
-ts-rs = { version = "11.1.0", features = [
+arrow = { version = "57.3.0", default-features = false, features = ["json"] }
+parquet = { version = "57.3.0", default-features = false, features = ["arrow", "async", "snap", "zstd"] }
+rand = "0.10.0"
+ts-rs = { version = "12.0.1", features = [
     "serde-compat",
     "serde-json-impl",
     "uuid-impl",
@@ -83,7 +90,7 @@ ts-rs = { version = "11.1.0", features = [
 ] }
 pin-project = "1.1.10"
 chrono = { version = "0.4.43", features = ["serde"] }
-git2 = { version = "0.20.3", default-features = false }
+git2 = { version = "0.20.4", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [
     "tracing_level_info",
 ] }
@@ -100,20 +107,31 @@ sqlx = { version = "0.9.0-alpha.1", features = [
     "uuid",
     "sqlx-toml",
 ] }
-rlt = "0.4.1"
+rlt = "0.5.0"
 metrics-exporter-prometheus = { version = "0.18.1", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"
+serde_arrow = { version = "0.13", features = ["arrow-57"] }
 blake3 = "1.8.3"
 moka = { version = "0.12.13", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "5e0e7863a725f656ddd6b1ff3ea5b00594c203db" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "3884f0d875130c1854a6eee8557ff8bd04b0b683" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"
-redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "1.0.2", features = [
+    "tokio-comp",
+    "connection-manager",
+    "tls-rustls",
+    "tokio-rustls-comp",
+] }
 redis-test = { version = "1.0.1", features = ["aio"] }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
+globset = "0.4.18"
+walkdir = "2.5.0"
+tempfile = "3.25.0"
+toml_edit = "0.24"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

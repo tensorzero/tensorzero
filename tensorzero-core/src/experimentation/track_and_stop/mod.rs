@@ -43,6 +43,7 @@
 use arc_swap::ArcSwap;
 use check_stopping::{CheckStoppingArgs, StoppingResult, check_stopping};
 use error::TrackAndStopError;
+use schemars::JsonSchema;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{
@@ -56,7 +57,7 @@ use tokio_util::sync::CancellationToken;
 use estimate_optimal_probabilities::{
     EstimateOptimalProbabilitiesArgs, estimate_optimal_probabilities,
 };
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
@@ -92,6 +93,12 @@ pub struct TrackAndStopConfig {
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     update_period: Duration,
     min_prob: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    max_samples_per_variant: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    namespace: Option<String>,
     #[serde(skip)]
     metric_optimize: MetricConfigOptimize,
     #[serde(skip)]
@@ -257,7 +264,9 @@ impl Nursery {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedTrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,
@@ -271,8 +280,15 @@ pub struct UninitializedTrackAndStopConfig {
     epsilon: f64,
     #[serde(default = "default_update_period_s")]
     update_period_s: u64,
-    #[serde(default = "default_min_prob")]
+    #[serde(default = "default_min_prob", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     min_prob: Option<f64>,
+    #[serde(
+        default = "default_max_samples_per_variant",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    max_samples_per_variant: Option<u64>,
 }
 
 fn default_min_samples_per_variant() -> u64 {
@@ -294,11 +310,17 @@ fn default_min_prob() -> Option<f64> {
     Some(0.0)
 }
 
+#[expect(clippy::unnecessary_wraps)]
+fn default_max_samples_per_variant() -> Option<u64> {
+    Some(10_000)
+}
+
 impl UninitializedTrackAndStopConfig {
     pub fn load(
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, MetricConfig>,
+        namespace: Option<String>,
     ) -> Result<TrackAndStopConfig, Error> {
         // Validate metric exists
         if !metrics.contains_key(&self.metric) {
@@ -410,6 +432,17 @@ impl UninitializedTrackAndStopConfig {
             }
         }
 
+        if let Some(max_samples) = self.max_samples_per_variant
+            && max_samples < self.min_samples_per_variant
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`max_samples_per_variant` ({max_samples}) must be >= `min_samples_per_variant` ({})",
+                    self.min_samples_per_variant
+                ),
+            }));
+        }
+
         let keep_variants: Vec<String> = self
             .candidate_variants
             .iter()
@@ -433,6 +466,8 @@ impl UninitializedTrackAndStopConfig {
             epsilon: self.epsilon,
             update_period: Duration::from_secs(self.update_period_s),
             min_prob: self.min_prob,
+            max_samples_per_variant: self.max_samples_per_variant,
+            namespace,
             metric_optimize: metric_config.optimize,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(keep_variants),
@@ -450,13 +485,13 @@ impl VariantSampler for TrackAndStopConfig {
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
     ) -> Result<(), Error> {
-        // Track-and-Stop requires PostgreSQL for episode-to-variant mapping
+        // Track-and-Stop requires Postgres for episode-to-variant mapping
         match postgres {
             PostgresConnectionInfo::Disabled => {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is not available. \
-                        Track-and-Stop requires PostgreSQL for episode-to-variant consistency. \
+                        "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is not available. \
+                        Track-and-Stop requires Postgres for episode-to-variant consistency. \
                         Please set the `TENSORZERO_POSTGRES_URL` environment variable.",
                     ),
                 }));
@@ -471,8 +506,8 @@ impl VariantSampler for TrackAndStopConfig {
         postgres.health().await.map_err(|e| {
             Error::new(ErrorDetails::Config {
                 message: format!(
-                    "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is unhealthy: {e}. \
-                    Track-and-Stop requires a healthy PostgreSQL connection for episode-to-variant consistency.",
+                    "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is unhealthy: {e}. \
+                    Track-and-Stop requires a healthy Postgres connection for episode-to-variant consistency.",
                 ),
             })
         })?;
@@ -484,11 +519,13 @@ impl VariantSampler for TrackAndStopConfig {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
-            return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Track-and-Stop probability update task has already been spawned for function '{function_name}'"
-                ),
-            }));
+            // This can happen when running GEPA, which re-uses the existing gateway config.
+            // We don't need to spawn another background update task - the existing task will update
+            // the `ArcSwap` read by all consumers
+            tracing::info!(
+                "Track-and-Stop experimentation background task has already been spawned for function '{function_name}'"
+            );
+            return Ok(());
         }
 
         // Spawn a background task that continuously updates sampling probabilities.
@@ -510,6 +547,8 @@ impl VariantSampler for TrackAndStopConfig {
             delta: self.delta,
             min_prob: self.min_prob,
             metric_optimize: self.metric_optimize,
+            namespace: self.namespace.clone(),
+            max_samples_per_variant: self.max_samples_per_variant,
             cancel_token,
         }));
         Ok(())
@@ -730,6 +769,8 @@ struct ProbabilityUpdateTaskArgs {
     delta: f64,
     min_prob: Option<f64>,
     metric_optimize: MetricConfigOptimize,
+    namespace: Option<String>,
+    max_samples_per_variant: Option<u64>,
     cancel_token: CancellationToken,
 }
 
@@ -756,8 +797,15 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
         delta,
         min_prob,
         metric_optimize,
+        namespace,
+        max_samples_per_variant,
         cancel_token,
     } = args;
+
+    let log_name = match &namespace {
+        Some(ns) => format!("{function_name} (namespace: {ns})"),
+        None => function_name.clone(),
+    };
 
     let mut interval = tokio::time::interval(update_period);
     loop {
@@ -779,13 +827,15 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
             delta,
             min_prob,
             metric_optimize,
+            namespace: namespace.as_deref(),
+            max_samples_per_variant,
         })
         .await;
 
         match result {
             Ok(()) => {}
             Err(e) => {
-                tracing::warn!("Failed to update probabilities for {function_name}: {e}");
+                tracing::warn!("Failed to update probabilities for {log_name}: {e}");
             }
         }
     }
@@ -802,6 +852,8 @@ struct UpdateProbabilitiesArgs<'a> {
     delta: f64,
     min_prob: Option<f64>,
     metric_optimize: MetricConfigOptimize,
+    namespace: Option<&'a str>,
+    max_samples_per_variant: Option<u64>,
 }
 
 async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), TrackAndStopError> {
@@ -816,11 +868,19 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
         delta,
         min_prob,
         metric_optimize,
+        namespace,
+        max_samples_per_variant,
     } = args;
 
     // Fetch feedback from database
     let variant_performances = db
-        .get_feedback_by_variant(metric_name, function_name, Some(candidate_variants))
+        .get_feedback_by_variant(
+            metric_name,
+            function_name,
+            Some(candidate_variants),
+            namespace,
+            max_samples_per_variant,
+        )
         .await?;
 
     // Compute new state in blocking task (CPU-bound work)
@@ -2080,6 +2140,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_prevents_duplicate_task_spawning() {
+        let logs_contain = crate::utils::testing::capture_logs();
+
         // Create a TrackAndStopConfig instance
         let config = TrackAndStopConfig {
             metric: "test_metric".to_string(),
@@ -2090,6 +2152,8 @@ mod tests {
             epsilon: 0.1,
             update_period: Duration::from_secs(60),
             min_prob: Some(0.001),
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Min,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
@@ -2108,17 +2172,21 @@ mod tests {
             .await;
         assert!(result1.is_ok(), "First setup call should succeed");
 
-        // Second call to setup should fail with an error
+        // Second call to setup should also succeed (no-op) and log a message
         let result2 = config
             .setup(db, "test_function", &postgres, cancel_token.clone())
             .await;
-        assert!(result2.is_err(), "Second setup call should fail");
-
-        // Verify the error message mentions the task has already been spawned
-        let err = result2.unwrap_err();
         assert!(
-            err.to_string().contains("already been spawned"),
-            "Error should mention task already spawned, got: {err}"
+            result2.is_ok(),
+            "Second setup call should succeed (task already spawned)"
+        );
+
+        // Verify the info log message is emitted
+        assert!(
+            logs_contain(
+                "Track-and-Stop experimentation background task has already been spawned for function"
+            ),
+            "Expected log message about task already being spawned"
         );
 
         // Clean up: cancel the spawned task
@@ -2137,6 +2205,8 @@ mod tests {
             epsilon: 0.1,
             update_period: Duration::from_secs(60),
             min_prob: Some(0.001),
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
@@ -2170,8 +2240,8 @@ mod tests {
             "Error message should mention Track-and-Stop, got: {err_msg}"
         );
         assert!(
-            err_msg.contains("PostgreSQL"),
-            "Error message should mention PostgreSQL, got: {err_msg}"
+            err_msg.contains("Postgres"),
+            "Error message should mention Postgres, got: {err_msg}"
         );
         assert!(
             err_msg.contains("test_function"),
@@ -2364,6 +2434,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::Stopped {
                 winner_variant_name: "A".to_string(),
@@ -2395,6 +2467,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::NurseryOnly(
                 Nursery::new(vec!["A".to_string(), "B".to_string(), "C".to_string()]),
@@ -2436,6 +2510,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
                 sampling_probabilities: sampling_probs,
@@ -2475,6 +2551,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::NurseryAndBandits {
@@ -2542,6 +2620,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::NurseryAndStopped {
@@ -2588,6 +2668,8 @@ mod tests {
             epsilon: 0.0,
             update_period: Duration::from_secs(60),
             min_prob: None,
+            max_samples_per_variant: None,
+            namespace: None,
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
                 sampling_probabilities: sampling_probs,
@@ -2630,6 +2712,8 @@ mod tests {
                 epsilon: 0.0,
                 update_period: Duration::from_secs(60),
                 min_prob: None,
+                max_samples_per_variant: None,
+                namespace: None,
                 metric_optimize: MetricConfigOptimize::Max,
                 state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::NurseryOnly(
                     nursery,
@@ -2660,6 +2744,8 @@ mod tests {
                 epsilon: 0.0,
                 update_period: Duration::from_secs(60),
                 min_prob: None,
+                max_samples_per_variant: None,
+                namespace: None,
                 metric_optimize: MetricConfigOptimize::Max,
                 state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
                     sampling_probabilities: sampling_probs,
@@ -2698,6 +2784,8 @@ mod tests {
                 epsilon: 0.0,
                 update_period: Duration::from_secs(60),
                 min_prob: None,
+                max_samples_per_variant: None,
+                namespace: None,
                 metric_optimize: MetricConfigOptimize::Max,
                 state: Arc::new(ArcSwap::new(Arc::new(
                     TrackAndStopState::NurseryAndBandits {
@@ -2737,6 +2825,8 @@ mod tests {
                 epsilon: 0.0,
                 update_period: Duration::from_secs(60),
                 min_prob: None,
+                max_samples_per_variant: None,
+                namespace: None,
                 metric_optimize: MetricConfigOptimize::Max,
                 state: Arc::new(ArcSwap::new(Arc::new(
                     TrackAndStopState::NurseryAndStopped {
@@ -2768,6 +2858,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let mut variants = HashMap::new();
@@ -2798,7 +2889,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -2818,6 +2909,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
@@ -2833,7 +2925,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("candidate_variants"));
@@ -2852,6 +2944,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
@@ -2867,7 +2960,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("fallback_variants"));
@@ -2886,6 +2979,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
@@ -2901,7 +2995,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(
@@ -2921,6 +3015,7 @@ mod tests {
             epsilon: 0.0,
             update_period_s: 60,
             min_prob: None,
+            max_samples_per_variant: None,
         };
 
         let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C", "D"])
@@ -2938,7 +3033,7 @@ mod tests {
             },
         );
 
-        let result = config.load(&variants, &metrics);
+        let result = config.load(&variants, &metrics, None);
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(
@@ -2946,5 +3041,259 @@ mod tests {
         );
         assert!(err_msg.contains("B"));
         assert!(err_msg.contains("C"));
+    }
+
+    #[test]
+    fn test_load_error_max_samples_less_than_min_samples() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 100,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+            max_samples_per_variant: Some(50),
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A"]).into_iter().collect();
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+                description: None,
+            },
+        );
+
+        let result = config.load(&variants, &metrics, None);
+        assert!(
+            result.is_err(),
+            "`max_samples_per_variant` < `min_samples_per_variant` should fail"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains(
+                "`max_samples_per_variant` (50) must be >= `min_samples_per_variant` (100)"
+            ),
+            "Error message should mention both values, got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn test_load_carries_namespace() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+            max_samples_per_variant: None,
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B"]).into_iter().collect();
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Boolean,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+                description: None,
+            },
+        );
+
+        let loaded = config
+            .load(&variants, &metrics, Some("mobile".to_string()))
+            .expect("Config should load successfully with a namespace");
+        assert_eq!(
+            loaded.namespace.as_deref(),
+            Some("mobile"),
+            "Loaded config should carry the namespace"
+        );
+    }
+
+    #[test]
+    fn test_load_carries_none_namespace() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+            max_samples_per_variant: None,
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A"]).into_iter().collect();
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Boolean,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+                description: None,
+            },
+        );
+
+        let loaded = config
+            .load(&variants, &metrics, None)
+            .expect("Config should load successfully without a namespace");
+        assert!(
+            loaded.namespace.is_none(),
+            "Loaded config should have no namespace when None is passed"
+        );
+    }
+
+    #[test]
+    fn test_load_carries_max_samples_per_variant() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+            max_samples_per_variant: Some(5_000),
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A"]).into_iter().collect();
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+                description: None,
+            },
+        );
+
+        let loaded = config
+            .load(&variants, &metrics, None)
+            .expect("Config should load successfully");
+        assert_eq!(
+            loaded.max_samples_per_variant,
+            Some(5_000),
+            "Loaded config should carry max_samples_per_variant"
+        );
+    }
+
+    #[test]
+    fn test_default_max_samples_per_variant_deserialization() {
+        let toml_str = r#"
+            metric = "test_metric"
+            candidate_variants = ["A"]
+            min_samples_per_variant = 10
+            delta = 0.05
+            epsilon = 0.0
+            update_period_s = 60
+        "#;
+
+        let config: UninitializedTrackAndStopConfig =
+            toml::from_str(toml_str).expect("Should deserialize with default max_samples");
+        assert_eq!(
+            config.max_samples_per_variant,
+            Some(10_000),
+            "`max_samples_per_variant` should default to Some(10_000)"
+        );
+    }
+
+    /// Regression test: `update_probabilities` must pass the canonical function name
+    /// (e.g. "my_function") to `get_feedback_by_variant`, NOT a decorated name like
+    /// "my_function (namespace: prod)". The namespace is a separate parameter.
+    #[tokio::test]
+    async fn test_update_probabilities_uses_canonical_function_name() {
+        use crate::db::feedback::MockFeedbackQueries;
+
+        let canonical_name = "my_function";
+        let namespace = Some("prod");
+
+        let mut mock_db = MockFeedbackQueries::new();
+        mock_db
+            .expect_get_feedback_by_variant()
+            .withf(move |_metric, function_name, _variants, ns, _max| {
+                // The function_name must be canonical, not decorated
+                function_name == canonical_name
+                    && !function_name.contains("namespace")
+                    && ns == &namespace
+            })
+            .times(1)
+            .returning(|_, _, _, _, _| {
+                Box::pin(async move {
+                    Ok(vec![
+                        FeedbackByVariant {
+                            variant_name: "A".to_string(),
+                            count: 20,
+                            mean: 0.5,
+                            variance: Some(0.1),
+                        },
+                        FeedbackByVariant {
+                            variant_name: "B".to_string(),
+                            count: 20,
+                            mean: 0.6,
+                            variance: Some(0.2),
+                        },
+                    ])
+                })
+            });
+
+        let candidates = Arc::new(vec!["A".to_string(), "B".to_string()]);
+        let state = Arc::new(ArcSwap::new(Arc::new(
+            TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
+        )));
+
+        let result = update_probabilities(UpdateProbabilitiesArgs {
+            db: &mock_db,
+            candidate_variants: &candidates,
+            metric_name: "test_metric",
+            function_name: canonical_name,
+            sampling_probabilities: &state,
+            min_samples_per_variant: 10,
+            epsilon: 0.0,
+            delta: 0.05,
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            namespace,
+            max_samples_per_variant: Some(10_000),
+        })
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "update_probabilities should succeed with canonical function name"
+        );
+    }
+
+    #[test]
+    fn test_explicit_max_samples_per_variant_deserialization() {
+        let toml_str = r#"
+            metric = "test_metric"
+            candidate_variants = ["A"]
+            min_samples_per_variant = 10
+            delta = 0.05
+            epsilon = 0.0
+            update_period_s = 60
+            max_samples_per_variant = 500
+        "#;
+
+        let config: UninitializedTrackAndStopConfig =
+            toml::from_str(toml_str).expect("Should deserialize with explicit max_samples");
+        assert_eq!(
+            config.max_samples_per_variant,
+            Some(500),
+            "`max_samples_per_variant` should be 500 when explicitly set"
+        );
     }
 }

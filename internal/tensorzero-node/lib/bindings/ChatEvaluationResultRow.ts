@@ -17,11 +17,11 @@ export type ChatEvaluationResultRow = {
   /**
    * The input to the function
    */
-  input: Input;
+  input?: Input;
   /**
    * The generated output from the model
    */
-  generated_output: Array<ContentBlockChatOutput>;
+  generated_output?: Array<ContentBlockChatOutput>;
   /**
    * The reference output from the datapoint
    */

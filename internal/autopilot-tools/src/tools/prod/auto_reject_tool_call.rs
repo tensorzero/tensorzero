@@ -20,7 +20,9 @@ use schemars::JsonSchema;
 use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
 /// Parameters for the auto-reject tool (not visible to LLM - internal use only).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AutoRejectToolCallParams {}
 
 /// Built-in tool to send `NotAvailable` authorization for unknown tool calls.
@@ -48,12 +50,23 @@ impl ToolMetadata for AutoRejectToolCallTool {
         )
     }
 
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::AUTO_REJECT_TOOL_CALL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
             "description": "Internal tool for auto-rejecting unknown tool calls.",
             "properties": {},
-            "required": []
+            "required": [],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {
@@ -67,6 +80,7 @@ impl ToolMetadata for AutoRejectToolCallTool {
 
 #[async_trait]
 impl TaskTool for AutoRejectToolCallTool {
+    type ExtraState = ();
     async fn execute(
         &self,
         _llm_params: <Self as ToolMetadata>::LlmParams,

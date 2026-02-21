@@ -3,7 +3,6 @@
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [gateway]
-bind_address = "0.0.0.0:3000"
 debug = true
 template_filesystem_access.base_path = ".."
 export.otlp.traces.enabled = true
@@ -72,6 +71,32 @@ level = "inference"
 type = "boolean"
 optimize = "max"
 level = "inference"
+
+[metrics.exact_match_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.jaccard_similarity_episode]
+type = "float"
+level = "episode"
+optimize = "max"
+
+[metrics.haiku_score]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.haiku_score_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.haiku_rating]
+type = "float"
+level = "inference"
+optimize = "max"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  TOOLS                                     │

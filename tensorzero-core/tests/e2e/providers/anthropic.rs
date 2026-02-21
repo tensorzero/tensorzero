@@ -145,13 +145,22 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
-    let reasoning_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "anthropic-haiku-4-5-thinking".to_string(),
-        model_name: "claude-haiku-4-5-thinking".into(),
-        model_provider_name: "anthropic".into(),
-        credentials: HashMap::new(),
-    }];
+    let reasoning_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "anthropic-haiku-4-5-thinking".to_string(),
+            model_name: "claude-haiku-4-5-thinking".into(),
+            model_provider_name: "anthropic".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "anthropic-sonnet-4-6-reasoning".to_string(),
+            model_name: "claude-sonnet-4-6".into(),
+            model_provider_name: "anthropic".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
@@ -791,12 +800,12 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
     if stream {
         assert_eq!(
             raw_request,
-            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
+            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}}"
         );
     } else {
         assert_eq!(
             raw_request,
-            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}"
+            "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}}"
         );
     }
 }

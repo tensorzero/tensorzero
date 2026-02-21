@@ -4,6 +4,7 @@ use std::{io::Write, path::PathBuf};
 use tempfile::NamedTempFile;
 use toml::de::DeTable;
 
+use crate::config::namespace::Namespace;
 use crate::{embeddings::EmbeddingProviderConfig, inference::types::Role, variant::JsonMode};
 
 /// Ensure that the sample valid config can be parsed without panicking
@@ -334,7 +335,7 @@ async fn test_config_from_toml_table_missing_models() {
             .await
             .unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "Model name 'gpt-4.1-mini' not found in model table".to_string()
+            message: "Model name 'gpt-5-mini' not found in model table".to_string()
         })
     );
 }
@@ -639,14 +640,14 @@ async fn test_config_from_toml_table_extra_variables_metrics() {
 #[tokio::test]
 async fn test_config_validate_model_empty_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec![]);
+    config["models"]["gpt-5-mini"]["routing"] = toml::Value::Array(vec![]);
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err();
     assert!(
         error
             .to_string()
-            .contains("`models.gpt-4.1-mini`: `routing` must not be empty")
+            .contains("`models.gpt-5-mini`: `routing` must not be empty")
     );
 }
 
@@ -654,20 +655,20 @@ async fn test_config_validate_model_empty_providers() {
 #[tokio::test]
 async fn test_config_validate_model_duplicate_routing_entry() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-4.1-mini"]["routing"] =
+    config["models"]["gpt-5-mini"]["routing"] =
         toml::Value::Array(vec!["openai".into(), "openai".into()]);
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err().to_string();
-    assert!(error.contains("`models.gpt-4.1-mini.routing`: duplicate entry `openai`"));
+    assert!(error.contains("`models.gpt-5-mini.routing`: duplicate entry `openai`"));
 }
 
 /// Ensure that the config validation fails when a routing entry does not exist in providers
 #[tokio::test]
 async fn test_config_validate_model_routing_entry_not_in_providers() {
     let mut config = get_sample_valid_config();
-    config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
+    config["models"]["gpt-5-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-5-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
 }
 
 /// Ensure that the config loading fails when the system schema does not exist
@@ -1132,8 +1133,8 @@ async fn test_config_validate_model_name_tensorzero_prefix() {
     let old_model_entry = config["models"]
         .as_table_mut()
         .unwrap()
-        .remove("gpt-4.1-mini")
-        .expect("Did not find model `gpt-4.1-mini`");
+        .remove("gpt-5-mini")
+        .expect("Did not find model `gpt-5-mini`");
     config["models"]
         .as_table_mut()
         .unwrap()
@@ -1259,18 +1260,18 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
     let mut config = get_sample_valid_config();
 
     // Rename an existing provider to start with `tensorzero::`
-    let old_openai_provider = config["models"]["gpt-4.1-mini"]["providers"]
+    let old_openai_provider = config["models"]["gpt-5-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .remove("openai")
-        .expect("Did not find provider `openai` under `gpt-4.1-mini`");
-    config["models"]["gpt-4.1-mini"]["providers"]
+        .expect("Did not find provider `openai` under `gpt-5-mini`");
+    config["models"]["gpt-5-mini"]["providers"]
         .as_table_mut()
         .unwrap()
         .insert("tensorzero::openai".to_string(), old_openai_provider);
 
     // Update the routing entry to match the new provider name
-    let routing = config["models"]["gpt-4.1-mini"]["routing"]
+    let routing = config["models"]["gpt-5-mini"]["routing"]
         .as_array_mut()
         .expect("Expected routing to be an array");
     for entry in routing.iter_mut() {
@@ -1281,7 +1282,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
 
-    assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
+    assert!(result.unwrap_err().to_string().contains("`models.gpt-5-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
 }
 
 /// Ensure that get_templates returns the correct templates
@@ -1559,7 +1560,7 @@ async fn test_config_load_shorthand_models_only() {
         [functions.generate_draft.variants.openai_promptA]
         type = "chat_completion"
         weight = 0.9
-        model = "openai::gpt-4.1-mini"
+        model = "openai::gpt-5-mini"
         "#
             .as_bytes(),
         )
@@ -2844,7 +2845,7 @@ async fn deny_bad_timeouts_streaming_field() {
 
     assert_eq!(
         err.to_string(),
-        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms`"
+        "models.slow_with_timeout.providers.slow.timeouts.streaming.unknown_field: unknown field `unknown_field`, expected `ttft_ms` or `total_ms`"
     );
 }
 
@@ -3458,4 +3459,115 @@ async fn test_nested_skip_credential_validation() {
     })
     .await;
     assert!(!skip_credential_validation());
+}
+
+#[tokio::test]
+async fn test_experimentation_with_namespaces_valid() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "uniform"
+
+        [functions.test_function.experimentation.namespaces.mobile]
+        type = "static_weights"
+        candidate_variants = {"variant_a" = 1.0}
+
+        [functions.test_function.experimentation.namespaces.web]
+        type = "uniform"
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse TOML config");
+    let loaded = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Config with valid namespace experimentation should load successfully");
+
+    let func = loaded
+        .functions
+        .get("test_function")
+        .expect("test_function should exist");
+    let exp = func.experimentation_with_namespaces();
+    assert!(
+        exp.has_namespace_config("mobile"),
+        "Should have a `mobile` namespace config"
+    );
+    assert!(
+        exp.has_namespace_config("web"),
+        "Should have a `web` namespace config"
+    );
+}
+
+#[tokio::test]
+async fn test_experimentation_namespace_track_and_stop_loads() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [metrics.test_metric]
+        type = "boolean"
+        optimize = "max"
+        level = "inference"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "uniform"
+
+        [functions.test_function.experimentation.namespaces.mobile]
+        type = "track_and_stop"
+        metric = "test_metric"
+        candidate_variants = ["variant_a", "variant_b"]
+        min_samples_per_variant = 10
+        delta = 0.05
+        epsilon = 0.1
+        update_period_s = 60
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse TOML config");
+    let loaded = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Namespace with track_and_stop should load successfully");
+
+    let function_config = loaded.functions.get("test_function").unwrap();
+    let experimentation = function_config.experimentation_with_namespaces();
+    assert!(
+        experimentation.has_namespace_config("mobile"),
+        "Should have a `mobile` namespace config"
+    );
+    assert!(
+        matches!(
+            experimentation.get_for_namespace(Some(&Namespace::new("mobile").unwrap())),
+            crate::experimentation::ExperimentationConfig::TrackAndStop(_)
+        ),
+        "The `mobile` namespace config should be TrackAndStop"
+    );
 }

@@ -4,12 +4,14 @@ use std::{
     sync::Arc,
 };
 
-use serde::Serialize;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tensorzero_derive::TensorZeroDeserialize;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::config::Namespace;
 use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
@@ -115,13 +117,92 @@ impl Default for ExperimentationConfig {
     }
 }
 
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+/// Holds the base experimentation config plus namespace-specific configs (loaded version).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Default)]
+pub struct ExperimentationConfigWithNamespaces {
+    /// The base experimentation config used when no namespace is provided
+    /// or when the provided namespace doesn't have a specific config
+    pub base: ExperimentationConfig,
+    /// Namespace-specific experimentation configs
+    pub namespaces: HashMap<String, ExperimentationConfig>,
+}
+
+impl ExperimentationConfigWithNamespaces {
+    /// Get the experimentation config for a given namespace.
+    /// If namespace is None or the namespace doesn't have a specific config,
+    /// returns the base config.
+    pub fn get_for_namespace(&self, namespace: Option<&Namespace>) -> &ExperimentationConfig {
+        match namespace {
+            Some(ns) => self.namespaces.get(ns.as_str()).unwrap_or(&self.base),
+            None => &self.base,
+        }
+    }
+
+    /// Check if a specific namespace has a dedicated config
+    pub fn has_namespace_config(&self, namespace: &str) -> bool {
+        self.namespaces.contains_key(namespace)
+    }
+
+    /// Create an ExperimentationConfigWithNamespaces from a legacy variants map.
+    /// This creates a config with only a base experimentation config (no namespace overrides).
+    pub fn legacy_from_variants_map(variants: &HashMap<String, Arc<VariantInfo>>) -> Self {
+        Self {
+            base: ExperimentationConfig::legacy_from_variants_map(variants),
+            namespaces: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     Uniform(uniform::UniformConfig),
     TrackAndStop(track_and_stop::UninitializedTrackAndStopConfig),
+}
+
+/// Wrapper struct that holds the base experimentation config plus namespace-specific configs.
+/// This is the type used in the TOML config to allow both a default config and per-namespace overrides.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct UninitializedExperimentationConfigWithNamespaces {
+    /// The base experimentation config (type, candidate_variants, etc.)
+    #[serde(flatten)]
+    pub base: UninitializedExperimentationConfig,
+    /// Namespace-specific experimentation configs
+    #[serde(default)]
+    pub namespaces: HashMap<String, UninitializedExperimentationConfig>,
+}
+
+impl UninitializedExperimentationConfigWithNamespaces {
+    pub fn load(
+        self,
+        variants: &HashMap<String, Arc<VariantInfo>>,
+        metrics: &HashMap<String, crate::config::MetricConfig>,
+        _function_name: &str,
+    ) -> Result<ExperimentationConfigWithNamespaces, Error> {
+        // Load the base config (no namespace)
+        let base = self.base.load(variants, metrics, None)?;
+
+        // Load namespace-specific configs
+        let mut loaded_namespaces = HashMap::new();
+        for (namespace, config) in self.namespaces {
+            let loaded_config = config.load(variants, metrics, Some(namespace.clone()))?;
+            loaded_namespaces.insert(namespace, loaded_config);
+        }
+
+        Ok(ExperimentationConfigWithNamespaces {
+            base,
+            namespaces: loaded_namespaces,
+        })
+    }
 }
 
 impl UninitializedExperimentationConfig {
@@ -129,6 +210,7 @@ impl UninitializedExperimentationConfig {
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, crate::config::MetricConfig>,
+        namespace: Option<String>,
     ) -> Result<ExperimentationConfig, Error> {
         // Check if any variant has a weight specified
         let variants_with_weights: Vec<&str> = variants
@@ -156,7 +238,7 @@ impl UninitializedExperimentationConfig {
                 Ok(ExperimentationConfig::Uniform(config.load(variants)?))
             }
             UninitializedExperimentationConfig::TrackAndStop(config) => Ok(
-                ExperimentationConfig::TrackAndStop(config.load(variants, metrics)?),
+                ExperimentationConfig::TrackAndStop(config.load(variants, metrics, namespace)?),
             ),
         }
     }
@@ -293,6 +375,21 @@ impl ExperimentationConfig {
                 }
             }
         })
+    }
+
+    /// Returns whether a variant name could be sampled by this experimentation config.
+    /// Empty allowed lists (e.g. default Uniform with no explicit candidates) means all variants
+    /// are eligible, so we return `true`.
+    pub fn could_sample_variant(&self, variant_name: &str) -> bool {
+        let allowed: Vec<&str> = match self {
+            Self::StaticWeights(c) => c.allowed_variants().collect(),
+            Self::Uniform(c) => c.allowed_variants().collect(),
+            Self::TrackAndStop(c) => c.allowed_variants().collect(),
+            #[cfg(test)]
+            Self::AlwaysFails(c) => c.allowed_variants().collect(),
+        };
+        // Empty means Uniform with no explicit candidates → all variants eligible
+        allowed.is_empty() || allowed.contains(&variant_name)
     }
 
     pub fn get_current_display_probabilities<'a>(
@@ -685,5 +782,233 @@ mod tests {
 
         // Should return empty map
         assert_eq!(probs.len(), 0);
+    }
+
+    /// Helper to create a variants map with the given variant names (no weights).
+    fn make_variants_map(names: &[&str]) -> HashMap<String, Arc<VariantInfo>> {
+        let mut map = HashMap::new();
+        for &name in names {
+            map.insert(
+                name.to_string(),
+                Arc::new(VariantInfo {
+                    inner: VariantConfig::ChatCompletion(
+                        UninitializedChatCompletionConfig {
+                            weight: None,
+                            model: "model-name".into(),
+                            ..Default::default()
+                        }
+                        .load(&SchemaData::default(), &ErrorContext::new_test())
+                        .unwrap(),
+                    ),
+                    timeouts: Default::default(),
+                }),
+            );
+        }
+        map
+    }
+
+    // =========================================================================
+    // Tests for ExperimentationConfigWithNamespaces
+    // =========================================================================
+
+    #[test]
+    fn test_get_for_namespace_none_returns_base() {
+        let config = ExperimentationConfigWithNamespaces {
+            base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            namespaces: HashMap::new(),
+        };
+        let result = config.get_for_namespace(None);
+        assert!(
+            matches!(result, ExperimentationConfig::Uniform(_)),
+            "None namespace should return the base config"
+        );
+    }
+
+    #[test]
+    fn test_get_for_namespace_unknown_returns_base() {
+        let config = ExperimentationConfigWithNamespaces {
+            base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            namespaces: HashMap::new(),
+        };
+        let ns = Namespace::new("unknown").unwrap();
+        let result = config.get_for_namespace(Some(&ns));
+        assert!(
+            matches!(result, ExperimentationConfig::Uniform(_)),
+            "Unknown namespace should fall back to the base config"
+        );
+    }
+
+    #[test]
+    fn test_get_for_namespace_known_returns_override() {
+        let mut namespaces = HashMap::new();
+        namespaces.insert(
+            "mobile".to_string(),
+            ExperimentationConfig::StaticWeights(
+                static_weights::StaticWeightsConfig::legacy_from_variants_map(&make_variants_map(
+                    &["variant_a"],
+                )),
+            ),
+        );
+        let config = ExperimentationConfigWithNamespaces {
+            base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            namespaces,
+        };
+        let ns = Namespace::new("mobile").unwrap();
+        let result = config.get_for_namespace(Some(&ns));
+        assert!(
+            matches!(result, ExperimentationConfig::StaticWeights(_)),
+            "Known namespace should return the namespace-specific config"
+        );
+    }
+
+    #[test]
+    fn test_has_namespace_config() {
+        let mut namespaces = HashMap::new();
+        namespaces.insert(
+            "mobile".to_string(),
+            ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+        );
+        let config = ExperimentationConfigWithNamespaces {
+            base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            namespaces,
+        };
+        assert!(
+            config.has_namespace_config("mobile"),
+            "`has_namespace_config` should return true for an existing namespace"
+        );
+        assert!(
+            !config.has_namespace_config("web"),
+            "`has_namespace_config` should return false for a missing namespace"
+        );
+    }
+
+    #[test]
+    fn test_legacy_from_variants_map_has_empty_namespaces() {
+        let variants = make_variants_map(&["a", "b"]);
+        let config = ExperimentationConfigWithNamespaces::legacy_from_variants_map(&variants);
+        assert!(
+            config.namespaces.is_empty(),
+            "Legacy creation should produce no namespace configs"
+        );
+    }
+
+    // =========================================================================
+    // Tests for UninitializedExperimentationConfigWithNamespaces::load()
+    // =========================================================================
+
+    #[test]
+    fn test_load_namespace_config_uniform() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let metrics = HashMap::new();
+
+        let uninitialized = UninitializedExperimentationConfigWithNamespaces {
+            base: UninitializedExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            namespaces: HashMap::from([(
+                "mobile".to_string(),
+                UninitializedExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            )]),
+        };
+
+        let loaded = uninitialized.load(&variants, &metrics, "test_fn");
+        assert!(
+            loaded.is_ok(),
+            "Namespace with `uniform` type should load successfully"
+        );
+        let loaded = loaded.unwrap();
+        assert!(
+            matches!(
+                loaded.namespaces.get("mobile"),
+                Some(ExperimentationConfig::Uniform(_))
+            ),
+            "Loaded namespace should be Uniform"
+        );
+    }
+
+    #[test]
+    fn test_load_namespace_config_static_weights() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let metrics = HashMap::new();
+
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("variant_a".to_string(), 1.0);
+
+        let uninitialized = UninitializedExperimentationConfigWithNamespaces {
+            base: UninitializedExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            namespaces: HashMap::from([(
+                "mobile".to_string(),
+                UninitializedExperimentationConfig::StaticWeights(
+                    serde_json::from_value(serde_json::json!({
+                        "candidate_variants": {"variant_a": 1.0}
+                    }))
+                    .unwrap(),
+                ),
+            )]),
+        };
+
+        let loaded = uninitialized.load(&variants, &metrics, "test_fn");
+        assert!(
+            loaded.is_ok(),
+            "Namespace with `static_weights` type should load successfully"
+        );
+        let loaded = loaded.unwrap();
+        assert!(
+            matches!(
+                loaded.namespaces.get("mobile"),
+                Some(ExperimentationConfig::StaticWeights(_))
+            ),
+            "Loaded namespace should be StaticWeights"
+        );
+    }
+
+    #[test]
+    fn test_load_namespace_config_track_and_stop_succeeds() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            crate::config::MetricConfig {
+                r#type: crate::config::MetricConfigType::Boolean,
+                level: crate::config::MetricConfigLevel::Inference,
+                optimize: crate::config::MetricConfigOptimize::Max,
+                description: None,
+            },
+        );
+
+        let uninitialized = UninitializedExperimentationConfigWithNamespaces {
+            base: UninitializedExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            namespaces: HashMap::from([(
+                "mobile".to_string(),
+                UninitializedExperimentationConfig::TrackAndStop(
+                    serde_json::from_value(serde_json::json!({
+                        "metric": "test_metric",
+                        "candidate_variants": ["variant_a", "variant_b"],
+                        "min_samples_per_variant": 10,
+                        "delta": 0.05,
+                        "epsilon": 0.1,
+                        "update_period_s": 60
+                    }))
+                    .unwrap(),
+                ),
+            )]),
+        };
+
+        let result = uninitialized.load(&variants, &metrics, "test_fn");
+        assert!(
+            result.is_ok(),
+            "Namespace with `track_and_stop` type should load successfully"
+        );
+
+        let loaded = result.unwrap();
+        assert!(
+            loaded.has_namespace_config("mobile"),
+            "Should have a `mobile` namespace config"
+        );
+        assert!(
+            matches!(
+                loaded.get_for_namespace(Some(&Namespace::new("mobile").unwrap())),
+                ExperimentationConfig::TrackAndStop(_)
+            ),
+            "The `mobile` namespace config should be TrackAndStop"
+        );
     }
 }

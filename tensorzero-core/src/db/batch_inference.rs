@@ -10,12 +10,14 @@ use crate::inference::types::FinishReason;
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 
 /// Response row for completed batch inferences (used for both Chat and Json).
+/// The `output` field is optional because inference data tables may have shorter
+/// retention than metadata tables; when IO rows are missing, `output` is `None`.
 #[derive(Debug, serde::Deserialize)]
 pub struct CompletedBatchInferenceRow {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
     pub variant_name: String,
-    pub output: String,
+    pub output: Option<String>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,
@@ -39,6 +41,7 @@ pub trait BatchInferenceQueries {
         inference_ids: &[Uuid],
     ) -> Result<Vec<BatchModelInferenceRow<'static>>, Error>;
 
+    // TODO(shuyangli): this should return a strongly typed response with input and output types.
     /// Get completed batch inference responses for Chat functions.
     /// If `inference_id` is Some, fetch only that specific inference. If None, fetch all inferences in the batch.
     async fn get_completed_chat_batch_inferences(
@@ -49,6 +52,7 @@ pub trait BatchInferenceQueries {
         inference_id: Option<Uuid>,
     ) -> Result<Vec<CompletedBatchInferenceRow>, Error>;
 
+    // TODO(shuyangli): this should return a strongly typed response with input and output types.
     /// Get completed batch inference responses for Json functions.
     /// If `inference_id` is Some, fetch only that specific inference. If None, fetch all inferences in the batch.
     async fn get_completed_json_batch_inferences(
@@ -58,4 +62,15 @@ pub trait BatchInferenceQueries {
         variant_name: &str,
         inference_id: Option<Uuid>,
     ) -> Result<Vec<CompletedBatchInferenceRow>, Error>;
+
+    // ===== Write methods =====
+
+    /// Write a batch request row to the database.
+    async fn write_batch_request(&self, row: &BatchRequestRow<'_>) -> Result<(), Error>;
+
+    /// Write batch model inference rows to the database.
+    async fn write_batch_model_inferences(
+        &self,
+        rows: &[BatchModelInferenceRow<'_>],
+    ) -> Result<(), Error>;
 }

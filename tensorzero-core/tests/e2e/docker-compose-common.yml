@@ -1,4 +1,35 @@
 services:
+  provider-proxy:
+    profiles: ["provider-proxy"]
+    image: tensorzero/provider-proxy:${TENSORZERO_COMMIT_TAG:-latest}
+    build:
+      context: ../../..
+      dockerfile: provider-proxy/Dockerfile
+      target: provider-proxy
+    ports:
+      - "3003:3003"
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    volumes:
+      # Mount cache directory for downloading cache files separately
+      - ../../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache
+    # Cache mode can be overridden via PROVIDER_PROXY_CACHE_MODE environment variable.
+    # Options: read-old-write-new (default), read-only, read-write
+    # See: https://github.com/tensorzero/tensorzero/issues/5380
+    command:
+      [
+        "--cache-path",
+        "/app/ci/provider-proxy-cache",
+        "--mode",
+        "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
+      ]
+    healthcheck:
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+    depends_on:
+      minio:
+        condition: service_healthy
+
   clickhouse:
     image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-lts}
     environment:
@@ -79,11 +110,15 @@ services:
       - 55679:55679 # ZPages
 
   postgres:
-    image: postgres:14-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    image: tensorzero/postgres-dev:14-trixie-slim
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    command: ["postgres", "-c", "cron.database_name=tensorzero-e2e-tests"]
     ports:
       - "5432:5432"
     healthcheck:
@@ -141,7 +176,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       [
-        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+        "gateway --run-postgres-migrations --enable-optimization-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
       ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"

@@ -51,16 +51,4 @@ pub use client::{
 };
 pub use error::AutopilotError;
 pub use reject_missing_tool::reject_missing_tool;
-pub use types::{
-    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotSideInfo, AutopilotStatus,
-    AutopilotToolResult, Base64File, CreateEventRequest, CreateEventResponse, ErrorDetail,
-    ErrorResponse, Event, EventPayload, EventPayloadError, EventPayloadMessage,
-    EventPayloadMessageContent, EventPayloadStatusUpdate, EventPayloadToolCall,
-    EventPayloadToolCallAuthorization, EventPayloadToolResult, File, GatewayEvent,
-    GatewayEventPayload, GatewayEventPayloadToolCallAuthorization, GatewayListEventsResponse,
-    GatewayStreamUpdate, GatewayToolCallAuthorizationStatus, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, ObjectStoragePointer, OptimizationWorkflowSideInfo,
-    RawText, Role, Session, StatusUpdate, StreamEventsParams, StreamUpdate, Template, Text,
-    Thought, ToolCallAuthorizationStatus, ToolCallDecisionSource, ToolCallWrapper, ToolOutcome,
-    Unknown, UrlFile,
-};
+pub use types::*;

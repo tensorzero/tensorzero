@@ -56,7 +56,7 @@ async fn test_mutate_variant_chat() {
     // Evaluate parent
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -73,7 +73,7 @@ async fn test_mutate_variant_chat() {
     // Analyze parent results
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,
@@ -191,7 +191,7 @@ async fn test_mutate_variant_json() {
     // Evaluate parent
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -208,7 +208,7 @@ async fn test_mutate_variant_json() {
     // Analyze parent results
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,
@@ -300,7 +300,7 @@ async fn test_mutate_variant_preserves_variables() {
     // Evaluate and analyze
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -316,7 +316,7 @@ async fn test_mutate_variant_preserves_variables() {
 
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,
@@ -397,7 +397,7 @@ async fn test_mutate_variant_preserves_schema_references() {
     // Evaluate and analyze
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -413,7 +413,7 @@ async fn test_mutate_variant_preserves_schema_references() {
 
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,
@@ -512,7 +512,7 @@ async fn test_mutate_variant_naming() {
     // Evaluate and analyze
     let evaluation_params = EvaluateVariantParams {
         gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
+        db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
         evaluation_name: gepa_config.evaluation_name.clone(),
@@ -528,7 +528,7 @@ async fn test_mutate_variant_naming() {
 
     let analyses = analyze_inferences(
         &gateway_client,
-        &parent_results.evaluation_infos,
+        parent_results.evaluation_infos(),
         &function_context,
         parent_config,
         &gepa_config,

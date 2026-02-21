@@ -15,7 +15,9 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the feedback tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FeedbackToolParams {
     /// The episode ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
     #[serde(default)]
@@ -50,6 +52,16 @@ impl ToolMetadata for FeedbackTool {
     type Output = FeedbackResponse;
     type LlmParams = FeedbackToolParams;
 
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::FEEDBACK_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::FEEDBACK_RESPONSE
+    }
+
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("feedback")
     }
@@ -60,6 +72,10 @@ impl ToolMetadata for FeedbackTool {
              Use metric_name='comment' for free-text comments, 'demonstration' for demonstrations, \
              or a configured metric name for float/boolean feedback values.",
         )
+    }
+
+    fn strict(&self) -> bool {
+        false // Value uses anyOf with array type without explicit items
     }
 
     fn parameters_schema(&self) -> ToolResult<Schema> {
@@ -82,14 +98,21 @@ impl ToolMetadata for FeedbackTool {
                     "description": "The metric name: 'comment' for free-text, 'demonstration' for demonstrations, or a configured metric name for float/boolean values."
                 },
                 "value": {
-                    "description": "The feedback value. Type depends on metric_name: string for 'comment', string/array for 'demonstration', number for float metrics, boolean for boolean metrics."
+                    "description": "The feedback value. Type depends on metric_name: string for 'comment', string/array for 'demonstration', number for float metrics, boolean for boolean metrics.",
+                    "anyOf": [
+                        { "type": "string" },
+                        { "type": "array", "items": { "type": "object" } },
+                        { "type": "number" },
+                        { "type": "boolean" }
+                    ]
                 },
                 "dryrun": {
                     "type": "boolean",
                     "description": "If true, feedback will not be stored (useful for testing)."
                 }
             },
-            "required": ["metric_name", "value"]
+            "required": ["metric_name", "value"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

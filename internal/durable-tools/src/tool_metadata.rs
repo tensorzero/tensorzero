@@ -1,9 +1,12 @@
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Serialize, de::DeserializeOwned};
+use serde_json::Value as JsonValue;
 use std::borrow::Cow;
 use std::time::Duration;
+#[cfg(feature = "ts-bindings")]
+use tensorzero_ts_types::TsTypeBundle;
 
-use crate::ToolResult;
+use crate::{NonControlToolError, ToolResult};
 
 /// Common metadata trait for all tools (both `TaskTool` and `SimpleTool`).
 ///
@@ -86,5 +89,51 @@ pub trait ToolMetadata: Send + Sync + 'static {
     /// Defaults to 60 seconds. Override this for tools with different requirements.
     fn timeout(&self) -> Duration {
         Duration::from_secs(60)
+    }
+
+    /// Whether or not to use 'strict mode' when providing our tool schema to LLMs
+    ///
+    /// Defaults to `true`. Override this for tools with schemas that are incompatible with strict mode
+    /// for providers that we wan too use (e.g. an 'object' parameter with arbitrary keys,
+    /// which is incompatible with the `'additionalProperties': false` requirement for providers
+    /// like Anthropic)
+    fn strict(&self) -> bool {
+        true
+    }
+
+    /// Validates the provided llm params and side_info
+    /// This is called *before* spawning a tool, to catch errors early.
+    fn validate_params(&self, llm_params: &JsonValue, side_info: &JsonValue) -> ToolResult<()> {
+        let _: Self::LlmParams = serde_json::from_value(llm_params.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("llm_params: {e}"),
+            }
+        })?;
+        let _: Self::SideInfo = serde_json::from_value(side_info.clone()).map_err(|e| {
+            NonControlToolError::InvalidParams {
+                message: format!("side_info: {e}"),
+            }
+        })?;
+        Ok(())
+    }
+
+    /// Returns the TypeScript type bundle for the `LlmParams` type.
+    ///
+    /// Contains all declarations needed to fully define the type and its
+    /// transitive dependencies, concatenated in dependency order.
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> TsTypeBundle {
+        tracing::warn!("TypeScript type bundle not available for this tool's LlmParams");
+        TsTypeBundle("")
+    }
+
+    /// Returns the TypeScript type bundle for the `Output` type.
+    ///
+    /// Contains all declarations needed to fully define the type and its
+    /// transitive dependencies, concatenated in dependency order.
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> TsTypeBundle {
+        tracing::warn!("TypeScript type bundle not available for this tool's Output");
+        TsTypeBundle("")
     }
 }

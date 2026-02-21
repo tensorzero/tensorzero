@@ -18,7 +18,9 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the run_evaluation tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RunEvaluationToolParams {
     /// Name of the evaluation to run (must be defined in config).
     pub evaluation_name: String,
@@ -76,6 +78,16 @@ impl ToolMetadata for RunEvaluationTool {
     type Output = RunEvaluationResponse;
     type LlmParams = RunEvaluationToolParams;
 
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::RUN_EVALUATION_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::RUN_EVALUATION_RESPONSE
+    }
+
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("run_evaluation")
     }
@@ -86,6 +98,10 @@ impl ToolMetadata for RunEvaluationTool {
              specified variant, then runs the configured evaluators. Returns statistics \
              (mean, stderr, count) for each evaluator.",
         )
+    }
+
+    fn strict(&self) -> bool {
+        false // precision_targets uses additionalProperties: {type: number} not supported in strict mode
     }
 
     fn parameters_schema(&self) -> ToolResult<Schema> {
@@ -133,7 +149,8 @@ impl ToolMetadata for RunEvaluationTool {
                     "description": "Include per-datapoint results in the response (default: false)."
                 }
             },
-            "required": ["evaluation_name", "variant_name"]
+            "required": ["evaluation_name", "variant_name"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

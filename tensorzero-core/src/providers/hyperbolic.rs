@@ -30,7 +30,8 @@ use uuid::Uuid;
 
 use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, SystemOrDeveloper, get_chat_url,
-    handle_openai_error, prepare_openai_messages, stream_openai,
+    handle_openai_error, openai_response_tool_call_to_tensorzero_tool_call,
+    prepare_openai_messages, stream_openai,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -171,6 +172,7 @@ impl InferenceProvider for HyperbolicProvider {
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -190,6 +192,7 @@ impl InferenceProvider for HyperbolicProvider {
                     raw_request: Some(raw_request.clone()),
                     raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -202,6 +205,7 @@ impl InferenceProvider for HyperbolicProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
                     raw_response: Some(raw_response.clone()),
+                    api_type: ApiType::ChatCompletions,
                 })
             })?;
 
@@ -230,10 +234,12 @@ impl InferenceProvider for HyperbolicProvider {
                         raw_request: Some(raw_request.clone()),
                         raw_response: None,
                         provider_type: PROVIDER_TYPE.to_string(),
+                        api_type: ApiType::ChatCompletions,
                     })
                 })?,
                 PROVIDER_TYPE,
                 None,
+                ApiType::ChatCompletions,
             ))
         }
     }
@@ -273,6 +279,7 @@ impl InferenceProvider for HyperbolicProvider {
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
+            ApiType::ChatCompletions,
             &request.extra_body,
             &request.extra_headers,
             model_provider,
@@ -459,6 +466,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
+                api_type: ApiType::ChatCompletions,
             }
             .into());
         }
@@ -475,6 +483,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some(raw_request.clone()),
                 raw_response: Some(raw_response.clone()),
+                api_type: ApiType::ChatCompletions,
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
@@ -482,7 +491,9 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    openai_response_tool_call_to_tensorzero_tool_call(tool_call),
+                ));
             }
         }
 

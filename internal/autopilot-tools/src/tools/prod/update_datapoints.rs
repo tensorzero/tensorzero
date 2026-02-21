@@ -13,7 +13,9 @@ use tensorzero::{UpdateDatapointRequest, UpdateDatapointsResponse};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the update_datapoints tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UpdateDatapointsToolParams {
     /// The name of the dataset containing the datapoints.
     pub dataset_name: String,
@@ -33,6 +35,16 @@ impl ToolMetadata for UpdateDatapointsTool {
     type Output = UpdateDatapointsResponse;
     type LlmParams = UpdateDatapointsToolParams;
 
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UPDATE_DATAPOINTS_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UPDATE_DATAPOINTS_RESPONSE
+    }
+
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("update_datapoints")
     }
@@ -43,6 +55,10 @@ impl ToolMetadata for UpdateDatapointsTool {
              Can modify input, output, tags, and metadata. \
              Returns new IDs for the updated datapoints (versions are immutable).",
         )
+    }
+
+    fn strict(&self) -> bool {
+        false // Datapoints have arbitrary input/output_schema objects
     }
 
     fn parameters_schema(&self) -> ToolResult<Schema> {
@@ -88,11 +104,13 @@ impl ToolMetadata for UpdateDatapointsTool {
                                 "description": "New tags (optional)."
                             }
                         },
-                        "required": ["type", "id"]
+                        "required": ["type", "id"],
+                        "additionalProperties": false
                     }
                 }
             },
-            "required": ["dataset_name", "datapoints"]
+            "required": ["dataset_name", "datapoints"],
+            "additionalProperties": false
         });
 
         serde_json::from_value(schema).map_err(|e| {

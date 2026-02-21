@@ -71,75 +71,78 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.azure]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
 [functions.dynamic_json.variants.azure-strict]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
 json_mode = "strict"
+reasoning_effort = "low"
 
 [functions.dynamic_json.variants.azure-implicit]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "tool"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
 
-[functions.dynamic_json.variants.azure-ai-foundry]
+[functions.dynamic_json.variants.azure-kimi]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 1024
 
-[functions.dynamic_json.variants.azure-ai-foundry-strict]
+[functions.dynamic_json.variants.azure-kimi-strict]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
 json_mode = "strict"
 
-[functions.dynamic_json.variants.azure-ai-foundry-implicit]
+[functions.dynamic_json.variants.azure-kimi-implicit]
 type = "chat_completion"
-model = "llama-3.3-70b-instruct-azure"
+model = "kimi-k2.5-azure"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "tool"
-max_tokens = 100
+max_tokens = 1024
 
 [functions.dynamic_json.variants.fireworks]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.dynamic_json.variants.fireworks-strict]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
-max_tokens = 100
+max_tokens = 1500
 json_mode = "strict"
 
 [functions.dynamic_json.variants.fireworks-implicit]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "tool"
-max_tokens = 100
+max_tokens = 1500
 
 [functions.dynamic_json.variants.gcp-vertex-gemini-flash]
 type = "chat_completion"
@@ -361,19 +364,21 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.sglang]
 type = "chat_completion"
-model = "Qwen/Qwen2.5-1.5B-Instruct"
+model = "Qwen/Qwen3-1.7B"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "strict"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.dynamic_json.variants.sglang-strict]
 type = "chat_completion"
-model = "Qwen/Qwen2.5-1.5B-Instruct"
+model = "Qwen/Qwen3-1.7B"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.dynamic_json.variants.tgi]
 type = "chat_completion"
@@ -417,27 +422,30 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.vllm]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.dynamic_json.variants.vllm-strict]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.dynamic_json.variants.vllm-implicit]
 type = "chat_completion"
-model = "qwen2.5-0.5b-instruct-vllm"
+model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "tool"
 max_tokens = 100
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.dynamic_json.variants.deepseek-chat]
 type = "chat_completion"

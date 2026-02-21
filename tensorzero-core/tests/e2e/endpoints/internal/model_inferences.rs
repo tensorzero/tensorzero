@@ -2,47 +2,14 @@
 
 use reqwest::Client;
 use tensorzero_core::endpoints::internal::model_inferences::GetModelInferencesResponse;
-use tensorzero_core::endpoints::stored_inferences::v1::types::{
-    GetInferencesResponse, ListInferencesRequest,
-};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
-/// Helper function to list inferences to get an inference_id
-async fn get_available_inference_id(request: ListInferencesRequest) -> Uuid {
-    let http_client = Client::new();
-    let resp = http_client
-        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
-        .json(&request)
-        .send()
-        .await
-        .unwrap();
-
-    assert!(
-        resp.status().is_success(),
-        "get_available_inference_id request failed: status={:?}",
-        resp.status(),
-    );
-
-    let response: GetInferencesResponse = resp.json().await.unwrap();
-    response
-        .inferences
-        .first()
-        .expect("Expected at least one inference")
-        .id()
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_model_inferences_for_chat_inference() {
-    skip_for_postgres!();
-    // First, get an inference_id from the list_inferences endpoint
-    let inference_id = get_available_inference_id(ListInferencesRequest {
-        function_name: Some("write_haiku".to_string()),
-        limit: Some(1),
-        ..Default::default()
-    })
-    .await;
+    // Use a hardcoded inference ID known to have model inferences
+    let inference_id = Uuid::parse_str("0196c682-72e0-7c83-a92b-9d1a3c7630f2").expect("Valid UUID");
 
     // Now get model inferences for this inference_id
     let http_client = Client::new();
@@ -77,14 +44,8 @@ async fn test_get_model_inferences_for_chat_inference() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_model_inferences_for_json_inference() {
-    skip_for_postgres!();
-    // Get an inference_id for a JSON function
-    let inference_id = get_available_inference_id(ListInferencesRequest {
-        function_name: Some("extract_entities".to_string()),
-        limit: Some(1),
-        ..Default::default()
-    })
-    .await;
+    // Use a hardcoded extract_entities inference ID known to have model inferences
+    let inference_id = Uuid::parse_str("0196374c-2c6d-7ce0-b508-e3b24ee4579c").expect("Valid UUID");
 
     // Get model inferences
     let http_client = Client::new();
@@ -111,7 +72,6 @@ async fn test_get_model_inferences_for_json_inference() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_model_inferences_nonexistent_id() {
-    skip_for_postgres!();
     // Use a random UUID that doesn't exist
     let nonexistent_id = Uuid::now_v7();
 
@@ -132,7 +92,6 @@ async fn test_get_model_inferences_nonexistent_id() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_model_inferences_invalid_uuid() {
-    skip_for_postgres!();
     let http_client = Client::new();
     let url = get_gateway_endpoint("/internal/model_inferences/not-a-valid-uuid");
 

@@ -27,10 +27,10 @@ use crate::rate_limiting::{
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE, TimeoutKind},
     inference::types::{
         Latency, ModelInferenceResponseWithMetadata, RawUsageEntry, RequestMessage, Role, Usage,
-        current_timestamp,
+        current_timestamp, usage::RawResponseEntry,
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
@@ -182,17 +182,27 @@ impl EmbeddingModelConfig {
                     otlp_config: &clients.otlp_config,
                     model_inference_id: Uuid::now_v7(),
                 };
+                let provider_type: Arc<str> = Arc::from(provider_config.inner.provider_type());
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
                     let cache_lookup = embedding_cache_lookup(
-                        &clients.clickhouse_connection_info,
+                        &clients.cache_manager,
                         &provider_request,
                         clients.cache_options.max_age_s,
+                        provider_type.clone(),
                     )
                     .await
                     .ok()
                     .flatten();
-                    if let Some(cache_lookup) = cache_lookup {
+                    if let Some(mut cache_lookup) = cache_lookup {
+                        // Collect raw response entries from failed providers before the cache hit
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                if let Some(entries) = error.extract_raw_response_entries() {
+                                    cache_lookup.failed_raw_response.extend(entries);
+                                }
+                            }
+                        }
                         return Ok(cache_lookup);
                     }
                 }
@@ -210,7 +220,7 @@ impl EmbeddingModelConfig {
                             .into());
                             };
                             let _ = start_cache_write(
-                                &clients.clickhouse_connection_info,
+                                &clients.cache_manager,
                                 provider_request.get_cache_key()?,
                                 CacheData {
                                     output: EmbeddingCacheData {
@@ -225,8 +235,19 @@ impl EmbeddingModelConfig {
                                 CacheValidationInfo { tool_config: None },
                             );
                         };
-                        let embedding_response =
-                            EmbeddingModelResponse::new(response, provider_name.clone());
+                        let mut embedding_response = EmbeddingModelResponse::new(
+                            response,
+                            provider_name.clone(),
+                            provider_type,
+                        );
+                        // Collect raw response entries from failed providers for fallback reporting
+                        if clients.include_raw_response {
+                            for error in provider_errors.values() {
+                                if let Some(entries) = error.extract_raw_response_entries() {
+                                    embedding_response.failed_raw_response.extend(entries);
+                                }
+                            }
+                        }
                         return Ok(embedding_response);
                     }
                     Err(error) => {
@@ -234,7 +255,7 @@ impl EmbeddingModelConfig {
                     }
                 }
             }
-            Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
+            Err(ErrorDetails::AllModelProvidersFailed { provider_errors }.into())
         };
         // This is the top-level embedding model timeout, which limits the total time taken to run all providers.
         // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
@@ -250,7 +271,7 @@ impl EmbeddingModelConfig {
                     Err(Error::new(ErrorDetails::ModelTimeout {
                         model_name: model_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })
         } else {
@@ -404,14 +425,17 @@ pub struct EmbeddingModelResponse {
     pub usage: Usage,
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub cached: bool,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 impl EmbeddingModelResponse {
     pub fn from_cache(
         cache_lookup: CacheData<EmbeddingCacheData>,
         request: &EmbeddingModelProviderRequest,
+        provider_type: Arc<str>,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -428,8 +452,10 @@ impl EmbeddingModelResponse {
                 response_time: Duration::from_secs(0),
             },
             embedding_provider_name: Arc::from(request.provider_name),
+            provider_type,
             cached: true,
             raw_usage: None,
+            failed_raw_response: vec![],
         }
     }
 
@@ -459,14 +485,18 @@ pub struct EmbeddingResponseWithMetadata {
     pub usage: Usage,
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
     pub embedding_model_name: Arc<str>,
+    pub cached: bool,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
+    pub failed_raw_response: Vec<RawResponseEntry>,
 }
 
 impl EmbeddingModelResponse {
     pub fn new(
         embedding_provider_response: EmbeddingProviderResponse,
         embedding_provider_name: Arc<str>,
+        provider_type: Arc<str>,
     ) -> Self {
         Self {
             id: embedding_provider_response.id,
@@ -478,8 +508,10 @@ impl EmbeddingModelResponse {
             usage: embedding_provider_response.usage,
             latency: embedding_provider_response.latency,
             embedding_provider_name,
+            provider_type,
             cached: false,
             raw_usage: embedding_provider_response.raw_usage,
+            failed_raw_response: vec![],
         }
     }
 }
@@ -496,8 +528,11 @@ impl EmbeddingResponseWithMetadata {
             usage: embedding_response.usage,
             latency: embedding_response.latency,
             embedding_provider_name: embedding_response.embedding_provider_name,
+            provider_type: embedding_response.provider_type,
             embedding_model_name,
+            cached: embedding_response.cached,
             raw_usage: embedding_response.raw_usage,
+            failed_raw_response: embedding_response.failed_raw_response,
         }
     }
 }
@@ -527,11 +562,13 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             usage: response.usage,
             latency: response.latency,
             model_provider_name: response.embedding_provider_name.clone(),
+            provider_type: response.provider_type,
             model_name: response.embedding_model_name,
-            cached: false,
+            cached: response.cached,
             finish_reason: None,
             raw_usage: response.raw_usage,
             relay_raw_response: None,
+            failed_raw_response: response.failed_raw_response,
         })
     }
 }
@@ -554,6 +591,18 @@ pub enum EmbeddingProviderConfig {
     OpenRouter(OpenRouterProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
+}
+
+impl EmbeddingProviderConfig {
+    pub fn provider_type(&self) -> &'static str {
+        match self {
+            EmbeddingProviderConfig::OpenAI(_) => crate::providers::openai::PROVIDER_TYPE,
+            EmbeddingProviderConfig::Azure(_) => crate::providers::azure::PROVIDER_TYPE,
+            EmbeddingProviderConfig::OpenRouter(_) => crate::providers::openrouter::PROVIDER_TYPE,
+            #[cfg(any(test, feature = "e2e_tests"))]
+            EmbeddingProviderConfig::Dummy(_) => crate::providers::dummy::PROVIDER_TYPE,
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -620,7 +669,7 @@ impl EmbeddingProviderInfo {
                     Err(Error::new(ErrorDetails::ModelProviderTimeout {
                         provider_name: self.provider_name.to_string(),
                         timeout,
-                        streaming: false,
+                        kind: TimeoutKind::NonStreamingTotal,
                     }))
                 })?
         } else {
@@ -664,7 +713,7 @@ impl UninitializedEmbeddingProviderConfig {
     ) -> Result<EmbeddingProviderInfo, Error> {
         let provider_config = self
             .config
-            .load(provider_types, default_credentials)
+            .load(provider_types, default_credentials, false)
             .await?;
         // timeout_ms is already set (either directly or migrated from deprecated `timeouts`
         // field via StoredEmbeddingProviderConfig when loading from snapshot)
@@ -798,7 +847,7 @@ impl<'a> Embedding {
 #[cfg(test)]
 mod tests {
     use crate::{
-        cache::{CacheEnabledMode, CacheOptions},
+        cache::{CacheEnabledMode, CacheManager, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         model_table::ProviderTypeDefaultCredentials,
         rate_limiting::{RateLimitingManager, ScopeInfo},
@@ -843,19 +892,21 @@ mod tests {
             dimensions: None,
             encoding_format: EmbeddingEncodingFormat::Float,
         };
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let response = fallback_embedding_model
             .embed(
                 &request,
                 "fallback",
                 &InferenceClients {
                     http_client: TensorzeroHttpClient::new_testing().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                    clickhouse_connection_info: clickhouse_connection_info.clone(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(InferenceCredentials::default()),
                     cache_options: CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
+                    cache_manager: CacheManager::new(Arc::new(clickhouse_connection_info.clone())),
                     tags: Arc::new(Default::default()),
                     rate_limiting_manager: Arc::new(RateLimitingManager::new_dummy()),
                     otlp_config: Default::default(),
@@ -867,6 +918,7 @@ mod tests {
                     relay: None,
                     include_raw_usage: false,
                     include_raw_response: false,
+                    include_aggregated_response: false,
                 },
             )
             .await;

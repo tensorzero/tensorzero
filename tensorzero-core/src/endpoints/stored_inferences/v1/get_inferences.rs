@@ -3,6 +3,7 @@ use axum::extract::State;
 use tracing::instrument;
 
 use crate::config::Config;
+use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
 use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInferenceDatabase;
@@ -18,18 +19,17 @@ pub async fn get_inferences_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<GetInferencesRequest>,
 ) -> Result<Json<GetInferencesResponse>, Error> {
-    let response = get_inferences(
-        &app_state.config,
-        &app_state.clickhouse_connection_info,
-        request,
-    )
-    .await?;
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = get_inferences(&app_state.config, &database, request).await?;
     Ok(Json(response))
 }
 
 pub async fn get_inferences(
     config: &Config,
-    clickhouse: &impl InferenceQueries,
+    database: &impl InferenceQueries,
     request: GetInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
     // Validate output_source parameter
@@ -54,7 +54,7 @@ pub async fn get_inferences(
         ..Default::default()
     };
 
-    let inferences_storage = clickhouse.list_inferences(config, &params).await?;
+    let inferences_storage = database.list_inferences(config, &params).await?;
     let inferences = inferences_storage
         .into_iter()
         .map(StoredInferenceDatabase::into_stored_inference)
@@ -71,19 +71,17 @@ pub async fn list_inferences_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<ListInferencesRequest>,
 ) -> Result<Json<GetInferencesResponse>, Error> {
-    let response = list_inferences(
-        &app_state.config,
-        &app_state.clickhouse_connection_info,
-        request,
-    )
-    .await?;
-
+    let database = DelegatingDatabaseConnection::new(
+        app_state.clickhouse_connection_info.clone(),
+        app_state.postgres_connection_info.clone(),
+    );
+    let response = list_inferences(&app_state.config, &database, request).await?;
     Ok(Json(response))
 }
 
 pub async fn list_inferences(
     config: &Config,
-    clickhouse: &impl InferenceQueries,
+    database: &impl InferenceQueries,
     request: ListInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
     // Validate output_source parameter
@@ -94,7 +92,7 @@ pub async fn list_inferences(
     }
 
     let params = request.as_list_inferences_params()?;
-    let inferences_storage = clickhouse.list_inferences(config, &params).await?;
+    let inferences_storage = database.list_inferences(config, &params).await?;
     let inferences = inferences_storage
         .into_iter()
         .map(StoredInferenceDatabase::into_stored_inference)
@@ -110,7 +108,7 @@ mod tests {
     use crate::db::inferences::{
         DEFAULT_INFERENCE_QUERY_LIMIT, InferenceOutputSource, MockInferenceQueries,
     };
-    use crate::experimentation::ExperimentationConfig;
+    use crate::experimentation::ExperimentationConfigWithNamespaces;
     use crate::function::{FunctionConfig, FunctionConfigChat};
     use crate::inference::types::{ContentBlockChatOutput, StoredInput, Text};
     use crate::stored_inference::{
@@ -133,7 +131,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 description: None,
-                experimentation: ExperimentationConfig::default(),
+                experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: Default::default(),
             })),
         );
@@ -145,18 +143,18 @@ mod tests {
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
-            input: StoredInput {
+            input: Some(StoredInput {
                 system: None,
                 messages: vec![],
-            },
-            output: vec![ContentBlockChatOutput::Text(Text {
+            }),
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "test output".to_string(),
-            })],
+            })]),
             dispreferred_outputs: vec![],
             timestamp: chrono::Utc::now(),
             episode_id: Uuid::now_v7(),
             inference_id: id,
-            tool_params: ToolCallConfigDatabaseInsert::default(),
+            tool_params: Some(ToolCallConfigDatabaseInsert::default()),
             tags: HashMap::new(),
             extra_body: Default::default(),
             inference_params: Default::default(),

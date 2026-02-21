@@ -17,14 +17,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  CARGO_INCREMENTAL: 0
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
   AWS_REGION: "us-east-1"
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AZURE_AI_FOUNDRY_API_KEY: ${{ secrets.AZURE_AI_FOUNDRY_API_KEY }}
-  AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
-  AZURE_OPENAI_EASTUS2_API_KEY: ${{ secrets.AZURE_OPENAI_EASTUS2_API_KEY }}
-  AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
+  AZURE_API_KEY: ${{ secrets.AZURE_API_KEY_NEW }}
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
@@ -97,8 +96,35 @@ jobs:
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
+  build-provider-proxy-container:
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    uses: ./.github/workflows/build-provider-proxy-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-live-tests-container:
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    uses: ./.github/workflows/build-live-tests-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
   live-tests:
-    needs: [build-gateway-e2e-container]
+    needs:
+      [
+        build-gateway-e2e-container,
+        build-gateway-container,
+        build-fixtures-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
+      ]
     # Run even when build-gateway-e2e-container is skipped (merge_group case)
     if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
@@ -106,8 +132,8 @@ jobs:
     permissions:
       # Permission to checkout the repository
       contents: read
-      # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      # Permission to download artifacts
+      actions: read
     timeout-minutes: 45
     strategy:
       matrix:
@@ -118,16 +144,42 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-
-      - name: Configure Namespace-powered Buildx
-        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
-        with:
-          wait-for-builder: true
-
       - name: Cleanup disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+
+      - name: Download gateway container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-gateway-container
+
+      - name: Download provider-proxy container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-provider-proxy-container
+
+      - name: Download gateway-e2e container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-gateway-e2e-container
+
+      - name: Download live-tests container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-live-tests-container
+
+      - name: Download fixtures container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-fixtures-container
+
+      - name: Load container images
+        run: |
+          docker load < gateway-container.tar
+          docker load < provider-proxy-container.tar
+          docker load < gateway-e2e-container.tar
+          docker load < live-tests-container.tar
+          docker load < fixtures-container.tar
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
       - name: Restore provider-proxy cache
         if: github.event_name != 'schedule'
@@ -156,19 +208,19 @@ jobs:
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Pull images referenced by the compose file
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml pull --ignore-pull-failures
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
 
       - name: Run live tests container via Docker Compose
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 -e TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1 live-tests
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm -e TENSORZERO_CI=1 -e TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1 live-tests
 
       - name: Print live tests logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs -t
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
 
       - name: Check e2e logs for impossible error messages
         run: |
-          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
+          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs gateway)
           if [ -z "$LOGS" ]; then
             echo "ERROR: Gateway logs are empty"
             exit 1
@@ -202,6 +254,7 @@ jobs:
         build-gateway-container,
         build-mock-provider-api-container,
         build-fixtures-container,
+        build-provider-proxy-container,
       ]
     # Run even when build jobs are skipped (merge_group case where general.yml already built them)
     if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
@@ -210,8 +263,6 @@ jobs:
     permissions:
       # Permission to checkout the repository
       contents: read
-      # Permission to fetch GitHub OIDC token authentication
-      id-token: write
       # Permission to download artifacts
       actions: read
     timeout-minutes: 45
@@ -266,30 +317,44 @@ jobs:
           done
         shell: bash
 
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-
-      - name: Login to Namespace registry
-        run: nsc docker login
-
-      - name: Pull pre-built containers from Namespace registry
-        run: |
-          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
-
-      - name: Configure Namespace-powered Buildx
-        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+      - name: Download gateway container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          wait-for-builder: true
+          name: build-gateway-container
 
-      - name: Install Rust toolchain
+      - name: Download mock-provider-api container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-mock-provider-api-container
+
+      - name: Download fixtures container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-fixtures-container
+
+      - name: Download gateway-e2e container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-gateway-e2e-container
+
+      - name: Download provider-proxy container image
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-provider-proxy-container
+
+      - name: Load container images
+        run: |
+          docker load < gateway-container.tar
+          docker load < mock-provider-api-container.tar
+          docker load < fixtures-container.tar
+          docker load < gateway-e2e-container.tar
+          docker load < provider-proxy-container.tar
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+
+      - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -366,19 +431,12 @@ jobs:
 
       - name: Launch dependency services for E2E tests
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy up --no-build -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
-
-      - name: Launch the provider-proxy cache for E2E tests
-        run: |
-          ./ci/run-provider-proxy.sh ci
-
-      - name: Pull gateway-e2e container
-        run: docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs -t
 
       - name: Set up gateway environment file
         run: |
@@ -394,12 +452,10 @@ jobs:
           # Provider API keys
           echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> gateway.env
           echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> gateway.env
+          echo "AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK}" >> gateway.env
           echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> gateway.env
           echo "AWS_REGION=${AWS_REGION}" >> gateway.env
           echo "AZURE_API_KEY=${AZURE_API_KEY}" >> gateway.env
-          echo "AZURE_OPENAI_EASTUS2_API_KEY=${AZURE_OPENAI_EASTUS2_API_KEY}" >> gateway.env
-          echo "AZURE_OPENAI_DEPLOYMENT_ID=${AZURE_OPENAI_DEPLOYMENT_ID}" >> gateway.env
-          echo "AZURE_AI_FOUNDRY_API_KEY=${AZURE_AI_FOUNDRY_API_KEY}" >> gateway.env
           echo "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}" >> gateway.env
           echo "FIREWORKS_API_KEY=${FIREWORKS_API_KEY}" >> gateway.env
           echo "FIREWORKS_ACCOUNT_ID=${FIREWORKS_ACCOUNT_ID}" >> gateway.env
@@ -535,7 +591,7 @@ jobs:
 
       - name: Print provider-proxy logs
         if: always()
-        run: cat provider_proxy_logs.txt
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs provider-proxy 2>&1 || echo "No provider-proxy logs available"
 
       - name: Print vLLM modal logs
         if: always()
