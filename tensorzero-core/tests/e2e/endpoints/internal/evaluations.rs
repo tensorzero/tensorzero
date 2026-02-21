@@ -1056,6 +1056,66 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_run_evaluation_streaming_datapoint_ids_mixed_datasets() {
+    let http_client = Client::new();
+    let _clickhouse = get_clickhouse().await;
+
+    // Create datapoints in two different datasets
+    let dataset_a = format!("test-eval-mixed-a-{}", Uuid::now_v7());
+    let dataset_b = format!("test-eval-mixed-b-{}", Uuid::now_v7());
+
+    let datapoint_id_a = create_test_chat_datapoint(&http_client, &dataset_a).await;
+    let datapoint_id_b = create_test_chat_datapoint(&http_client, &dataset_b).await;
+
+    // Wait for data to be available
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Pass datapoint_ids from different datasets — should fail
+    let payload = json!({
+        "evaluation_config": {
+            "type": "inference",
+            "function_name": "basic_test",
+            "evaluators": {
+                "exact_match_eval": {
+                    "type": "exact_match",
+                }
+            }
+        },
+        "function_config": { "type": "chat" },
+        "evaluation_name": "test_evaluation_mixed_datasets",
+        "datapoint_ids": [datapoint_id_a.to_string(), datapoint_id_b.to_string()],
+        "variant_name": "test",
+        "concurrency": 1,
+        "inference_cache": "off",
+    });
+
+    // The error occurs inside run_evaluation_with_app_state (before the SSE stream
+    // is established), so it comes back as an HTTP error response, not an SSE event.
+    let resp = http_client
+        .post(get_gateway_endpoint("/internal/evaluations/run"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        resp.status().is_server_error(),
+        "Should return an error when datapoint_ids span multiple datasets, got: {:?}",
+        resp.status()
+    );
+
+    let body: Value = resp.json().await.unwrap();
+    let error_message = body
+        .get("error")
+        .and_then(|e| e.as_str())
+        .unwrap_or_default();
+    assert!(
+        error_message.contains("All datapoints must belong to the same dataset"),
+        "Error message should mention the multi-dataset constraint, got: {error_message}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_conflicting_variant_config() {
     let http_client = Client::new();
 

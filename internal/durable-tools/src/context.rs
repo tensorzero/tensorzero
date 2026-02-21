@@ -163,6 +163,11 @@ impl<'a, S: Clone + Send + Sync + 'static> ToolContext<'a, S> {
         self.app_state.tool_registry.read().await
     }
 
+    /// Get access to the 'extra_side' provided when building the 'DurableClient'
+    pub fn extra_state(&self) -> &S {
+        &self.app_state.extra_state
+    }
+
     /// Get mutable access to the underlying durable `TaskContext`.
     ///
     /// Use this for advanced operations not exposed by `ToolContext`.

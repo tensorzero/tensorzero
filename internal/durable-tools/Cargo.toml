@@ -9,6 +9,7 @@ workspace = true
 
 [features]
 test-support = ["dep:mockall"]
+ts-bindings = ["dep:ts-rs", "dep:tensorzero-ts-types", "tensorzero-core/ts-bindings", "evaluations/ts-bindings"]
 
 [dependencies]
 mockall = { version = "0.14", optional = true }
@@ -22,6 +23,7 @@ serde_path_to_error.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
 schemars.workspace = true
 sqlx.workspace = true
+tracing.workspace = true
 thiserror = "2"
 anyhow = "1"
 uuid.workspace = true
@@ -32,6 +34,8 @@ url = "2"
 secrecy.workspace = true
 
 tensorzero-core.workspace = true
+tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
+ts-rs = { workspace = true, optional = true }
 evaluations = { path = "../../evaluations" }
 tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
 indexmap = "2.13.0"

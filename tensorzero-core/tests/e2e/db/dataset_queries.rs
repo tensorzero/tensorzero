@@ -2,9 +2,13 @@
 
 use object_store::path::Path as ObjectStorePath;
 use serde_json::json;
+use sqlx::Row;
 use std::collections::{HashMap, HashSet};
 use tensorzero::{GetDatapointParams, GetDatasetMetadataParams, OrderDirection, Role};
+use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{DatasetMetadata, DatasetQueries, GetDatapointsParams};
+use tensorzero_core::db::postgres::test_helpers::get_postgres;
 use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -2632,4 +2636,256 @@ mod tool_call_storage_tests {
         }
     }
     make_db_test!(test_tool_call_storage_roundtrip_comprehensive);
+}
+
+// ===== SNAPSHOT HASH TESTS =====
+// These tests verify that snapshot_hash is correctly written to the database.
+// They use database-specific queries and cannot use the make_db_test! macro.
+
+/// Test that snapshot_hash is written correctly to ClickHouse for chat datapoints.
+#[tokio::test]
+async fn test_insert_chat_datapoint_snapshot_hash_clickhouse() {
+    let clickhouse = get_clickhouse().await;
+    let snapshot_hash = SnapshotHash::new_test();
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_snapshot_chat_ch_{}", Uuid::now_v7());
+
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "write_haiku".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(snapshot_hash.clone()),
+    };
+
+    clickhouse
+        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await
+        .unwrap();
+
+    clickhouse.sleep_for_writes_to_be_visible().await;
+
+    // Query ClickHouse directly to verify snapshot_hash was written
+    let query = format!(
+        "SELECT snapshot_hash FROM ChatInferenceDatapoint WHERE id = '{datapoint_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let datapoint_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+
+    assert!(
+        !datapoint_row["snapshot_hash"].is_null(),
+        "ChatInferenceDatapoint should have snapshot_hash in ClickHouse"
+    );
+    // Verify it matches the expected value (decimal string representation)
+    let stored_hash: SnapshotHash = datapoint_row["snapshot_hash"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        stored_hash, snapshot_hash,
+        "Stored snapshot_hash should match the inserted value"
+    );
+}
+
+/// Test that snapshot_hash is written correctly to Postgres for chat datapoints.
+#[tokio::test]
+async fn test_insert_chat_datapoint_snapshot_hash_postgres() {
+    let postgres = get_postgres().await;
+    let snapshot_hash = SnapshotHash::new_test();
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_snapshot_chat_pg_{}", Uuid::now_v7());
+
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "write_haiku".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(snapshot_hash.clone()),
+    };
+
+    postgres
+        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await
+        .unwrap();
+
+    // Query Postgres directly to verify snapshot_hash was written
+    let pool = postgres.get_pool().unwrap();
+    let row = sqlx::query("SELECT snapshot_hash FROM tensorzero.chat_datapoints WHERE id = $1")
+        .bind(datapoint_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+
+    let stored_hash_bytes: Option<Vec<u8>> = row.get("snapshot_hash");
+    assert!(
+        stored_hash_bytes.is_some(),
+        "ChatInferenceDatapoint should have snapshot_hash in Postgres"
+    );
+
+    let stored_hash = SnapshotHash::from_bytes(&stored_hash_bytes.unwrap());
+    assert_eq!(
+        stored_hash, snapshot_hash,
+        "Stored snapshot_hash should match the inserted value"
+    );
+}
+
+/// Test that snapshot_hash is written correctly to ClickHouse for JSON datapoints.
+#[tokio::test]
+async fn test_insert_json_datapoint_snapshot_hash_clickhouse() {
+    let clickhouse = get_clickhouse().await;
+    let snapshot_hash = SnapshotHash::new_test();
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_snapshot_json_ch_{}", Uuid::now_v7());
+
+    let datapoint = StoredJsonInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "extract_entities".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            raw: Some("{}".to_string()),
+            parsed: Some(json!({})),
+        }),
+        output_schema: json!({"type":"object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(snapshot_hash.clone()),
+    };
+
+    clickhouse
+        .insert_datapoints(&[StoredDatapoint::Json(datapoint)])
+        .await
+        .unwrap();
+
+    clickhouse.sleep_for_writes_to_be_visible().await;
+
+    // Query ClickHouse directly to verify snapshot_hash was written
+    let query = format!(
+        "SELECT snapshot_hash FROM JsonInferenceDatapoint WHERE id = '{datapoint_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let datapoint_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+
+    assert!(
+        !datapoint_row["snapshot_hash"].is_null(),
+        "JsonInferenceDatapoint should have snapshot_hash in ClickHouse"
+    );
+    // Verify it matches the expected value (decimal string representation)
+    let stored_hash: SnapshotHash = datapoint_row["snapshot_hash"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        stored_hash, snapshot_hash,
+        "Stored snapshot_hash should match the inserted value"
+    );
+}
+
+/// Test that snapshot_hash is written correctly to Postgres for JSON datapoints.
+#[tokio::test]
+async fn test_insert_json_datapoint_snapshot_hash_postgres() {
+    let postgres = get_postgres().await;
+    let snapshot_hash = SnapshotHash::new_test();
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_snapshot_json_pg_{}", Uuid::now_v7());
+
+    let datapoint = StoredJsonInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "extract_entities".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            raw: Some("{}".to_string()),
+            parsed: Some(json!({})),
+        }),
+        output_schema: json!({"type":"object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(snapshot_hash.clone()),
+    };
+
+    postgres
+        .insert_datapoints(&[StoredDatapoint::Json(datapoint)])
+        .await
+        .unwrap();
+
+    // Query Postgres directly to verify snapshot_hash was written
+    let pool = postgres.get_pool().unwrap();
+    let row = sqlx::query("SELECT snapshot_hash FROM tensorzero.json_datapoints WHERE id = $1")
+        .bind(datapoint_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+
+    let stored_hash_bytes: Option<Vec<u8>> = row.get("snapshot_hash");
+    assert!(
+        stored_hash_bytes.is_some(),
+        "JsonInferenceDatapoint should have snapshot_hash in Postgres"
+    );
+
+    let stored_hash = SnapshotHash::from_bytes(&stored_hash_bytes.unwrap());
+    assert_eq!(
+        stored_hash, snapshot_hash,
+        "Stored snapshot_hash should match the inserted value"
+    );
 }

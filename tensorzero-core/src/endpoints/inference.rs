@@ -911,7 +911,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 
         let result = result?;
 
-        if !dryrun {
+        if !dryrun && config.gateway.observability.writes_enabled() {
             // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
             let result_to_write = result.clone();
             let extra_body = inference_config.extra_body.clone();
@@ -1274,7 +1274,7 @@ fn create_stream(
             buffer.push(chunk.clone());
 
             // Stream chunk, unless we've stripped all useful information
-            if should_stream_chunk_in_create_stream(&chunk, metadata.include_original_response, metadata.include_raw_response, metadata.include_raw_usage) {
+            if should_stream_chunk_in_create_stream(&chunk, metadata.cached, metadata.include_original_response, metadata.include_raw_response, metadata.include_raw_usage) {
                 yield Ok(prepare_response_chunk(&metadata, chunk));
             }
         }
@@ -1364,7 +1364,7 @@ fn create_stream(
 
         yield Ok(prepare_response_chunk(&metadata, chunk));
 
-        if !metadata.dryrun {
+        if !metadata.dryrun && config.gateway.observability.writes_enabled() {
             // IMPORTANT: The following code will not be reached if the stream is interrupted.
             // Only do things that would be ok to skip in that case.
             //
@@ -1470,6 +1470,7 @@ fn create_stream(
 /// We always want to stream a chunk if `include_original_response` or `include_raw_response` is enabled.
 fn should_stream_chunk_in_create_stream(
     chunk: &InferenceResultChunk,
+    cached: bool,
     include_original_response: bool,
     include_raw_response: bool,
     include_raw_usage: bool,
@@ -1493,8 +1494,12 @@ fn should_stream_chunk_in_create_stream(
                 aggregated_response: _,
             } = c;
 
-            // We want to stream the chunk if `raw_chunk` is relevant (non-empty and requested)
-            if (include_original_response || include_raw_response) && !raw_chunk.is_empty() {
+            // We want to stream the chunk if `raw_chunk` is relevant (non-empty, requested,
+            // and not suppressed by caching)
+            if !cached
+                && (include_original_response || include_raw_response)
+                && !raw_chunk.is_empty()
+            {
                 return true;
             }
 
@@ -1530,8 +1535,12 @@ fn should_stream_chunk_in_create_stream(
                 aggregated_response: _,
             } = c;
 
-            // We want to stream the chunk if `raw_chunk` is relevant (non-empty and requested)
-            if (include_original_response || include_raw_response) && !raw_chunk.is_empty() {
+            // We want to stream the chunk if `raw_chunk` is relevant (non-empty, requested,
+            // and not suppressed by caching)
+            if !cached
+                && (include_original_response || include_raw_response)
+                && !raw_chunk.is_empty()
+            {
                 return true;
             }
 
@@ -2020,6 +2029,7 @@ impl InferenceResponseChunk {
                 // Compute chunk fields based on request flags
                 let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
                     result.raw_chunk,
+                    cached,
                     include_original_response,
                     include_raw_response,
                 );
@@ -2050,6 +2060,7 @@ impl InferenceResponseChunk {
                 // Compute chunk fields based on request flags
                 let (original_chunk, raw_chunk) = Self::compute_chunk_fields(
                     result.raw_chunk,
+                    cached,
                     include_original_response,
                     include_raw_response,
                 );
@@ -2084,11 +2095,15 @@ impl InferenceResponseChunk {
     /// Returns None if the source is empty (e.g., for fake streams).
     fn compute_chunk_fields(
         source: String,
+        cached: bool,
         include_original: bool,
         include_raw: bool,
     ) -> (Option<String>, Option<String>) {
-        // Don't serialize empty strings - return None instead
-        let source = if source.is_empty() {
+        // Suppress raw chunk data on cache hits (no raw provider data for cached responses)
+        let source = if cached {
+            None
+        } else if source.is_empty() {
+            // Don't serialize empty strings - return None instead
             None
         } else {
             Some(source)
@@ -3437,11 +3452,11 @@ mod tests {
             ..Default::default()
         });
         assert!(
-            should_stream_chunk_in_create_stream(&chunk_with_content, false, false, false),
+            should_stream_chunk_in_create_stream(&chunk_with_content, false, false, false, false),
             "Chunk with content should stream"
         );
         assert!(
-            should_stream_chunk_in_create_stream(&chunk_with_content, false, true, false),
+            should_stream_chunk_in_create_stream(&chunk_with_content, false, false, true, false),
             "Chunk with content should stream even with include_raw_response"
         );
 
@@ -3454,7 +3469,7 @@ mod tests {
             ..Default::default()
         });
         assert!(
-            should_stream_chunk_in_create_stream(&chunk_with_usage, false, false, false),
+            should_stream_chunk_in_create_stream(&chunk_with_usage, false, false, false, false),
             "Chunk with usage should stream"
         );
 
@@ -3464,25 +3479,25 @@ mod tests {
             ..Default::default()
         });
         assert!(
-            should_stream_chunk_in_create_stream(&chunk_with_finish, false, false, false),
+            should_stream_chunk_in_create_stream(&chunk_with_finish, false, false, false, false),
             "Chunk with finish_reason should stream"
         );
 
         // Empty chunk should NOT stream
         let empty_chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk::default());
         assert!(
-            !should_stream_chunk_in_create_stream(&empty_chunk, false, false, false),
+            !should_stream_chunk_in_create_stream(&empty_chunk, false, false, false, false),
             "Empty chunk should not stream"
         );
 
         // Empty chunk should NOT stream even with include_raw_response=true
         // (This is the bug fix: previously it would unconditionally return true)
         assert!(
-            !should_stream_chunk_in_create_stream(&empty_chunk, false, true, false),
+            !should_stream_chunk_in_create_stream(&empty_chunk, false, false, true, false),
             "Empty chunk should not stream even with include_raw_response=true"
         );
         assert!(
-            !should_stream_chunk_in_create_stream(&empty_chunk, true, false, false),
+            !should_stream_chunk_in_create_stream(&empty_chunk, false, true, false, false),
             "Empty chunk should not stream even with include_original_response=true"
         );
 
@@ -3492,22 +3507,42 @@ mod tests {
             ..Default::default()
         });
         assert!(
-            !should_stream_chunk_in_create_stream(&chunk_with_raw, false, false, false),
+            !should_stream_chunk_in_create_stream(&chunk_with_raw, false, false, false, false),
             "Chunk with only raw_chunk should not stream when flags are off"
         );
         assert!(
-            should_stream_chunk_in_create_stream(&chunk_with_raw, false, true, false),
+            should_stream_chunk_in_create_stream(&chunk_with_raw, false, false, true, false),
             "Chunk with raw_chunk should stream when include_raw_response=true"
         );
         assert!(
-            should_stream_chunk_in_create_stream(&chunk_with_raw, true, false, false),
+            should_stream_chunk_in_create_stream(&chunk_with_raw, false, true, false, false),
             "Chunk with raw_chunk should stream when include_original_response=true"
+        );
+
+        // Chunk with raw_chunk should NOT stream when cached, even with include_raw_response=true
+        assert!(
+            !should_stream_chunk_in_create_stream(&chunk_with_raw, true, false, true, false),
+            "Cached chunk with raw_chunk should not stream (raw_chunk suppressed on cache hit)"
+        );
+        assert!(
+            !should_stream_chunk_in_create_stream(&chunk_with_raw, true, true, false, false),
+            "Cached chunk with raw_chunk should not stream even with include_original_response"
+        );
+        assert!(
+            !should_stream_chunk_in_create_stream(&chunk_with_raw, true, true, true, false),
+            "Cached chunk with raw_chunk should not stream even with both flags"
+        );
+
+        // Chunk with content should still stream even when cached
+        assert!(
+            should_stream_chunk_in_create_stream(&chunk_with_content, true, false, true, false),
+            "Cached chunk with content should still stream"
         );
 
         // Same tests for Json variant
         let json_empty = InferenceResultChunk::Json(JsonInferenceResultChunk::default());
         assert!(
-            !should_stream_chunk_in_create_stream(&json_empty, false, true, false),
+            !should_stream_chunk_in_create_stream(&json_empty, false, false, true, false),
             "Empty JSON chunk should not stream even with include_raw_response=true"
         );
 
@@ -3516,8 +3551,12 @@ mod tests {
             ..Default::default()
         });
         assert!(
-            should_stream_chunk_in_create_stream(&json_with_raw, false, true, false),
+            should_stream_chunk_in_create_stream(&json_with_raw, false, false, true, false),
             "JSON chunk with raw_chunk should stream when include_raw_response=true"
+        );
+        assert!(
+            !should_stream_chunk_in_create_stream(&json_with_raw, true, false, true, false),
+            "Cached JSON chunk with raw_chunk should not stream (raw_chunk suppressed on cache hit)"
         );
     }
 

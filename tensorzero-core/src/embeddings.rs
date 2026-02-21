@@ -490,6 +490,7 @@ pub struct EmbeddingResponseWithMetadata {
     pub embedding_provider_name: Arc<str>,
     pub provider_type: Arc<str>,
     pub embedding_model_name: Arc<str>,
+    pub cached: bool,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub failed_raw_response: Vec<RawResponseEntry>,
 }
@@ -532,6 +533,7 @@ impl EmbeddingResponseWithMetadata {
             embedding_provider_name: embedding_response.embedding_provider_name,
             provider_type: embedding_response.provider_type,
             embedding_model_name,
+            cached: embedding_response.cached,
             raw_usage: embedding_response.raw_usage,
             failed_raw_response: embedding_response.failed_raw_response,
         }
@@ -565,7 +567,7 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             model_provider_name: response.embedding_provider_name.clone(),
             provider_type: response.provider_type,
             model_name: response.embedding_model_name,
-            cached: false,
+            cached: response.cached,
             finish_reason: None,
             raw_usage: response.raw_usage,
             relay_raw_response: None,
