@@ -696,239 +696,23 @@ jobs:
         run: cargo deny check
 
   clickhouse-tests:
-    name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
-    permissions:
-      contents: read
-      # Permission to download artifacts and for rust-cache
-      actions: read
-      # Permission to fetch GitHub OIDC token authentication for Namespace login
-      id-token: write
     needs:
       [
-        build-gateway-container,
+        build-gateway-e2e-container,
         build-mock-provider-api-container,
         build-fixtures-container,
       ]
-
-    # We don't run many tests here, so use a normal runner with Github Actions caching
-    # to avoid unnecessarily using Namespace credits (it should still always finish before
-    # the main 'validate' job)
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16;ephemeral-storage.size-multiplier=2' || 'namespace-profile-tensorzero-8x16' }}
-    continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
-    # This needs to pull from Docker Hub, so only run in the merge queue, or when running on a PR from the main repository
-    # TODO - switch back to 'latest': https://github.com/tensorzero/tensorzero/issues/6080
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
-    strategy:
-      matrix:
-        # Only include replicated: true when running in merge queue
-        replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"25.11","prefix":"25.11","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
-        exclude:
-          - replicated: true
-            clickhouse_version:
-              { "tag": "25.11", "prefix": "25.11", "allow_failure": false }
-        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.11","prefix":"25.11","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
-
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust (from rust-toolchain.toml)
-        run: |
-          for attempt in 1 2 3; do
-            if rustup show; then
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust toolchain after 3 attempts"
-              exit 1
-            fi
-            sleep $((10 * attempt))
-          done
-        shell: bash
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
-        with:
-          cache-provider: "buildjet"
-          shared-key: "build-gateway-cache"
-          save-if: false
-      - name: "Check disk space before cleanup"
-        run: df -h
-      # ClickHouse intermittently runs out of disk space on the `ubuntu-latest` runner
-      # Use extreme disk cleanup script that frees up ~26GB of space (11-phase cleanup)
-      - name: "Free up disk space"
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
-        with:
-          tool: cargo-nextest
-
-      - name: Set ClickHouse replicated cluster name
-        if: matrix.replicated == true
-        run: echo "TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster" >> $GITHUB_ENV
-
-      - name: Setup Namespace caching for Clickhouse fixtures
-        uses: namespacelabs/nscloud-cache-action@446d8f390563cd54ca27e8de5bdb816f63c0b706
-        with:
-          path: |
-            ./ui/fixtures/large-fixtures/
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
-        with:
-          version: "0.9.27"
-
-      - name: Download container images
-        run: |
-          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
-          # Retag the images to what we expect the names to be
-          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
-
-      - name: Download ClickHouse fixtures
-        run: |
-          uv run ./ui/fixtures/download-large-fixtures.py
-          uv run ./ui/fixtures/download-small-fixtures.py
-
-      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (non-replicated)
-        if: matrix.replicated == false
-        run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
-
-      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (replicated)
-        if: matrix.replicated == true
-        run: |
-          # Note: In replicated mode, we use the HTTP port (8124) of the second replica so we can ensure this works
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8124/tensorzero_e2e_tests" >> $GITHUB_ENV
-
-      - name: Set container image tags
-        run: |
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-
-      - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
-        if: matrix.replicated == false
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build --wait
-
-      - name: Launch replicated ClickHouse container for E2E tests
-        if: matrix.replicated == true
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up --no-build --wait
-
-      # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
-      - name: Check ClickHouse version
-        run: |
-          CLICKHOUSE_VERSION=$(curl -s "http://localhost:8123/query?user=chuser&password=chpassword" --data-binary "SELECT version()")
-          echo "Detected ClickHouse version: $CLICKHOUSE_VERSION"
-          echo "$CLICKHOUSE_VERSION" | grep -q "${{ matrix.clickhouse_version.prefix }}" || echo "WARNING: ClickHouse version does not match expected ${{ matrix.clickhouse_version.prefix }}"
-
-      # We run this as a separate step so that we can see live build logs
-      # (and fail the job immediately if the build fails)
-      - name: Build the gateway for E2E tests
-        run: cargo build-e2e
-
-      - name: Launch the gateway for E2E tests (not configured for replication)
-        if: matrix.replicated == false
-        run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
-            count=0
-            max_attempts=20
-            while ! curl http://localhost:3000/health; do
-              echo "Waiting for gateway to be healthy..."
-              sleep 1
-              count=$((count + 1))
-              if [ $count -ge $max_attempts ]; then
-                echo "Gateway failed to become healthy after $max_attempts attempts"
-                exit 1
-              fi
-            done
-          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
-
-      - name: Launch the gateway for E2E tests (configured for replication)
-        if: matrix.replicated == true
-        env:
-          TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests
-        run: |
-          cargo run-e2e --run-clickhouse-migrations &&
-          cargo run-e2e > e2e_logs.txt 2>&1 &
-            count=0
-            max_attempts=40
-            while ! curl http://localhost:3000/health; do
-              echo "Waiting for gateway to be healthy..."
-              sleep 1
-              count=$((count + 1))
-              if [ $count -ge $max_attempts ]; then
-                echo "Gateway failed to become healthy after $max_attempts attempts"
-                exit 1
-              fi
-            done
-          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
-
-      - name: Test (Rust)
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-          TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-        run: cargo test-clickhouse
-
-      - name: Print docker compose logs (replicated)
-        if: always() && matrix.replicated == true
-        run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
-
-      - name: Print ClickHouse error logs (replicated)
-        if: always() && matrix.replicated == true
-        run: |
-          echo "Error logs for ClickHouse 01:"
-          docker cp e2e-clickhouse-01-1:/var/log/clickhouse-server/clickhouse-server.err.log -
-          echo "Error logs for ClickHouse 02:"
-          docker cp e2e-clickhouse-02-1:/var/log/clickhouse-server/clickhouse-server.err.log -
-          echo "Error logs for ClickHouse 03:"
-          docker cp e2e-clickhouse-03-1:/var/log/clickhouse-server/clickhouse-server.err.log -
-
-      - name: Print ClickHouse trace logs (replicated)
-        if: always() && matrix.replicated == true
-        run: |
-          echo "Trace logs for ClickHouse 01:"
-          docker cp e2e-clickhouse-01-1:/var/log/clickhouse-server/clickhouse-server.log -
-          echo "Trace logs for ClickHouse 02:"
-          docker cp e2e-clickhouse-02-1:/var/log/clickhouse-server/clickhouse-server.log -
-          echo "Trace logs for ClickHouse 03:"
-          docker cp e2e-clickhouse-03-1:/var/log/clickhouse-server/clickhouse-server.log -
-
-      - name: Print container health checks (replicated)
-        if: always() && matrix.replicated == true
-        run: |
-          echo "Health check for ClickHouse 01:"
-          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-01-1 | jq
-          echo "Health check for ClickHouse 02:"
-          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-02-1 | jq
-          echo "Health check for ClickHouse 03:"
-          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-03-1 | jq
-
-      - name: Print docker compose logs (non-replicated)
-        if: always() && matrix.replicated == false
-        run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
-
-      - name: Print ClickHouse error logs (non-replicated)
-        if: always() && matrix.replicated == false
-        run: docker cp e2e-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.err.log -
-
-      - name: Print ClickHouse trace logs (non-replicated)
-        if: always() && matrix.replicated == false
-        run: docker cp e2e-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.log -
-
-      - name: Print container health checks (non-replicated)
-        if: always() && matrix.replicated == false
-        run: |
-          echo "Health check for ClickHouse:"
-          docker inspect --format "{{json .State.Health }}" e2e-clickhouse-1 | jq || echo "Could not read health check"
-
-      - name: Print e2e logs
-        if: always()
-        run: cat e2e_logs.txt
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/clickhouse-tests.yml
+    with:
+      is_merge_group: ${{ github.event_name == 'merge_group' }}
+    secrets:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
   # Run Postgres tests
   # Postgres does not have unit test coverage, because sqlx doesn't expose mocks. We include it here to get early CI signals.
@@ -1028,7 +812,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Cleanup disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        run: bash ci/free-disk-space.sh
 
       - name: Install Rust (from rust-toolchain.toml)
         run: |
@@ -1174,7 +958,7 @@ jobs:
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
           version: "0.9.27"
-          # Without this, the post-install hook tries to prune and save the cache, but jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be already nukes /opt/hostedtoolcache/*, so it fails.
+          # Without this, the post-install hook tries to prune and save the cache, but the disk cleanup script already nukes /opt/hostedtoolcache/*, so it fails.
           enable-cache: "false"
 
       - name: Download ClickHouse fixtures
@@ -1183,7 +967,7 @@ jobs:
           uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Cleanup disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        run: bash ci/free-disk-space.sh
 
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64

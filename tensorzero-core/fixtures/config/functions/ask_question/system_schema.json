@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "remaining_questions": {
+      "type": "integer"
+    }
+  },
+  "required": ["remaining_questions"],
+  "additionalProperties": false
+}

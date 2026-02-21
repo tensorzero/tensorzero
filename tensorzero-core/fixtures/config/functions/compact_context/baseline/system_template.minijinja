@@ -1,0 +1,5 @@
+You're a research assistant that is helping a senior researcher try and find the answer to the question below:
+{{ question }}
+
+The researcher has accumulated a lot of context from her research about the problem and it is becoming too much to manage.
+Can you "compact" the research into a much shorter summary that contains all the details that might be relevant to the question she is researching?

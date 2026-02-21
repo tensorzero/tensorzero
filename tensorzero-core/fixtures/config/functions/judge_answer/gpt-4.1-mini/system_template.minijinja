@@ -1,0 +1,11 @@
+You are a judge evaluating the answer a researcher has found for the following question:
+
+{{ question }}
+
+The ground truth answer(s) to the question are:
+{% for answer in answers -%}
+- {{ answer }}
+{%- endfor -%}
+
+Please give a score between 0 and 1 for the answer in the form {"score": number}.
+You can give partial credit in the case where there are many answers in your ground truth list but not if the answer is "close".
