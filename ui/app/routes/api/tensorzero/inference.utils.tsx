@@ -236,11 +236,12 @@ export function prepareInferenceActionRequest(
     credentials: new Map(),
     cache_options: {
       max_age_s: null,
-      enabled: "on",
+      enabled: "off",
     },
     include_original_response: false, // deprecated
     include_raw_response: false,
     include_raw_usage: false,
+    include_aggregated_response: false,
   };
 
   // Prepare request based on source and function type

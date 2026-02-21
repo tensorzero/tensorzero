@@ -143,6 +143,14 @@ pub async fn start_batch_inference(
         }));
     }
 
+    if !config.gateway.observability.writes_enabled() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Batch inference requires observability to be enabled \
+                      (`gateway.observability.enabled` must not be `false`)."
+                .to_string(),
+        }));
+    }
+
     let database = DelegatingDatabaseConnection::new(
         clickhouse_connection_info.clone(),
         postgres_connection_info.clone(),
@@ -248,6 +256,7 @@ pub async fn start_batch_inference(
         relay: config.gateway.relay.clone(),
         include_raw_usage: false, // batch inference does not support include_raw_usage (#5452)
         include_raw_response: false, // batch inference does not support include_raw_response
+        include_aggregated_response: false, // batch inference does not support include_aggregated_response
     };
 
     let inference_models = InferenceModels {
@@ -506,6 +515,14 @@ pub async fn poll_batch_inference_handler(
     if config.gateway.relay.is_some() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: "poll_batch_inference is not supported in relay mode".to_string(),
+        }));
+    }
+
+    if !config.gateway.observability.writes_enabled() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Batch inference requires observability to be enabled \
+                      (`gateway.observability.enabled` must not be `false`)."
+                .to_string(),
         }));
     }
 
@@ -1177,6 +1194,8 @@ pub async fn get_completed_batch_inference_response(
 }
 
 /// Convert a CompletedBatchInferenceRow to an InferenceResponse based on function type.
+/// When `output` is None (inference data dropped due to retention), defaults to
+/// an empty content list (Chat) or empty JSON object (Json).
 fn convert_row_to_inference_response(
     row: CompletedBatchInferenceRow,
     function: &FunctionConfig,
@@ -1188,12 +1207,14 @@ fn convert_row_to_inference_response(
 
     match function {
         FunctionConfig::Chat(_) => {
-            let output: Vec<ContentBlockChatOutput> =
-                serde_json::from_str(&row.output).map_err(|e| {
+            let output: Vec<ContentBlockChatOutput> = match row.output {
+                Some(ref output_str) => serde_json::from_str(output_str).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: e.to_string(),
                     })
-                })?;
+                })?,
+                None => vec![],
+            };
             Ok(InferenceResponse::Chat(ChatInferenceResponse {
                 inference_id: row.inference_id,
                 episode_id: row.episode_id,
@@ -1207,11 +1228,17 @@ fn convert_row_to_inference_response(
             }))
         }
         FunctionConfig::Json(_) => {
-            let output: JsonInferenceOutput = serde_json::from_str(&row.output).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: e.to_string(),
-                })
-            })?;
+            let output: JsonInferenceOutput = match row.output {
+                Some(ref output_str) => serde_json::from_str(output_str).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: e.to_string(),
+                    })
+                })?,
+                None => JsonInferenceOutput {
+                    raw: None,
+                    parsed: None,
+                },
+            };
             Ok(InferenceResponse::Json(JsonInferenceResponse {
                 inference_id: row.inference_id,
                 episode_id: row.episode_id,
@@ -1224,5 +1251,54 @@ fn convert_row_to_inference_response(
                 finish_reason: row.finish_reason,
             }))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    use crate::config::gateway::GatewayConfig;
+    use crate::config::{Config, ObservabilityConfig};
+    use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::error::ErrorDetails;
+    use crate::utils::gateway::{GatewayHandle, GatewayHandleTestOptions};
+
+    #[tokio::test]
+    async fn test_start_batch_inference_rejects_when_observability_disabled() {
+        let config = Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: Some(false),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut mock_client = MockClickHouseClient::new();
+        mock_client.expect_batcher_join_handle().returning(|| None);
+        let gateway_handle = GatewayHandle::new_unit_test_data(
+            Arc::new(config),
+            GatewayHandleTestOptions {
+                clickhouse_client: Arc::new(mock_client),
+                postgres_healthy: false,
+            },
+        );
+        let app_state = gateway_handle.app_state.clone();
+        let params = StartBatchInferenceParams::default();
+        let error = start_batch_inference(app_state, params, None)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidRequest {
+                message: "Batch inference requires observability to be enabled \
+                          (`gateway.observability.enabled` must not be `false`)."
+                    .to_string(),
+            },
+            "Batch inference should be rejected when observability is disabled"
+        );
     }
 }

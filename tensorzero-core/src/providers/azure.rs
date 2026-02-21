@@ -1202,7 +1202,7 @@ mod tests {
         // Run in credential validation skip context to avoid API key requirement
         let provider = with_skip_credential_validation(async {
             AzureProvider::new(
-                "gpt-4.1-mini".to_string(),
+                "gpt-5-mini".to_string(),
                 EndpointLocation::Static("https://test.openai.azure.com".to_string()),
                 AzureCredentials::None,
             )
@@ -1210,7 +1210,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
+        assert_eq!(provider.deployment_id(), "gpt-5-mini");
         match provider.endpoint {
             AzureEndpoint::Static(url) => {
                 assert_eq!(url.as_str(), "https://test.openai.azure.com/");
@@ -1224,7 +1224,7 @@ mod tests {
         // Run in credential validation skip context to avoid API key requirement
         let provider = with_skip_credential_validation(async {
             AzureProvider::new(
-                "gpt-4.1-mini".to_string(),
+                "gpt-5-mini".to_string(),
                 EndpointLocation::Dynamic("azure_endpoint".to_string()),
                 AzureCredentials::None,
             )
@@ -1232,7 +1232,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(provider.deployment_id(), "gpt-4.1-mini");
+        assert_eq!(provider.deployment_id(), "gpt-5-mini");
         match provider.endpoint {
             AzureEndpoint::Dynamic(key) => {
                 assert_eq!(key, "azure_endpoint");

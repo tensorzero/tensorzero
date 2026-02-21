@@ -1,25 +1,11 @@
-import { countInferencesForFunction } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
-import {
-  Await,
-  data,
-  useAsyncError,
-  useLocation,
-  useNavigate,
-  useSearchParams,
-} from "react-router";
+import { data, useLocation } from "react-router";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
-import PageButtons from "~/components/utils/PageButtons";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
-import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import { useFunctionConfig } from "~/context/config";
-import { MetricSelector } from "~/components/function/variant/MetricSelector";
-import { Suspense, useMemo } from "react";
-import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
-import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
 import {
   PageHeader,
   PageLayout,
@@ -31,26 +17,19 @@ import {
 import { FunctionTypeBadge } from "~/components/function/FunctionSelector";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { FunctionConfig, TimeWindow } from "~/types/tensorzero";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { applyPaginationLogic } from "~/utils/pagination";
-import { Skeleton } from "~/components/ui/skeleton";
-import { PageErrorContent } from "~/components/ui/error";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "~/components/ui/table";
 import { fetchVariantsSectionData } from "./variants-data.server";
 import { VariantsSection } from "./VariantsSection";
 import { fetchExperimentationSectionData } from "./experimentation-data.server";
 import { ExperimentationSection } from "./ExperimentationSection";
-
-export type FunctionDetailData = Awaited<
-  ReturnType<typeof fetchFunctionDetailData>
->;
+import { fetchThroughputSectionData } from "./throughput-data.server";
+import { ThroughputSection } from "./ThroughputSection";
+import { fetchMetricsSectionData } from "./metrics-data.server";
+import { MetricsSection } from "./MetricsSection";
+import {
+  countInferences,
+  fetchInferencesSectionData,
+} from "./inferences-data.server";
+import { InferencesSection } from "./InferencesSection";
 
 function FunctionDetailPageHeader({
   functionName,
@@ -83,154 +62,6 @@ function FunctionDetailPageHeader({
   );
 }
 
-function SectionsSkeleton() {
-  return (
-    <>
-      <SectionLayout>
-        <SectionHeader heading="Throughput" />
-        <Skeleton className="h-64 w-full" />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Metrics" />
-        <Skeleton className="mb-4 h-10 w-64" />
-        <Skeleton className="h-64 w-full" />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Schemas" />
-        <Skeleton className="h-32 w-full" />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Inferences" />
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Variant</TableHead>
-              <TableHead>Time</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <TableRow key={i}>
-                <TableCell>
-                  <Skeleton className="h-4 w-48" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-24" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-4 w-32" />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </SectionLayout>
-    </>
-  );
-}
-
-function SectionsErrorState() {
-  const error = useAsyncError();
-  return (
-    <SectionLayout>
-      <PageErrorContent error={error} />
-    </SectionLayout>
-  );
-}
-
-type FetchParams = {
-  function_name: string;
-  config: Awaited<ReturnType<typeof getConfig>>;
-  beforeInference: string | null;
-  afterInference: string | null;
-  limit: number;
-  metric_name: string | undefined;
-  time_granularity: TimeWindow;
-  throughput_time_granularity: TimeWindow;
-};
-
-async function fetchFunctionDetailData(params: FetchParams) {
-  const {
-    function_name,
-    config,
-    beforeInference,
-    afterInference,
-    limit,
-    metric_name,
-    time_granularity,
-    throughput_time_granularity,
-  } = params;
-
-  const client = getTensorZeroClient();
-  const inferencePromise = client.listInferenceMetadata({
-    function_name,
-    before: beforeInference || undefined,
-    after: afterInference || undefined,
-    limit: limit + 1, // Fetch one extra to determine pagination
-  });
-  const numInferencesPromise = countInferencesForFunction(function_name);
-  const tensorZeroClient = getTensorZeroClient();
-  const metricsWithFeedbackPromise =
-    tensorZeroClient.getFunctionMetricsWithFeedback(function_name);
-  const variantPerformancesPromise =
-    // Only get variant performances if metric_name is provided and valid
-    metric_name && config.metrics[metric_name]
-      ? tensorZeroClient
-          .getVariantPerformances(function_name, metric_name, time_granularity)
-          .then((response) =>
-            response.performances.length > 0
-              ? response.performances
-              : undefined,
-          )
-      : Promise.resolve(undefined);
-  const variantThroughputPromise = tensorZeroClient
-    .getFunctionThroughputByVariant(
-      function_name,
-      throughput_time_granularity,
-      10,
-    )
-    .then((response) => response.throughput);
-
-  const [
-    inferenceResult,
-    num_inferences,
-    metricsWithFeedback,
-    variant_performances,
-    variant_throughput,
-  ] = await Promise.all([
-    inferencePromise,
-    numInferencesPromise,
-    metricsWithFeedbackPromise,
-    variantPerformancesPromise,
-    variantThroughputPromise,
-  ]);
-
-  // Handle pagination from listInferenceMetadata response
-  const {
-    items: inferences,
-    hasNextPage: hasNextInferencePage,
-    hasPreviousPage: hasPreviousInferencePage,
-  } = applyPaginationLogic(inferenceResult.inference_metadata, limit, {
-    before: beforeInference,
-    after: afterInference,
-  });
-
-  return {
-    function_name,
-    inferences,
-    hasNextInferencePage,
-    hasPreviousInferencePage,
-    num_inferences,
-    metricsWithFeedback,
-    variant_performances,
-    variant_throughput,
-  };
-}
-
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
@@ -256,6 +87,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
 
+  const inferenceCountPromise = countInferences(function_name);
+
   return {
     function_name,
     variantsData: fetchVariantsSectionData({ function_name, function_config }),
@@ -267,116 +100,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             time_granularity: feedback_time_granularity,
           })
         : null,
-    functionDetailData: fetchFunctionDetailData({
+    throughputData: fetchThroughputSectionData({
       function_name,
+      time_granularity: throughput_time_granularity,
+    }),
+    metricsData: fetchMetricsSectionData({
+      function_name,
+      metric_name,
+      time_granularity,
       config,
+    }),
+    inferenceCountPromise,
+    inferencesData: fetchInferencesSectionData({
+      function_name,
       beforeInference,
       afterInference,
       limit,
-      metric_name,
-      time_granularity,
-      throughput_time_granularity,
     }),
   };
-}
-
-function SectionsContent({
-  data,
-  functionConfig,
-}: {
-  data: FunctionDetailData;
-  functionConfig: FunctionConfig;
-}) {
-  const {
-    inferences,
-    hasNextInferencePage,
-    hasPreviousInferencePage,
-    num_inferences,
-    metricsWithFeedback,
-    variant_performances,
-    variant_throughput,
-  } = data;
-
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  // Only get top/bottom inferences if array is not empty
-  const topInference = inferences.length > 0 ? inferences[0] : null;
-  const bottomInference =
-    inferences.length > 0 ? inferences[inferences.length - 1] : null;
-
-  const handleNextInferencePage = () => {
-    if (!bottomInference) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("afterInference");
-    searchParams.set("beforeInference", bottomInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousInferencePage = () => {
-    if (!topInference) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("beforeInference");
-    searchParams.set("afterInference", topInference.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const metric_name = searchParams.get("metric_name") || "";
-
-  const handleMetricChange = (metric: string) => {
-    const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("metric_name", metric);
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const metricsExcludingDemonstrations = useMemo(
-    () => ({
-      metrics: metricsWithFeedback.metrics.filter(
-        ({ metric_type }) => metric_type !== "demonstration",
-      ),
-    }),
-    [metricsWithFeedback],
-  );
-
-  return (
-    <>
-      <SectionLayout>
-        <SectionHeader heading="Throughput" />
-        <VariantThroughput variant_throughput={variant_throughput} />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Metrics" />
-        <MetricSelector
-          metricsWithFeedback={metricsExcludingDemonstrations}
-          selectedMetric={metric_name || ""}
-          onMetricChange={handleMetricChange}
-        />
-        {variant_performances && (
-          <VariantPerformance
-            variant_performances={variant_performances}
-            metric_name={metric_name}
-          />
-        )}
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Schemas" />
-        <FunctionSchema functionConfig={functionConfig} />
-      </SectionLayout>
-
-      <SectionLayout>
-        <SectionHeader heading="Inferences" count={num_inferences} />
-        <FunctionInferenceTable inferences={inferences} />
-        <PageButtons
-          onPreviousPage={handlePreviousInferencePage}
-          onNextPage={handleNextInferencePage}
-          disablePrevious={!hasPreviousInferencePage}
-          disableNext={!hasNextInferencePage}
-        />
-      </SectionLayout>
-    </>
-  );
 }
 
 export default function FunctionDetailPage({
@@ -386,7 +127,10 @@ export default function FunctionDetailPage({
     function_name,
     variantsData,
     experimentationData,
-    functionDetailData,
+    throughputData,
+    metricsData,
+    inferenceCountPromise,
+    inferencesData,
   } = loaderData;
   const location = useLocation();
   const function_config = useFunctionConfig(function_name);
@@ -418,16 +162,23 @@ export default function FunctionDetailPage({
           />
         )}
 
-        <Suspense key={location.key} fallback={<SectionsSkeleton />}>
-          <Await
-            resolve={functionDetailData}
-            errorElement={<SectionsErrorState />}
-          >
-            {(data) => (
-              <SectionsContent data={data} functionConfig={function_config} />
-            )}
-          </Await>
-        </Suspense>
+        <ThroughputSection
+          throughputData={throughputData}
+          locationKey={location.key}
+        />
+
+        <MetricsSection metricsData={metricsData} locationKey={location.key} />
+
+        <SectionLayout>
+          <SectionHeader heading="Schemas" />
+          <FunctionSchema functionConfig={function_config} />
+        </SectionLayout>
+
+        <InferencesSection
+          inferencesData={inferencesData}
+          countPromise={inferenceCountPromise}
+          locationKey={location.key}
+        />
       </SectionsGroup>
     </PageLayout>
   );

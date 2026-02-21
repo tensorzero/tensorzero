@@ -150,7 +150,10 @@ pub enum PollBatchInferenceResponse {
     },
 }
 
-/// Data retrieved from the BatchRequest table in ClickHouse
+/// Data retrieved from the BatchRequest table.
+/// In Postgres, `raw_request` and `raw_response` live in a separate
+/// `batch_request_data` table with daily partitions. They may be `None`
+/// if the data was dropped due to retention policy.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BatchRequestRow<'a> {
     pub batch_id: Uuid,
@@ -158,12 +161,15 @@ pub struct BatchRequestRow<'a> {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub batch_params: Cow<'a, Value>,
     pub model_name: Arc<str>,
-    pub raw_request: Cow<'a, str>,
-    pub raw_response: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_request: Option<Cow<'a, str>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<Cow<'a, str>>,
     pub model_provider_name: Cow<'a, str>,
     pub status: BatchStatus,
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<SnapshotHash>,
@@ -264,8 +270,8 @@ impl<'a> BatchRequestRow<'a> {
             function_name: Cow::Borrowed(function_name),
             variant_name: Cow::Borrowed(variant_name),
             model_name: Arc::from(model_name),
-            raw_request: Cow::Borrowed(raw_request),
-            raw_response: Cow::Borrowed(raw_response),
+            raw_request: Some(Cow::Borrowed(raw_request)),
+            raw_response: Some(Cow::Borrowed(raw_response)),
             model_provider_name: Cow::Borrowed(model_provider_name),
             status,
             errors,

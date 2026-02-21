@@ -1,0 +1,90 @@
+---
+title: Upgrade TensorZero
+description: Learn how to upgrade TensorZero with minimal downtime.
+---
+
+This guide covers how to upgrade the TensorZero Gateway, run database migrations, and perform zero-downtime upgrades.
+
+## Before you upgrade
+
+<Steps>
+
+<Step title="Check the release notes">
+
+Review the [release notes on GitHub](https://github.com/tensorzero/tensorzero/releases) for any breaking changes or special migration instructions.
+
+</Step>
+
+<Step title="Back up your databases">
+
+We recommend backing up your ClickHouse and Postgres databases according to your provider's backup procedures.
+
+</Step>
+
+</Steps>
+
+## Upgrade the TensorZero Gateway
+
+The TensorZero Gateway is stateless: it does not store any data locally.
+This means you can upgrade it by simply replacing the running container with a new one.
+The gateway handles `SIGTERM` gracefully, so in-flight requests will complete before shutdown.
+
+<Steps>
+
+<Step title="Update the image tag">
+
+Update the gateway image tag (e.g. in your `docker-compose.yml`, Helm values, or deployment manifest) to the desired version.
+
+</Step>
+
+<Step title="Run database migrations">
+
+Run any required [ClickHouse](/deployment/clickhouse) and [Postgres](/deployment/postgres) migrations before starting the new gateway.
+Valkey (Redis) does not require any migrations.
+
+<Warning>
+
+**Rollback database migrations**
+
+Migrations are expected to work smoothly, but rare issues can happen.
+
+- **ClickHouse:** The gateway logs manual rollback instructions if a migration fails.
+- **Postgres:** Rollback instructions are not available at the moment.
+
+If rollbacks are not feasible, restore the database from a backup.
+
+</Warning>
+
+</Step>
+
+<Step title="Restart the gateway">
+
+Restart the gateway with the new image.
+
+<Tip>
+
+**Zero-downtime Upgrades**
+
+Because the gateway is stateless, you can run old and new instances side-by-side behind a load balancer. Run migrations first, start new instances, verify they're healthy via `/health`, then drain and shut down the old ones.
+
+</Tip>
+
+</Step>
+
+<Step title="Verify the upgrade">
+
+```bash
+curl http://localhost:3000/status
+```
+
+</Step>
+
+</Steps>
+
+## Upgrading the TensorZero UI
+
+The TensorZero UI follows the same versioning as the gateway.
+To upgrade, update the image tag and restart.
+The UI does not require any database migrations.
+
+See [Deploy the TensorZero UI](/deployment/tensorzero-ui) for more details.

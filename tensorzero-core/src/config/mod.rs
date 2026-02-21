@@ -393,6 +393,14 @@ pub struct ObservabilityConfig {
     pub disable_automatic_migrations: bool,
 }
 
+impl ObservabilityConfig {
+    /// Returns true when observability writes (inferences, feedback) should be persisted.
+    /// Defaults to true when `enabled` is not explicitly set.
+    pub fn writes_enabled(&self) -> bool {
+        self.enabled.unwrap_or(true)
+    }
+}
+
 fn default_flush_interval_ms() -> u64 {
     100
 }
@@ -1475,6 +1483,8 @@ impl Config {
             }
             model.validate(model_name, &self.gateway.global_outbound_http_timeout)?;
         }
+
+        namespace::validate_namespaced_model_usage(&self.functions, &self.models)?;
 
         for embedding_model_name in self.embedding_models.table.keys() {
             if embedding_model_name.starts_with("tensorzero::") {

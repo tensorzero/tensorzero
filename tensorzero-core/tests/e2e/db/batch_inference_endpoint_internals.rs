@@ -34,6 +34,8 @@ use tensorzero_core::inference::types::{
 use tensorzero_core::jsonschema_util::JSONSchema;
 use uuid::Uuid;
 
+use crate::utils::poll_for_result::poll_for_result;
+
 // ===== HELPER FUNCTIONS =====
 
 fn create_delegating_connection(
@@ -164,11 +166,13 @@ async fn test_get_batch_request_endpoint(
         "status should be Pending"
     );
     assert_eq!(
-        batch_request.raw_request, raw_request,
+        batch_request.raw_request.as_deref(),
+        Some(raw_request),
         "raw_request should match"
     );
     assert_eq!(
-        batch_request.raw_response, raw_response,
+        batch_request.raw_response.as_deref(),
+        Some(raw_response),
         "raw_response should match"
     );
 
@@ -279,21 +283,19 @@ async fn test_write_poll_batch_inference_endpoint(
         PollInferenceResponse::Pending,
         "Response should be Pending"
     );
-    database.sleep_for_writes_to_be_visible().await;
-
     let query = PollPathParams {
         batch_id,
         inference_id: None,
     };
-    let batch_request_result = get_batch_request(&database, &query).await.unwrap();
+    let batch_request_result = poll_for_result(
+        || get_batch_request(&database, &query),
+        |r| r.status == BatchStatus::Pending,
+        "Timed out waiting for batch status to become Pending",
+    )
+    .await;
     assert_eq!(
         batch_request_result.batch_id, batch_id,
         "batch_id should match"
-    );
-    assert_eq!(
-        batch_request_result.status,
-        BatchStatus::Pending,
-        "status should be Pending"
     );
 
     // Write a failed batch
@@ -329,19 +331,18 @@ async fn test_write_poll_batch_inference_endpoint(
         "Response should be Failed"
     );
 
-    database.sleep_for_writes_to_be_visible().await;
     let query = PollPathParams {
         batch_id,
         inference_id: None,
     };
-    // This should return the failed batch as it is more recent
-    let batch_request = get_batch_request(&database, &query).await.unwrap();
+    // Poll until the Failed batch is visible (it is more recent than the Pending one)
+    let batch_request = poll_for_result(
+        || get_batch_request(&database, &query),
+        |r| r.status == BatchStatus::Failed,
+        "Timed out waiting for batch status to become Failed",
+    )
+    .await;
     assert_eq!(batch_request.batch_id, batch_id, "batch_id should match");
-    assert_eq!(
-        batch_request.status,
-        BatchStatus::Failed,
-        "status should be Failed"
-    );
 }
 make_db_test!(test_write_poll_batch_inference_endpoint);
 
@@ -610,7 +611,8 @@ async fn test_write_read_completed_batch_inference_chat(
         .get(&inference_id1)
         .expect("Should find inference_id1");
     assert_eq!(row1.variant_name, variant_name, "variant_name should match");
-    let output1: Vec<ContentBlockChatOutput> = serde_json::from_str(&row1.output).unwrap();
+    let output1: Vec<ContentBlockChatOutput> =
+        serde_json::from_str(row1.output.as_deref().expect("output should be present")).unwrap();
     assert_eq!(output1.len(), 1, "Should have 1 content block");
     match &output1[0] {
         ContentBlockChatOutput::Text(text) => {
@@ -629,7 +631,8 @@ async fn test_write_read_completed_batch_inference_chat(
         .get(&inference_id2)
         .expect("Should find inference_id2");
     assert_eq!(row2.variant_name, variant_name, "variant_name should match");
-    let output2: Vec<ContentBlockChatOutput> = serde_json::from_str(&row2.output).unwrap();
+    let output2: Vec<ContentBlockChatOutput> =
+        serde_json::from_str(row2.output.as_deref().expect("output should be present")).unwrap();
     match &output2[0] {
         ContentBlockChatOutput::Text(text) => {
             assert_eq!(text.text, "goodbye world", "text should match");
@@ -921,7 +924,8 @@ async fn test_write_read_completed_batch_inference_json(
         .get(&inference_id1)
         .expect("Should find inference_id1");
     assert_eq!(row1.variant_name, variant_name, "variant_name should match");
-    let output1: JsonInferenceOutput = serde_json::from_str(&row1.output).unwrap();
+    let output1: JsonInferenceOutput =
+        serde_json::from_str(row1.output.as_deref().expect("output should be present")).unwrap();
     assert_eq!(
         output1.parsed.unwrap()["answer"],
         "hello world",
@@ -943,7 +947,8 @@ async fn test_write_read_completed_batch_inference_json(
         .get(&inference_id2)
         .expect("Should find inference_id2");
     assert_eq!(row2.variant_name, variant_name, "variant_name should match");
-    let output2: JsonInferenceOutput = serde_json::from_str(&row2.output).unwrap();
+    let output2: JsonInferenceOutput =
+        serde_json::from_str(row2.output.as_deref().expect("output should be present")).unwrap();
     assert!(
         output2.parsed.is_none(),
         "parsed output should be None for invalid schema"

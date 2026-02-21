@@ -84,6 +84,24 @@ bind_address = "0.0.0.0:3000"
 # ...
 ```
 
+### `cache.valkey.ttl_s`
+
+- **Type:** integer
+- **Required:** no (default: `86400` = 24 hours)
+
+The time-to-live (TTL) in seconds for inference cache entries stored in Valkey.
+By default, cache entries expire after 24 hours (86400 seconds).
+This setting only applies when Valkey is available (i.e. `TENSORZERO_VALKEY_URL` is set); otherwise, the inference cache uses ClickHouse.
+
+```toml title="tensorzero.toml"
+[gateway.cache.valkey]
+ttl_s = 86400  # 24 hours (default)
+```
+
+If you use a single Valkey instance for both rate limiting and caching, see [Inference Caching](/gateway/guides/inference-caching#cache-backend) for recommended TTL settings.
+
+See [Inference Caching](/gateway/guides/inference-caching) for more details.
+
 ### `debug`
 
 - **Type:** boolean
@@ -178,19 +196,19 @@ Setting this value too low may cause legitimate requests to timeout before recei
 
 </Warning>
 
-### `metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`
+### `metrics.tensorzero_inference_latency_overhead_seconds_buckets`
 
 - **Type:** array of floats
-- **Required:** no (default: disabled)
+- **Required:** no (default: `[0.001, 0.01, 0.1]`)
 
-Enable the `tensorzero_inference_latency_overhead_seconds_histogram` Prometheus metric with the specified histogram buckets.
+Configures the histogram buckets for the `tensorzero_inference_latency_overhead_seconds` Prometheus metric.
 This metric tracks the latency overhead introduced by TensorZero on HTTP requests.
 
 The buckets must be in strictly ascending order and contain at least one value.
 
 ```toml title="tensorzero.toml"
 [gateway.metrics]
-tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
+tensorzero_inference_latency_overhead_seconds_buckets = [0.001, 0.005, 0.01, 0.05, 0.1]
 ```
 
 See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
@@ -438,6 +456,24 @@ routing = ["openai", "azure"]
 # ...
 ```
 
+### `discard_unknown_chunks`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+When set to `true`, the gateway will silently discard streaming chunks with unknown or unsupported types instead of forwarding them.
+A warning is emitted for each discarded chunk.
+
+By default (`false`), unknown chunks are forwarded in the stream as-is.
+This is useful when a model provider introduces new chunk types that TensorZero doesn't yet support, and you'd prefer to drop them rather than receive unrecognized data.
+
+```toml title="tensorzero.toml"
+[models.my-model.providers.my-provider]
+# ...
+discard_unknown_chunks = true
+# ...
+```
+
 ### `extra_body`
 
 - **Type:** array of objects (see below)
@@ -663,6 +699,28 @@ Overrides the base URL used for Anthropic Messages API requests. The value shoul
 # ...
 type = "anthropic"
 api_base = "https://example.com/v1/messages"
+# ...
+```
+
+##### `provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., Anthropic's web search tool).
+
+Each object in the array should contain the provider-specific tool configuration as defined by Anthropic's API.
+
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
+
+```toml title="tensorzero.toml"
+[models.claude-sonnet-4-5.providers.anthropic]
+# ...
+type = "anthropic"
+model_name = "claude-sonnet-4-5"
+provider_tools = [{type = "web_search_20250305", name = "web_search"}]
 # ...
 ```
 
@@ -1032,7 +1090,7 @@ The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
 api_key_location = "dynamic::azure_api_key"
@@ -1051,10 +1109,10 @@ Defines the deployment ID of the Azure OpenAI deployment.
 See <a href="https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models" target="_blank">Azure OpenAI's documentation</a> for the list of available models.
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
+deployment_id = "gpt-5-mini"
 # ...
 ```
 
@@ -1066,7 +1124,7 @@ deployment_id = "gpt4o-mini-20240718"
 Defines the endpoint of the Azure OpenAI deployment (protocol and hostname).
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
 endpoint = "https://<your-endpoint>.openai.azure.com"
@@ -1244,6 +1302,30 @@ Defines the project ID of the GCP Vertex AI model.
 # ...
 type = "gcp_vertex"
 project_id = "your-project-id"
+# ...
+```
+
+##### `provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., Anthropic's web search tool).
+
+Each object in the array should contain the provider-specific tool configuration as defined by Anthropic's API.
+
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
+
+```toml title="tensorzero.toml"
+[models.claude-sonnet-4-5.providers.gcp_vertex]
+# ...
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "your-project-id"
+provider_tools = [{type = "web_search_20250305", name = "web_search"}]
 # ...
 ```
 
@@ -2039,6 +2121,29 @@ extra_body = [
 ]
 ```
 
+### `extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_headers` field allows you to set or overwrite the request headers that TensorZero sends to an embedding model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `name` (string): The name of the header to modify
+- One of the following:
+  - `value` (string): The value of the header
+  - `delete = true`: Deletes the header from the request, if present
+
+```toml title="tensorzero.toml"
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+type = "openai"
+extra_headers = [
+  { name = "X-Custom-Header", value = "custom-value" }
+]
+```
+
 ### `timeout_ms`
 
 - **Type:** integer
@@ -2274,9 +2379,7 @@ credential_location = "dynamic::gcp_credentials_path"
 - **Type:** object
 - **Required:** no (default: `null`)
 
-The `batch` object allows you to configure batch processing for GCP Vertex models.
-Today we support batch inference through GCP Vertex using Google cloud storage as documented [here](https://cloud.google.com/vertex-ai/docs/tabular-data/classification-regression/get-batch-predictions#api:-cloud-storage).
-To do this you must also have object_storage (see the [object_storage](#object_storage) section) configured using GCP.
+The `batch` object allows you to configure [batch inference](/gateway/guides/batch-inference/) for GCP Vertex Gemini models using Google Cloud Storage.
 
 ```toml title="tensorzero.toml"
 [provider_types.gcp_vertex_gemini.batch]
@@ -2650,9 +2753,8 @@ assistant_template = "./functions/draft-email/prompt-v1/assistant_template.minij
 - **Type:** string
 - **Required:** no
 
-Defines a description of the function.
-
-In the future, this description will inform automated optimization recipes.
+An optional description of the function.
+It helps TensorZero Autopilot understand the intent behind the function.
 
 ```toml title="tensorzero.toml"
 [functions.extract_data]
@@ -3183,6 +3285,7 @@ presence_penalty = 0.5
 
 Controls the reasoning effort level for reasoning models.
 
+For Anthropic, this enables adaptive thinking (`thinking.type: "adaptive"`) with the specified effort level via `output_config.effort`.
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingLevel`.
 
 <Warning>
@@ -3191,11 +3294,11 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
-<Tip>
+<Warning>
 
-Some providers (e.g. Anthropic) support `thinking_budget_tokens` instead.
+For Anthropic, `reasoning_effort` and `thinking_budget_tokens` are mutually exclusive. Use `reasoning_effort` for adaptive thinking or `thinking_budget_tokens` for manual thinking.
 
-</Tip>
+</Warning>
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3306,7 +3409,7 @@ temperature = 0.5
 
 Controls the thinking budget in tokens for reasoning models.
 
-For Anthropic, this value corresponds to `thinking.budget_tokens`.
+For Anthropic, this value corresponds to `thinking.budget_tokens` (manual thinking mode with `thinking.type: "enabled"`).
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingBudget`.
 
 <Warning>
@@ -3315,9 +3418,15 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
+<Warning>
+
+For Anthropic, `thinking_budget_tokens` and `reasoning_effort` are mutually exclusive. Use `thinking_budget_tokens` for manual thinking or `reasoning_effort` for adaptive thinking.
+
+</Warning>
+
 <Tip>
 
-Some providers (e.g. OpenAI) support `reasoning_effort` instead.
+Some providers (e.g. OpenAI) support `reasoning_effort` instead. For Anthropic, both `reasoning_effort` and `thinking_budget_tokens` are supported but cannot be used together.
 
 </Tip>
 
@@ -4366,6 +4475,21 @@ For example, periods are not allowed in basic strings, so you can define `beats-
 [metrics.user-rating]
 # fieldA = ...
 # fieldB = ...
+# ...
+```
+
+### `description`
+
+- **Type:** string
+- **Required:** no
+
+An optional description of the metric.
+It helps TensorZero Autopilot understand the intent behind the metric.
+
+```toml title="tensorzero.toml"
+[metrics.task-completed]
+# ...
+description = "Whether the task was completed successfully"
 # ...
 ```
 

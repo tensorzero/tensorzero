@@ -23,7 +23,8 @@ use crate::types::{
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
     GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
     ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, StreamEventsParams, ToolCallAuthorizationStatus,
+    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
+    StreamEventsParams, ToolCallAuthorizationStatus,
 };
 
 /// Default base URL for the Autopilot API.
@@ -352,6 +353,31 @@ impl AutopilotClient {
     }
 
     // -------------------------------------------------------------------------
+    // S3 Upload Endpoints
+    // -------------------------------------------------------------------------
+
+    /// Initiates an S3 upload by requesting temporary credentials from the Autopilot API.
+    pub async fn s3_initiate_upload(
+        &self,
+        session_id: Uuid,
+        request: S3UploadRequest,
+    ) -> Result<S3UploadResponse, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/aws/s3_initiate_upload"))?;
+        let response = self
+            .http_client
+            .post(url)
+            .headers(self.auth_headers())
+            .json(&request)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let body = response.json().await?;
+        Ok(body)
+    }
+
+    // -------------------------------------------------------------------------
     // Health Endpoints
     // -------------------------------------------------------------------------
 
@@ -568,10 +594,14 @@ impl AutopilotClient {
     /// Creates an event in a session.
     ///
     /// Use `Uuid::nil()` as the `session_id` to create a new session.
+    ///
+    /// If `beta_tools` is non-empty, they are forwarded as the `tensorzero-beta-tools`
+    /// header (comma-separated) to the remote autopilot server.
     pub async fn create_event(
         &self,
         session_id: Uuid,
         request: CreateEventRequest,
+        beta_tools: &[String],
     ) -> Result<CreateEventResponse, AutopilotError> {
         let tool_call_event_id = match &request.payload {
             EventPayload::ToolCallAuthorization(auth) => match auth.status {
@@ -601,10 +631,17 @@ impl AutopilotClient {
         let url = self
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events"))?;
+        let mut headers = self.auth_headers();
+        if !beta_tools.is_empty() {
+            let value = beta_tools.join(",");
+            if let Ok(value) = HeaderValue::from_str(&value) {
+                headers.insert("tensorzero-beta-tools", value);
+            }
+        }
         let response = self
             .http_client
             .post(url)
-            .headers(self.auth_headers())
+            .headers(headers)
             .json(&request)
             .send()
             .await?;

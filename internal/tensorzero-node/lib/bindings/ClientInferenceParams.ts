@@ -44,6 +44,10 @@ export type ClientInferenceParams = {
    * If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
    */
   include_raw_usage: boolean;
+  /**
+   * If `true`, include an `aggregated_response` field in the final chunk in the stream
+   */
+  include_aggregated_response: boolean;
   internal_dynamic_variant_config?: UninitializedVariantInfo;
   /**
    * A subset of static tools configured for the function that the inference is allowed to use. Optional.

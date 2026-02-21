@@ -14,6 +14,8 @@ pub use stats::{
     PerEvaluatorStats,
 };
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::postgres::batching::PostgresBatchSender;
 pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
 pub use tensorzero_core::statistics_util::{mean, std_deviation};
 use tensorzero_core::utils::gateway::AppStateData;
@@ -339,13 +341,29 @@ pub async fn run_evaluation_with_app_state(
     app_state: AppStateData,
     params: RunEvaluationWithAppStateParams,
 ) -> Result<EvaluationStreamResult> {
-    // Create a fresh ClickHouse client for the evaluation (with independent batch writer)
+    // Create fresh ClickHouse and Postgres clients for the evaluation (with independent batch writers)
+    // so that evaluation writes don't interfere with the gateway's batch writers.
     let clickhouse_client = app_state
         .clickhouse_connection_info
         .recreate()
         .await
         .map_err(|e| anyhow!("Failed to create ClickHouse client for evaluation: {e}"))?;
-    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse_client);
+    let batch_writes_config = &app_state.config.gateway.observability.batch_writes;
+    let postgres_client = match app_state.postgres_connection_info.get_pool() {
+        Some(pool) if batch_writes_config.enabled => {
+            let batch_sender = Arc::new(
+                PostgresBatchSender::new(pool.clone(), batch_writes_config.clone()).map_err(
+                    |e| anyhow!("Failed to create Postgres batch sender for evaluation: {e}"),
+                )?,
+            );
+            PostgresConnectionInfo::new_with_pool_and_batcher(pool.clone(), batch_sender)
+        }
+        Some(pool) => PostgresConnectionInfo::new_with_pool(pool.clone()),
+        None => PostgresConnectionInfo::new_disabled(),
+    };
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(
+        DelegatingDatabaseConnection::new(clickhouse_client, postgres_client),
+    );
 
     // Create AppStateInferenceExecutor to call handlers directly without HTTP overhead
     let inference_executor = Arc::new(AppStateInferenceExecutor::new(app_state));
@@ -393,7 +411,9 @@ pub async fn run_evaluation_with_app_state(
 ///
 /// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
 /// 2. Loads the evaluation and function configurations
-/// 3. Queries the dataset (limited by `max_datapoints` if specified)
+/// 3. Queries the dataset (limited by `max_datapoints` if specified). When `datapoint_ids`
+///    are provided instead of `dataset_name`, the dataset name is derived from the loaded
+///    datapoints — all datapoints must belong to the same dataset or an error is returned.
 /// 4. If `precision_targets` is provided, creates a `StoppingManager` which internally creates cancellation
 ///    tokens and tracks evaluator statistics
 /// 5. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
@@ -521,11 +541,24 @@ pub async fn run_evaluation_core_streaming(
         dataset_size = dataset.len(),
         "Datapoints loaded successfully"
     );
-    let dataset_name = Arc::new(
-        args.dataset_name
-            .clone()
-            .unwrap_or_else(|| format!("datapoint_ids[{}]", datapoint_ids.len())),
-    );
+    // Get dataset name when datapoint_ids are passed. Error if the datapoints don't all belong to the same dataset.
+    let dataset_name = Arc::new(match args.dataset_name.clone() {
+        Some(name) => name,
+        None => {
+            // Derive dataset_name from the loaded datapoints
+            let mut dataset_names = dataset.iter().map(|dp| dp.dataset_name());
+            let first = dataset_names
+                .next()
+                .ok_or_else(|| anyhow!("No datapoints found for the provided `datapoint_ids`"))?;
+            if let Some(mismatched) = dataset_names.find(|name| *name != first) {
+                bail!(
+                    "All datapoints must belong to the same dataset when using `datapoint_ids`, \
+                     but found datapoints from both `{first}` and `{mismatched}`"
+                );
+            }
+            first.to_string()
+        }
+    });
     let variant = Arc::new(args.variant);
     let variants = [variant]; // Single-element array for process_batch
     let evaluation_name = Arc::new(args.evaluation_name);
@@ -788,6 +821,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         include_original_response: false,
         include_raw_response: false,
         include_raw_usage: false,
+        include_aggregated_response: false,
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),

@@ -5,6 +5,7 @@
     clippy::print_stdout,
     clippy::unwrap_used
 )]
+mod aggregated_response;
 mod best_of_n;
 mod built_in;
 mod cache;
@@ -12,7 +13,6 @@ mod clickhouse;
 #[macro_use]
 mod common;
 mod config;
-mod datasets;
 mod db;
 mod dicl;
 mod dynamic_variants;
@@ -47,4 +47,5 @@ mod retries;
 mod streaming_errors;
 mod template;
 mod timeouts;
+mod utils;
 mod workflow_evaluations;
