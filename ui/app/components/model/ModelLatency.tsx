@@ -15,6 +15,7 @@ import React, { useState, useMemo } from "react";
 import { Await, useAsyncError, isRouteErrorResponse } from "react-router";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertCircle } from "lucide-react";
+import { LineChartSkeleton } from "~/components/ui/LineChartSkeleton";
 import { CHART_COLORS } from "~/utils/chart";
 import {
   Select,
@@ -295,7 +296,7 @@ export function ModelLatency({
         </div>
       </CardHeader>
       <CardContent>
-        <React.Suspense fallback={<div>Loading latency data...</div>}>
+        <React.Suspense fallback={<LineChartSkeleton />}>
           <Await
             resolve={modelLatencyResponsePromise}
             errorElement={<ModelLatencyError />}
