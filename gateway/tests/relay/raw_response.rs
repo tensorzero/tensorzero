@@ -464,7 +464,7 @@ reasoning_effort = "minimal"
         .await
         .unwrap();
 
-    let mut raw_response_entries: Vec<Value> = Vec::new();
+    let mut raw_response: Vec<Value> = Vec::new();
     let mut found_raw_chunk = false;
 
     while let Some(event) = stream.next().await {
@@ -479,10 +479,10 @@ reasoning_effort = "minimal"
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
         // Check if this chunk has raw_response (previous inferences for best-of-n)
-        if let Some(raw_response) = chunk.get("raw_response")
-            && let Some(arr) = raw_response.as_array()
+        if let Some(raw_resp) = chunk.get("raw_response")
+            && let Some(arr) = raw_resp.as_array()
         {
-            raw_response_entries.extend(arr.clone());
+            raw_response.extend(arr.clone());
         }
 
         // Check for raw_chunk field in streaming
@@ -493,13 +493,13 @@ reasoning_effort = "minimal"
 
     // Best-of-n streaming should have at least the 2 candidates in raw_response
     assert!(
-        raw_response_entries.len() >= 2,
+        raw_response.len() >= 2,
         "Best-of-n relay streaming should have at least 2 raw_response entries (2 candidates), got {} (accumulated across all chunks)",
-        raw_response_entries.len()
+        raw_response.len()
     );
 
     // All entries should have provider_type = "openai" (from downstream), not "relay"
-    for entry in &raw_response_entries {
+    for entry in &raw_response {
         assert_raw_response_entry_structure(entry);
 
         let provider_type = entry

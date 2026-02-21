@@ -145,7 +145,7 @@ impl TensorzeroRelay {
 /// Tries to parse the body as JSON and look for `raw_response` (TensorZero format) or
 /// `tensorzero_raw_response` (OpenAI format). If found, deserializes the array into
 /// `Vec<RawResponseEntry>`. Otherwise, creates a synthetic entry wrapping the raw body.
-fn extract_raw_response_entries_from_body(body: &str, api_type: ApiType) -> Vec<RawResponseEntry> {
+fn extract_raw_response_from_body(body: &str, api_type: ApiType) -> Vec<RawResponseEntry> {
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
         // Try TensorZero format first, then OpenAI format
         let raw_response = json
@@ -177,10 +177,10 @@ fn relay_error_from_tensorzero_error(e: TensorZeroError, api_type: ApiType) -> E
         TensorZeroError::Http {
             status_code, text, ..
         } => {
-            let (message, raw_response_entries) = match &text {
+            let (message, raw_response) = match &text {
                 Some(text) => (
                     format!("HTTP Error (status code {status_code}): {text}"),
-                    extract_raw_response_entries_from_body(text, api_type),
+                    extract_raw_response_from_body(text, api_type),
                 ),
                 None => (
                     format!("HTTP Error (status code {status_code})"),
@@ -194,14 +194,14 @@ fn relay_error_from_tensorzero_error(e: TensorZeroError, api_type: ApiType) -> E
             };
             Error::new(ErrorDetails::Relay {
                 message,
-                raw_response_entries,
+                raw_response,
                 raw_chunk: None,
                 status_code: StatusCode::from_u16(status_code).ok(),
             })
         }
         TensorZeroError::RequestTimeout => Error::new(ErrorDetails::Relay {
             message: "Request timeout".to_string(),
-            raw_response_entries: vec![RawResponseEntry {
+            raw_response: vec![RawResponseEntry {
                 model_inference_id: None,
                 provider_type: "tensorzero::relay".to_string(),
                 api_type,
@@ -214,7 +214,7 @@ fn relay_error_from_tensorzero_error(e: TensorZeroError, api_type: ApiType) -> E
             let message = e.to_string();
             Error::new(ErrorDetails::Relay {
                 message: message.clone(),
-                raw_response_entries: vec![RawResponseEntry {
+                raw_response: vec![RawResponseEntry {
                     model_inference_id: None,
                     provider_type: "tensorzero::relay".to_string(),
                     api_type,
@@ -346,7 +346,7 @@ impl TensorzeroRelay {
                     let raw_chunk = e.extract_raw_chunk().unwrap_or_else(|| message.clone());
                     Err(Error::new(ErrorDetails::Relay {
                         message,
-                        raw_response_entries: vec![],
+                        raw_response: vec![],
                         raw_chunk: Some(raw_chunk),
                         status_code: None,
                     }))
@@ -636,7 +636,7 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
-    fn test_extract_passthrough_raw_response_entries() {
+    fn test_extract_passthrough_raw_response() {
         let model_inference_id = Uuid::now_v7();
         let body = json!({
             "error": "something failed",
@@ -651,7 +651,7 @@ mod tests {
         })
         .to_string();
 
-        let entries = extract_raw_response_entries_from_body(&body, ApiType::ChatCompletions);
+        let entries = extract_raw_response_from_body(&body, ApiType::ChatCompletions);
         assert_eq!(entries.len(), 1, "Should have one passthrough entry");
         assert_eq!(
             entries[0].provider_type, "openai",
@@ -666,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_passthrough_tensorzero_raw_response_entries() {
+    fn test_extract_passthrough_tensorzero_raw_response() {
         let body = json!({
             "error": {"message": "something failed"},
             "tensorzero_raw_response": [
@@ -680,7 +680,7 @@ mod tests {
         })
         .to_string();
 
-        let entries = extract_raw_response_entries_from_body(&body, ApiType::ChatCompletions);
+        let entries = extract_raw_response_from_body(&body, ApiType::ChatCompletions);
         assert_eq!(entries.len(), 1, "Should have one passthrough entry");
         assert_eq!(
             entries[0].provider_type, "anthropic",
@@ -692,7 +692,7 @@ mod tests {
     fn test_extract_non_json_body_creates_synthetic() {
         let body = "Bad Gateway: upstream server error";
 
-        let entries = extract_raw_response_entries_from_body(body, ApiType::ChatCompletions);
+        let entries = extract_raw_response_from_body(body, ApiType::ChatCompletions);
         assert_eq!(entries.len(), 1, "Should have one synthetic entry");
         assert_eq!(
             entries[0].provider_type, "tensorzero::relay",
@@ -715,7 +715,7 @@ mod tests {
         })
         .to_string();
 
-        let entries = extract_raw_response_entries_from_body(&body, ApiType::Embeddings);
+        let entries = extract_raw_response_from_body(&body, ApiType::Embeddings);
         assert_eq!(entries.len(), 1, "Should have one synthetic entry");
         assert_eq!(
             entries[0].provider_type, "tensorzero::relay",
@@ -736,7 +736,7 @@ mod tests {
         })
         .to_string();
 
-        let entries = extract_raw_response_entries_from_body(&body, ApiType::ChatCompletions);
+        let entries = extract_raw_response_from_body(&body, ApiType::ChatCompletions);
         assert_eq!(entries.len(), 1, "Should have one synthetic entry");
         assert_eq!(
             entries[0].provider_type, "tensorzero::relay",
@@ -752,7 +752,7 @@ mod tests {
         })
         .to_string();
 
-        let entries = extract_raw_response_entries_from_body(&body, ApiType::ChatCompletions);
+        let entries = extract_raw_response_from_body(&body, ApiType::ChatCompletions);
         assert_eq!(entries.len(), 1, "Should have one synthetic entry");
         assert_eq!(
             entries[0].provider_type, "tensorzero::relay",
