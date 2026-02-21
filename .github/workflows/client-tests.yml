@@ -2,9 +2,6 @@ name: Client Tests
 
 on:
   workflow_call:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
 env:
   CARGO_INCREMENTAL: 0
@@ -50,63 +47,8 @@ env:
   CARGO_NEXTEST_FLAKY_TESTS: ${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}
 
 jobs:
-  # Build containers for standalone runs (schedule/workflow_dispatch).
-  # When called from general.yml via workflow_call, these are skipped
-  # because the caller already built and uploaded the container artifacts.
-  build-gateway-e2e-container:
-    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
-    uses: ./.github/workflows/build-gateway-e2e-container.yml
-    permissions:
-      contents: read
-      id-token: write
-    secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
-
-  build-gateway-container:
-    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
-    uses: ./.github/workflows/build-gateway-container.yml
-    permissions:
-      contents: read
-      id-token: write
-
-  build-mock-provider-api-container:
-    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
-    uses: ./.github/workflows/build-mock-provider-api-container.yml
-    permissions:
-      contents: read
-      id-token: write
-
-  build-fixtures-container:
-    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
-    uses: ./.github/workflows/build-fixtures-container.yml
-    permissions:
-      contents: read
-      id-token: write
-    secrets:
-      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
-
-  build-provider-proxy-container:
-    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
-    uses: ./.github/workflows/build-provider-proxy-container.yml
-    permissions:
-      contents: read
-      id-token: write
-    secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
-
   client-tests:
-    needs:
-      [
-        build-gateway-e2e-container,
-        build-gateway-container,
-        build-mock-provider-api-container,
-        build-fixtures-container,
-        build-provider-proxy-container,
-      ]
-    # Run even when build jobs are skipped (workflow_call case where caller already built them)
-    if: always() && !failure() && !cancelled() && github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero'
     name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
     runs-on: ubuntu-latest
     permissions:
@@ -458,21 +400,3 @@ jobs:
         if: github.event_name == 'merge_group' || github.event_name == 'schedule'
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/upload-provider-proxy-cache.sh
-
-  # Post to Slack on failure for scheduled (cron) runs only.
-  # Scheduled runs bypass the provider-proxy cache to detect provider flakiness.
-  # See: https://github.com/tensorzero/tensorzero/issues/5380
-  notify-on-failure:
-    permissions: {}
-    if: always() && github.event_name == 'schedule' && needs.client-tests.result == 'failure'
-    needs: [client-tests]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Post to Slack on failure
-        uses: slackapi/slack-github-action@v2.1.1
-        with:
-          method: chat.postMessage
-          token: ${{ secrets.SLACK_BOT_TOKEN }}
-          payload: |
-            channel: C09DM0RGDFG
-            text: "Client tests failed (scheduled run, no cache): <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
