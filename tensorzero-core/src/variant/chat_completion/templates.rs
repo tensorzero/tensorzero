@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{ErrorContext, PathWithContents, SchemaData, path::ResolvedTomlPathData},
@@ -17,7 +17,7 @@ use crate::{
 
 /// Holds of all of the templates and schemas used by a chat-completion variant.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ChatTemplates {
     #[serde(flatten)]

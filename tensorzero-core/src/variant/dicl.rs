@@ -54,7 +54,7 @@ use super::{
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DiclConfig {
     weight: Option<f64>,

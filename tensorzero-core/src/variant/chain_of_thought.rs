@@ -31,7 +31,7 @@ use super::{InferenceConfig, ModelUsedInfo, Variant};
 /// DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
 /// Use `chat_completion` with reasoning instead.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ChainOfThoughtConfig {
     #[serde(flatten)]
