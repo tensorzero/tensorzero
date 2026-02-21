@@ -1,0 +1,119 @@
+name: Daily Tests
+run-name: Daily Tests
+
+# Runs live-tests, client-tests, and batch-tests daily.
+# Live/client tests run without provider-proxy cache to detect provider flakiness.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *" # Runs at 00:00 UTC every day
+
+jobs:
+  build-gateway-e2e-container:
+    if: github.repository == 'tensorzero/tensorzero'
+    uses: ./.github/workflows/build-gateway-e2e-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-gateway-container:
+    if: github.repository == 'tensorzero/tensorzero'
+    uses: ./.github/workflows/build-gateway-container.yml
+    permissions:
+      contents: read
+      id-token: write
+
+  build-mock-provider-api-container:
+    if: github.repository == 'tensorzero/tensorzero'
+    uses: ./.github/workflows/build-mock-provider-api-container.yml
+    permissions:
+      contents: read
+      id-token: write
+
+  build-fixtures-container:
+    if: github.repository == 'tensorzero/tensorzero'
+    uses: ./.github/workflows/build-fixtures-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-provider-proxy-container:
+    if: github.repository == 'tensorzero/tensorzero'
+    uses: ./.github/workflows/build-provider-proxy-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  build-live-tests-container:
+    if: github.repository == 'tensorzero/tensorzero'
+    uses: ./.github/workflows/build-live-tests-container.yml
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+  live-tests:
+    needs:
+      [
+        build-gateway-e2e-container,
+        build-gateway-container,
+        build-fixtures-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
+      ]
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/live-tests.yml
+    secrets: inherit
+
+  client-tests:
+    needs:
+      [
+        build-gateway-e2e-container,
+        build-gateway-container,
+        build-mock-provider-api-container,
+        build-fixtures-container,
+        build-provider-proxy-container,
+      ]
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/client-tests.yml
+    secrets: inherit
+
+  live-batch-tests:
+    if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/live-batch-tests.yml
+    secrets: inherit
+
+  # Post to Slack on failure for scheduled (cron) runs only.
+  # Scheduled runs bypass the provider-proxy cache to detect provider flakiness.
+  # See: https://github.com/tensorzero/tensorzero/issues/5380
+  notify-on-failure:
+    permissions: {}
+    if: always() && github.event_name == 'schedule' && (needs.live-tests.result != 'success' || needs.client-tests.result != 'success' || needs.live-batch-tests.result != 'success')
+    needs: [live-tests, client-tests, live-batch-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to Slack on failure
+        uses: slackapi/slack-github-action@v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: C09DM0RGDFG
+            text: "Live provider tests failed (scheduled run, no cache): <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
