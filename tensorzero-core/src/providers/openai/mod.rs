@@ -1465,7 +1465,7 @@ where
     Ok(response.id)
 }
 
-fn serialize_text_content_vec<S>(
+pub(super) fn serialize_text_content_vec<S>(
     content: &Vec<OpenAIContentBlock<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
@@ -1483,7 +1483,7 @@ where
 
 // Signature dictated by Serde
 #[expect(clippy::ref_option)]
-fn serialize_optional_text_content_vec<S>(
+pub(super) fn serialize_optional_text_content_vec<S>(
     content: &Option<Vec<OpenAIContentBlock<'_>>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
