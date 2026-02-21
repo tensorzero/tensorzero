@@ -3,12 +3,16 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "~/components/ui/popover";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { ComboboxInput } from "./ComboboxInput";
 import { ComboboxContent } from "./ComboboxContent";
 import { ComboboxHint } from "./ComboboxHint";
 import { ComboboxMenuItems } from "./ComboboxMenuItems";
 import { useCombobox } from "./use-combobox";
+import {
+  DEFAULT_VIRTUALIZE_THRESHOLD,
+  useVirtualizedNavigation,
+} from "~/components/ui/use-virtualized-navigation";
 
 export type ComboboxItem = string | { value: string; label: string };
 
@@ -40,6 +44,12 @@ type ComboboxProps = {
   loadingMessage?: string;
   error?: boolean;
   errorMessage?: string;
+  /**
+   * Number of items at which virtualization is enabled.
+   * Set to 0 to always virtualize, or Infinity to never virtualize.
+   * Default: 100
+   */
+  virtualizeThreshold?: number;
 };
 
 export function Combobox({
@@ -61,6 +71,7 @@ export function Combobox({
   loadingMessage = "Loading...",
   error = false,
   errorMessage = "An error occurred.",
+  virtualizeThreshold = DEFAULT_VIRTUALIZE_THRESHOLD,
 }: ComboboxProps) {
   const {
     open,
@@ -69,7 +80,7 @@ export function Combobox({
     commandRef,
     getInputValue,
     closeDropdown,
-    handleKeyDown,
+    handleKeyDown: baseHandleKeyDown,
     handleInputChange,
     handleBlur,
     handleClick,
@@ -94,6 +105,15 @@ export function Combobox({
     );
   }, [normalizedItems, searchValue]);
 
+  const shouldVirtualize = filteredItems.length >= virtualizeThreshold;
+
+  const showCreateOption =
+    allowCreation &&
+    Boolean(searchValue.trim()) &&
+    !normalizedItems.some(
+      (item) => item.label.toLowerCase() === searchValue.trim().toLowerCase(),
+    );
+
   const handleSelectItem = useCallback(
     (value: string, isNew: boolean) => {
       onSelect(value, isNew);
@@ -102,12 +122,45 @@ export function Combobox({
     [onSelect, closeDropdown],
   );
 
-  const showCreateOption =
-    allowCreation &&
-    Boolean(searchValue.trim()) &&
-    !normalizedItems.some(
-      (item) => item.label.toLowerCase() === searchValue.trim().toLowerCase(),
-    );
+  // Virtualized navigation hook
+  const {
+    highlightedIndex,
+    handleKeyDown: virtualizedHandleKeyDown,
+    resetHighlight,
+  } = useVirtualizedNavigation({
+    itemCount: filteredItems.length,
+    enabled: shouldVirtualize,
+    onSelect: (index) => {
+      const item = filteredItems[index];
+      if (item) {
+        handleSelectItem(item.value, false);
+      }
+    },
+    onClose: closeDropdown,
+    hasCreateOption: showCreateOption,
+    onSelectCreate: () => {
+      handleSelectItem(searchValue.trim(), true);
+    },
+  });
+
+  // Reset highlight when dropdown opens or search changes
+  useEffect(() => {
+    if (open) {
+      resetHighlight();
+    }
+  }, [open, searchValue, resetHighlight]);
+
+  // Combined keyboard handler
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (shouldVirtualize && open) {
+        virtualizedHandleKeyDown(e);
+      } else {
+        baseHandleKeyDown(e);
+      }
+    },
+    [shouldVirtualize, virtualizedHandleKeyDown, baseHandleKeyDown, open],
+  );
 
   const inputPrefix = useMemo(() => {
     const value = selected && !searchValue ? selected : null;
@@ -172,6 +225,8 @@ export function Combobox({
                 getPrefix={getPrefix}
                 getSuffix={getSuffix}
                 getItemDataAttributes={getItemDataAttributes}
+                virtualize={shouldVirtualize}
+                highlightedIndex={highlightedIndex}
               />
             )}
           </ComboboxContent>
