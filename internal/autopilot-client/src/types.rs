@@ -728,6 +728,17 @@ pub struct StreamEventsParams {
     pub last_event_id: Option<Uuid>,
 }
 
+/// Query parameters for streaming workspace tool calls.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct StreamWorkspaceToolCallsParams {
+    /// Resume streaming from this event ID (exclusive).
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_event_id: Option<Uuid>,
+}
+
 /// Request body for approving all pending tool calls.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApproveAllToolCallsRequest {
@@ -796,6 +807,27 @@ pub struct GatewayListEventsResponse {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListSessionsResponse {
     pub sessions: Vec<Session>,
+}
+
+/// Internal response from listing workspace pending tool calls.
+///
+/// Note: TS derive is needed for types that reference this, but we don't export it.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspacePendingToolCallsResponse {
+    pub pending_tool_calls: Vec<Event>,
+    pub last_event_id: Uuid,
+}
+
+/// Response from listing workspace pending tool calls as seen by gateway consumers.
+///
+/// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GatewayWorkspacePendingToolCallsResponse {
+    pub pending_tool_calls: Vec<GatewayEvent>,
+    pub last_event_id: Uuid,
 }
 
 /// Query parameters for listing config writes.

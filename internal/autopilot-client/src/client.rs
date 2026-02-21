@@ -22,9 +22,10 @@ use crate::types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
     GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
-    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
-    StreamEventsParams, ToolCallAuthorizationStatus,
+    GatewayWorkspacePendingToolCallsResponse, ListConfigWritesParams, ListConfigWritesResponse,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    S3UploadRequest, S3UploadResponse, StreamEventsParams, StreamWorkspaceToolCallsParams,
+    ToolCallAuthorizationStatus, WorkspacePendingToolCallsResponse,
 };
 
 /// Default base URL for the Autopilot API.
@@ -755,6 +756,182 @@ impl AutopilotClient {
             }
             Some(Err(e)) => {
                 // Convert SSE error to appropriate AutopilotError
+                return Err(Self::convert_sse_error(e).await);
+            }
+            Some(Ok(reqwest_sse_stream::Event::Message(_))) => {
+                return Err(AutopilotError::Sse(
+                    "Received message before connection was established".to_string(),
+                ));
+            }
+            None => {
+                return Err(AutopilotError::Sse(
+                    "Connection closed unexpectedly".to_string(),
+                ));
+            }
+        }
+
+        // Connection is good, return the stream
+        let cache = self.tool_call_cache.clone();
+        let available_tools = self.available_tools.clone();
+        let spawn_client = self.spawn_client.clone();
+
+        let stream = event_source.filter_map(move |result| {
+            let cache = cache.clone();
+            let available_tools = available_tools.clone();
+            let spawn_client = spawn_client.clone();
+            async move {
+                match result {
+                    Ok(reqwest_sse_stream::Event::Open) => None,
+                    Ok(reqwest_sse_stream::Event::Message(sse)) => {
+                        if sse.event.as_str() == "event" {
+                            match serde_json::from_str::<StreamUpdate>(&sse.data) {
+                                Ok(update) => {
+                                    // Cache tool calls for later lookup
+                                    if let EventPayload::ToolCall(tool_call) = &update.event.payload
+                                    {
+                                        cache.insert(update.event.id, tool_call.clone());
+
+                                        // Reject unknown tool calls
+                                        if !available_tools.contains(&tool_call.name)
+                                            && let Err(e) =
+                                                reject_missing_tool(&spawn_client, tool_call).await
+                                        {
+                                            return Some(Err(e));
+                                        }
+                                    }
+
+                                    // Filter out NotAvailable authorizations and unknown tool calls
+                                    if Self::should_filter_event(&update.event, &available_tools) {
+                                        return None;
+                                    }
+
+                                    // Convert to gateway type - should succeed since we filtered NotAvailable above
+                                    match update.try_into() {
+                                        Ok(gateway_update) => Some(Ok(gateway_update)),
+                                        Err(e) => Some(Err(AutopilotError::Internal(format!(
+                                            "StreamUpdate conversion failed after filtering: {e}"
+                                        )))),
+                                    }
+                                }
+                                Err(e) => Some(Err(AutopilotError::Json(e))),
+                            }
+                        } else {
+                            None
+                        }
+                    }
+                    Err(e) => Some(Err(Self::convert_sse_error(e).await)),
+                }
+            }
+        });
+
+        Ok(stream)
+    }
+
+    // -------------------------------------------------------------------------
+    // Workspace Endpoints
+    // -------------------------------------------------------------------------
+
+    /// Lists pending tool calls across all sessions in a workspace.
+    ///
+    /// Unknown tool calls (those not in `available_tools`) are filtered from
+    /// results and automatically rejected via a durable task.
+    /// `ToolCallAuthorization::NotAvailable` events are also filtered from results.
+    ///
+    /// Returns `GatewayWorkspacePendingToolCallsResponse` which uses `GatewayEvent` - a narrower type
+    /// that excludes `NotAvailable` authorization status. The `last_event_id` can be used
+    /// as the starting point for `stream_workspace_tool_calls` to avoid TOCTOU bugs.
+    pub async fn pending_tool_calls(
+        &self,
+        workspace_id: &str,
+    ) -> Result<GatewayWorkspacePendingToolCallsResponse, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/workspaces/{workspace_id}/pending_tool_calls"))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let body: WorkspacePendingToolCallsResponse = response.json().await?;
+        self.cache_tool_call_events(&body.pending_tool_calls);
+
+        // Filter pending tool calls and reject unknown ones
+        let mut filtered_pending_tool_calls = Vec::new();
+        for event in body.pending_tool_calls {
+            if let EventPayload::ToolCall(tool_call) = &event.payload
+                && self.is_unknown_tool(tool_call)
+            {
+                reject_missing_tool(&self.spawn_client, tool_call).await?;
+            }
+            if Self::should_filter_event(&event, &self.available_tools) {
+                continue;
+            }
+            let gateway_event = event.try_into().map_err(|e| {
+                AutopilotError::Internal(format!("Event conversion failed after filtering: {e}"))
+            })?;
+            filtered_pending_tool_calls.push(gateway_event);
+        }
+
+        Ok(GatewayWorkspacePendingToolCallsResponse {
+            pending_tool_calls: filtered_pending_tool_calls,
+            last_event_id: body.last_event_id,
+        })
+    }
+
+    /// Streams tool call events across all sessions in a workspace using Server-Sent Events.
+    ///
+    /// Returns a stream of tool call events. The stream will remain open until:
+    /// - The client drops the stream
+    /// - The server closes the connection
+    /// - An error occurs
+    ///
+    /// Use `params.last_event_id` to resume from a specific event (typically the `last_event_id`
+    /// returned by `pending_tool_calls` to avoid TOCTOU bugs).
+    ///
+    /// # Errors
+    ///
+    /// Returns `AutopilotError::Http` if the server returns an error status code
+    /// (e.g., 401 Unauthorized, 404 Not Found). This is checked before returning
+    /// the stream, so connection errors are caught immediately.
+    /// Returns a stream of `GatewayStreamUpdate` - a narrower type that excludes
+    /// `NotAvailable` authorization status.
+    pub async fn stream_workspace_tool_calls(
+        &self,
+        workspace_id: &str,
+        params: StreamWorkspaceToolCallsParams,
+    ) -> Result<
+        impl Stream<Item = Result<GatewayStreamUpdate, AutopilotError>> + use<>,
+        AutopilotError,
+    > {
+        let mut url = self
+            .base_url
+            .join(&format!("/v1/workspaces/{workspace_id}/tool_calls/stream"))?;
+        if let Some(last_event_id) = params.last_event_id {
+            url.query_pairs_mut()
+                .append_pair("last_event_id", &last_event_id.to_string());
+        }
+
+        // Wait for connection to be established or fail.
+        let event_source = self
+            .sse_http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .eventsource()
+            .await;
+
+        let mut event_source = match event_source {
+            Ok(event_source) => event_source,
+            Err(e) => return Err(Self::convert_sse_error(e).await),
+        };
+
+        // The first event should be Open on success, or an error on failure.
+        match event_source.next().await {
+            Some(Ok(reqwest_sse_stream::Event::Open)) => {
+                // Connection established successfully
+            }
+            Some(Err(e)) => {
                 return Err(Self::convert_sse_error(e).await);
             }
             Some(Ok(reqwest_sse_stream::Event::Message(_))) => {
