@@ -10,7 +10,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
@@ -44,13 +44,16 @@ use crate::{
 use super::helpers_thinking_block::{THINK_CHUNK_ID, ThinkingState, process_think_blocks};
 use super::openai::{
     OpenAIContentBlock, OpenAIRequestMessage, OpenAIRequestToolCall, OpenAISystemRequestMessage,
-    OpenAIToolRequestMessage, OpenAIToolType, OpenAIUsage, OpenAIUserRequestMessage, get_chat_url,
-    handle_openai_error, prepare_file_message, serialize_optional_text_content_vec,
-    tensorzero_to_openai_messages,
+    OpenAIToolRequestMessage, OpenAIUserRequestMessage, get_chat_url, handle_openai_error,
+    prepare_file_message, serialize_optional_text_content_vec, tensorzero_to_openai_messages,
 };
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{
     ChatCompletionTool, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
+};
+use tensorzero_types_providers::together::{
+    TogetherChatChunk, TogetherFinishReason, TogetherResponse, TogetherResponseChoice,
+    TogetherResponseToolCall,
 };
 use uuid::Uuid;
 
@@ -756,53 +759,15 @@ fn tensorzero_to_together_system_message(
     })
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct TogetherResponseFunctionCall {
-    name: String,
-    arguments: String,
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct TogetherResponseToolCall {
-    id: String,
-    r#type: OpenAIToolType,
-    function: TogetherResponseFunctionCall,
-}
-
-impl From<TogetherResponseToolCall> for ToolCall {
-    fn from(together_tool_call: TogetherResponseToolCall) -> Self {
-        ToolCall {
-            id: together_tool_call.id,
-            name: together_tool_call.function.name,
-            arguments: together_tool_call.function.arguments,
-        }
+fn together_tool_call_to_tool_call(together_tool_call: TogetherResponseToolCall) -> ToolCall {
+    ToolCall {
+        id: together_tool_call.id,
+        name: together_tool_call.function.name,
+        arguments: together_tool_call.function.arguments,
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherResponseMessage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<TogetherResponseToolCall>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(alias = "reasoning_content")]
-    reasoning: Option<String>,
-}
-
 // The thinking block processing has been moved to helpers_thinking_block.rs
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
-enum TogetherFinishReason {
-    Stop,
-    Eos,
-    Length,
-    ToolCalls,
-    FunctionCall,
-    #[serde(other)]
-    Unknown,
-}
 
 impl From<TogetherFinishReason> for FinishReason {
     fn from(finish_reason: TogetherFinishReason) -> Self {
@@ -815,21 +780,6 @@ impl From<TogetherFinishReason> for FinishReason {
             TogetherFinishReason::Unknown => FinishReason::Unknown,
         }
     }
-}
-
-// Leaving out logprobs and finish_reason for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct TogetherResponseChoice {
-    index: u8,
-    message: TogetherResponseMessage,
-    finish_reason: Option<TogetherFinishReason>,
-}
-
-// Leaving out id, created, model, service_tier, system_fingerprint, object for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct TogetherResponse {
-    choices: Vec<TogetherResponseChoice>,
-    usage: OpenAIUsage,
 }
 
 struct TogetherResponseWithMetadata<'a> {
@@ -913,7 +863,9 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    together_tool_call_to_tool_call(tool_call),
+                ));
             }
         }
         let raw_usage = together_usage_from_raw_response(&raw_response).map(|usage| {
@@ -1145,50 +1097,6 @@ fn together_usage_from_raw_response(raw_response: &str) -> Option<Value> {
         .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherFunctionCallChunk {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    arguments: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherToolCallChunk {
-    index: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
-    // If we were to do this better, we would need to check the type field
-    function: TogetherFunctionCallChunk,
-}
-
-// This doesn't include role
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherDelta {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(alias = "reasoning_content")]
-    reasoning: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<TogetherToolCallChunk>>,
-}
-
-// This doesn't include logprobs, finish_reason, and index
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherChatChunkChoice {
-    delta: TogetherDelta,
-    finish_reason: Option<TogetherFinishReason>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherChatChunk {
-    choices: Vec<TogetherChatChunkChoice>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<OpenAIUsage>,
-}
-
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
@@ -1198,6 +1106,11 @@ mod tests {
     use super::*;
 
     use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
+    use tensorzero_types_providers::together::{
+        TogetherChatChunkChoice, TogetherDelta, TogetherFunctionCallChunk, TogetherResponseMessage,
+        TogetherToolCallChunk,
+    };
+
     use crate::providers::chat_completions::{
         ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
         ChatCompletionToolChoice, ChatCompletionToolType,
