@@ -25,6 +25,7 @@ members = [
     "internal/reqwest-sse-stream",
     "internal/config-applier",
     "internal/tensorzero-config-paths",
+    "internal/tensorzero-ts-types",
 ]
 resolver = "2"
 
@@ -76,6 +77,8 @@ minijinja = { version = "2.15.1", features = [
 url = { version = "2.5.8", features = ["serde"] }
 google-cloud-auth = "1.6.0"
 object_store = { version = "0.13.1", features = ["serde", "aws", "gcp"] }
+arrow = { version = "57.3.0", default-features = false, features = ["json"] }
+parquet = { version = "57.3.0", default-features = false, features = ["arrow", "async", "snap", "zstd"] }
 rand = "0.10.0"
 ts-rs = { version = "12.0.1", features = [
     "serde-compat",
@@ -109,6 +112,7 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"
+serde_arrow = { version = "0.13", features = ["arrow-57"] }
 blake3 = "1.8.3"
 moka = { version = "0.12.13", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", rev = "3884f0d875130c1854a6eee8557ff8bd04b0b683" }
@@ -123,6 +127,7 @@ redis = { version = "1.0.2", features = [
     "tokio-rustls-comp",
 ] }
 redis-test = { version = "1.0.1", features = ["aio"] }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 globset = "0.4.18"
 walkdir = "2.5.0"
 tempfile = "3.25.0"

@@ -5,9 +5,10 @@ description: Learn how to use inference-time strategies like dynamic in-context 
 
 Inference-time optimizations are powerful techniques that can significantly enhance the performance of your LLM applications without the need for model fine-tuning.
 
-This guide will explore two key strategies implemented as variant types in TensorZero: Best-of-N (BoN) sampling and Dynamic In-Context Learning (DICL).
-Best-of-N sampling generates multiple response candidates and selects the best one using an evaluator model, while Dynamic In-Context Learning enhances context by incorporating relevant historical examples into the prompt.
-Both techniques can lead to improved response quality and consistency in your LLM applications.
+This guide will explore three key strategies implemented as variant types in TensorZero: Best-of-N (BoN) sampling, Dynamic In-Context Learning (DICL), and Mixture-of-N (MoN) sampling.
+Dynamic In-Context Learning enhances context by incorporating relevant historical examples into the prompt.
+Best-of-N and Mixture-of-N sampling both generate multiple response candidates; Best-of-N selects the best one using an evaluator model, while Mixture-of-N combines the responses using a fuser model.
+All three techniques can lead to improved response quality and consistency in your LLM applications.
 
 ## Best-of-N Sampling
 

@@ -19,7 +19,10 @@ pub use tensorzero::{
     ListDatasetsResponse, PostgresConfig, TensorZeroError, UpdateDatapointRequest,
     UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
-use tensorzero::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
+use tensorzero::{
+    GetInferencesRequest, GetInferencesResponse, ListEpisodesRequest, ListEpisodesResponse,
+    ListInferencesRequest,
+};
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -36,7 +39,8 @@ pub use embedded::EmbeddedClient;
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
     CreateEventResponse, EventPayload, EventPayloadToolResult, GatewayListEventsResponse,
-    ListEventsParams, ListSessionsParams, ListSessionsResponse, ToolOutcome,
+    ListEventsParams, ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
+    ToolOutcome,
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
@@ -152,6 +156,15 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         params: ListSessionsParams,
     ) -> Result<ListSessionsResponse, TensorZeroClientError>;
 
+    /// Initiate an S3 upload via the Autopilot API.
+    ///
+    /// Returns temporary S3 credentials for uploading data.
+    async fn s3_initiate_upload(
+        &self,
+        session_id: Uuid,
+        request: S3UploadRequest,
+    ) -> Result<S3UploadResponse, TensorZeroClientError>;
+
     /// Execute an action with a historical config snapshot.
     ///
     /// This uses the action endpoint to run inference, feedback, or evaluations
@@ -241,6 +254,14 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         request: GetInferencesRequest,
     ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+    // ========== Episode Operations ==========
+
+    /// List episodes with pagination and optional filtering.
+    async fn list_episodes(
+        &self,
+        request: ListEpisodesRequest,
+    ) -> Result<ListEpisodesResponse, TensorZeroClientError>;
 
     // ========== Optimization Operations ==========
 

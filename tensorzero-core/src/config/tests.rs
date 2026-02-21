@@ -4,6 +4,7 @@ use std::{io::Write, path::PathBuf};
 use tempfile::NamedTempFile;
 use toml::de::DeTable;
 
+use crate::config::namespace::Namespace;
 use crate::{embeddings::EmbeddingProviderConfig, inference::types::Role, variant::JsonMode};
 
 /// Ensure that the sample valid config can be parsed without panicking
@@ -3512,9 +3513,8 @@ async fn test_experimentation_with_namespaces_valid() {
     );
 }
 
-// TODO: implement track-and-stop for namespaces, delete
 #[tokio::test]
-async fn test_experimentation_namespace_track_and_stop_rejected() {
+async fn test_experimentation_namespace_track_and_stop_loads() {
     let config_str = r#"
         [models.test]
         routing = ["test"]
@@ -3553,17 +3553,21 @@ async fn test_experimentation_namespace_track_and_stop_rejected() {
         "#;
 
     let config = toml::from_str(config_str).expect("Failed to parse TOML config");
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let loaded = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
         .await
-        .expect_err("Namespace with track_and_stop should fail to load");
+        .expect("Namespace with track_and_stop should load successfully");
 
-    let err_msg = err.to_string();
+    let function_config = loaded.functions.get("test_function").unwrap();
+    let experimentation = function_config.experimentation_with_namespaces();
     assert!(
-        err_msg.contains("track_and_stop"),
-        "Error should mention `track_and_stop`: {err_msg}"
+        experimentation.has_namespace_config("mobile"),
+        "Should have a `mobile` namespace config"
     );
     assert!(
-        err_msg.contains("mobile"),
-        "Error should mention the namespace name: {err_msg}"
+        matches!(
+            experimentation.get_for_namespace(Some(&Namespace::new("mobile").unwrap())),
+            crate::experimentation::ExperimentationConfig::TrackAndStop(_)
+        ),
+        "The `mobile` namespace config should be TrackAndStop"
     );
 }

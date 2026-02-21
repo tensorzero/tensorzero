@@ -15,7 +15,9 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the feedback tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FeedbackToolParams {
     /// The episode ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
     #[serde(default)]
@@ -49,6 +51,16 @@ impl ToolMetadata for FeedbackTool {
     type SideInfo = AutopilotSideInfo;
     type Output = FeedbackResponse;
     type LlmParams = FeedbackToolParams;
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::FEEDBACK_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::FEEDBACK_RESPONSE
+    }
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("feedback")

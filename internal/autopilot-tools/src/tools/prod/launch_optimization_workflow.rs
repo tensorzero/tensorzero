@@ -19,7 +19,9 @@ use tensorzero_core::optimization::{
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LaunchOptimizationWorkflowToolParams {
     /// The function name to optimize.
     pub function_name: String,
@@ -50,7 +52,9 @@ pub struct LaunchOptimizationWorkflowToolParams {
 }
 
 /// Response from the optimization workflow tool.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LaunchOptimizationWorkflowToolOutput {
     /// The final job info (Completed or Failed).
     pub result: OptimizationJobInfo,
@@ -68,6 +72,16 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
     type SideInfo = AutopilotSideInfo;
     type Output = LaunchOptimizationWorkflowToolOutput;
     type LlmParams = LaunchOptimizationWorkflowToolParams;
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::LAUNCH_OPTIMIZATION_WORKFLOW_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::LAUNCH_OPTIMIZATION_WORKFLOW_TOOL_OUTPUT
+    }
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("launch_optimization_workflow")

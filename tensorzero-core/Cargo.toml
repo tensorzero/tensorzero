@@ -117,7 +117,7 @@ enum-map = "2.7.3"
 tokio-util = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 moka = { workspace = true }
-tonic = { version = "0.14.2", default-features = false }
+tonic = { version = "0.14.4", default-features = false }
 sqlx = { workspace = true }
 pin-project = { workspace = true }
 once_cell = "1.21.3"
@@ -135,6 +135,7 @@ opentelemetry-http = "0.31.0"
 regex = { workspace = true }
 dashmap = "6.1.0"
 redis = { workspace = true }
+rustls = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

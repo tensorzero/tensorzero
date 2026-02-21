@@ -102,7 +102,9 @@ impl From<&MetricConfigType> for FeedbackType {
 }
 
 // TODO(shuyangli): rename this to CreateFeedbackResponse and export
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FeedbackResponse {
     pub feedback_id: Uuid,
 }
@@ -181,6 +183,14 @@ async fn feedback_inner(
     deferred_tasks: &TaskTracker,
     params: Params,
 ) -> Result<FeedbackResponse, Error> {
+    if !config.gateway.observability.writes_enabled() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Feedback requires observability to be enabled \
+                      (`gateway.observability.enabled` must not be `false`)."
+                .to_string(),
+        }));
+    }
+
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         config,
@@ -894,7 +904,10 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
 
-    use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
+    use crate::config::gateway::GatewayConfig;
+    use crate::config::{
+        Config, MetricConfig, MetricConfigOptimize, ObservabilityConfig, SchemaData,
+    };
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
     use crate::db::inferences::FunctionInfo;
     use crate::experimentation::ExperimentationConfigWithNamespaces;
@@ -1787,5 +1800,66 @@ mod tests {
             "456".to_string(),
         );
         assert!(validate_feedback_specific_tags(&tags).is_ok());
+    }
+
+    fn mock_db_expecting_no_calls() -> MockClickHouseConnectionInfo {
+        let mut mock_db = MockClickHouseConnectionInfo::new();
+        mock_db.inference_queries.expect_get_function_info().never();
+        mock_db
+            .feedback_queries
+            .expect_insert_comment_feedback()
+            .never();
+        mock_db
+            .feedback_queries
+            .expect_insert_float_feedback()
+            .never();
+        mock_db
+            .feedback_queries
+            .expect_insert_boolean_feedback()
+            .never();
+        mock_db
+            .feedback_queries
+            .expect_insert_demonstration_feedback()
+            .never();
+        mock_db
+    }
+
+    #[tokio::test]
+    async fn test_feedback_rejects_when_observability_disabled() {
+        let config = Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: Some(false),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mock_db = mock_db_expecting_no_calls();
+        let params = Params {
+            episode_id: Some(Uuid::now_v7()),
+            inference_id: None,
+            metric_name: "comment".to_string(),
+            value: json!("test comment"),
+            tags: HashMap::new(),
+            internal: false,
+            dryrun: Some(false),
+        };
+        let deferred_tasks = TaskTracker::new();
+
+        let error = feedback_inner(&config, Arc::new(mock_db), &deferred_tasks, params)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidRequest {
+                message: "Feedback requires observability to be enabled \
+                          (`gateway.observability.enabled` must not be `false`)."
+                    .to_string(),
+            },
+            "Feedback should be rejected when observability is disabled"
+        );
     }
 }

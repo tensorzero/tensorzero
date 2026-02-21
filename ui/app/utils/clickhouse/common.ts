@@ -266,24 +266,6 @@ export const inputMessageSchema = z
   .strict();
 export type ZodInputMessage = z.infer<typeof inputMessageSchema>;
 
-export const displayModelInferenceInputMessageContentSchema =
-  z.discriminatedUnion("type", [
-    displayTextInputSchema,
-    toolCallContentSchema,
-    toolResultContentSchema,
-    resolvedFileContentSchema,
-    resolvedFileContentErrorSchema,
-    thoughtContentSchema,
-  ]);
-
-export const displayModelInferenceInputMessageSchema = z.object({
-  role: roleSchema,
-  content: z.array(displayModelInferenceInputMessageContentSchema),
-});
-export type ZodDisplayModelInferenceInputMessage = z.infer<
-  typeof displayModelInferenceInputMessageSchema
->;
-
 export const displayInputMessageSchema = z
   .object({
     role: roleSchema,

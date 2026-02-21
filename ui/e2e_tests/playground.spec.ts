@@ -98,7 +98,8 @@ test("playground should work for extract_entities JSON function with 2 variants"
   // - 2 Reference Output sections (one per datapoint)
   // - 4 Variant Output sections (2 variants × 2 datapoints)
   // Total: 8 CodeMirror editors
-  // Wait for all editors to load before counting
+  // Scroll to bottom to force all VirtualizedCodeEditors into the viewport
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await expect(page.locator(".cm-editor")).toHaveCount(8);
 
   // Verify that there are no errors
@@ -110,9 +111,6 @@ test("playground should work for extract_entities JSON function with 2 variants"
 test("playground should work for image_judger function with images in input", async ({
   page,
 }) => {
-  // We set 'limit=1' so that we don't make parallel inference requests
-  // (two of the datapoints have the same input, and could trample on each other's
-  // cache entries)
   await page.goto("/playground?limit=1");
   await expect(page.getByPlaceholder("Select function")).toBeVisible();
 

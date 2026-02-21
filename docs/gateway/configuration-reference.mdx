@@ -702,6 +702,28 @@ api_base = "https://example.com/v1/messages"
 # ...
 ```
 
+##### `provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., Anthropic's web search tool).
+
+Each object in the array should contain the provider-specific tool configuration as defined by Anthropic's API.
+
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
+
+```toml title="tensorzero.toml"
+[models.claude-sonnet-4-5.providers.anthropic]
+# ...
+type = "anthropic"
+model_name = "claude-sonnet-4-5"
+provider_tools = [{type = "web_search_20250305", name = "web_search"}]
+# ...
+```
+
 </Accordion>
 
 <Accordion title='type: "aws_bedrock"'>
@@ -1280,6 +1302,30 @@ Defines the project ID of the GCP Vertex AI model.
 # ...
 type = "gcp_vertex"
 project_id = "your-project-id"
+# ...
+```
+
+##### `provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., Anthropic's web search tool).
+
+Each object in the array should contain the provider-specific tool configuration as defined by Anthropic's API.
+
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
+
+```toml title="tensorzero.toml"
+[models.claude-sonnet-4-5.providers.gcp_vertex]
+# ...
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "your-project-id"
+provider_tools = [{type = "web_search_20250305", name = "web_search"}]
 # ...
 ```
 
@@ -2075,6 +2121,29 @@ extra_body = [
 ]
 ```
 
+### `extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_headers` field allows you to set or overwrite the request headers that TensorZero sends to an embedding model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `name` (string): The name of the header to modify
+- One of the following:
+  - `value` (string): The value of the header
+  - `delete = true`: Deletes the header from the request, if present
+
+```toml title="tensorzero.toml"
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+type = "openai"
+extra_headers = [
+  { name = "X-Custom-Header", value = "custom-value" }
+]
+```
+
 ### `timeout_ms`
 
 - **Type:** integer
@@ -2684,9 +2753,8 @@ assistant_template = "./functions/draft-email/prompt-v1/assistant_template.minij
 - **Type:** string
 - **Required:** no
 
-Defines a description of the function.
-
-In the future, this description will inform automated optimization recipes.
+An optional description of the function.
+It helps TensorZero Autopilot understand the intent behind the function.
 
 ```toml title="tensorzero.toml"
 [functions.extract_data]
@@ -3217,6 +3285,7 @@ presence_penalty = 0.5
 
 Controls the reasoning effort level for reasoning models.
 
+For Anthropic, this enables adaptive thinking (`thinking.type: "adaptive"`) with the specified effort level via `output_config.effort`.
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingLevel`.
 
 <Warning>
@@ -3225,11 +3294,11 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
-<Tip>
+<Warning>
 
-Some providers (e.g. Anthropic) support `thinking_budget_tokens` instead.
+For Anthropic, `reasoning_effort` and `thinking_budget_tokens` are mutually exclusive. Use `reasoning_effort` for adaptive thinking or `thinking_budget_tokens` for manual thinking.
 
-</Tip>
+</Warning>
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3340,7 +3409,7 @@ temperature = 0.5
 
 Controls the thinking budget in tokens for reasoning models.
 
-For Anthropic, this value corresponds to `thinking.budget_tokens`.
+For Anthropic, this value corresponds to `thinking.budget_tokens` (manual thinking mode with `thinking.type: "enabled"`).
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingBudget`.
 
 <Warning>
@@ -3349,9 +3418,15 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
+<Warning>
+
+For Anthropic, `thinking_budget_tokens` and `reasoning_effort` are mutually exclusive. Use `thinking_budget_tokens` for manual thinking or `reasoning_effort` for adaptive thinking.
+
+</Warning>
+
 <Tip>
 
-Some providers (e.g. OpenAI) support `reasoning_effort` instead.
+Some providers (e.g. OpenAI) support `reasoning_effort` instead. For Anthropic, both `reasoning_effort` and `thinking_budget_tokens` are supported but cannot be used together.
 
 </Tip>
 
@@ -4400,6 +4475,21 @@ For example, periods are not allowed in basic strings, so you can define `beats-
 [metrics.user-rating]
 # fieldA = ...
 # fieldB = ...
+# ...
+```
+
+### `description`
+
+- **Type:** string
+- **Required:** no
+
+An optional description of the metric.
+It helps TensorZero Autopilot understand the intent behind the metric.
+
+```toml title="tensorzero.toml"
+[metrics.task-completed]
+# ...
+description = "Whether the task was completed successfully"
 # ...
 ```
 
