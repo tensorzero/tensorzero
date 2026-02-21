@@ -26,7 +26,7 @@ use crate::config::with_skip_credential_validation;
 use crate::config::{
     Namespace, OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
-use crate::cost::{CostConfig, load_cost_config};
+use crate::cost::{CostConfig, ResponseMode, compute_cost, load_cost_config};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
@@ -189,6 +189,8 @@ pub struct StreamResponse {
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts during fallback.
     pub failed_raw_response: Vec<RawResponseEntry>,
+    /// Cost configuration from the successful provider, for computing cost after streaming completes.
+    pub cost_config: Option<CostConfig>,
 }
 
 impl StreamResponse {
@@ -237,6 +239,7 @@ impl StreamResponse {
             cached: true,
             model_inference_id,
             failed_raw_response: vec![],
+            cost_config: None,
         }
     }
 }
@@ -476,6 +479,7 @@ impl ModelConfig {
                 cached: false,
                 model_inference_id: model_provider_request.model_inference_id,
                 failed_raw_response: vec![],
+                cost_config: provider.cost.clone(),
             },
             messages: model_provider_request.request.messages.clone(),
         })
@@ -547,6 +551,17 @@ impl ModelConfig {
 
                 match response {
                     Ok(mut response) => {
+                        // Compute cost from raw response using provider's cost config
+                        if !response.cached
+                            && let Some(cost_config) = &provider.cost
+                        {
+                            response.usage.cost = compute_cost(
+                                &response.raw_response,
+                                cost_config,
+                                ResponseMode::NonStreaming,
+                            );
+                        }
+
                         // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
                         // (in case we ever add a blocking cache write option)
                         if !response.cached && clients.cache_options.enabled.write() {
@@ -648,6 +663,7 @@ impl ModelConfig {
                         cached: false,
                         model_inference_id: Uuid::now_v7(),
                         failed_raw_response: vec![],
+                        cost_config: None,
                     },
                     messages: request.messages.clone(),
                 });
@@ -3045,6 +3061,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -3322,6 +3339,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -3410,6 +3428,7 @@ mod tests {
                     cached: _,
                     model_inference_id: _,
                     failed_raw_response: _,
+                    cost_config: _,
                 },
             messages: _input,
         } = model_config
@@ -3596,6 +3615,7 @@ mod tests {
                     cached: _,
                     model_inference_id: _,
                     failed_raw_response: _,
+                    cost_config: _,
                 },
             messages: _,
         } = model_config

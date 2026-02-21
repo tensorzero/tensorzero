@@ -109,6 +109,12 @@ pub enum OpenAIEmbedding {
 pub struct OpenAIEmbeddingUsage {
     pub prompt_tokens: Option<u32>,
     pub total_tokens: Option<u32>,
+    #[serde(
+        rename = "tensorzero::cost",
+        skip_serializing_if = "Option::is_none",
+        with = "rust_decimal::serde::float_option"
+    )]
+    pub tensorzero_cost: Option<rust_decimal::Decimal>,
 }
 
 impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
@@ -127,6 +133,7 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
             usage: Some(OpenAIEmbeddingUsage {
                 prompt_tokens: response.usage.input_tokens,
                 total_tokens: response.usage.input_tokens, // there are no output tokens for embeddings
+                tensorzero_cost: response.usage.cost,
             }),
             tensorzero_raw_response: response.tensorzero_raw_response,
         }

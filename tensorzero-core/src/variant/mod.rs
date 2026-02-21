@@ -210,6 +210,8 @@ pub struct ModelUsedInfo {
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts during model-level fallback.
     pub failed_raw_response: Vec<RawResponseEntry>,
+    /// Cost configuration from the provider, for computing cost after streaming completes.
+    pub cost_config: Option<crate::cost::CostConfig>,
 }
 
 pub trait Variant {
@@ -949,6 +951,7 @@ async fn infer_model_request_stream<'request>(
                 cached,
                 model_inference_id,
                 mut failed_raw_response,
+                cost_config,
             },
         messages: input_messages,
     } = match result {
@@ -991,6 +994,7 @@ async fn infer_model_request_stream<'request>(
         cached,
         model_inference_id,
         failed_raw_response,
+        cost_config,
     };
     let config_type = function.config_type();
     let stream =
@@ -1463,6 +1467,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match inference_result {
@@ -1577,6 +1582,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match inference_result {
@@ -1805,6 +1811,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match inference_result {

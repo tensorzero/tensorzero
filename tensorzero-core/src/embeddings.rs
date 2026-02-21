@@ -214,7 +214,15 @@ impl EmbeddingModelConfig {
                     .await;
 
                 match response {
-                    Ok(response) => {
+                    Ok(mut response) => {
+                        // Compute cost from raw response using the provider's cost config
+                        if let Some(cost_config) = &provider_config.cost {
+                            response.usage.cost = crate::cost::compute_cost(
+                                &response.raw_response,
+                                cost_config,
+                                crate::cost::ResponseMode::NonStreaming,
+                            );
+                        }
                         if clients.cache_options.enabled.write() && response.embeddings.len() == 1 {
                             let Some(first_embedding) = response.embeddings.first() else {
                                 return Err(ErrorDetails::InternalError{
@@ -450,6 +458,8 @@ impl EmbeddingModelResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
+
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
@@ -468,10 +478,7 @@ impl EmbeddingModelResponse {
     /// So we need this function to compute the actual usage in order to send it in the HTTP response.
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
-            Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
-            }
+            Usage::zero()
         } else {
             self.usage
         }

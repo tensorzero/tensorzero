@@ -1,5 +1,6 @@
 use json_pointer::JsonPointer;
 use rust_decimal::Decimal;
+use serde_json::Value;
 
 use crate::error::{Error, ErrorDetails};
 use tensorzero_types::{
@@ -8,6 +9,82 @@ use tensorzero_types::{
 
 /// Decimal type alias for cost values.
 pub type Cost = Decimal;
+
+/// Whether the response being costed came from streaming or non-streaming inference.
+/// Used to select the correct pointer for `Split` pointer configurations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResponseMode {
+    Streaming,
+    NonStreaming,
+}
+
+/// Compute the cost of a provider response by resolving JSON pointers in the raw response
+/// and multiplying extracted values by configured rates.
+///
+/// Returns `Some(total)` if cost can be computed, `None` if:
+/// - The raw response is not valid JSON
+/// - A required field is missing or non-numeric
+/// - The computed total is negative
+pub fn compute_cost(
+    raw_response: &str,
+    cost_config: &CostConfig,
+    mode: ResponseMode,
+) -> Option<Cost> {
+    let json: Value = serde_json::from_str(raw_response).ok()?;
+    let mut total = Decimal::ZERO;
+
+    for entry in cost_config {
+        let pointer_str = match &entry.pointer {
+            NormalizedCostPointerConfig::Unified { pointer } => pointer.as_str(),
+            NormalizedCostPointerConfig::Split {
+                pointer_nonstreaming,
+                pointer_streaming,
+            } => match mode {
+                ResponseMode::NonStreaming => pointer_nonstreaming.as_str(),
+                ResponseMode::Streaming => pointer_streaming.as_str(),
+            },
+        };
+
+        let value = json.pointer(pointer_str);
+        match value {
+            Some(v) => {
+                let numeric = value_to_decimal(v)?;
+                total += numeric * entry.rate.cost_per_unit;
+            }
+            None => {
+                if entry.required {
+                    return None;
+                }
+                // Non-required missing field: skip (contributes 0)
+            }
+        }
+    }
+
+    if total < Decimal::ZERO {
+        return None;
+    }
+
+    Some(total)
+}
+
+/// Convert a JSON value to a Decimal. Handles integers, floats, and string representations.
+fn value_to_decimal(value: &Value) -> Option<Decimal> {
+    match value {
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Some(Decimal::from(i))
+            } else if let Some(u) = n.as_u64() {
+                Some(Decimal::from(u))
+            } else if let Some(f) = n.as_f64() {
+                Decimal::try_from(f).ok()
+            } else {
+                None
+            }
+        }
+        Value::String(s) => s.parse::<Decimal>().ok(),
+        _ => None,
+    }
+}
 
 // ============================================================================
 // Normalized (runtime) types — after validation and rate normalization
@@ -518,5 +595,217 @@ cost_per_million = 3.0
             load_cost_config(config).is_err(),
             "JSON pointer without leading `/` should be rejected"
         );
+    }
+
+    // ========================================================================
+    // compute_cost tests
+    // ========================================================================
+
+    fn make_config_entry(
+        pointer: NormalizedCostPointerConfig,
+        cost_per_unit: Decimal,
+        required: bool,
+    ) -> CostConfigEntry {
+        CostConfigEntry {
+            pointer,
+            rate: CostRate { cost_per_unit },
+            required,
+        }
+    }
+
+    fn unified_config(pointer: &str, cost_per_unit: Decimal, required: bool) -> CostConfigEntry {
+        make_config_entry(
+            NormalizedCostPointerConfig::Unified {
+                pointer: pointer.to_string(),
+            },
+            cost_per_unit,
+            required,
+        )
+    }
+
+    fn split_config(
+        nonstreaming: &str,
+        streaming: &str,
+        cost_per_unit: Decimal,
+        required: bool,
+    ) -> CostConfigEntry {
+        make_config_entry(
+            NormalizedCostPointerConfig::Split {
+                pointer_nonstreaming: nonstreaming.to_string(),
+                pointer_streaming: streaming.to_string(),
+            },
+            cost_per_unit,
+            required,
+        )
+    }
+
+    #[test]
+    fn test_compute_cost_per_unit_unified() {
+        let raw = r#"{"usage": {"prompt_tokens": 100, "completion_tokens": 50}}"#;
+        let config = vec![
+            unified_config(
+                "/usage/prompt_tokens",
+                Decimal::from(3) / Decimal::from(1_000_000),
+                false,
+            ),
+            unified_config(
+                "/usage/completion_tokens",
+                Decimal::from(15) / Decimal::from(1_000_000),
+                false,
+            ),
+        ];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        let expected = Decimal::from(100) * Decimal::from(3) / Decimal::from(1_000_000)
+            + Decimal::from(50) * Decimal::from(15) / Decimal::from(1_000_000);
+        assert_eq!(
+            cost,
+            Some(expected),
+            "cost should be sum of (tokens * rate) for each entry"
+        );
+    }
+
+    #[test]
+    fn test_compute_cost_per_unit_direct() {
+        let raw = r#"{"cost": 0.05}"#;
+        let config = vec![unified_config(
+            "/cost",
+            Decimal::from(1), // cost_per_unit = 1 means use value directly
+            true,
+        )];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        assert_eq!(
+            cost,
+            Some(Decimal::new(5, 2)),
+            "should extract cost directly when rate is 1"
+        );
+    }
+
+    #[test]
+    fn test_compute_cost_split_pointers_nonstreaming() {
+        let raw = r#"{"usage": {"total": 200, "stream_total": 999}}"#;
+        let config = vec![split_config(
+            "/usage/total",
+            "/usage/stream_total",
+            Decimal::from(1) / Decimal::from(1_000_000),
+            false,
+        )];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        let expected = Decimal::from(200) / Decimal::from(1_000_000);
+        assert_eq!(
+            cost,
+            Some(expected),
+            "non-streaming mode should use nonstreaming pointer"
+        );
+    }
+
+    #[test]
+    fn test_compute_cost_split_pointers_streaming() {
+        let raw = r#"{"usage": {"total": 200, "stream_total": 300}}"#;
+        let config = vec![split_config(
+            "/usage/total",
+            "/usage/stream_total",
+            Decimal::from(1) / Decimal::from(1_000_000),
+            false,
+        )];
+        let cost = compute_cost(raw, &config, ResponseMode::Streaming);
+        let expected = Decimal::from(300) / Decimal::from(1_000_000);
+        assert_eq!(
+            cost,
+            Some(expected),
+            "streaming mode should use streaming pointer"
+        );
+    }
+
+    #[test]
+    fn test_compute_cost_required_field_missing_returns_none() {
+        let raw = r#"{"usage": {"prompt_tokens": 100}}"#;
+        let config = vec![
+            unified_config("/usage/prompt_tokens", Decimal::from(1), false),
+            unified_config("/usage/completion_tokens", Decimal::from(1), true), // required but missing
+        ];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        assert_eq!(
+            cost, None,
+            "should return None when a required field is missing"
+        );
+    }
+
+    #[test]
+    fn test_compute_cost_nonrequired_field_missing() {
+        let raw = r#"{"usage": {"prompt_tokens": 100}}"#;
+        let config = vec![
+            unified_config("/usage/prompt_tokens", Decimal::from(1), false),
+            unified_config("/usage/completion_tokens", Decimal::from(1), false), // not required
+        ];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        assert_eq!(
+            cost,
+            Some(Decimal::from(100)),
+            "should skip non-required missing fields"
+        );
+    }
+
+    #[test]
+    fn test_compute_cost_invalid_json_returns_none() {
+        let raw = "not valid json";
+        let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        assert_eq!(cost, None, "should return None for invalid JSON");
+    }
+
+    #[test]
+    fn test_compute_cost_negative_total_returns_none() {
+        // Set up a config where the total will be negative
+        let raw = r#"{"tokens": 10}"#;
+        let config = vec![unified_config(
+            "/tokens",
+            Decimal::new(-5, 0), // -5 per unit → total = -50
+            false,
+        )];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        assert_eq!(cost, None, "should return None when total cost is negative");
+    }
+
+    #[test]
+    fn test_compute_cost_empty_config() {
+        let raw = r#"{"usage": {"tokens": 100}}"#;
+        let config: CostConfig = vec![];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        assert_eq!(
+            cost,
+            Some(Decimal::ZERO),
+            "empty config should return Some(0)"
+        );
+    }
+
+    #[test]
+    fn test_compute_cost_non_numeric_value_returns_none() {
+        let raw = r#"{"usage": {"tokens": "not_a_number"}}"#;
+        let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        assert_eq!(
+            cost, None,
+            "should return None for non-numeric field values"
+        );
+    }
+
+    #[test]
+    fn test_compute_cost_string_numeric_value() {
+        let raw = r#"{"usage": {"tokens": "100"}}"#;
+        let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        assert_eq!(
+            cost,
+            Some(Decimal::from(100)),
+            "should parse numeric strings"
+        );
+    }
+
+    #[test]
+    fn test_compute_cost_boolean_value_returns_none() {
+        let raw = r#"{"usage": {"tokens": true}}"#;
+        let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        assert_eq!(cost, None, "should return None for boolean field values");
     }
 }
