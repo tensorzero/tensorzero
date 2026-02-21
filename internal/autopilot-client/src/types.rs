@@ -144,6 +144,7 @@ pub enum AutopilotStatus {
     ServerSideProcessing,
     WaitingForToolCallAuthorization,
     WaitingForToolExecution,
+    WaitingForUserQuestionsAnswers,
     WaitingForRetry,
     Failed,
 }
@@ -768,6 +769,9 @@ pub struct ListEventsResponse {
     /// All EventPayloads in these Events should be of type ToolCall.
     #[serde(default)]
     pub pending_tool_calls: Vec<Event>,
+    /// All user_questions events that do not have a matching user_questions_answers event.
+    #[serde(default)]
+    pub pending_user_questions: Vec<Event>,
 }
 
 /// Response from listing events as seen by gateway consumers.
@@ -788,6 +792,9 @@ pub struct GatewayListEventsResponse {
     /// All EventPayloads in these Events should be of type ToolCall.
     #[serde(default)]
     pub pending_tool_calls: Vec<GatewayEvent>,
+    /// All user_questions events that do not have a matching user_questions_answers event.
+    #[serde(default)]
+    pub pending_user_questions: Vec<GatewayEvent>,
 }
 
 /// Response from listing sessions.

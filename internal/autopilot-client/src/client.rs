@@ -526,11 +526,25 @@ impl AutopilotClient {
             filtered_pending_tool_calls.push(gateway_event);
         }
 
+        // Convert pending user questions to gateway events (no filtering needed)
+        let pending_user_questions = body
+            .pending_user_questions
+            .into_iter()
+            .map(|event| {
+                event.try_into().map_err(|e| {
+                    AutopilotError::Internal(format!(
+                        "Event conversion failed for pending user question: {e}"
+                    ))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(GatewayListEventsResponse {
             events: filtered_events,
             previous_user_message_event_id: body.previous_user_message_event_id,
             status: body.status,
             pending_tool_calls: filtered_pending_tool_calls,
+            pending_user_questions,
         })
     }
 

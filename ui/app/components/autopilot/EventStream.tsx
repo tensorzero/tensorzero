@@ -6,7 +6,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { Component, type RefObject, useState } from "react";
+import { Component, type RefObject, useMemo, useState } from "react";
 import {
   AnimatedEllipsis,
   EllipsisMode,
@@ -30,11 +30,15 @@ import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
   AutopilotStatus,
   EventPayloadMessageContent,
+  EventPayloadUserQuestion,
   GatewayEvent,
   GatewayEventPayload,
   TopKEvaluationVisualization,
+  UserQuestionAnswer,
   VisualizationType,
 } from "~/types/tensorzero";
+import { formatResponse } from "~/components/autopilot/question-cards/formatResponse";
+import { hasAnsweredResponse } from "~/components/autopilot/question-cards/responseStatus";
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
@@ -77,6 +81,7 @@ type EventStreamProps = {
   onRetryLoad?: () => void;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
+  pendingUserQuestionIds?: Set<string>;
   optimisticMessages?: OptimisticMessage[];
   status?: AutopilotStatus;
   configApplyEnabled?: boolean;
@@ -277,11 +282,12 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
         description: payload.message,
       };
     case "visualization":
-    case "user_questions":
-    case "user_questions_answers":
     case "unknown":
       // Visualization events render their own content, no text description needed
-      // TODO (#6270): add a real component for `user_questions` and `user_responses`
+      return {};
+    case "user_questions":
+      return {};
+    case "user_questions_answers":
       return {};
   }
 }
@@ -442,8 +448,23 @@ function renderEventTitle(event: GatewayEvent) {
           <span>{getVisualizationTitle(payload.visualization)}</span>
         </span>
       );
-    case "user_questions":
-    case "user_questions_answers":
+    case "user_questions": {
+      const questionCount = payload.questions.length;
+      return (
+        <span className="inline-flex items-center gap-2">
+          {questionCount === 1 ? "Question" : "Questions"}
+        </span>
+      );
+    }
+    case "user_questions_answers": {
+      return (
+        <span className="inline-flex items-center gap-2">
+          Question
+          <DotSeparator />
+          {hasAnsweredResponse(payload.responses) ? "Answered" : "Skipped"}
+        </span>
+      );
+    }
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -521,20 +542,71 @@ class EventErrorBoundary extends Component<
   }
 }
 
+type UserQuestionsContentProps = {
+  questions: EventPayloadUserQuestion[];
+};
+
+function UserQuestionsContent({ questions }: UserQuestionsContentProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      {questions.map((q) => (
+        <div key={q.id} className="flex flex-col gap-0.5">
+          <span className="text-fg-muted text-xs font-medium">{q.header}</span>
+          <span className="text-fg-secondary text-sm">{q.question}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type UserQuestionsAnswersContentProps = {
+  responses: Record<string, UserQuestionAnswer>;
+  questions: EventPayloadUserQuestion[];
+};
+
+function UserQuestionsAnswersContent({
+  responses,
+  questions,
+}: UserQuestionsAnswersContentProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      {Object.entries(responses).map(([questionId, response]) => {
+        const question = questions.find((q) => q.id === questionId);
+        return (
+          <div key={questionId} className="flex flex-col gap-0.5">
+            <span className="text-fg-muted text-xs font-medium">
+              {question?.header ?? questionId}
+            </span>
+            <span className="text-fg-primary text-sm">
+              {formatResponse(response, question)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
-function EventItem({
-  event,
-  isPending = false,
-  configApplyEnabled = false,
-  sessionId,
-}: {
+type EventItemProps = {
   event: GatewayEvent;
-  isPending?: boolean;
+  questionsMap?: Map<string, EventPayloadUserQuestion[]>;
+  isPendingToolCall?: boolean;
+  isPendingQuestion?: boolean;
   configApplyEnabled?: boolean;
   sessionId?: string;
-}) {
+};
+
+function EventItem({
+  event,
+  questionsMap,
+  isPendingToolCall = false,
+  isPendingQuestion = false,
+  configApplyEnabled = false,
+  sessionId,
+}: EventItemProps) {
   const { yoloMode } = useAutopilotSession();
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
@@ -544,6 +616,8 @@ function EventItem({
     event.payload.type === "tool_call" ||
     event.payload.type === "error" ||
     event.payload.type === "visualization" ||
+    event.payload.type === "user_questions" ||
+    event.payload.type === "user_questions_answers" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
@@ -561,7 +635,7 @@ function EventItem({
             type="button"
             aria-expanded={isExpanded}
             aria-label={
-              isExpanded ? "Collapse tool details" : "Expand tool details"
+              isExpanded ? "Collapse event details" : "Expand event details"
             }
             className="inline-flex cursor-pointer items-center gap-2 text-left"
             onClick={() => setIsExpanded((current) => !current)}
@@ -575,7 +649,7 @@ function EventItem({
             >
               <ChevronRight className="h-4 w-4" />
             </span>
-            {isPending && !yoloMode && (
+            {((isPendingToolCall && !yoloMode) || isPendingQuestion) && (
               <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                 Action Required
               </span>
@@ -630,6 +704,17 @@ function EventItem({
       )}
       {shouldShowDetails && event.payload.type === "visualization" && (
         <VisualizationRenderer visualization={event.payload.visualization} />
+      )}
+      {shouldShowDetails && event.payload.type === "user_questions" && (
+        <UserQuestionsContent questions={event.payload.questions} />
+      )}
+      {shouldShowDetails && event.payload.type === "user_questions_answers" && (
+        <UserQuestionsAnswersContent
+          responses={event.payload.responses}
+          questions={
+            questionsMap?.get(event.payload.user_questions_event_id) ?? []
+          }
+        />
       )}
     </div>
   );
@@ -697,6 +782,8 @@ function getStatusLabel(status: AutopilotStatus): {
       return { text: "Waiting", showEllipsis: false };
     case "waiting_for_tool_execution":
       return { text: "Executing tool", showEllipsis: true };
+    case "waiting_for_user_questions_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_retry":
       return { text: "Something went wrong. Retrying", showEllipsis: true };
     case "failed":
@@ -745,11 +832,24 @@ export default function EventStream({
   onRetryLoad,
   topSentinelRef,
   pendingToolCallIds,
+  pendingUserQuestionIds,
   optimisticMessages = [],
   status,
   configApplyEnabled = false,
   sessionId,
 }: EventStreamProps) {
+  // Map from user_questions event ID → questions array, used to resolve
+  // option labels when rendering user_questions_answers events.
+  const questionsMap = useMemo(() => {
+    const map = new Map<string, EventPayloadUserQuestion[]>();
+    for (const event of events) {
+      if (event.payload.type === "user_questions") {
+        map.set(event.id, event.payload.questions);
+      }
+    }
+    return map;
+  }, [events]);
+
   // Determine what to show at the top: sentinel, error, or session start
   // Only show session start when there's content to display (events or optimistic messages)
   const showSessionStart =
@@ -782,7 +882,9 @@ export default function EventStream({
         <EventErrorBoundary key={event.id} eventId={event.id}>
           <EventItem
             event={event}
-            isPending={pendingToolCallIds?.has(event.id)}
+            questionsMap={questionsMap}
+            isPendingToolCall={pendingToolCallIds?.has(event.id)}
+            isPendingQuestion={pendingUserQuestionIds?.has(event.id)}
             configApplyEnabled={configApplyEnabled}
             sessionId={sessionId}
           />

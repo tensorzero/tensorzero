@@ -237,7 +237,7 @@ export function ChatInput({
             "text-fg-primary transition-colors",
             canSend
               ? "hover:text-fg-secondary cursor-pointer"
-              : "cursor-not-allowed opacity-50",
+              : "cursor-not-allowed opacity-25",
           )}
           aria-label="Send message"
         >
