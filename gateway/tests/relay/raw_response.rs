@@ -1139,7 +1139,7 @@ gateway_url = "http://0.0.0.0:19999"
         .expect("synthetic entry should have provider_type");
     assert_eq!(
         provider_type, "tensorzero::relay",
-        "Synthetic entry should have provider_type 'tensorzero::relay'"
+        "Synthetic entry should have provider_type `tensorzero::relay`"
     );
 }
 
