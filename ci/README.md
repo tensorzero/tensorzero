@@ -22,7 +22,7 @@ We have two top-level statuses:
 The `check-all-general-jobs-passed` runs for both PR CI and the merge queue, and depends on all of the other jobs in 'general.yml'.
 It reads the job statuses from all of its dependencies, and fails if any of those jobs failed or were cancelled.
 Some jobs (like `live-tests` and `client-tests`) are invoked as reusable workflows from `general.yml` and also run
-on a daily cron schedule (via their own `schedule` triggers) to detect provider flakiness.
+on a daily cron schedule (via `daily-tests.yml`) to detect provider flakiness.
 
 The `merge-checks-buildkite` status is reported in two places:
 

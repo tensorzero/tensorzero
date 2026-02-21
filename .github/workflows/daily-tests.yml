@@ -96,7 +96,7 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
       contents: read
-      id-token: write
+      actions: read
     uses: ./.github/workflows/live-batch-tests.yml
     secrets: inherit
 
