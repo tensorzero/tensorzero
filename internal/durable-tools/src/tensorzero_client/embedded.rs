@@ -135,7 +135,7 @@ impl TensorZeroClient for EmbeddedClient {
             config_snapshot_hash,
         };
 
-        create_event(autopilot_client, session_id, full_request)
+        create_event(autopilot_client, session_id, full_request, &[])
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
