@@ -241,6 +241,12 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 
+    /// Delete an entire dataset.
+    async fn delete_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
     // ========== Inference Query Operations ==========
 
     /// List inferences with filtering and pagination.
