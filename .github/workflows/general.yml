@@ -1135,7 +1135,7 @@ jobs:
       id-token: write
     needs: [build-gateway-container]
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero' && !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]')
+    if: github.repository == 'tensorzero/tensorzero' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))
     env:
       OPENAI_API_KEY: not_used
       FIREWORKS_API_KEY: not_used
@@ -1229,6 +1229,7 @@ jobs:
         run: cat e2e_logs.txt
 
   build-gateway-e2e-container:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     uses: ./.github/workflows/build-gateway-e2e-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1240,6 +1241,7 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-provider-proxy-container:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     uses: ./.github/workflows/build-provider-proxy-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1288,7 +1290,7 @@ jobs:
 
   build-fixtures-container:
     uses: ./.github/workflows/build-fixtures-container.yml
-    if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     permissions:
       # Permission to checkout the repository
       contents: read
