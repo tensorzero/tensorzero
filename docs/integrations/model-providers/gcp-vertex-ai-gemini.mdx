@@ -114,6 +114,23 @@ curl -X POST http://localhost:3000/inference \
   }'
 ```
 
+## Batch Inference
+
+GCP Vertex AI Gemini supports [batch inference](/gateway/guides/batch-inference/) using Google Cloud Storage for input and output files.
+
+To enable batch inference, configure the `provider_types.gcp_vertex_gemini.batch` section in your configuration file:
+
+```toml title="tensorzero.toml"
+[provider_types.gcp_vertex_gemini.batch]
+storage_type = "cloud_storage"
+input_uri_prefix = "gs://my-bucket/batch-inputs/"
+output_uri_prefix = "gs://my-bucket/batch-outputs/"
+```
+
+The service account used by the gateway must have read/write access to the specified GCS buckets.
+
+See the [Batch Inference](/gateway/guides/batch-inference/) guide and [Configuration Reference](/gateway/configuration-reference/) for more details.
+
 ## Thinking Parameters
 
 Gemini supports two thinking parameters:

@@ -95,10 +95,13 @@ services:
         condition: service_healthy
 
   ui:
-    image: tensorzero/ui
     environment:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
+    command: --config-file /app/config/tensorzero.toml
+    volumes:
+      - ./config:/app/config
+    image: tensorzero/ui
     env_file:
       - ${ENV_FILE:-.env}
     ports:

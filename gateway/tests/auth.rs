@@ -1,10 +1,15 @@
 #![expect(clippy::print_stdout)]
-use std::process::Stdio;
 use std::str::FromStr;
+use std::{process::Stdio, time::Duration};
 
 use http::{Method, StatusCode};
 use serde_json::{Value, json};
-use tensorzero_auth::key::TensorZeroApiKey;
+
+use sqlx::types::chrono::Utc;
+use tensorzero_auth::{
+    key::TensorZeroApiKey,
+    postgres::{AuthResult, check_key},
+};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_feedback_clickhouse,
@@ -41,7 +46,7 @@ async fn test_tensorzero_auth_enabled() {
     )
     .await;
 
-    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
         .await
         .unwrap();
 
@@ -242,9 +247,10 @@ async fn test_tensorzero_missing_auth() {
     )
     .await;
 
-    let disabled_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let disabled_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let disabled_at = tensorzero_auth::postgres::disable_key(
         &TensorZeroApiKey::parse(disabled_key.expose_secret())
@@ -373,6 +379,37 @@ async fn test_tensorzero_missing_auth() {
             ),
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        let expired_key = tensorzero_auth::postgres::create_key(
+            "my_org",
+            "my_workspace",
+            None,
+            Some(Utc::now() - Duration::from_secs(2)),
+            &pool,
+        )
+        .await
+        .unwrap();
+
+        let expired_key_response = client
+            .request(
+                Method::from_str(method).unwrap(),
+                format!("http://{}/{}", child_data.addr, path),
+            )
+            .header(
+                http::header::AUTHORIZATION,
+                format!("Bearer {}", expired_key.expose_secret()),
+            )
+            .send()
+            .await
+            .unwrap();
+
+        let status = expired_key_response.status();
+        let text = expired_key_response.text().await.unwrap();
+        assert!(
+            text.contains("API key expired at:"),
+            "Expected expired key error message, got: {text}"
+        );
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 }
 
@@ -393,9 +430,10 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     .await;
 
     // Create a key
-    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
-        .await
-        .unwrap();
+    let key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
+            .await
+            .unwrap();
     let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
 
     // First request - should succeed
@@ -494,9 +532,10 @@ async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
     .await;
 
     // Create a key
-    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
-        .await
-        .unwrap();
+    let key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
+            .await
+            .unwrap();
     let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
 
     // First request - should succeed
@@ -570,7 +609,7 @@ async fn test_auth_cache_requires_full_key_match() {
 
     // Create a valid key
     let valid_key =
-        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, None, &pool)
             .await
             .unwrap();
     let parsed_valid_key = TensorZeroApiKey::parse(valid_key.expose_secret()).unwrap();
@@ -742,8 +781,86 @@ async fn test_disable_api_key_cli() {
 }
 
 #[tokio::test]
+async fn test_create_api_key_with_invalid_expiration() {
+    let past_datetime = "2025-12-20 23:00:00.000000 UTC";
+
+    let output = Command::new(common::gateway_path())
+        .args(["--create-api-key", "--expiration", past_datetime])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "Expected --create-api-key to fail w/ --expiration in the past but it didn't"
+    );
+
+    let output = Command::new(common::gateway_path())
+        .args(["--create-api-key", "--expiration", "some complete nonsense"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "Expected --create-api-key to fail w/ non-datetime --expiration value but it didn't"
+    );
+}
+
+#[tokio::test]
+async fn test_create_api_key_cli_with_expiration() {
+    let pool = get_postgres_pool_for_testing().await;
+
+    // Deliberately set a soon-to-expire expiration time
+    let expire_datetime = Utc::now() + Duration::from_secs(2);
+
+    let output = Command::new(common::gateway_path())
+        .args([
+            "--create-api-key",
+            "--expiration",
+            expire_datetime.to_string().as_str(),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "CLI command failed with stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let api_key = stdout.trim();
+
+    // Verify the key has the correct format
+    assert!(
+        api_key.starts_with("sk-t0-"),
+        "API key should start with 'sk-t0-', got: {api_key}"
+    );
+
+    let api_key = TensorZeroApiKey::parse(api_key).unwrap();
+
+    // Wait for the created key to expire
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+    assert!(matches!(
+        check_key(&api_key, &pool).await.unwrap(),
+        AuthResult::Expired(_, _)
+    ));
+}
+
+#[tokio::test]
 async fn test_create_api_key_cli() {
     // This test verifies that the --create-api-key CLI command works correctly
+    let pool = get_postgres_pool_for_testing().await;
+
     let output = Command::new(common::gateway_path())
         .args(["--create-api-key"])
         .stdout(Stdio::piped())
@@ -774,6 +891,15 @@ async fn test_create_api_key_cli() {
         "API key should be valid, got error: {:?}",
         parsed_key.err()
     );
+
+    if let AuthResult::Success(key_info) = check_key(&parsed_key.unwrap(), &pool).await.unwrap() {
+        assert!(
+            key_info.expires_at.is_none(),
+            "Created key should not have expires_at set"
+        );
+    } else {
+        panic!("Created key is unexpectedly invalid");
+    };
 
     // Verify the key works for authentication
     let child_data = start_gateway_on_random_port(
@@ -814,16 +940,18 @@ async fn test_create_api_key_cli() {
 #[tokio::test]
 async fn test_rate_limit_auth_single_key() {
     let pool = get_postgres_pool_for_testing().await;
-    let first_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let first_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let parsed_first_key = TensorZeroApiKey::parse(first_key.expose_secret()).unwrap();
     let first_key_public_id = parsed_first_key.public_id;
 
-    let second_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let second_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let child_data = start_gateway_on_random_port(
         &format!(
@@ -1074,15 +1202,17 @@ async fn test_auth_error_format_with_base_path() {
 #[tokio::test]
 async fn test_rate_limit_auth_each_key() {
     let pool = get_postgres_pool_for_testing().await;
-    let first_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let first_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let parsed_first_key = TensorZeroApiKey::parse(first_key.expose_secret()).unwrap();
 
-    let second_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
-        .await
-        .unwrap();
+    let second_key =
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, None, &pool)
+            .await
+            .unwrap();
 
     let parsed_second_key = TensorZeroApiKey::parse(second_key.expose_secret()).unwrap();
 

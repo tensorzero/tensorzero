@@ -185,10 +185,18 @@ pub fn convert_response_to_python_dataclass<T: serde::Serialize>(
     let dacite = PyModule::import(py, "dacite")?;
     let from_dict = dacite.getattr("from_dict")?;
 
-    // Call dacite.from_dict(data_class=TargetClass, data=dict)
+    // Use check_types so dacite validates Literal type constraints when
+    // discriminating between union members (e.g. DatapointChat vs DatapointJson).
+    let config_class = dacite.getattr("Config")?;
+    let config_kwargs = PyDict::new(py);
+    config_kwargs.set_item("check_types", true)?;
+    let config = config_class.call((), Some(&config_kwargs))?;
+
+    // Call dacite.from_dict(data_class=TargetClass, data=dict, config=config)
     let kwargs = PyDict::new(py);
     kwargs.set_item("data_class", data_class)?;
     kwargs.set_item("data", dict)?;
+    kwargs.set_item("config", config)?;
 
     from_dict.call((), Some(&kwargs)).map(Bound::unbind)
 }

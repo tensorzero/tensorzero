@@ -885,6 +885,13 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 max_tokens = 2048
 thinking_budget_tokens = 1024
 
+[functions.basic_test.variants.anthropic-sonnet-4-6-reasoning]
+type = "chat_completion"
+model = "claude-sonnet-4-6"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+reasoning_effort = "low"
+
 [functions.basic_test.variants.gcp-vertex-anthropic-thinking]
 type = "chat_completion"
 model = "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"

@@ -12,19 +12,21 @@ describe("update datapoints", () => {
   test("should preserve source_inference_id, generate a new ID, and set is_custom to true when updating a datapoint", async () => {
     // Create datapoint from inference
     const inferenceId = "0196368e-5505-7721-88d2-644a2da892a7";
-    const createResult =
-      await tensorZeroClient.createDatapointFromInferenceLegacy(
-        "test",
-        inferenceId,
-        "inherit",
-        "extract_entities",
-        "gpt4o_initial_prompt",
-        "0196368e-5505-7721-88d2-645619b42142",
-      );
+    const createResult = await tensorZeroClient.createDatapointsFromInferences(
+      "test",
+      {
+        type: "inference_ids",
+        inference_ids: [inferenceId],
+        output_source: "inference",
+      },
+    );
+
+    expect(createResult.ids).toHaveLength(1);
+    const createdId = createResult.ids[0];
 
     // Verify initial state: is_custom should be false, source_inference_id should match
     const initialDatapoint = await tensorZeroClient.getDatapoint(
-      createResult.id,
+      createdId,
       /*datasetName=*/ "test",
     );
     expect(initialDatapoint).toBeDefined();
@@ -61,7 +63,7 @@ describe("update datapoints", () => {
     );
 
     // New ID should be created
-    expect(updateResult.id).not.toBe(createResult.id);
+    expect(updateResult.id).not.toBe(createdId);
 
     // source_inference_id should be preserved
     expect(updatedDatapoint?.source_inference_id).toBe(inferenceId);

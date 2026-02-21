@@ -230,9 +230,6 @@ pub(super) fn build_insert_model_inferences_query(
     );
 
     qb.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
-        let snapshot_hash_bytes: Option<Vec<u8>> =
-            row.snapshot_hash.as_ref().map(|h| h.as_bytes().to_vec());
-
         b.push_bind(row.id)
             .push_bind(row.inference_id)
             .push_bind(row.input_tokens.map(|v| v as i32))
@@ -243,7 +240,7 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(row.ttft_ms.map(|v| v as i32))
             .push_bind(row.cached)
             .push_bind(row.finish_reason)
-            .push_bind(snapshot_hash_bytes)
+            .push_bind(row.snapshot_hash.as_ref())
             .push_bind(created_at);
     });
 
@@ -688,11 +685,8 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
         let ttft_ms: Option<i32> = row.try_get("ttft_ms")?;
         let cached: bool = row.try_get("cached")?;
         let finish_reason: Option<FinishReason> = row.try_get("finish_reason")?;
-        let snapshot_hash_bytes: Option<Vec<u8>> = row.try_get("snapshot_hash")?;
+        let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
         let created_at: DateTime<Utc> = row.try_get("created_at")?;
-
-        // Convert snapshot_hash from bytes
-        let snapshot_hash = snapshot_hash_bytes.map(|bytes| SnapshotHash::from_bytes(&bytes));
 
         Ok(StoredModelInference {
             id,

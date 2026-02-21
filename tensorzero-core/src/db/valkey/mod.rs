@@ -1,5 +1,7 @@
 pub mod cache;
 mod rate_limiting;
+#[cfg(test)]
+mod tests;
 
 use std::time::Duration;
 

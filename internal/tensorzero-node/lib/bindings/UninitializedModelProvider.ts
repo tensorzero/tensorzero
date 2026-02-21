@@ -10,9 +10,7 @@ export type UninitializedModelProvider = {
   /**
    * If `true`, we emit a warning and discard chunks that we don't recognize
    * (on a best-effort, per-provider basis).
-   * By default, we produce an error in the stream
-   * We can't meaningfully return unknown chunks to the user, as we don't
-   * know how to correctly merge them.
+   * By default, unknown chunks are forwarded as-is in the stream.
    */
   discard_unknown_chunks: boolean;
 } & (
