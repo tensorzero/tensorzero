@@ -8,11 +8,6 @@ on:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
-permissions:
-  contents: read
-  id-token: write
-  actions: read
-
 jobs:
   build-gateway-e2e-container:
     if: github.repository == 'tensorzero/tensorzero'
@@ -99,6 +94,9 @@ jobs:
 
   live-batch-tests:
     if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/live-batch-tests.yml
     secrets: inherit
 
