@@ -668,6 +668,12 @@ pub enum ErrorDetails {
     },
     Relay {
         message: String,
+        #[serde(skip)]
+        raw_response_entries: Vec<RawResponseEntry>,
+        #[serde(skip)]
+        raw_chunk: Option<String>,
+        #[serde(serialize_with = "serialize_status")]
+        status_code: Option<StatusCode>,
     },
     RateLimitMissingMaxTokens,
     Serialization {
@@ -909,6 +915,7 @@ impl ErrorDetails {
                 .last()
                 .and_then(|error| error.underlying_status_code()),
             ErrorDetails::InferenceClient { status_code, .. } => *status_code,
+            ErrorDetails::Relay { status_code, .. } => *status_code,
             ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
                 .values()
                 .last()
@@ -969,7 +976,9 @@ impl ErrorDetails {
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::FatalStreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
-            ErrorDetails::Relay { .. } => StatusCode::BAD_GATEWAY,
+            ErrorDetails::Relay { status_code, .. } => {
+                status_code.unwrap_or(StatusCode::BAD_GATEWAY)
+            }
             ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -1144,6 +1153,12 @@ impl ErrorDetails {
                     data: data.clone(),
                 });
             }
+            ErrorDetails::Relay {
+                raw_response_entries,
+                ..
+            } => {
+                entries.extend(raw_response_entries.clone());
+            }
             _ => {}
         }
     }
@@ -1166,6 +1181,7 @@ impl ErrorDetails {
                 raw_response: Some(data),
                 ..
             } => Some(data.clone()),
+            ErrorDetails::Relay { raw_chunk, .. } => raw_chunk.clone(),
             _ => None,
         }
     }
@@ -1261,7 +1277,7 @@ impl std::fmt::Display for ErrorDetails {
                     "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration."
                 )
             }
-            ErrorDetails::Relay { message } => {
+            ErrorDetails::Relay { message, .. } => {
                 write!(f, "Error forwarding request in relay mode: {message}")
             }
             ErrorDetails::UnsupportedContentBlockType {

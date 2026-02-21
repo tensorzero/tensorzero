@@ -4,6 +4,7 @@
 //! when using the relay feature.
 
 use crate::common::relay::start_relay_test_environment;
+use crate::common::start_gateway_on_random_port;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest_sse_stream::{Event, RequestBuilderExt};
@@ -824,4 +825,320 @@ model_name = "test-embeddings"
         .and_then(|v| v.as_str())
         .unwrap();
     assert_eq!(api_type, "embeddings");
+}
+
+// =============================================================================
+// Error Tests with include_raw_response
+// =============================================================================
+
+/// Test that relay error includes raw_response when downstream model fails and
+/// include_raw_response is true (non-streaming).
+#[tokio::test]
+async fn test_relay_raw_response_downstream_error() {
+    let downstream_config = "";
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    // Make a request targeting the error model on downstream with include_raw_response
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::error",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false,
+            "include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+
+    // Should be an error (BAD_GATEWAY from downstream)
+    assert_eq!(
+        status,
+        reqwest::StatusCode::BAD_GATEWAY,
+        "Response status should be 502 for downstream error model, body: {body_text}"
+    );
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    // Error responses should include raw_response when requested
+    let raw_response = body.get("raw_response").unwrap_or_else(|| {
+        panic!(
+            "Error response should have raw_response when include_raw_response=true. Body: {body}"
+        )
+    });
+    assert!(
+        raw_response.is_array(),
+        "raw_response should be an array, got: {raw_response}"
+    );
+
+    let raw_response_array = raw_response
+        .as_array()
+        .expect("raw_response should be an array");
+    assert!(
+        !raw_response_array.is_empty(),
+        "raw_response should have at least one entry for error case"
+    );
+
+    // Verify entries have valid structure
+    for entry in raw_response_array {
+        assert!(
+            entry.get("provider_type").is_some(),
+            "raw_response entry should have provider_type"
+        );
+        assert!(
+            entry.get("api_type").is_some(),
+            "raw_response entry should have api_type"
+        );
+        assert!(
+            entry.get("data").is_some(),
+            "raw_response entry should have data"
+        );
+    }
+}
+
+/// Test that relay error does NOT include raw_response when include_raw_response is false.
+#[tokio::test]
+async fn test_relay_raw_response_downstream_error_no_flag() {
+    let downstream_config = "";
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::error",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false,
+            "include_raw_response": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+    assert_eq!(
+        status,
+        reqwest::StatusCode::BAD_GATEWAY,
+        "Response status should be 502 for downstream error model, body: {body_text}"
+    );
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    // raw_response should NOT be present when not requested
+    assert!(
+        body.get("raw_response").is_none(),
+        "raw_response should NOT be present when include_raw_response=false. Body: {body}"
+    );
+}
+
+/// Test that relay streaming error includes raw_response when downstream fails before SSE starts
+/// and include_raw_response is true.
+#[tokio::test]
+async fn test_relay_raw_response_streaming_pre_stream_error() {
+    let downstream_config = "";
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    // Streaming request to error model — downstream should fail before SSE starts
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", env.relay.addr))
+        .json(&json!({
+            "model_name": "dummy::error",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": true,
+            "include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+
+    // Should be an error (pre-stream failure returns non-SSE response)
+    assert!(
+        status.is_client_error() || status.is_server_error(),
+        "Response should be an error status for streaming error model, got {status}, body: {body_text}"
+    );
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    // Error responses should include raw_response when requested
+    let raw_response = body.get("raw_response").unwrap_or_else(|| {
+        panic!("Streaming error response should have raw_response when include_raw_response=true. Body: {body}")
+    });
+    assert!(
+        raw_response.is_array(),
+        "raw_response should be an array, got: {raw_response}"
+    );
+
+    let raw_response_array = raw_response
+        .as_array()
+        .expect("raw_response should be an array");
+    assert!(
+        !raw_response_array.is_empty(),
+        "raw_response should have at least one entry for streaming error case"
+    );
+}
+
+/// Test that relay error for embeddings includes raw_response when downstream fails
+/// and include_raw_response is true.
+#[tokio::test]
+async fn test_relay_raw_response_embeddings_error() {
+    // Configure downstream with a dummy embedding provider that uses an error model
+    let downstream_config = r#"
+[embedding_models.test-embedding]
+routing = ["error_provider"]
+
+[embedding_models.test-embedding.providers.error_provider]
+type = "dummy"
+model_name = "error"
+"#;
+    let relay_config = "";
+
+    let env = start_relay_test_environment(downstream_config, relay_config).await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/openai/v1/embeddings", env.relay.addr))
+        .json(&json!({
+            "input": "Hello, world!",
+            "model": "tensorzero::embedding_model_name::test-embedding",
+            "tensorzero::include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+
+    // Should be an error
+    assert!(
+        status.is_client_error() || status.is_server_error(),
+        "Response should be an error status for embeddings error model, got {status}, body: {body_text}"
+    );
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    // OpenAI format uses tensorzero_raw_response
+    let raw_response = body.get("tensorzero_raw_response").unwrap_or_else(|| {
+        panic!("Embeddings error response should have tensorzero_raw_response when include_raw_response=true. Body: {body}")
+    });
+    assert!(
+        raw_response.is_array(),
+        "tensorzero_raw_response should be an array, got: {raw_response}"
+    );
+
+    let raw_response_array = raw_response
+        .as_array()
+        .expect("tensorzero_raw_response should be an array");
+    assert!(
+        !raw_response_array.is_empty(),
+        "tensorzero_raw_response should have at least one entry for embeddings error case"
+    );
+}
+
+/// Test that relay error produces a synthetic raw_response entry when the downstream
+/// is unreachable (no HTTP response body to extract from).
+#[tokio::test]
+async fn test_relay_raw_response_downstream_unreachable() {
+    // Point relay at a port where nothing is listening
+    let relay = start_gateway_on_random_port(
+        r#"
+[gateway.relay]
+gateway_url = "http://0.0.0.0:19999"
+"#,
+        None,
+    )
+    .await;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}/inference", relay.addr))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "episode_id": Uuid::now_v7(),
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello"
+                    }
+                ]
+            },
+            "stream": false,
+            "include_raw_response": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap();
+
+    assert!(
+        status.is_client_error() || status.is_server_error(),
+        "Response should be an error when downstream is unreachable, got {status}, body: {body_text}"
+    );
+
+    let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
+
+    // Even with no HTTP response body, we should get a synthetic raw_response entry
+    let raw_response = body.get("raw_response").unwrap_or_else(|| {
+        panic!("Error response should have raw_response with synthetic entry when downstream is unreachable. Body: {body}")
+    });
+    let raw_response_array = raw_response
+        .as_array()
+        .expect("raw_response should be an array");
+    assert!(
+        !raw_response_array.is_empty(),
+        "raw_response should have a synthetic entry for unreachable downstream"
+    );
+
+    // The synthetic entry should have provider_type "tensorzero::relay"
+    let entry = &raw_response_array[0];
+    let provider_type = entry
+        .get("provider_type")
+        .and_then(|v| v.as_str())
+        .expect("synthetic entry should have provider_type");
+    assert_eq!(
+        provider_type, "tensorzero::relay",
+        "Synthetic entry should have provider_type 'tensorzero::relay'"
+    );
 }

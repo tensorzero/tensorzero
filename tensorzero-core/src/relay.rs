@@ -8,8 +8,11 @@ use futures::future::try_join_all;
 use secrecy::SecretString;
 use url::Url;
 
+use axum::http::StatusCode;
+
 use crate::client::{
-    ClientBuilder, ClientBuilderMode, ClientSecretString, ContentBlockChunk, InferenceResponseChunk,
+    ClientBuilder, ClientBuilderMode, ClientSecretString, ContentBlockChunk,
+    InferenceResponseChunk, TensorZeroError,
 };
 use crate::config::UninitializedRelayConfig;
 use crate::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
@@ -21,7 +24,7 @@ use crate::error::{DelayedError, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_relay_extra_headers};
 use crate::inference::types::{
     ApiType, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponseChunk, TextChunk, Usage,
+    ProviderInferenceResponseChunk, RawResponseEntry, TextChunk, Usage,
 };
 use crate::model::Credential;
 use crate::{
@@ -137,6 +140,93 @@ impl TensorzeroRelay {
     }
 }
 
+/// Extracts raw response entries from a downstream error body.
+///
+/// Tries to parse the body as JSON and look for `raw_response` (TensorZero format) or
+/// `tensorzero_raw_response` (OpenAI format). If found, deserializes the array into
+/// `Vec<RawResponseEntry>`. Otherwise, creates a synthetic entry wrapping the raw body.
+fn extract_raw_response_entries_from_body(body: &str, api_type: ApiType) -> Vec<RawResponseEntry> {
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+        // Try TensorZero format first, then OpenAI format
+        let raw_response = json
+            .get("raw_response")
+            .or_else(|| json.get("tensorzero_raw_response"));
+
+        if let Some(raw_response) = raw_response
+            && let Some(arr) = raw_response.as_array()
+            && !arr.is_empty()
+            && let Ok(entries) =
+                serde_json::from_value::<Vec<RawResponseEntry>>(raw_response.clone())
+        {
+            return entries;
+        }
+    }
+
+    // Fallback: create a synthetic entry wrapping the raw body
+    vec![RawResponseEntry {
+        model_inference_id: None,
+        provider_type: "tensorzero::relay".to_string(),
+        api_type,
+        data: body.to_string(),
+    }]
+}
+
+/// Converts a `TensorZeroError` into an `ErrorDetails::Relay` error with raw response data preserved.
+fn relay_error_from_tensorzero_error(e: TensorZeroError, api_type: ApiType) -> Error {
+    match e {
+        TensorZeroError::Http {
+            status_code, text, ..
+        } => {
+            let (message, raw_response_entries) = match &text {
+                Some(text) => (
+                    format!("HTTP Error (status code {status_code}): {text}"),
+                    extract_raw_response_entries_from_body(text, api_type),
+                ),
+                None => (
+                    format!("HTTP Error (status code {status_code})"),
+                    vec![RawResponseEntry {
+                        model_inference_id: None,
+                        provider_type: "tensorzero::relay".to_string(),
+                        api_type,
+                        data: format!("HTTP Error (status code {status_code})"),
+                    }],
+                ),
+            };
+            Error::new(ErrorDetails::Relay {
+                message,
+                raw_response_entries,
+                raw_chunk: None,
+                status_code: StatusCode::from_u16(status_code).ok(),
+            })
+        }
+        TensorZeroError::RequestTimeout => Error::new(ErrorDetails::Relay {
+            message: "Request timeout".to_string(),
+            raw_response_entries: vec![RawResponseEntry {
+                model_inference_id: None,
+                provider_type: "tensorzero::relay".to_string(),
+                api_type,
+                data: "Request timeout".to_string(),
+            }],
+            raw_chunk: None,
+            status_code: Some(StatusCode::REQUEST_TIMEOUT),
+        }),
+        TensorZeroError::Other { .. } | TensorZeroError::Git { .. } => {
+            let message = e.to_string();
+            Error::new(ErrorDetails::Relay {
+                message: message.clone(),
+                raw_response_entries: vec![RawResponseEntry {
+                    model_inference_id: None,
+                    provider_type: "tensorzero::relay".to_string(),
+                    api_type,
+                    data: message,
+                }],
+                raw_chunk: None,
+                status_code: None,
+            })
+        }
+    }
+}
+
 impl TensorzeroRelay {
     pub async fn relay_embeddings(
         &self,
@@ -163,17 +253,7 @@ impl TensorzeroRelay {
             .client
             .http_embeddings(params, api_key)
             .await
-            .map_err(|e| {
-                // TODO - include `raw_request`/`raw_response` here
-                Error::new(ErrorDetails::InferenceClient {
-                    message: e.to_string(),
-                    status_code: None,
-                    provider_type: "tensorzero_relay".to_string(),
-                    api_type: ApiType::Embeddings,
-                    raw_request: None,
-                    raw_response: None,
-                })
-            })?;
+            .map_err(|e| relay_error_from_tensorzero_error(e, ApiType::Embeddings))?;
         match res.response {
             OpenAIEmbeddingResponse::List {
                 data,
@@ -219,11 +299,7 @@ impl TensorzeroRelay {
             .client
             .http_inference(client_inference_params)
             .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::Inference {
-                    message: e.to_string(),
-                })
-            })?;
+            .map_err(|e| relay_error_from_tensorzero_error(e, ApiType::ChatCompletions))?;
 
         let InferenceOutput::Streaming(streaming) = res.response else {
             return Err(Error::new(ErrorDetails::InternalError {
@@ -265,7 +341,15 @@ impl TensorzeroRelay {
                         }
                     }
                 }
-                Err(e) => Err(e),
+                Err(e) => {
+                    let message = e.to_string();
+                    Err(Error::new(ErrorDetails::Relay {
+                        message: message.clone(),
+                        raw_response_entries: vec![],
+                        raw_chunk: Some(message),
+                        status_code: None,
+                    }))
+                }
             })
             .boxed()
             .peekable();
@@ -288,11 +372,7 @@ impl TensorzeroRelay {
             .client
             .http_inference(client_inference_params)
             .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::Inference {
-                    message: e.to_string(),
-                })
-            })?;
+            .map_err(|e| relay_error_from_tensorzero_error(e, ApiType::ChatCompletions))?;
 
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
