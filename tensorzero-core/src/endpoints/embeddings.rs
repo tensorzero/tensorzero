@@ -122,7 +122,7 @@ pub async fn embeddings(
         });
         Some(entries)
     } else if params.include_raw_response {
-        Some(vec![]) // Empty array for cached responses
+        Some(response.failed_raw_response.clone())
     } else {
         None
     };

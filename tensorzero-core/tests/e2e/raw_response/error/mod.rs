@@ -6,6 +6,7 @@
 //! - `streaming_mid_stream`: Streaming requests where a provider error occurs after chunks have been sent
 
 mod best_of_n_sampling;
+mod cache;
 mod dicl;
 mod embeddings;
 mod json_functions;
