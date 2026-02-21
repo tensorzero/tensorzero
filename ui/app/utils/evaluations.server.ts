@@ -35,14 +35,33 @@ const INFERENCE_CACHE_SETTINGS = [
 export type InferenceCacheSetting = (typeof INFERENCE_CACHE_SETTINGS)[number];
 
 interface RunningEvaluationInfo {
+  abortController: AbortController;
   errors: DisplayEvaluationError[];
   variantName: string;
   completed?: Date;
+  cancelled?: boolean;
   started: Date;
 }
 
 // This is a map of evaluation run id to running evaluation info
 const runningEvaluations = new Map<string, RunningEvaluationInfo>();
+
+type RunningEvaluationView = Omit<RunningEvaluationInfo, "abortController">;
+
+/** @internal Exposed for testing only — injects an entry into the in-memory map. */
+export function _test_registerRunningEvaluation(
+  id: string,
+  abortController: AbortController,
+  options?: { variantName?: string; completed?: Date },
+): void {
+  runningEvaluations.set(id, {
+    abortController,
+    errors: [],
+    variantName: options?.variantName ?? "test-variant",
+    started: new Date(),
+    completed: options?.completed,
+  });
+}
 
 /**
  * Returns the running information for a specific evaluation run.
@@ -51,8 +70,30 @@ const runningEvaluations = new Map<string, RunningEvaluationInfo>();
  */
 export function getRunningEvaluation(
   evaluationRunId: string,
-): RunningEvaluationInfo | undefined {
-  return runningEvaluations.get(evaluationRunId);
+): RunningEvaluationView | undefined {
+  const info = runningEvaluations.get(evaluationRunId);
+  if (!info) return undefined;
+  const { abortController: _, ...view } = info;
+  return view;
+}
+
+/**
+ * Cancels a running evaluation by aborting its HTTP connection to the gateway.
+ * Idempotent: returns true if the evaluation exists (whether still running or
+ * already completed), false if not found. Calling abort() on an already-finished
+ * controller is a no-op.
+ */
+export function cancelEvaluation(evaluationRunId: string): boolean {
+  const evaluation = runningEvaluations.get(evaluationRunId);
+  if (!evaluation) {
+    return false;
+  }
+  evaluation.cancelled = true;
+  if (!evaluation.completed) {
+    evaluation.abortController.abort();
+    evaluation.completed = new Date();
+  }
+  return true;
 }
 
 const evaluationFormDataSchema = z.object({
@@ -115,6 +156,7 @@ export async function runEvaluation(
   precisionTargets?: Record<string, number>,
 ): Promise<EvaluationStartInfo> {
   const startTime = new Date();
+  const abortController = new AbortController();
   let evaluationRunId: string | null = null;
   let startResolved = false;
 
@@ -157,6 +199,7 @@ export async function runEvaluation(
 
         evaluationRunId = startInfo.data.evaluation_run_id;
         runningEvaluations.set(evaluationRunId, {
+          abortController,
           variantName,
           errors: [],
           started: startTime,
@@ -225,6 +268,7 @@ export async function runEvaluation(
     maxDatapoints,
     precisionTargets,
     onEvent: handleEvent,
+    signal: abortController.signal,
   });
 
   void evaluationPromise
@@ -237,6 +281,9 @@ export async function runEvaluation(
       }
     })
     .catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
       if (!startResolved) {
         rejectStart(error);
         startResolved = true;

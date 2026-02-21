@@ -132,6 +132,12 @@ type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"
 description = "Generate a haiku about a given topic"
 
+[functions.write_haiku.variants.dummy_slow]
+type = "chat_completion"
+model = "dummy::slow"
+system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
+
 [functions.write_haiku.variants.initial_prompt_gpt4o_mini]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"

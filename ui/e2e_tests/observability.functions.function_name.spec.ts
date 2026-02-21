@@ -137,11 +137,11 @@ test("should show experimentation section with pie chart for write_haiku functio
     page.getByText("This chart displays the current sampling probabilities"),
   ).toBeVisible();
 
-  // Check that all three variants are shown with 33.3% weight
-  // The pie chart should display percentages on the chart (use first since there are 3 instances)
-  await expect(page.getByText("33.3%").first()).toBeVisible();
+  // Check that all four variants are shown with 25.0% weight
+  // The pie chart should display percentages on the chart (use first since there are 4 instances)
+  await expect(page.getByText("25.0%").first()).toBeVisible();
 
-  // Check that the legend contains all three variant names
+  // Check that the legend contains all four variant names
   // Just verify they exist on the page - they appear in multiple places
   await expect(
     page.getByText("initial_prompt_gpt4o_mini").first(),
@@ -150,6 +150,7 @@ test("should show experimentation section with pie chart for write_haiku functio
     page.getByText("initial_prompt_haiku_4_5").first(),
   ).toBeVisible();
   await expect(page.getByText("better_prompt_haiku_4_5").first()).toBeVisible();
+  await expect(page.getByText("dummy_slow").first()).toBeVisible();
 
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
