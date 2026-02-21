@@ -343,10 +343,11 @@ impl TensorzeroRelay {
                 }
                 Err(e) => {
                     let message = e.to_string();
+                    let raw_chunk = e.extract_raw_chunk().unwrap_or_else(|| message.clone());
                     Err(Error::new(ErrorDetails::Relay {
-                        message: message.clone(),
+                        message,
                         raw_response_entries: vec![],
-                        raw_chunk: Some(message),
+                        raw_chunk: Some(raw_chunk),
                         status_code: None,
                     }))
                 }
@@ -625,5 +626,137 @@ impl TensorzeroRelay {
             api_key,
         };
         Ok(res)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[test]
+    fn test_extract_passthrough_raw_response_entries() {
+        let model_inference_id = Uuid::now_v7();
+        let body = json!({
+            "error": "something failed",
+            "raw_response": [
+                {
+                    "model_inference_id": model_inference_id,
+                    "provider_type": "openai",
+                    "api_type": "chat_completions",
+                    "data": "{\"choices\": []}"
+                }
+            ]
+        })
+        .to_string();
+
+        let entries = extract_raw_response_entries_from_body(&body, ApiType::ChatCompletions);
+        assert_eq!(entries.len(), 1, "Should have one passthrough entry");
+        assert_eq!(
+            entries[0].provider_type, "openai",
+            "Should preserve original provider_type"
+        );
+        assert_eq!(
+            entries[0].model_inference_id,
+            Some(model_inference_id),
+            "Should preserve model_inference_id"
+        );
+        assert_eq!(entries[0].data, "{\"choices\": []}", "Should preserve data");
+    }
+
+    #[test]
+    fn test_extract_passthrough_tensorzero_raw_response_entries() {
+        let body = json!({
+            "error": {"message": "something failed"},
+            "tensorzero_raw_response": [
+                {
+                    "model_inference_id": null,
+                    "provider_type": "anthropic",
+                    "api_type": "chat_completions",
+                    "data": "raw data"
+                }
+            ]
+        })
+        .to_string();
+
+        let entries = extract_raw_response_entries_from_body(&body, ApiType::ChatCompletions);
+        assert_eq!(entries.len(), 1, "Should have one passthrough entry");
+        assert_eq!(
+            entries[0].provider_type, "anthropic",
+            "Should preserve original provider_type from `tensorzero_raw_response` key"
+        );
+    }
+
+    #[test]
+    fn test_extract_non_json_body_creates_synthetic() {
+        let body = "Bad Gateway: upstream server error";
+
+        let entries = extract_raw_response_entries_from_body(body, ApiType::ChatCompletions);
+        assert_eq!(entries.len(), 1, "Should have one synthetic entry");
+        assert_eq!(
+            entries[0].provider_type, "tensorzero::relay",
+            "Non-JSON body should produce synthetic entry"
+        );
+        assert_eq!(
+            entries[0].data, body,
+            "Synthetic entry should contain the raw body text"
+        );
+        assert!(
+            entries[0].model_inference_id.is_none(),
+            "Synthetic entry should have no model_inference_id"
+        );
+    }
+
+    #[test]
+    fn test_extract_json_without_raw_response_key_creates_synthetic() {
+        let body = json!({
+            "error": "something failed"
+        })
+        .to_string();
+
+        let entries = extract_raw_response_entries_from_body(&body, ApiType::Embeddings);
+        assert_eq!(entries.len(), 1, "Should have one synthetic entry");
+        assert_eq!(
+            entries[0].provider_type, "tensorzero::relay",
+            "JSON without `raw_response` key should produce synthetic entry"
+        );
+        assert_eq!(
+            entries[0].api_type,
+            ApiType::Embeddings,
+            "Synthetic entry should use the provided api_type"
+        );
+    }
+
+    #[test]
+    fn test_extract_empty_raw_response_array_creates_synthetic() {
+        let body = json!({
+            "error": "something failed",
+            "raw_response": []
+        })
+        .to_string();
+
+        let entries = extract_raw_response_entries_from_body(&body, ApiType::ChatCompletions);
+        assert_eq!(entries.len(), 1, "Should have one synthetic entry");
+        assert_eq!(
+            entries[0].provider_type, "tensorzero::relay",
+            "Empty `raw_response` array should produce synthetic entry"
+        );
+    }
+
+    #[test]
+    fn test_extract_malformed_raw_response_array_creates_synthetic() {
+        let body = json!({
+            "error": "something failed",
+            "raw_response": ["not a valid entry", 42]
+        })
+        .to_string();
+
+        let entries = extract_raw_response_entries_from_body(&body, ApiType::ChatCompletions);
+        assert_eq!(entries.len(), 1, "Should have one synthetic entry");
+        assert_eq!(
+            entries[0].provider_type, "tensorzero::relay",
+            "Malformed `raw_response` array should fall back to synthetic entry"
+        );
     }
 }

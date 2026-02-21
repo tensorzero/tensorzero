@@ -831,8 +831,8 @@ model_name = "test-embeddings"
 // Error Tests with include_raw_response
 // =============================================================================
 
-/// Test that relay error includes raw_response when downstream model fails and
-/// include_raw_response is true (non-streaming).
+/// Test that relay error includes passthrough raw_response entries from the downstream
+/// when downstream model fails with raw_response data and include_raw_response is true.
 #[tokio::test]
 async fn test_relay_raw_response_downstream_error() {
     let downstream_config = "";
@@ -840,12 +840,12 @@ async fn test_relay_raw_response_downstream_error() {
 
     let env = start_relay_test_environment(downstream_config, relay_config).await;
 
-    // Make a request targeting the error model on downstream with include_raw_response
+    // Use error_with_raw_response so the downstream includes raw_response in its error body
     let client = Client::new();
     let response = client
         .post(format!("http://{}/inference", env.relay.addr))
         .json(&json!({
-            "model_name": "dummy::error",
+            "model_name": "dummy::error_with_raw_response",
             "episode_id": Uuid::now_v7(),
             "input": {
                 "messages": [
@@ -865,11 +865,10 @@ async fn test_relay_raw_response_downstream_error() {
     let status = response.status();
     let body_text = response.text().await.unwrap();
 
-    // Should be an error (BAD_GATEWAY from downstream)
-    assert_eq!(
-        status,
-        reqwest::StatusCode::BAD_GATEWAY,
-        "Response status should be 502 for downstream error model, body: {body_text}"
+    // The downstream returns 500 for error_with_raw_response, which becomes the relay's status
+    assert!(
+        status.is_server_error(),
+        "Response status should be a server error, got {status}, body: {body_text}"
     );
 
     let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
@@ -880,11 +879,6 @@ async fn test_relay_raw_response_downstream_error() {
             "Error response should have raw_response when include_raw_response=true. Body: {body}"
         )
     });
-    assert!(
-        raw_response.is_array(),
-        "raw_response should be an array, got: {raw_response}"
-    );
-
     let raw_response_array = raw_response
         .as_array()
         .expect("raw_response should be an array");
@@ -893,11 +887,15 @@ async fn test_relay_raw_response_downstream_error() {
         "raw_response should have at least one entry for error case"
     );
 
-    // Verify entries have valid structure
+    // Verify entries are passthrough from the downstream's provider (not synthetic)
     for entry in raw_response_array {
-        assert!(
-            entry.get("provider_type").is_some(),
-            "raw_response entry should have provider_type"
+        let provider_type = entry
+            .get("provider_type")
+            .and_then(|v| v.as_str())
+            .expect("raw_response entry should have provider_type");
+        assert_ne!(
+            provider_type, "tensorzero::relay",
+            "Entries should be passthrough from downstream provider, not synthetic relay entries"
         );
         assert!(
             entry.get("api_type").is_some(),
@@ -922,7 +920,7 @@ async fn test_relay_raw_response_downstream_error_no_flag() {
     let response = client
         .post(format!("http://{}/inference", env.relay.addr))
         .json(&json!({
-            "model_name": "dummy::error",
+            "model_name": "dummy::error_with_raw_response",
             "episode_id": Uuid::now_v7(),
             "input": {
                 "messages": [
@@ -941,10 +939,9 @@ async fn test_relay_raw_response_downstream_error_no_flag() {
 
     let status = response.status();
     let body_text = response.text().await.unwrap();
-    assert_eq!(
-        status,
-        reqwest::StatusCode::BAD_GATEWAY,
-        "Response status should be 502 for downstream error model, body: {body_text}"
+    assert!(
+        status.is_server_error(),
+        "Response status should be a server error, got {status}, body: {body_text}"
     );
 
     let body: Value = serde_json::from_str(&body_text).expect("Response should be valid JSON");
@@ -1174,7 +1171,7 @@ async fn test_relay_raw_response_streaming_mid_stream_error() {
         .unwrap();
 
     let mut got_successful_chunk = false;
-    let mut got_error_with_raw_chunk = false;
+    let mut raw_chunk_value: Option<String> = None;
 
     while let Some(event) = stream.next().await {
         let event = event.unwrap();
@@ -1188,9 +1185,9 @@ async fn test_relay_raw_response_streaming_mid_stream_error() {
         let chunk: Value = serde_json::from_str(&message.data).unwrap();
 
         if chunk.get("error").is_some() {
-            // This is the mid-stream error event — check for raw_chunk
-            if chunk.get("raw_chunk").is_some() {
-                got_error_with_raw_chunk = true;
+            // This is the mid-stream error event — capture raw_chunk
+            if let Some(raw_chunk) = chunk.get("raw_chunk").and_then(|v| v.as_str()) {
+                raw_chunk_value = Some(raw_chunk.to_string());
             }
         } else {
             got_successful_chunk = true;
@@ -1201,8 +1198,15 @@ async fn test_relay_raw_response_streaming_mid_stream_error() {
         got_successful_chunk,
         "Should have received at least one successful chunk before the mid-stream error"
     );
+    let raw_chunk = raw_chunk_value
+        .expect("Mid-stream error event should include raw_chunk when include_raw_response=true");
+    assert!(!raw_chunk.is_empty(), "raw_chunk should be non-empty");
+    // The raw_chunk should be the actual SSE event JSON from the downstream,
+    // which contains an "error" key from the downstream's error event
+    let raw_chunk_json: Value = serde_json::from_str(&raw_chunk)
+        .expect("raw_chunk should be valid JSON (the downstream's SSE event data)");
     assert!(
-        got_error_with_raw_chunk,
-        "Mid-stream error event should include raw_chunk when include_raw_response=true"
+        raw_chunk_json.get("error").is_some(),
+        "raw_chunk should contain the downstream's error event data with an `error` key, got: {raw_chunk}"
     );
 }

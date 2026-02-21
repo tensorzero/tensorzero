@@ -186,6 +186,11 @@ impl Error {
         }
     }
 
+    /// Extracts the raw chunk string from a mid-stream error, if available.
+    pub fn extract_raw_chunk(&self) -> Option<String> {
+        self.0.extract_raw_chunk()
+    }
+
     /// Builds an HTTP error response, optionally including raw response entries from failed providers.
     pub fn into_response_with_raw_entries(
         self,
@@ -685,6 +690,10 @@ pub enum ErrorDetails {
     },
     StreamError {
         source: Box<Error>,
+        /// The raw SSE event data that produced this error, if available.
+        /// Used by relay to populate `raw_chunk` with the downstream's actual event payload.
+        #[serde(skip)]
+        raw_event: Option<String>,
     },
     ToolNotFound {
         name: String,
@@ -1182,6 +1191,10 @@ impl ErrorDetails {
                 ..
             } => Some(data.clone()),
             ErrorDetails::Relay { raw_chunk, .. } => raw_chunk.clone(),
+            ErrorDetails::StreamError {
+                raw_event: Some(raw_event),
+                ..
+            } => Some(raw_event.clone()),
             _ => None,
         }
     }
@@ -1832,7 +1845,7 @@ impl std::fmt::Display for ErrorDetails {
                     "Missing `max_tokens` for request subject to rate limiting rules."
                 )
             }
-            ErrorDetails::StreamError { source } => {
+            ErrorDetails::StreamError { source, .. } => {
                 write!(f, "Error in streaming response: {source}")
             }
             ErrorDetails::Serialization { message } => write!(f, "{message}"),
