@@ -109,6 +109,13 @@ test-feedback-load = [
     "feedback-load-test",
     "--",
 ]
+test-postgres-inference-load = [
+    "run",
+    "--release",
+    "--package",
+    "postgres-inference-load-test",
+    "--",
+]
 
 
 build-e2e = "build --bin gateway --features e2e_tests"
