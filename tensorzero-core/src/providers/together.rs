@@ -41,7 +41,9 @@ use crate::{
     tool::{ToolCall, ToolCallChunk},
 };
 
-use super::helpers_thinking_block::{THINK_CHUNK_ID, ThinkingState, process_think_blocks};
+use super::helpers_thinking_block::{
+    REASONING_FIELD_CHUNK_ID, ThinkingState, process_think_blocks,
+};
 use super::openai::{
     OpenAIContentBlock, OpenAIRequestMessage, OpenAIRequestToolCall, OpenAISystemRequestMessage,
     OpenAIToolRequestMessage, OpenAIUserRequestMessage, get_chat_url, handle_openai_error,
@@ -1007,7 +1009,7 @@ fn together_to_tensorzero_chunk(
                 signature: None,
                 summary_id: None,
                 summary_text: None,
-                id: THINK_CHUNK_ID.to_string(),
+                id: REASONING_FIELD_CHUNK_ID.to_string(),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
                 extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
             }));
@@ -2288,7 +2290,7 @@ mod tests {
                 signature: None,
                 summary_id: None,
                 summary_text: None,
-                id: THINK_CHUNK_ID.to_string(),
+                id: REASONING_FIELD_CHUNK_ID.to_string(),
                 provider_type: Some("together".to_string()),
                 extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
             })
