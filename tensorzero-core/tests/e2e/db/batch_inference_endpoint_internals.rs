@@ -34,7 +34,7 @@ use tensorzero_core::inference::types::{
 use tensorzero_core::jsonschema_util::JSONSchema;
 use uuid::Uuid;
 
-use crate::utils::poll_for_result::poll_for_result;
+use crate::utils::poll_for_result::{poll_for_result, poll_for_result_with_interval_and_timeout};
 
 // ===== HELPER FUNCTIONS =====
 
@@ -336,9 +336,11 @@ async fn test_write_poll_batch_inference_endpoint(
         inference_id: None,
     };
     // Poll until the Failed batch is visible (it is more recent than the Pending one)
-    let batch_request = poll_for_result(
+    let batch_request = poll_for_result_with_interval_and_timeout(
         || get_batch_request(&database, &query),
         |r| r.status == BatchStatus::Failed,
+        std::time::Duration::from_millis(500),
+        std::time::Duration::from_secs(30),
         "Timed out waiting for batch status to become Failed",
     )
     .await;

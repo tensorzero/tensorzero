@@ -129,6 +129,8 @@ redis = { version = "1.0.2", features = [
 redis-test = { version = "1.0.1", features = ["aio"] }
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 globset = "0.4.18"
+json-pointer = "0.3.4"
+rust_decimal = { version = "1.37", features = ["serde-float", "serde-with-float"] }
 walkdir = "2.5.0"
 tempfile = "3.25.0"
 toml_edit = "0.24"
