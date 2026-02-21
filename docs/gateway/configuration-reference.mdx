@@ -77,6 +77,10 @@ You can bind the gateway to IPv4 and/or IPv6 addresses.
 To bind to an IPv6 address, you can set this field to a value like `[::]:3000`.
 Depending on the operating system, this value binds only to IPv6 (e.g. Windows) or to both (e.g. Linux by default).
 
+You can also set the bind address using the `--bind-address` CLI flag or the `TENSORZERO_GATEWAY_BIND_ADDRESS` environment variable.
+Only one of these methods can be used at a time.
+See [Customize the bind address and port](/deployment/tensorzero-gateway#customize-the-bind-address-and-port) for more details.
+
 ```toml title="tensorzero.toml"
 [gateway]
 # ...
