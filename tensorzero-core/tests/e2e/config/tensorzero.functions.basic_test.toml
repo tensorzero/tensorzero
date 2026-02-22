@@ -835,6 +835,11 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 max_tokens = 100
 retries = { num_retries = 5, max_delay_s = 0.1 }
 
+[functions.basic_test.variants.no_cost_config]
+type = "chat_completion"
+model = "dummy::good"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
 [functions.basic_test.variants.err_in_stream]
 type = "chat_completion"
 model = "err_in_stream"

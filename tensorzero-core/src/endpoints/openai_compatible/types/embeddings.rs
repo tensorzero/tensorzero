@@ -109,7 +109,7 @@ pub enum OpenAIEmbedding {
 pub struct OpenAIEmbeddingUsage {
     pub prompt_tokens: Option<u32>,
     pub total_tokens: Option<u32>,
-    #[serde(with = "rust_decimal::serde::float_option")]
+    #[serde(default, with = "rust_decimal::serde::float_option")]
     pub tensorzero_cost: Option<rust_decimal::Decimal>,
 }
 

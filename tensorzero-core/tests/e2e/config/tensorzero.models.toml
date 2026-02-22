@@ -788,6 +788,10 @@ routing = ["dummy"]
 [models.err_in_stream.providers.dummy]
 type = "dummy"
 model_name = "err_in_stream"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 3.0 },
+    { pointer = "/usage/completion_tokens", cost_per_million = 15.0 },
+]
 
 [models.err_in_stream_with_raw_response]
 routing = ["dummy"]

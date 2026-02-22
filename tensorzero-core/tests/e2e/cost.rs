@@ -365,9 +365,142 @@ async fn test_cost_tool_use_variant_streaming() {
     );
 }
 
+// ===== Missing Cost Config Tests =====
+// When a model has no cost config, cost should be null.
+
+#[tokio::test]
+async fn test_cost_no_cost_config_non_streaming() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "no_cost_config",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Hello"}]
+        },
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let response_json: Value = response.json().await.unwrap();
+
+    let usage = response_json.get("usage").unwrap().as_object().unwrap();
+    assert!(
+        usage.get("cost").unwrap().is_null(),
+        "Expected `cost` to be null when model has no cost config"
+    );
+}
+
+#[tokio::test]
+async fn test_cost_no_cost_config_streaming() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "no_cost_config",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Hello"}]
+        },
+        "stream": true,
+    });
+
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut last_chunk = None;
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                last_chunk = Some(message.data);
+            }
+        }
+    }
+
+    let last_chunk: Value = serde_json::from_str(&last_chunk.unwrap()).unwrap();
+    let usage = last_chunk.get("usage").unwrap().as_object().unwrap();
+    assert!(
+        usage.get("cost").unwrap().is_null(),
+        "Expected `cost` to be null when model has no cost config (streaming)"
+    );
+}
+
+// ===== Streaming Error Mid-Stream + Cost =====
+
+#[tokio::test]
+async fn test_cost_streaming_error_mid_stream() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "err_in_stream",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Hello"}]
+        },
+        "stream": true,
+    });
+
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut last_usage_chunk = None;
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                let obj: Value = serde_json::from_str(&message.data).unwrap();
+                // Skip error events
+                if obj.get("error").is_some() {
+                    continue;
+                }
+                // Keep the last chunk that has usage
+                if obj.get("usage").is_some() {
+                    last_usage_chunk = Some(obj);
+                }
+            }
+        }
+    }
+
+    let last_chunk = last_usage_chunk.expect("Expected a chunk with usage data");
+    let usage = last_chunk.get("usage").unwrap().as_object().unwrap();
+    let cost = usage
+        .get("cost")
+        .expect("Expected `cost` key in streaming error mid-stream usage")
+        .as_f64()
+        .unwrap();
+    // err_in_stream model: prompt_tokens=10, completion_tokens=16
+    assert!(
+        (cost - 0.00027).abs() < 1e-10,
+        "Expected cost ~0.00027 (10*$3/M + 16*$15/M) despite mid-stream error, got {cost}"
+    );
+}
+
 // ===== Best-of-N and Mixture-of-N Tests =====
 // These tests use functions with some inline dummy models that don't have cost config,
-// so cost may be null due to None propagation. We verify the field exists.
+// so cost should be null due to None propagation.
 
 #[tokio::test]
 async fn test_cost_best_of_n_non_streaming() {
@@ -393,8 +526,8 @@ async fn test_cost_best_of_n_non_streaming() {
 
     let usage = response_json.get("usage").unwrap().as_object().unwrap();
     assert!(
-        usage.contains_key("cost"),
-        "Expected `cost` key in best-of-N usage"
+        usage.get("cost").unwrap().is_null(),
+        "Expected `cost` to be null in best-of-N (inline model has no cost config)"
     );
 }
 
@@ -434,8 +567,8 @@ async fn test_cost_best_of_n_streaming() {
     let last_chunk: Value = serde_json::from_str(&last_chunk.unwrap()).unwrap();
     let usage = last_chunk.get("usage").unwrap().as_object().unwrap();
     assert!(
-        usage.contains_key("cost"),
-        "Expected `cost` key in streaming best-of-N usage"
+        usage.get("cost").unwrap().is_null(),
+        "Expected `cost` to be null in streaming best-of-N (inline model has no cost config)"
     );
 }
 
@@ -463,8 +596,8 @@ async fn test_cost_mixture_of_n_non_streaming() {
 
     let usage = response_json.get("usage").unwrap().as_object().unwrap();
     assert!(
-        usage.contains_key("cost"),
-        "Expected `cost` key in mixture-of-N usage"
+        usage.get("cost").unwrap().is_null(),
+        "Expected `cost` to be null in mixture-of-N (inline model has no cost config)"
     );
 }
 
@@ -504,8 +637,8 @@ async fn test_cost_mixture_of_n_streaming() {
     let last_chunk: Value = serde_json::from_str(&last_chunk.unwrap()).unwrap();
     let usage = last_chunk.get("usage").unwrap().as_object().unwrap();
     assert!(
-        usage.contains_key("cost"),
-        "Expected `cost` key in streaming mixture-of-N usage"
+        usage.get("cost").unwrap().is_null(),
+        "Expected `cost` to be null in streaming mixture-of-N (inline model has no cost config)"
     );
 }
 

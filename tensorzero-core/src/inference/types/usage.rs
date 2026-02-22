@@ -644,4 +644,93 @@ mod tests {
             "should NOT log a warning for Anthropic-style streaming where input_tokens is only in first chunk"
         );
     }
+
+    // Tests for cost in streaming aggregation
+
+    #[test]
+    fn test_aggregate_single_streaming_with_cost() {
+        let usage = Usage {
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            cost: Some(Decimal::new(18, 5)), // 0.00018
+        };
+        let result = aggregate_usage_from_single_streaming_model_inference(vec![usage]);
+        assert_eq!(
+            result.cost,
+            Some(Decimal::new(18, 5)),
+            "single chunk cost should be preserved as-is"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_single_streaming_cumulative_cost() {
+        let chunks = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(10),
+                cost: Some(Decimal::new(5, 5)), // 0.00005
+            },
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(25),
+                cost: Some(Decimal::new(12, 5)), // 0.00012
+            },
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(18, 5)), // 0.00018
+            },
+        ];
+        let result = aggregate_usage_from_single_streaming_model_inference(chunks);
+        assert_eq!(
+            result.cost,
+            Some(Decimal::new(18, 5)),
+            "cumulative cost should take the max value"
+        );
+    }
+
+    // Tests for cost in cross-inference aggregation
+
+    #[test]
+    fn test_aggregate_across_inferences_with_cost() {
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(18, 5)), // 0.00018
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                cost: Some(Decimal::new(27, 5)), // 0.00027
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost,
+            Some(Decimal::new(45, 5)),
+            "cost should be summed across inferences"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_across_inferences_cost_none_propagates() {
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(18, 5)), // 0.00018
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                cost: None,
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost, None,
+            "None cost in any inference should propagate to result"
+        );
+    }
 }
