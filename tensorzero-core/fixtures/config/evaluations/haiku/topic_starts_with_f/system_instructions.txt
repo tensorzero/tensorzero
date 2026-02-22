@@ -1,0 +1,2 @@
+The score should be true if the assigned haiku topic starts with the letter "f" and false otherwise.
+Please output this as a boolean value.
