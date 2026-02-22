@@ -3,8 +3,6 @@ name: Build Gateway E2E Container
 on:
   workflow_call:
     secrets:
-      DOCKERHUB_USERNAME:
-        required: true
       DOCKERHUB_LIMITED_TOKEN:
         required: true
 

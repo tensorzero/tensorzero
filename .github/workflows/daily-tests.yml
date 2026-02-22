@@ -16,7 +16,6 @@ jobs:
       contents: read
       id-token: write
     secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-gateway-container:
@@ -53,7 +52,6 @@ jobs:
       contents: read
       id-token: write
     secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-live-tests-container:
@@ -63,7 +61,6 @@ jobs:
       contents: read
       id-token: write
     secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   live-tests:

@@ -777,7 +777,7 @@ jobs:
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Download container images
         run: |
@@ -787,7 +787,7 @@ jobs:
           # Retag the images to what we expect the names to be
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Download ClickHouse fixtures
         run: |
@@ -977,7 +977,7 @@ jobs:
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Download container images
         run: |
@@ -985,7 +985,7 @@ jobs:
           docker pull tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Set container image tags
         run: |
@@ -1070,7 +1070,7 @@ jobs:
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Download container images
         run: |
@@ -1079,7 +1079,7 @@ jobs:
           docker pull tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Set environment variables
         run: |
@@ -1232,7 +1232,7 @@ jobs:
         run: cat e2e_logs.txt
 
   build-gateway-e2e-container:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     uses: ./.github/workflows/build-gateway-e2e-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1240,11 +1240,10 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-provider-proxy-container:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     uses: ./.github/workflows/build-provider-proxy-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1252,7 +1251,6 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-live-tests-container:
@@ -1264,10 +1262,10 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
     secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-gateway-container:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     uses: ./.github/workflows/build-gateway-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1278,6 +1276,7 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-ui-container:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     uses: ./.github/workflows/build-ui-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1288,6 +1287,7 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-mock-provider-api-container:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     uses: ./.github/workflows/build-mock-provider-api-container.yml
     permissions:
       # Permission to checkout the repository
