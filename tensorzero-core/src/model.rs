@@ -1581,7 +1581,7 @@ impl UninitializedProviderConfig {
                 api_key_location,
                 parse_think_blocks,
             } => {
-                if !is_config_snapshot && parse_think_blocks == Some(false) {
+                if !is_config_snapshot && parse_think_blocks.is_some() {
                     crate::utils::deprecation_warning(
                         "The `parse_think_blocks` option for `fireworks` providers is deprecated and will be removed in a future release. Think blocks are now always parsed.",
                     );

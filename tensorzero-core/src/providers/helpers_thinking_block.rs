@@ -81,7 +81,7 @@ impl ThinkingState {
     pub fn get_id(&self) -> String {
         match self {
             ThinkingState::Normal => "0".to_string(),
-            ThinkingState::Thinking => "1".to_string(),
+            ThinkingState::Thinking => THINK_CHUNK_ID.to_string(),
             ThinkingState::Finished => "2".to_string(),
         }
     }
