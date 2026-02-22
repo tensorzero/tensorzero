@@ -1013,7 +1013,12 @@ jobs:
     permissions:
       contents: read
       actions: read
-    needs: [build-gateway-container, build-mock-provider-api-container]
+    needs:
+      [
+        build-gateway-container,
+        build-mock-provider-api-container,
+        build-fixtures-container,
+      ]
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     strategy:
@@ -1071,13 +1076,16 @@ jobs:
         run: |
           docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
           docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Set environment variables
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
           echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
           echo "TENSORZERO_SKIP_LARGE_FIXTURES=1" >> $GITHUB_ENV
@@ -1125,7 +1133,7 @@ jobs:
       contents: read
       # Permission for rust-cache
       actions: read
-    needs: [build-gateway-container]
+    needs: [build-gateway-container, build-fixtures-container]
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))
     env:
@@ -1186,11 +1194,14 @@ jobs:
       - name: Download container images
         run: |
           docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Make sure dependency services are up
