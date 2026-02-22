@@ -502,12 +502,7 @@ impl ModelConfig {
             {
                 let response = relay
                     .relay_non_streaming(model_name, request, clients)
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::Relay {
-                            message: e.to_string(),
-                        })
-                    })?;
+                    .await?;
                 return Ok(ModelInferenceResponse::new(
                     response,
                     "tensorzero::relay".into(),
@@ -590,7 +585,7 @@ impl ModelConfig {
                         // Collect raw response entries from failed providers for fallback reporting
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                if let Some(entries) = error.extract_raw_response_entries() {
+                                if let Some(entries) = error.extract_raw_response() {
                                     response.failed_raw_response.extend(entries);
                                 }
                             }
@@ -646,14 +641,8 @@ impl ModelConfig {
             {
                 // Note - we do *not* call wrap_provider_stream,
                 // since we don't want caching or (model provider) OTEL attributes
-                let (stream, raw_request) = relay
-                    .relay_streaming(model_name, request, clients)
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::Relay {
-                            message: e.to_string(),
-                        })
-                    })?;
+                let (stream, raw_request) =
+                    relay.relay_streaming(model_name, request, clients).await?;
                 return Ok(StreamResponseAndMessages {
                     response: StreamResponse {
                         stream: stream.instrument(Span::current()),
@@ -728,7 +717,7 @@ impl ModelConfig {
                         // Collect raw response entries from failed providers for fallback reporting
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                if let Some(entries) = error.extract_raw_response_entries() {
+                                if let Some(entries) = error.extract_raw_response() {
                                     response.response.failed_raw_response.extend(entries);
                                 }
                             }
