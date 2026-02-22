@@ -54,14 +54,9 @@ for table in "${!all_tables[@]}"; do
     for file in "${files[@]}"; do
         if [ -f "$file" ]; then
             if [[ "$file" == *.parquet ]]; then
-                # For parquet files, use pyarrow to count rows
-                if command -v uv &> /dev/null; then
-                    file_count=$(uv run python -c "import pyarrow.parquet as pq; print(pq.read_metadata('$file').num_rows)")
-                    echo "  - $file: $file_count rows (parquet)"
-                else
-                    echo "  - WARNING: uv not installed, cannot count rows in $file"
-                    mismatch=1
-                fi
+                # For parquet files, use clickhouse-local to count rows
+                file_count=$(clickhouse-local --query "SELECT count() FROM file('$file', Parquet)")
+                echo "  - $file: $file_count rows (parquet)"
             else
                 # For regular text files, count non-empty lines
                 file_count=$(grep -v '^[[:space:]]*$' "$file" | wc -l)
