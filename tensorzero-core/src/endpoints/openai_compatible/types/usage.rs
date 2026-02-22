@@ -16,10 +16,7 @@ pub struct OpenAICompatibleUsage {
     pub completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_tokens: Option<u32>,
-    #[serde(
-        rename = "tensorzero::cost",
-        with = "rust_decimal::serde::float_option"
-    )]
+    #[serde(with = "rust_decimal::serde::float_option")]
     pub tensorzero_cost: Option<Decimal>,
 }
 

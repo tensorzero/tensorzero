@@ -127,7 +127,7 @@ async fn test_cost_openai_compatible_non_streaming() {
     let response_json: Value = response.json().await.unwrap();
 
     let usage = response_json.get("usage").unwrap().as_object().unwrap();
-    let cost = usage.get("tensorzero::cost").unwrap().as_f64().unwrap();
+    let cost = usage.get("tensorzero_cost").unwrap().as_f64().unwrap();
     assert!(
         (cost - 0.00018).abs() < 1e-10,
         "Expected cost ~0.00018 (10*$3/M + 10*$15/M), got {cost}"
@@ -174,8 +174,8 @@ async fn test_cost_openai_compatible_streaming() {
         .as_object()
         .expect("Expected `usage` to be an object");
     let cost = usage
-        .get("tensorzero::cost")
-        .expect("Expected `tensorzero::cost` key in streaming usage")
+        .get("tensorzero_cost")
+        .expect("Expected `tensorzero_cost` key in streaming usage")
         .as_f64()
         .unwrap();
     // "good" model streaming: prompt_tokens=10, completion_tokens=16
@@ -205,7 +205,7 @@ async fn test_cost_openai_compatible_embeddings() {
     let response_json: Value = response.json().await.unwrap();
 
     let usage = response_json.get("usage").unwrap().as_object().unwrap();
-    let cost = usage.get("tensorzero::cost").unwrap().as_f64().unwrap();
+    let cost = usage.get("tensorzero_cost").unwrap().as_f64().unwrap();
     // prompt_tokens=10 * $3/M = 0.00003
     assert!(
         (cost - 0.00003).abs() < 1e-10,
