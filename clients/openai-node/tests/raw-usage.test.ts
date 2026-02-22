@@ -25,7 +25,7 @@ describe("Raw Usage", () => {
     expect(entry.data.total_tokens).toBeDefined();
     expect(entry.data.prompt_tokens_details?.cached_tokens).toBeDefined();
     expect(
-      entry.data.completion_tokens_details?.reasoning_tokens
+      entry.data.completion_tokens_details?.reasoning_tokens,
     ).toBeDefined();
   };
 

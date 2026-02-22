@@ -2,19 +2,19 @@
   "name": "openai-node",
   "version": "0.0.0",
   "description": "OpenAI Node.js compatibility tests for TensorZero",
+  "license": "Apache-2.0",
+  "author": "TensorZero",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tensorzero/tensorzero.git"
+  },
   "type": "module",
   "scripts": {
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json}\""
+    "format": "oxfmt \"**/*.{js,jsx,ts,tsx,json}\""
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/tensorzero/tensorzero.git"
-  },
-  "author": "TensorZero",
-  "license": "Apache-2.0",
   "dependencies": {
     "openai": "^6.4.0",
     "uuid": "^11.1.0"
@@ -24,7 +24,7 @@
     "@types/node": "^22.16.0",
     "@types/uuid": "^10.0.0",
     "eslint": "^9.37.0",
-    "prettier": "^3.6.2",
+    "oxfmt": "^0.34.0",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.36.0",
     "vitest": "^4.0.8"

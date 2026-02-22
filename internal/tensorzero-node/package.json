@@ -1,41 +1,15 @@
 {
   "name": "tensorzero-node",
   "version": "0.0.0",
+  "license": "Apache-2.0",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
-  },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "napi": {
-    "binaryName": "tensorzero-node",
-    "targets": [
-      "aarch64-apple-darwin",
-      "aarch64-unknown-linux-gnu",
-      "aarch64-unknown-linux-musl",
-      "x86_64-apple-darwin",
-      "x86_64-unknown-linux-gnu",
-      "x86_64-unknown-linux-musl"
-    ]
-  },
-  "license": "Apache-2.0",
-  "devDependencies": {
-    "@eslint/js": "^9.37.0",
-    "@napi-rs/cli": "^3.5.1",
-    "@types/node": "^20.19.4",
-    "eslint": "^9.37.0",
-    "prettier": "^3.6.2",
-    "typescript-eslint": "^8.46.0",
-    "vitest": "^4.0.8"
-  },
-  "vitest": {
-    "testTimeout": 180000
-  },
-  "engines": {
-    "node": ">= 10"
   },
   "scripts": {
     "artifacts": "napi artifacts",
@@ -47,11 +21,37 @@
     "prepublishOnly": "napi prepublish -t npm",
     "test": "vitest",
     "typecheck": "tsc",
-    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path .prettierignore",
-    "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path .prettierignore",
+    "format": "oxfmt \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\"",
+    "format:check": "oxfmt --check \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\"",
     "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\" --ignore-pattern \"index.d.ts\"",
     "lint:check": "eslint . --max-warnings=0 --config eslint.config.js --cache --ignore-pattern \"dist/\" --ignore-pattern \"index.d.ts\"",
     "universal": "napi universalize",
     "version": "napi version"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@napi-rs/cli": "^3.5.1",
+    "@types/node": "^20.19.4",
+    "eslint": "^9.37.0",
+    "oxfmt": "^0.34.0",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^4.0.8"
+  },
+  "napi": {
+    "binaryName": "tensorzero-node",
+    "targets": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ]
+  },
+  "engines": {
+    "node": ">= 10"
+  },
+  "vitest": {
+    "testTimeout": 180000
   }
 }

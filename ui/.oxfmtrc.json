@@ -1,0 +1,19 @@
+{
+  "$schema": "../node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "arrowParens": "always",
+  "tailwindStylesheet": "app/tailwind.css",
+  "ignorePatterns": [
+    "**/.mypy_cache/",
+    "**/.venv",
+    "**/playwright-report/",
+    "**/.react-router/",
+    "**/test-results/",
+    "build/"
+  ]
+}
