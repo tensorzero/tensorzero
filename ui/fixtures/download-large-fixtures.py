@@ -1,6 +1,7 @@
 # /// script
 # dependencies = [
 #   "requests",
+#   "pyarrow",
 # ]
 # ///
 # For local development without R2 credentials, use download-large-fixtures-http.py instead.
@@ -168,17 +169,13 @@ def main():
     print("R2 credentials found, downloading fixtures using `s5cmd`", flush=True)
     download_fixtures_from_r2()
 
+    import pyarrow.parquet as pq
+
     for fixture in FIXTURES:
         print(f"Fixture {fixture}:", flush=True)
-        result = subprocess.run(
-            ["clickhouse-local", "--query", f"SELECT count() FROM file('{LARGE_FIXTURES_DIR / fixture}', Parquet)"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            print(f"  num_rows: {result.stdout.strip()}", flush=True)
-        else:
-            print(f"  (could not read metadata: {result.stderr.strip()})", flush=True)
+        metadata = pq.read_metadata(LARGE_FIXTURES_DIR / fixture)
+        print(f"  num_rows: {metadata.num_rows}", flush=True)
+        print(f"  num_row_groups: {metadata.num_row_groups}", flush=True)
 
 
 if __name__ == "__main__":
