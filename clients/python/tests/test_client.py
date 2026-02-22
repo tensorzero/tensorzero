@@ -3420,7 +3420,7 @@ def test_sync_include_original_response_chat(sync_client: TensorZeroGateway):
     assert isinstance(response, ChatInferenceResponse)
     assert (
         response.original_response
-        == '{\n  "id": "id",\n  "object": "text.completion",\n  "created": 1618870400,\n  "model": "text-davinci-002",\n  "choices": [\n    {\n      "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",\n      "index": 0,\n      "logprobs": null,\n      "finish_reason": null\n    }\n  ]\n}'
+        == '{\n  "id": "id",\n  "object": "text.completion",\n  "created": 1618870400,\n  "model": "text-davinci-002",\n  "choices": [\n    {\n      "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",\n      "index": 0,\n      "logprobs": null,\n      "finish_reason": null\n    }\n  ],\n  "usage": {\n    "prompt_tokens": 10,\n    "completion_tokens": 10,\n    "total_tokens": 20\n  }\n}'
     )
 
 
@@ -3439,7 +3439,10 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
         include_original_response=True,
     )
     assert isinstance(response, JsonInferenceResponse)
-    assert response.original_response == '{"answer":"Hello"}'
+    assert (
+        response.original_response
+        == '{\n  "id": "id",\n  "object": "text.completion",\n  "created": 1618870400,\n  "model": "text-davinci-002",\n  "choices": [\n    {\n      "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",\n      "index": 0,\n      "logprobs": null,\n      "finish_reason": null\n    }\n  ],\n  "usage": {\n    "prompt_tokens": 10,\n    "completion_tokens": 10,\n    "total_tokens": 20\n  }\n}'
+    )
 
 
 def test_sync_clickhouse_batch_writes():
