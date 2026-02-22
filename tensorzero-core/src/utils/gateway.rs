@@ -767,7 +767,9 @@ async fn setup_autopilot_client(
                 .spawn_pool(pool.clone())
                 .spawn_queue_name(queue_name)
                 .available_tools(available_tools)
-                .tool_whitelist(tool_whitelist);
+                .tool_whitelist(tool_whitelist)
+                .deployment_id(deployment_id.cloned().unwrap_or_default())
+                .tensorzero_version(crate::endpoints::status::TENSORZERO_VERSION.to_string());
 
             // Allow custom base URL for testing
             if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {

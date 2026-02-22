@@ -308,7 +308,11 @@ async fn run() -> Result<(), ExitCode> {
     let autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle).await?;
 
     // Start tool whitelist approver if configured
-    spawn_tool_whitelist_approver_if_configured(&gateway_handle);
+    if let Some(client) = gateway_handle.app_state.autopilot_client.clone() {
+        let token = gateway_handle.app_state.shutdown_token.clone();
+        #[expect(clippy::disallowed_methods)]
+        tokio::spawn(async move { client.run_tool_whitelist_approver(token).await });
+    }
 
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
@@ -656,136 +660,6 @@ async fn spawn_autopilot_worker_if_configured(
         .await
         .log_err_pretty("Failed to spawn autopilot worker")?,
     ))
-}
-
-/// Spawn the tool whitelist approver if the autopilot client is configured and the whitelist is non-empty.
-fn spawn_tool_whitelist_approver_if_configured(gateway_handle: &gateway::GatewayHandle) {
-    let Some(autopilot_client) = gateway_handle.app_state.autopilot_client.as_ref() else {
-        return;
-    };
-    if autopilot_client.tool_whitelist.is_empty() {
-        return;
-    }
-    let Some(deployment_id) = gateway_handle.app_state.deployment_id.clone() else {
-        tracing::warn!("Tool whitelist approver not started: deployment_id not available");
-        return;
-    };
-    let client = autopilot_client.clone();
-    let token = gateway_handle.app_state.shutdown_token.clone();
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(async move {
-        run_tool_whitelist_approver(client, deployment_id, token).await;
-    });
-}
-
-/// Runs the tool whitelist auto-approval loop with reconnection logic.
-async fn run_tool_whitelist_approver(
-    autopilot_client: std::sync::Arc<autopilot_client::AutopilotClient>,
-    deployment_id: String,
-    shutdown_token: tokio_util::sync::CancellationToken,
-) {
-    loop {
-        match run_approval_loop(&autopilot_client, &deployment_id, &shutdown_token).await {
-            Ok(()) => break, // Graceful shutdown
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "Tool whitelist approver stream disconnected, reconnecting..."
-                );
-                tokio::select! {
-                    () = tokio::time::sleep(Duration::from_secs(5)) => {},
-                    () = shutdown_token.cancelled() => break,
-                }
-            }
-        }
-    }
-    tracing::info!("Tool whitelist approver shut down");
-}
-
-/// Inner approval loop: processes pending tool calls, then streams new ones.
-async fn run_approval_loop(
-    autopilot_client: &autopilot_client::AutopilotClient,
-    deployment_id: &str,
-    shutdown_token: &tokio_util::sync::CancellationToken,
-) -> Result<(), autopilot_client::AutopilotError> {
-    use autopilot_client::{GatewayEventPayload, StreamWorkspaceToolCallsParams};
-
-    // 1. Process any existing pending tool calls
-    let pending = autopilot_client.pending_tool_calls().await?;
-    for event in &pending.pending_tool_calls {
-        if let GatewayEventPayload::ToolCall(tc) = &event.payload
-            && autopilot_client.tool_whitelist.contains(&tc.name)
-        {
-            approve_single_tool_call(autopilot_client, deployment_id, event.session_id, event.id)
-                .await;
-        }
-    }
-
-    // 2. Stream new tool calls
-    let stream = autopilot_client
-        .stream_workspace_tool_calls(StreamWorkspaceToolCallsParams {
-            last_event_id: Some(pending.last_event_id),
-        })
-        .await?;
-    tokio::pin!(stream);
-
-    loop {
-        tokio::select! {
-            item = stream.next() => {
-                match item {
-                    Some(Ok(update)) => {
-                        if let GatewayEventPayload::ToolCall(tc) = &update.event.payload
-                            && autopilot_client.tool_whitelist.contains(&tc.name)
-                        {
-                            approve_single_tool_call(
-                                autopilot_client,
-                                deployment_id,
-                                update.event.session_id,
-                                update.event.id,
-                            )
-                            .await;
-                        }
-                    }
-                    Some(Err(e)) => return Err(e),
-                    None => return Ok(()), // Stream ended
-                }
-            }
-            () = shutdown_token.cancelled() => return Ok(()),
-        }
-    }
-}
-
-/// Approves a single whitelisted tool call by creating a ToolCallAuthorization event.
-async fn approve_single_tool_call(
-    client: &autopilot_client::AutopilotClient,
-    deployment_id: &str,
-    session_id: uuid::Uuid,
-    tool_call_event_id: uuid::Uuid,
-) {
-    use autopilot_client::{
-        CreateEventRequest, EventPayload, EventPayloadToolCallAuthorization,
-        ToolCallAuthorizationStatus, ToolCallDecisionSource,
-    };
-
-    let request = CreateEventRequest {
-        deployment_id: deployment_id.to_string(),
-        tensorzero_version: TENSORZERO_VERSION.to_string(),
-        payload: EventPayload::ToolCallAuthorization(EventPayloadToolCallAuthorization {
-            source: ToolCallDecisionSource::Whitelist,
-            tool_call_event_id,
-            status: ToolCallAuthorizationStatus::Approved,
-        }),
-        previous_user_message_event_id: None,
-        config_snapshot_hash: None,
-    };
-    if let Err(e) = client.create_event(session_id, request, &[]).await {
-        tracing::warn!(
-            %session_id,
-            %tool_call_event_id,
-            error = %e,
-            "Failed to auto-approve whitelisted tool call"
-        );
-    }
 }
 
 /// ┌──────────────────────────────────────────────────────────────────────────┐

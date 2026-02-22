@@ -21,11 +21,12 @@ use crate::reject_missing_tool::reject_missing_tool;
 use crate::types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
-    GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
-    GatewayWorkspacePendingToolCallsResponse, ListConfigWritesParams, ListConfigWritesResponse,
-    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
-    S3UploadRequest, S3UploadResponse, StreamEventsParams, StreamWorkspaceToolCallsParams,
-    ToolCallAuthorizationStatus, WorkspacePendingToolCallsResponse,
+    EventPayloadToolCallAuthorization, GatewayEventPayload, GatewayListConfigWritesResponse,
+    GatewayListEventsResponse, GatewayStreamUpdate, GatewayWorkspacePendingToolCallsResponse,
+    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
+    StreamEventsParams, StreamWorkspaceToolCallsParams, ToolCallAuthorizationStatus,
+    ToolCallDecisionSource, WorkspacePendingToolCallsResponse,
 };
 
 /// Default base URL for the Autopilot API.
@@ -63,6 +64,8 @@ pub struct AutopilotClientBuilder {
     tool_call_cache_ttl: Duration,
     available_tools: Option<HashSet<String>>,
     tool_whitelist: Option<HashSet<String>>,
+    deployment_id: Option<String>,
+    tensorzero_version: Option<String>,
 }
 
 impl Default for AutopilotClientBuilder {
@@ -79,6 +82,8 @@ impl Default for AutopilotClientBuilder {
             tool_call_cache_ttl: DEFAULT_TOOL_CALL_CACHE_TTL,
             available_tools: None,
             tool_whitelist: None,
+            deployment_id: None,
+            tensorzero_version: None,
         }
     }
 }
@@ -164,6 +169,18 @@ impl AutopilotClientBuilder {
         self
     }
 
+    /// Sets the deployment ID used for creating events.
+    pub fn deployment_id(mut self, deployment_id: String) -> Self {
+        self.deployment_id = Some(deployment_id);
+        self
+    }
+
+    /// Sets the TensorZero version used for creating events.
+    pub fn tensorzero_version(mut self, version: String) -> Self {
+        self.tensorzero_version = Some(version);
+        self
+    }
+
     /// Builds the [`AutopilotClient`].
     ///
     /// # Errors
@@ -180,6 +197,12 @@ impl AutopilotClientBuilder {
         let available_tools = self
             .available_tools
             .ok_or(AutopilotError::MissingConfig("available_tools"))?;
+        let deployment_id = self
+            .deployment_id
+            .ok_or(AutopilotError::MissingConfig("deployment_id"))?;
+        let tensorzero_version = self
+            .tensorzero_version
+            .ok_or(AutopilotError::MissingConfig("tensorzero_version"))?;
 
         let base_url = match self.base_url {
             Some(url) => url,
@@ -229,6 +252,8 @@ impl AutopilotClientBuilder {
             tool_call_cache,
             available_tools: Arc::new(available_tools),
             tool_whitelist: Arc::new(self.tool_whitelist.unwrap_or_default()),
+            deployment_id,
+            tensorzero_version,
         })
     }
 }
@@ -249,6 +274,10 @@ pub struct AutopilotClient {
     available_tools: Arc<HashSet<String>>,
     /// Set of tool names that are automatically approved without manual intervention.
     pub tool_whitelist: Arc<HashSet<String>>,
+    /// The deployment ID used for creating events (e.g. tool call authorizations).
+    deployment_id: String,
+    /// The TensorZero version used for creating events.
+    tensorzero_version: String,
 }
 
 impl fmt::Debug for AutopilotClient {
@@ -1019,6 +1048,114 @@ impl AutopilotClient {
         Ok(stream)
     }
 
+    // -------------------------------------------------------------------------
+    // Tool Whitelist Auto-Approval
+    // -------------------------------------------------------------------------
+
+    /// Runs the tool whitelist auto-approval loop with reconnection logic.
+    ///
+    /// This method watches for new tool calls across the workspace and automatically
+    /// approves any whose name is in `tool_whitelist`. It is a no-op if the whitelist
+    /// is empty.
+    ///
+    /// The loop reconnects on stream errors and shuts down gracefully when the
+    /// `shutdown_token` is cancelled.
+    pub async fn run_tool_whitelist_approver(
+        &self,
+        shutdown_token: tokio_util::sync::CancellationToken,
+    ) {
+        if self.tool_whitelist.is_empty() {
+            return;
+        }
+        loop {
+            match self.run_approval_loop(&shutdown_token).await {
+                Ok(()) => break, // Graceful shutdown
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Tool whitelist approver stream disconnected, reconnecting..."
+                    );
+                    tokio::select! {
+                        () = tokio::time::sleep(Duration::from_secs(5)) => {},
+                        () = shutdown_token.cancelled() => break,
+                    }
+                }
+            }
+        }
+        tracing::info!("Tool whitelist approver shut down");
+    }
+
+    /// Inner approval loop: processes pending tool calls, then streams new ones.
+    async fn run_approval_loop(
+        &self,
+        shutdown_token: &tokio_util::sync::CancellationToken,
+    ) -> Result<(), AutopilotError> {
+        // 1. Process any existing pending tool calls
+        let pending = self.pending_tool_calls().await?;
+        for event in &pending.pending_tool_calls {
+            if let GatewayEventPayload::ToolCall(tc) = &event.payload
+                && self.tool_whitelist.contains(&tc.name)
+            {
+                self.approve_whitelisted_tool_call(event.session_id, event.id)
+                    .await;
+            }
+        }
+
+        // 2. Stream new tool calls
+        let stream = self
+            .stream_workspace_tool_calls(StreamWorkspaceToolCallsParams {
+                last_event_id: Some(pending.last_event_id),
+            })
+            .await?;
+        tokio::pin!(stream);
+
+        loop {
+            tokio::select! {
+                item = stream.next() => {
+                    match item {
+                        Some(Ok(update)) => {
+                            if let GatewayEventPayload::ToolCall(tc) = &update.event.payload
+                                && self.tool_whitelist.contains(&tc.name)
+                            {
+                                self.approve_whitelisted_tool_call(
+                                    update.event.session_id,
+                                    update.event.id,
+                                )
+                                .await;
+                            }
+                        }
+                        Some(Err(e)) => return Err(e),
+                        None => return Ok(()), // Stream ended
+                    }
+                }
+                () = shutdown_token.cancelled() => return Ok(()),
+            }
+        }
+    }
+
+    /// Approves a single whitelisted tool call by creating a ToolCallAuthorization event.
+    async fn approve_whitelisted_tool_call(&self, session_id: Uuid, tool_call_event_id: Uuid) {
+        let request = CreateEventRequest {
+            deployment_id: self.deployment_id.clone(),
+            tensorzero_version: self.tensorzero_version.clone(),
+            payload: EventPayload::ToolCallAuthorization(EventPayloadToolCallAuthorization {
+                source: ToolCallDecisionSource::Whitelist,
+                tool_call_event_id,
+                status: ToolCallAuthorizationStatus::Approved,
+            }),
+            previous_user_message_event_id: None,
+            config_snapshot_hash: None,
+        };
+        if let Err(e) = self.create_event(session_id, request, &[]).await {
+            tracing::warn!(
+                %session_id,
+                %tool_call_event_id,
+                error = %e,
+                "Failed to auto-approve whitelisted tool call"
+            );
+        }
+    }
+
     /// Converts an SSE error to the appropriate AutopilotError.
     /// HTTP errors are converted to AutopilotError::Http for consistency.
     async fn convert_sse_error(e: reqwest_sse_stream::ReqwestSseStreamError) -> AutopilotError {
@@ -1131,6 +1268,8 @@ mod tests {
             AutopilotClient::builder()
                 .api_key("test_key")
                 .spawn_database_url("postgres://localhost/test")
+                .deployment_id("test_deployment".to_string())
+                .tensorzero_version("0.0.0".to_string())
                 .build(),
         );
 
@@ -1140,6 +1279,43 @@ mod tests {
                 Err(AutopilotError::MissingConfig("available_tools"))
             ),
             "Building without available_tools should fail with MissingConfig error"
+        );
+    }
+
+    #[test]
+    fn test_build_fails_without_deployment_id() {
+        let result = futures::executor::block_on(
+            AutopilotClient::builder()
+                .api_key("test_key")
+                .spawn_database_url("postgres://localhost/test")
+                .available_tools(HashSet::new())
+                .tensorzero_version("0.0.0".to_string())
+                .build(),
+        );
+
+        assert!(
+            matches!(result, Err(AutopilotError::MissingConfig("deployment_id"))),
+            "Building without deployment_id should fail with MissingConfig error"
+        );
+    }
+
+    #[test]
+    fn test_build_fails_without_tensorzero_version() {
+        let result = futures::executor::block_on(
+            AutopilotClient::builder()
+                .api_key("test_key")
+                .spawn_database_url("postgres://localhost/test")
+                .available_tools(HashSet::new())
+                .deployment_id("test_deployment".to_string())
+                .build(),
+        );
+
+        assert!(
+            matches!(
+                result,
+                Err(AutopilotError::MissingConfig("tensorzero_version"))
+            ),
+            "Building without tensorzero_version should fail with MissingConfig error"
         );
     }
 }
