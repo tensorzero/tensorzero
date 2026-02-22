@@ -798,6 +798,12 @@ model = "together-deepseek-r1"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
+[functions.basic_test.variants.together-kimi]
+type = "chat_completion"
+model = "together-kimi"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.reasoner]
 type = "chat_completion"
 model = "reasoner"

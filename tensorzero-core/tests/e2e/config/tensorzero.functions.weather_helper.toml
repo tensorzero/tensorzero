@@ -210,7 +210,13 @@ system_template = "../../../fixtures/config/functions/weather_helper/prompt/syst
 type = "chat_completion"
 model = "together-deepseek-r1"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 800
+max_tokens = 1200
+
+[functions.weather_helper.variants.together-kimi]
+type = "chat_completion"
+model = "together-kimi"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 1200
 
 [functions.weather_helper.variants.openai]
 type = "chat_completion"

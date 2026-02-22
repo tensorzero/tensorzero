@@ -81,6 +81,13 @@ system_template = "../../../fixtures/config/functions/json_success/prompt/system
 json_mode = "off"
 max_tokens = 800
 
+[functions.json_math.variants.together-kimi]
+type = "chat_completion"
+model = "together-kimi"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "off"
+max_tokens = 800
+
 [functions.json_math.variants.mistral-reasoning]
 type = "chat_completion"
 model = "magistral-small-latest"

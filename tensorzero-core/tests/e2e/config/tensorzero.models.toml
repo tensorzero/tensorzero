@@ -548,6 +548,14 @@ routing = ["together"]
 type = "together"
 model_name = "deepseek-ai/DeepSeek-R1"
 
+[models."together-kimi"]
+routing = ["together"]
+
+[models."together-kimi".providers.together]
+type = "together"
+model_name = "moonshotai/Kimi-K2.5"
+extra_body = [{ pointer = "/reasoning/enabled", value = true }]
+
 ## OpenRouter
 
 [models.gpt_4_o_mini_openrouter]
