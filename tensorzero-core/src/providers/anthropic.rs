@@ -1123,6 +1123,8 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
         || model_name == "claude-opus-4-1"
     {
         Ok(32_000)
+    } else if model_name == "claude-opus-4-6" {
+        Ok(128_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
             message: format!(
