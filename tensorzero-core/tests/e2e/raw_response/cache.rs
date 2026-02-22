@@ -250,13 +250,19 @@ async fn test_raw_response_cache_behavior_streaming() {
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Second request: should be a cache hit
-    let (second_raw_response, _second_found_raw_chunk) =
+    let (second_raw_response, second_found_raw_chunk) =
         make_streaming_request(&client, input).await;
 
     // Cache hit should have empty raw_response array
     assert!(
         second_raw_response.is_empty(),
         "Second streaming request (cache hit) should have empty raw_response array, got {second_raw_response:?}"
+    );
+
+    // Cache hit should suppress raw_chunk (consistent with non-streaming excluding success entries)
+    assert!(
+        !second_found_raw_chunk,
+        "Second streaming request (cache hit) should not have raw_chunk"
     );
 }
 
@@ -377,12 +383,14 @@ async fn test_raw_response_cache_disabled_streaming() {
 // OpenAI-Compatible API Cache Tests (with unique HTTP gateway per test)
 // ============================================================================
 
-/// Helper to make OpenAI-compatible request and get tensorzero_raw_response array
+/// Helper to make OpenAI-compatible request and get tensorzero_raw_response array.
+/// Returns `(raw_response_entries, found_raw_chunk)`.
+/// `found_raw_chunk` is always `false` for non-streaming requests.
 async fn make_openai_request_to_gateway(
     base_url: &str,
     input_text: &str,
     stream: bool,
-) -> Vec<Value> {
+) -> (Vec<Value>, bool) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -424,8 +432,9 @@ async fn make_openai_request_to_gateway(
             .await
             .unwrap();
 
-        // Collect raw_response entries from all chunks
+        // Collect raw_response entries and track raw_chunk presence
         let mut raw_response_entries: Vec<Value> = Vec::new();
+        let mut found_raw_chunk = false;
 
         while let Some(chunk) = chunks.next().await {
             let chunk = chunk.unwrap();
@@ -443,9 +452,13 @@ async fn make_openai_request_to_gateway(
             {
                 raw_response_entries.extend(arr.iter().cloned());
             }
+
+            if chunk_json.get("tensorzero_raw_chunk").is_some() {
+                found_raw_chunk = true;
+            }
         }
 
-        raw_response_entries
+        (raw_response_entries, found_raw_chunk)
     } else {
         let response = Client::new()
             .post(&url)
@@ -462,10 +475,11 @@ async fn make_openai_request_to_gateway(
         let raw_response = response_json.get("tensorzero_raw_response").expect(
             "tensorzero_raw_response should be present when tensorzero::include_raw_response is true",
         );
-        raw_response
+        let entries = raw_response
             .as_array()
             .expect("tensorzero_raw_response should be an array")
-            .clone()
+            .clone();
+        (entries, false)
     }
 }
 
@@ -480,7 +494,7 @@ async fn test_raw_response_cache_openai_compatible_non_streaming() {
     let input = "raw_response_openai_non_streaming: What is 5+5?";
 
     // First request: should be a cache miss
-    let first_raw_response = make_openai_request_to_gateway(&base_url, input, false).await;
+    let (first_raw_response, _) = make_openai_request_to_gateway(&base_url, input, false).await;
 
     assert!(
         !first_raw_response.is_empty(),
@@ -493,7 +507,7 @@ async fn test_raw_response_cache_openai_compatible_non_streaming() {
 
     // Second request: should be a cache hit
     // tensorzero_raw_response should still be present but empty (field present as [])
-    let second_raw_response = make_openai_request_to_gateway(&base_url, input, false).await;
+    let (second_raw_response, _) = make_openai_request_to_gateway(&base_url, input, false).await;
 
     assert!(
         second_raw_response.is_empty(),
@@ -512,18 +526,30 @@ async fn test_raw_response_cache_openai_compatible_streaming() {
 
     // First request: should be a cache miss
     // For single inference streaming, raw_response array should be empty
-    // (no previous inferences), but the response should succeed
-    let _first_raw_response = make_openai_request_to_gateway(&base_url, input, true).await;
+    // (no previous inferences), but raw_chunk should be present
+    let (_first_raw_response, first_found_raw_chunk) =
+        make_openai_request_to_gateway(&base_url, input, true).await;
+    assert!(
+        first_found_raw_chunk,
+        "First streaming request (cache miss) should have tensorzero_raw_chunk"
+    );
 
     // Wait for cache write
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Second request: should be a cache hit
     // tensorzero_raw_response should still be present but empty
-    let second_raw_response = make_openai_request_to_gateway(&base_url, input, true).await;
+    let (second_raw_response, second_found_raw_chunk) =
+        make_openai_request_to_gateway(&base_url, input, true).await;
 
     assert!(
         second_raw_response.is_empty(),
         "Second streaming request (cache hit) should have empty tensorzero_raw_response array, got {second_raw_response:?}"
+    );
+
+    // Cache hit should suppress tensorzero_raw_chunk
+    assert!(
+        !second_found_raw_chunk,
+        "Second streaming request (cache hit) should not have tensorzero_raw_chunk"
     );
 }

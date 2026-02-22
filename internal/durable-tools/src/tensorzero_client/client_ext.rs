@@ -142,6 +142,7 @@ impl TensorZeroClient for Client {
                     autopilot_client,
                     session_id,
                     full_request,
+                    &[],
                 )
                 .await
                 .map_err(|e| {

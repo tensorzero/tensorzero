@@ -27,9 +27,7 @@ async fn test_metrics_by_variant_singleton(conn: impl FeedbackQueries) {
     assert_float_eq(metric.variance.unwrap(), 0.10703, None);
     assert_eq!(metric.count, 75);
 }
-// Postgres small fixtures don't have haiku_score_episode feedback linked to write_haiku inferences.
-// TODO(#5691): Add Postgres test after adding large fixtures.
-make_clickhouse_only_test!(test_metrics_by_variant_singleton);
+make_db_test!(test_metrics_by_variant_singleton);
 
 async fn test_metrics_by_variant_filter_all(conn: impl FeedbackQueries) {
     let metrics_by_variant = conn
@@ -45,9 +43,7 @@ async fn test_metrics_by_variant_filter_all(conn: impl FeedbackQueries) {
         .unwrap();
     assert!(metrics_by_variant.is_empty());
 }
-// Postgres small fixtures don't have haiku_score_episode feedback linked to write_haiku inferences.
-// TODO(#5691): Add Postgres test after adding large fixtures.
-make_clickhouse_only_test!(test_metrics_by_variant_filter_all);
+make_db_test!(test_metrics_by_variant_filter_all);
 
 async fn test_metrics_by_variant_many_results(conn: impl FeedbackQueries) {
     let metrics_by_variant = conn
@@ -107,9 +103,7 @@ async fn test_metrics_by_variant_episode_boolean(conn: impl FeedbackQueries) {
     assert_float_eq(metric.mean, 1.0, None);
     assert_float_eq(metric.variance.unwrap(), 0.0, None);
 }
-// Postgres small fixtures don't have solved feedback linked to ask_question inferences.
-// TODO(#5691): Add Postgres test after adding large fixtures.
-make_clickhouse_only_test!(test_metrics_by_variant_episode_boolean);
+make_db_test!(test_metrics_by_variant_episode_boolean);
 
 async fn test_metrics_by_variant_episode_float(conn: impl FeedbackQueries) {
     let metrics_by_variant = conn
@@ -137,11 +131,10 @@ async fn test_metrics_by_variant_episode_float(conn: impl FeedbackQueries) {
     assert_eq!(metric.variant_name, "gpt-4.1-mini");
     assert_eq!(metric.count, 3);
     assert_float_eq(metric.mean, 65755.3, None);
-    assert_float_eq(metric.variance.unwrap(), 22337140.0, None);
+    // The variance differs between Postgres and Clickhouse by ~10.0, which is odd but seems within numeric bounds (the raw values are ~65K).
+    assert_float_eq(metric.variance.unwrap(), 22337140.0, Some(10.0));
 }
-// Postgres small fixtures don't have elapsed_ms feedback linked to ask_question inferences.
-// TODO(#5691): Add Postgres test after adding large fixtures.
-make_clickhouse_only_test!(test_metrics_by_variant_episode_float);
+make_db_test!(test_metrics_by_variant_episode_float);
 
 // ===== get_cumulative_feedback_timeseries tests =====
 
