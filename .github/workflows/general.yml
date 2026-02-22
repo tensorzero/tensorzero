@@ -284,8 +284,21 @@ jobs:
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
           version: "0.9.27"
+
       - name: Install Python 3.10
-        run: uv python install 3.10
+        run: |
+          for attempt in 1 2 3; do
+            if uv python install 3.10; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Python 3.10 after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
       - name: Set PYO3_PYTHON
         run: echo "PYO3_PYTHON=$(uv python find python3.10)" >> $GITHUB_ENV
         shell: bash
@@ -361,8 +374,19 @@ jobs:
         with:
           version: "0.9.27"
 
-      - name: Install Python for python async client tests
-        run: uv python install 3.9
+      - name: Install Python 3.10
+        run: |
+          for attempt in 1 2 3; do
+            if uv python install 3.10; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Python 3.10 after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: Lint (Python:ruff)
         run: |

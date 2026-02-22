@@ -287,8 +287,19 @@ jobs:
             sleep 1
           done
 
-      - name: Install Python for python async client tests
-        run: uv python install 3.9
+      - name: Install Python 3.10
+        run: |
+          for attempt in 1 2 3; do
+            if uv python install 3.10; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Python 3.10 after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - name: "Python: PyO3 Client: pytest (non-mock tests)"
         working-directory: clients/python

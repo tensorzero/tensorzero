@@ -60,12 +60,23 @@ jobs:
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
           version: "0.9.27"
+
       - name: Install Python 3.10
         if: runner.os == 'windows'
         run: |
-          uv python install 3.10
+          for attempt in 1 2 3; do
+            if uv python install 3.10; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Python 3.10 after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
           echo "PYO3_PYTHON=$(uv python find python3.10)" >> $GITHUB_ENV
         shell: bash
+
       - run: |
           # Run both of these, as they build dependencies with different features
           cargo build --features e2e_tests --tests
