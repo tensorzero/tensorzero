@@ -7,7 +7,7 @@ For developing Postgres features (writing queries, testing locally):
 ```bash
 # 1. Set environment variables
 export TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@localhost:5432/postgres_migration_dev"
-export TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ=1
+export TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=1
 
 # 2. Reset Postgres and load fixture data
 ./ui/fixtures/reset-dev-postgres.sh

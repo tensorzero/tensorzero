@@ -31,8 +31,8 @@ pub enum DatapointOrderByTerm {
     /// Relevance score of the search query in the input and output of the datapoint.
     /// Requires a search query (experimental). If it's not provided, we return an error.
     ///
-    /// Current relevance metric is very rudimentary (just term frequency), but we plan
-    /// to improve it in the future.
+    /// NOTE: Relevance ordering is not yet implemented for Postgres and currently
+    /// falls back to id ordering. See TODO(#6441).
     #[schemars(title = "DatapointOrderBySearchRelevance")]
     SearchRelevance,
 }

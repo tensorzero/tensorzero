@@ -322,7 +322,7 @@ export function prepareInferenceActionRequest(
     credentials: new Map(),
     cache_options: {
       max_age_s: null,
-      enabled: "on",
+      enabled: "off",
     },
     include_original_response: false, // deprecated
     include_raw_response: false,

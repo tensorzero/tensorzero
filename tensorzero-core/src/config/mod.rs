@@ -393,6 +393,14 @@ pub struct ObservabilityConfig {
     pub disable_automatic_migrations: bool,
 }
 
+impl ObservabilityConfig {
+    /// Returns true when observability writes (inferences, feedback) should be persisted.
+    /// Defaults to true when `enabled` is not explicitly set.
+    pub fn writes_enabled(&self) -> bool {
+        self.enabled.unwrap_or(true)
+    }
+}
+
 fn default_flush_interval_ms() -> u64 {
     100
 }

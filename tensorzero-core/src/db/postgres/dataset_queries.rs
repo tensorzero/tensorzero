@@ -471,12 +471,8 @@ fn build_order_by_clause_string(order_by: Option<&Vec<DatapointOrderBy>>) -> Str
     for order_spec in order_by_vec {
         let column = match order_spec.term {
             DatapointOrderByTerm::Timestamp => "updated_at",
-            DatapointOrderByTerm::SearchRelevance => {
-                // For Postgres, we don't have the same term frequency calculation as ClickHouse.
-                // Fall back to updated_at for now.
-                // TODO(#5691): Implement proper text search ranking in Postgres
-                "updated_at"
-            }
+            // TODO(#6441): Implement proper search relevance ordering for Postgres.
+            DatapointOrderByTerm::SearchRelevance => "id",
         };
         let direction = order_spec.direction.to_sql_direction();
         clauses.push(format!("{column} {direction}"));
