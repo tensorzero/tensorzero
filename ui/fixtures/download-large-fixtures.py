@@ -1,7 +1,7 @@
 # /// script
 # dependencies = [
 #   "requests",
-#   "parquet-tools",
+#   "pyarrow",
 # ]
 # ///
 # For local development without R2 credentials, use download-large-fixtures-http.py instead.
@@ -183,13 +183,13 @@ def main():
     print("R2 credentials found, downloading fixtures using `aws s3 sync`", flush=True)
     sync_fixtures_from_r2()
 
+    import pyarrow.parquet as pq
+
     for fixture in FIXTURES:
         print(f"Fixture {fixture}:", flush=True)
-        subprocess.run(
-            ["parquet-tools", "inspect", LARGE_FIXTURES_DIR / fixture],
-            check=True,
-            stderr=subprocess.STDOUT,
-        )
+        metadata = pq.read_metadata(LARGE_FIXTURES_DIR / fixture)
+        print(f"  num_rows: {metadata.num_rows}", flush=True)
+        print(f"  num_row_groups: {metadata.num_row_groups}", flush=True)
 
 
 if __name__ == "__main__":
