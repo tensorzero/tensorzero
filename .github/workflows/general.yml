@@ -770,14 +770,6 @@ jobs:
           path: |
             ./ui/fixtures/large-fixtures/
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
-        with:
-          version: "0.9.27"
-
-      - name: Install s5cmd
-        run: curl -fsSL https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-64bit.tar.gz | sudo tar xz -C /usr/local/bin s5cmd
-
       - name: Download container images
         run: |
           docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
@@ -789,11 +781,6 @@ jobs:
           docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
           docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
-
-      - name: Download ClickHouse fixtures
-        run: |
-          uv run ./ui/fixtures/download-large-fixtures.py
-          uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (non-replicated)
         if: matrix.replicated == false
@@ -1062,18 +1049,6 @@ jobs:
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
-        with:
-          version: "0.9.27"
-
-      - name: Install s5cmd
-        run: curl -fsSL https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-64bit.tar.gz | sudo tar xz -C /usr/local/bin s5cmd
-
-      - name: Download ClickHouse fixtures
-        run: |
-          uv run ./ui/fixtures/download-small-fixtures.py
-
       - name: Login to Namespace registry
         run: nsc docker login
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
@@ -1175,21 +1150,6 @@ jobs:
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
           tool: cargo-nextest
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
-        with:
-          version: "0.9.27"
-          # Without this, the post-install hook tries to prune and save the cache, but jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be already nukes /opt/hostedtoolcache/*, so it fails.
-          enable-cache: "false"
-
-      - name: Install s5cmd
-        run: curl -fsSL https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-64bit.tar.gz | sudo tar xz -C /usr/local/bin s5cmd
-
-      - name: Download ClickHouse fixtures
-        run: |
-          uv run ./ui/fixtures/download-large-fixtures.py
-          uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Cleanup disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
