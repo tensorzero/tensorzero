@@ -1,9 +1,8 @@
 # This Dockerfile is used to load fixtures into (separate) ClickHouse and Postgres servers
 FROM debian:trixie-slim
 
-# Install system dependencies and clickhouse-client
+# Install system dependencies, clickhouse-client, and AWS CLI v2
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    apt-transport-https \
     ca-certificates \
     curl \
     gnupg \
@@ -16,23 +15,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        > /etc/apt/sources.list.d/clickhouse.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends clickhouse-client \
+    && ARCH=$(uname -m) \
+    && if [ "$ARCH" = "x86_64" ]; then \
+         AWSCLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"; \
+       elif [ "$ARCH" = "aarch64" ]; then \
+         AWSCLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip"; \
+       else \
+         echo "Unsupported architecture: $ARCH" && exit 1; \
+       fi \
+    && curl "$AWSCLI_URL" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && ./aws/install \
+    && rm -rf awscliv2.zip aws \
+    && apt-get purge -y --auto-remove gnupg unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install AWS CLI v2
-RUN ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then \
-      AWSCLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-      AWSCLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip"; \
-    else \
-      echo "Unsupported architecture: $ARCH" && exit 1; \
-    fi && \
-    curl "$AWSCLI_URL" -o "awscliv2.zip" && \
-    unzip awscliv2.zip && \
-    ./aws/install && \
-    rm -rf awscliv2.zip aws
-
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.9.27 /uv /uvx /bin/
 
 # Copy Python project files and install dependencies
 WORKDIR /fixtures
