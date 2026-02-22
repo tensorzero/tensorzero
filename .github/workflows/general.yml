@@ -53,7 +53,7 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
         uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
         with:
-          python-version: "3.9"
+          python-version: "3.10"
 
       - name: Check coordinated edits
         if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
