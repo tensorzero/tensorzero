@@ -778,7 +778,7 @@ async fn approve_single_tool_call(
         previous_user_message_event_id: None,
         config_snapshot_hash: None,
     };
-    if let Err(e) = client.create_event(session_id, request).await {
+    if let Err(e) = client.create_event(session_id, request, &[]).await {
         tracing::warn!(
             %session_id,
             %tool_call_event_id,
