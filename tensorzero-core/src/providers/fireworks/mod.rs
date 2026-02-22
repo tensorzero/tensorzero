@@ -506,27 +506,54 @@ pub async fn prepare_fireworks_messages<'a>(
     messages: &'a [RequestMessage],
     config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut output_messages = Vec::with_capacity(messages.len());
-    for message in messages {
-        match message.role {
-            Role::Assistant => {
-                let msg = tensorzero_to_fireworks_assistant_message(
-                    Cow::Borrowed(&message.content),
-                    config,
-                )
-                .await?;
+    // Convert all messages concurrently, then assemble in order.
+    enum ConvertedMessage<'a> {
+        Assistant(OpenAIRequestMessage<'a>),
+        Other(Vec<OpenAIRequestMessage<'a>>),
+    }
+
+    let conversion_futures: Vec<_> = messages
+        .iter()
+        .map(|msg| async move {
+            match msg.role {
+                Role::Assistant => {
+                    let m = tensorzero_to_fireworks_assistant_message(
+                        Cow::Borrowed(&msg.content),
+                        config,
+                    )
+                    .await?;
+                    Ok(ConvertedMessage::Assistant(m))
+                }
+                Role::User => {
+                    let openai_msgs = tensorzero_to_openai_messages(msg, config).await?;
+                    Ok(ConvertedMessage::Other(openai_msgs))
+                }
+            }
+        })
+        .collect();
+
+    let converted: Vec<Result<ConvertedMessage<'a>, Error>> =
+        futures::future::join_all(conversion_futures).await;
+
+    let mut output_messages: Vec<OpenAIRequestMessage<'a>> = Vec::new();
+
+    if let Some(system_msg) = tensorzero_to_fireworks_system_message(system) {
+        output_messages.push(system_msg);
+    }
+
+    for result in converted {
+        match result? {
+            ConvertedMessage::Assistant(msg) => {
                 if !msg.no_content() {
                     output_messages.push(msg);
                 }
             }
-            Role::User => {
-                output_messages.extend(tensorzero_to_openai_messages(message, config).await?);
+            ConvertedMessage::Other(msgs) => {
+                output_messages.extend(msgs);
             }
         }
     }
-    if let Some(system_msg) = tensorzero_to_fireworks_system_message(system) {
-        output_messages.insert(0, system_msg);
-    }
+
     Ok(output_messages)
 }
 
@@ -614,7 +641,7 @@ pub async fn tensorzero_to_fireworks_assistant_message<'a>(
                             think_tag_texts.push(text.clone());
                         }
                     }
-                    _ => {
+                    Some("reasoning_field") | None => {
                         if let Some(text) = &thought.text {
                             match &mut reasoning_content {
                                 Some(existing) => {
@@ -626,6 +653,13 @@ pub async fn tensorzero_to_fireworks_assistant_message<'a>(
                                 }
                             }
                         }
+                    }
+                    Some(other) => {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: format!(
+                                "Unknown `reasoning_format` value in thought `extra_data`: `{other}`"
+                            ),
+                        }));
                     }
                 }
 
@@ -649,7 +683,7 @@ pub async fn tensorzero_to_fireworks_assistant_message<'a>(
                             think_tag_texts.push(text.clone());
                         }
                     }
-                    _ => {
+                    Some("reasoning_field") | None => {
                         if let Some(text) = &thought.text {
                             match &mut reasoning_content {
                                 Some(existing) => {
@@ -661,6 +695,13 @@ pub async fn tensorzero_to_fireworks_assistant_message<'a>(
                                 }
                             }
                         }
+                    }
+                    Some(other) => {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: format!(
+                                "Unknown `reasoning_format` value in thought `extra_data`: `{other}`"
+                            ),
+                        }));
                     }
                 }
 
@@ -1942,6 +1983,37 @@ mod tests {
         } else {
             panic!("Expected an Assistant message");
         }
+    }
+
+    #[tokio::test]
+    async fn test_tensorzero_to_fireworks_assistant_message_invalid_reasoning_format() {
+        // Thought with an unknown reasoning_format should return an error
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "unknown_format"})),
+            }),
+            ContentBlock::Text(tensorzero_types::content::Text {
+                text: "the answer".to_string(),
+            }),
+        ];
+        let config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let result =
+            tensorzero_to_fireworks_assistant_message(Cow::Owned(content_blocks), config).await;
+        assert!(result.is_err(), "should error on unknown reasoning_format");
+        let err = result.unwrap_err();
+        let details = err.get_details();
+        assert!(
+            matches!(details, ErrorDetails::InvalidMessage { message } if message.contains("unknown_format")),
+            "error should mention the unknown format value"
+        );
     }
 
     #[tokio::test]
