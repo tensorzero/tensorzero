@@ -67,30 +67,11 @@ jobs:
       - name: Cleanup disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
-      - name: Download gateway container image
+      - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          name: build-gateway-container
-
-      - name: Download provider-proxy container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-provider-proxy-container
-
-      - name: Download gateway-e2e container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-gateway-e2e-container
-
-      - name: Download live-tests container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-live-tests-container
-
-      - name: Download fixtures container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-fixtures-container
+          pattern: build-{gateway,gateway-e2e,provider-proxy,live-tests,fixtures}-container
+          merge-multiple: true
 
       - name: Load container images
         run: |

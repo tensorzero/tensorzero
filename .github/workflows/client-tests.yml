@@ -92,30 +92,11 @@ jobs:
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/download-provider-proxy-cache.sh
 
-      - name: Download gateway container image
+      - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          name: build-gateway-container
-
-      - name: Download mock-provider-api container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-mock-provider-api-container
-
-      - name: Download fixtures container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-fixtures-container
-
-      - name: Download gateway-e2e container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-gateway-e2e-container
-
-      - name: Download provider-proxy container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-provider-proxy-container
+          pattern: build-{gateway,gateway-e2e,mock-provider-api,fixtures,provider-proxy}-container
+          merge-multiple: true
 
       - name: Load container images
         run: |
@@ -139,8 +120,13 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-      # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
 
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          save-if: false
+
+      # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
       # - uses: 'google-github-actions/auth@v2'
       #   with:
       #     project_id: 'tensozero-public'
