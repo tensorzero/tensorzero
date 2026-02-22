@@ -233,9 +233,21 @@ lazy_static! {
     // This is the same as DUMMY_TOOL_RESPONSE, but with the units capitalized
     // Since that field is an enum, this should fail validation
     pub static ref DUMMY_BAD_TOOL_RESPONSE: Value = json!({"location": "Brooklyn", "units": "Celsius"});
+    /// Raw provider response for the "tool" model.
+    /// Contains the tool output alongside a `usage` block so cost JSON pointers can resolve.
+    pub static ref DUMMY_TOOL_RAW_RESPONSE: String = {
+        let mut v = DUMMY_TOOL_RESPONSE.clone();
+        v["usage"] = json!({"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20});
+        serde_json::to_string(&v).unwrap()
+    };
     static ref FLAKY_COUNTERS: Mutex<HashMap<String, u16>> = Mutex::new(HashMap::new());
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
+
+/// Raw provider response for the "json" model.
+/// Contains the JSON output alongside a `usage` block so cost JSON pointers can resolve.
+pub static DUMMY_JSON_RAW_RESPONSE: &str =
+    r#"{"answer":"Hello","usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}"#;
 pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
 pub static DUMMY_JSON_RESPONSE_RAW_DIFF_SCHEMA: &str = r#"{"response":"Hello"}"#;
 pub static DUMMY_JSON_COT_RESPONSE_RAW: &str =
@@ -650,7 +662,9 @@ impl InferenceProvider for DummyProvider {
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = match self.model_name.as_str() {
+            "tool" => DUMMY_TOOL_RAW_RESPONSE.clone(),
             "good_tool" => r#"{"sentiment":"positive","confidence":0.95}"#.to_string(),
+            "json" => DUMMY_JSON_RAW_RESPONSE.to_string(),
             "json_goodbye" => DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string(),
             "json_cot" => DUMMY_JSON_COT_RESPONSE_RAW.to_string(),
             #[expect(clippy::unwrap_used)]

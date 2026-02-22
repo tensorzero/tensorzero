@@ -1247,6 +1247,7 @@ fn create_stream(
         // Then, send all chunks but strip usage and finish reason
         let mut usages: Vec<Usage> = vec![];
         let mut finish_reasons: Vec<FinishReason> = vec![];
+        let mut cost_raw_chunks: Vec<String> = vec![];
         let mut inference_ttft = None;
         while let Some(chunk) = stream.next().await {
             let mut chunk = match chunk {
@@ -1262,16 +1263,10 @@ fn create_stream(
                 inference_ttft = Some(metadata.start_time.elapsed());
             }
 
-            // Strip usage and compute cost per-chunk
-            if let Some(mut u) = chunk.usage().copied() {
-                if !metadata.cached
-                    && let Some(ref cost_config) = metadata.cost_config
-                {
-                    u.cost = crate::cost::compute_cost(
-                        chunk.raw_chunk(),
-                        cost_config,
-                        crate::cost::ResponseMode::Streaming,
-                    );
+            // Strip usage and collect raw chunks for post-loop cost computation
+            if let Some(u) = chunk.usage().copied() {
+                if !metadata.cached && metadata.cost_config.is_some() {
+                    cost_raw_chunks.push(chunk.raw_chunk().to_string());
                 }
                 usages.push(u);
                 chunk.set_usage(None);
@@ -1299,7 +1294,14 @@ fn create_stream(
 
         // If we saw multiple chunks with `usage`, compute the field-wise max and warn if they are non-cumulative
         // This is the current model's usage (used for database storage)
-        let model_inference_usage = aggregate_usage_from_single_streaming_model_inference(usages);
+        let mut model_inference_usage = aggregate_usage_from_single_streaming_model_inference(usages);
+
+        // Compute cost from all collected raw chunks (handles both cumulative and split-usage providers)
+        if let Some(ref cost_config) = metadata.cost_config {
+            let chunk_refs: Vec<&str> = cost_raw_chunks.iter().map(|s| s.as_str()).collect();
+            model_inference_usage.cost =
+                crate::cost::compute_cost_from_streaming_chunks(&chunk_refs, cost_config);
+        }
 
         // Then add the usage from previous inferences (e.g. best-of-N candidates)
         // This is the total usage for the TensorZero inference

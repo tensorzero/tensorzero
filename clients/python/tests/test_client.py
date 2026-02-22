@@ -3441,7 +3441,7 @@ def test_sync_include_original_response_json(sync_client: TensorZeroGateway):
     assert isinstance(response, JsonInferenceResponse)
     assert (
         response.original_response
-        == '{\n  "id": "id",\n  "object": "text.completion",\n  "created": 1618870400,\n  "model": "text-davinci-002",\n  "choices": [\n    {\n      "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",\n      "index": 0,\n      "logprobs": null,\n      "finish_reason": null\n    }\n  ],\n  "usage": {\n    "prompt_tokens": 10,\n    "completion_tokens": 10,\n    "total_tokens": 20\n  }\n}'
+        == '{"answer":"Hello","usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}'
     )
 
 
