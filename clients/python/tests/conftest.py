@@ -68,11 +68,9 @@ def embedded_sync_client():
 
 @pytest.fixture
 def embedded_sync_client_using_postgres():
-    original_enable_postgres_read_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ", None)
-    original_enable_postgres_write_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE", None)
+    original_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE", None)
 
-    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ"] = "1"
-    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE"] = "1"
+    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"] = "1"
 
     with TensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
@@ -81,13 +79,10 @@ def embedded_sync_client_using_postgres():
     ) as client:
         yield client
 
-    # Reset flags
-    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ", None)
-    if original_enable_postgres_read_flag:
-        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ"] = original_enable_postgres_read_flag
-    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE", None)
-    if original_enable_postgres_write_flag:
-        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE"] = original_enable_postgres_write_flag
+    # Reset flag
+    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE", None)
+    if original_flag:
+        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"] = original_flag
 
 
 @pytest_asyncio.fixture

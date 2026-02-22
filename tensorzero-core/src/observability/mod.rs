@@ -1190,6 +1190,13 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
             }),
         }
     };
+
+    // This is needed for for the `redis` crate to work in HTTPs mode
+    // We call this in `setup_observability` since this is an 'application'-style
+    // entrypoint (e.g. any eventual external consumers of the Rust client will
+    // *not* call this, allowing the top-level application to decide the crypto provider.)
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
     Ok(ObservabilityHandle {
         delayed_otel,
         delayed_debug_logs,

@@ -130,6 +130,7 @@
               "deployment/postgres",
               "deployment/valkey-redis",
               "deployment/tensorzero-autopilot",
+              "deployment/upgrade-tensorzero",
               "deployment/optimize-latency-and-throughput"
             ]
           },

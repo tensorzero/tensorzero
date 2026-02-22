@@ -13,7 +13,9 @@ use tensorzero::{GetInferencesRequest, GetInferencesResponse};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_inferences tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetInferencesToolParams {
     /// Request parameters for getting inferences by ID.
     #[serde(flatten)]
@@ -31,6 +33,16 @@ impl ToolMetadata for GetInferencesTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GetInferencesResponse;
     type LlmParams = GetInferencesToolParams;
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::GET_INFERENCES_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::GET_INFERENCES_RESPONSE
+    }
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("get_inferences")

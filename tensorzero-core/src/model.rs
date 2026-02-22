@@ -26,6 +26,7 @@ use crate::config::with_skip_credential_validation;
 use crate::config::{
     Namespace, OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
+use crate::cost::{CostConfig, load_cost_config};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
@@ -35,6 +36,7 @@ use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use tensorzero_types::UninitializedCostConfig;
 
 use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
@@ -138,6 +140,15 @@ impl UninitializedModelConfig {
                 } else {
                     load_future.await
                 };
+                let cost = provider
+                    .cost
+                    .map(load_cost_config)
+                    .transpose()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!("models.{model_name}.providers.{name}.cost: {e}"),
+                        })
+                    })?;
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
@@ -151,6 +162,7 @@ impl UninitializedModelConfig {
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
                         discard_unknown_chunks: provider.discard_unknown_chunks,
+                        cost,
                     },
                 ))
             }
@@ -970,6 +982,9 @@ pub struct UninitializedModelProvider {
     /// By default, unknown chunks are forwarded as-is in the stream.
     #[serde(default)]
     pub discard_unknown_chunks: bool,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<UninitializedCostConfig>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -985,6 +1000,9 @@ pub struct ModelProvider {
     pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
     pub discard_unknown_chunks: bool,
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<CostConfig>,
 }
 
 impl ModelProvider {
@@ -2846,6 +2864,7 @@ impl ShorthandModelConfig for ModelConfig {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -2960,6 +2979,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3047,6 +3067,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3090,6 +3111,7 @@ mod tests {
             extra_headers: Default::default(),
             timeouts: Default::default(),
             discard_unknown_chunks: false,
+            cost: None,
         };
 
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
@@ -3263,6 +3285,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
                 (
@@ -3274,6 +3297,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
             ]),
@@ -3351,6 +3375,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3441,6 +3466,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3522,6 +3548,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
                 (
@@ -3533,6 +3560,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
             ]),
@@ -3632,6 +3660,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3769,6 +3798,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3927,6 +3957,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),

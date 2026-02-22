@@ -8,4 +8,6 @@ export type TrackAndStopConfig = {
   delta: number;
   epsilon: number;
   min_prob: number | null;
+  max_samples_per_variant?: bigint;
+  namespace?: string;
 };

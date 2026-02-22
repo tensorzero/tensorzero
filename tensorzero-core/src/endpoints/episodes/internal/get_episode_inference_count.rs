@@ -2,7 +2,7 @@ use crate::{
     config::Config,
     db::inferences::{CountInferencesParams, InferenceQueries},
     error::Error,
-    feature_flags::ENABLE_POSTGRES_READ,
+    feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE,
     utils::gateway::{AppState, AppStateData},
 };
 use axum::{
@@ -33,7 +33,7 @@ pub async fn get_episode_inference_count_handler(
     State(app_state): AppState,
     Path(episode_id): Path<Uuid>,
 ) -> Result<Json<GetEpisodeInferenceCountResponse>, Error> {
-    let stats = if ENABLE_POSTGRES_READ.get() {
+    let stats = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
         get_episode_inference_count(
             &app_state.config,
             &app_state.postgres_connection_info,

@@ -13,7 +13,6 @@ JSONL_FILES=(
     "boolean_metric_feedback_examples.jsonl"
     "float_metric_feedback_examples.jsonl"
     "demonstration_feedback_examples.jsonl"
-    "model_inference_cache_e2e.jsonl"
     "json_inference_datapoint_examples.jsonl"
     "chat_inference_datapoint_examples_20260129.jsonl"
     "dynamic_evaluation_run_episode_examples.jsonl"

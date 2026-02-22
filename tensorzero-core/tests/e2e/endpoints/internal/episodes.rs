@@ -115,16 +115,10 @@ async fn test_query_episode_table_limit_zero() {
     let url = get_gateway_endpoint("/internal/episodes?limit=0");
 
     let resp = http_client.get(url).send().await.unwrap();
-    assert!(
-        resp.status().is_success(),
-        "query_episode_table with limit=0 request failed: status={:?}",
-        resp.status()
-    );
-
-    let response: ListEpisodesResponse = resp.json().await.unwrap();
-    assert!(
-        response.episodes.is_empty(),
-        "Expected empty result for limit=0"
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "query_episode_table with limit=0 should return 400"
     );
 }
 

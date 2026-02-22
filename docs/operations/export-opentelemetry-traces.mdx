@@ -236,9 +236,38 @@ This will attach the headers `user-id: user-123` and `request-source: mobile-app
 
 ### Send custom OpenTelemetry attributes
 
-You can attach custom span attributes using headers prefixed with `tensorzero-otlp-traces-extra-attribute-`.
+You can attach custom span attributes to OTLP trace exports.
 The values must be valid JSON; TensorZero currently supports strings and booleans only.
-For example:
+
+<Tabs>
+
+<Tab title="Python (TensorZero SDK)">
+
+When using the TensorZero Python SDK, you can pass custom attributes using the `otlp_traces_extra_attributes` parameter:
+
+```python
+response = t0.inference(
+    function_name="your_function_name",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": "Write a haiku about TensorZero.",
+            }
+        ]
+    },
+    otlp_traces_extra_attributes={
+        "user_id": "\"user-123\"",
+        "is_premium": "true",
+    },
+)
+```
+
+</Tab>
+
+<Tab title="HTTP">
+
+When making a request to a TensorZero HTTP endpoint, add headers prefixed with `tensorzero-otlp-traces-extra-attribute-`:
 
 ```bash
 curl -X POST http://localhost:3000/inference \
@@ -247,16 +276,52 @@ curl -X POST http://localhost:3000/inference \
   -d '{ ... }'
 ```
 
+</Tab>
+
+</Tabs>
+
 ### Send custom OpenTelemetry resources
 
-You can attach custom resource attributes using headers prefixed with `tensorzero-otlp-traces-extra-resource-`.
-For example:
+You can attach custom resource attributes to OTLP trace exports.
+
+<Tabs>
+
+<Tab title="Python (TensorZero SDK)">
+
+When using the TensorZero Python SDK, you can pass custom resources using the `otlp_traces_extra_resources` parameter:
+
+```python
+response = t0.inference(
+    function_name="your_function_name",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": "Write a haiku about TensorZero.",
+            }
+        ]
+    },
+    otlp_traces_extra_resources={
+        "service.namespace": "production",
+    },
+)
+```
+
+</Tab>
+
+<Tab title="HTTP">
+
+When making a request to a TensorZero HTTP endpoint, add headers prefixed with `tensorzero-otlp-traces-extra-resource-`:
 
 ```bash
 curl -X POST http://localhost:3000/inference \
   -H "tensorzero-otlp-traces-extra-resource-service.namespace: production" \
   -d '{ ... }'
 ```
+
+</Tab>
+
+</Tabs>
 
 ### Link to existing traces with `traceparent`
 
