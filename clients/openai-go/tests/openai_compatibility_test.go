@@ -98,7 +98,7 @@ func overrideUserMessage(t *testing.T, data map[string]interface{}) openai.ChatC
 	return param.Override[openai.ChatCompletionUserMessageParam](json.RawMessage(jsonData))
 }
 
-func sendRequestTzGateway(t *testing.T, body map[string]interface{}) (map[string]interface{}, error) {
+func sendRequestT0Gateway(t *testing.T, body map[string]interface{}) (map[string]interface{}, error) {
 	// Send a request to the TensorZero gateway
 	t.Helper()
 	url := "http://127.0.0.1:3000/openai/v1/chat/completions"
@@ -1658,7 +1658,7 @@ func TestToolCallingInference(t *testing.T) {
 		}
 
 		// Initial request
-		firstResponse, err := sendRequestTzGateway(t, firstRequestBody)
+		firstResponse, err := sendRequestT0Gateway(t, firstRequestBody)
 		require.NoError(t, err, "First API request failed")
 
 		// Validate the assistant's response
@@ -1702,7 +1702,7 @@ func TestToolCallingInference(t *testing.T) {
 			"tensorzero::variant_name": "openai",
 		}
 
-		secondResponse, err := sendRequestTzGateway(t, secondRequestBody)
+		secondResponse, err := sendRequestT0Gateway(t, secondRequestBody)
 		require.NoError(t, err, "Second request failed")
 
 		finalAssistantMessage := secondResponse["choices"].([]interface{})[0].(map[string]interface{})["message"].(map[string]interface{})
