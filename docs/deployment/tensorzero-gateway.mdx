@@ -162,7 +162,7 @@ We recommend setting up observability early to monitor your LLM application and 
 
 ### Customize the bind address and port
 
-By default, the gateway binds to `[::]:3000`.
+By default, the gateway binds to `0.0.0.0:3000`.
 You can customize the bind address and port in the configuration ([`gateway.bind_address`](/gateway/configuration-reference#bind_address)), with the `--bind-address` CLI flag, or with the `TENSORZERO_GATEWAY_BIND_ADDRESS` environment variable.
 Only one of these methods can be used at a time.
 
