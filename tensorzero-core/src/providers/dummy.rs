@@ -650,10 +650,7 @@ impl InferenceProvider for DummyProvider {
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = match self.model_name.as_str() {
-            #[expect(clippy::unwrap_used)]
-            "tool" => serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
             "good_tool" => r#"{"sentiment":"positive","confidence":0.95}"#.to_string(),
-            "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
             "json_goodbye" => DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string(),
             "json_cot" => DUMMY_JSON_COT_RESPONSE_RAW.to_string(),
             #[expect(clippy::unwrap_used)]

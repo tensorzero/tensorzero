@@ -111,7 +111,6 @@ pub struct OpenAIEmbeddingUsage {
     pub total_tokens: Option<u32>,
     #[serde(
         rename = "tensorzero::cost",
-        skip_serializing_if = "Option::is_none",
         with = "rust_decimal::serde::float_option"
     )]
     pub tensorzero_cost: Option<rust_decimal::Decimal>,

@@ -236,14 +236,11 @@ async fn test_cost_json_variant_non_streaming() {
     assert_eq!(response.status(), 200);
     let response_json: Value = response.json().await.unwrap();
 
-    // The `json` dummy model's raw_response doesn't include usage fields,
-    // so cost resolves to 0 (non-required entries default to 0 when missing).
-    // This test verifies cost flows through the JSON function type correctly.
     let usage = response_json.get("usage").unwrap().as_object().unwrap();
     let cost = usage.get("cost").unwrap().as_f64().unwrap();
     assert!(
-        cost.abs() < 1e-10,
-        "Expected cost 0 for JSON variant (no usage in raw_response), got {cost}"
+        (cost - 0.00018).abs() < 1e-10,
+        "Expected cost ~0.00018 (10*$3/M + 10*$15/M), got {cost}"
     );
 }
 
@@ -314,14 +311,11 @@ async fn test_cost_tool_use_variant_non_streaming() {
     assert_eq!(response.status(), 200);
     let response_json: Value = response.json().await.unwrap();
 
-    // The `tool` dummy model's raw_response doesn't include usage fields,
-    // so cost resolves to 0 (non-required entries default to 0 when missing).
-    // This test verifies cost flows through the tool use function type correctly.
     let usage = response_json.get("usage").unwrap().as_object().unwrap();
     let cost = usage.get("cost").unwrap().as_f64().unwrap();
     assert!(
-        cost.abs() < 1e-10,
-        "Expected cost 0 for tool use variant (no usage in raw_response), got {cost}"
+        (cost - 0.00018).abs() < 1e-10,
+        "Expected cost ~0.00018 (10*$3/M + 10*$15/M), got {cost}"
     );
 }
 
@@ -639,5 +633,85 @@ async fn test_cost_cached_streaming() {
     assert!(
         (cost).abs() < 1e-10,
         "Cached streaming response should have zero cost, got {cost}"
+    );
+}
+
+// ===== Real OpenAI Provider Tests =====
+
+#[tokio::test]
+async fn test_cost_openai_real_non_streaming() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "openai",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Say hello in one word."}]
+        },
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let response_json: Value = response.json().await.unwrap();
+
+    let usage = response_json.get("usage").unwrap().as_object().unwrap();
+    let cost = usage.get("cost").unwrap().as_f64().unwrap();
+    assert!(
+        cost > 0.0,
+        "Expected positive cost from real OpenAI provider, got {cost}"
+    );
+}
+
+#[tokio::test]
+async fn test_cost_openai_real_streaming() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "openai",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Say hello in one word."}]
+        },
+        "stream": true,
+    });
+
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .await
+        .unwrap();
+
+    let mut last_chunk = None;
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                last_chunk = Some(message.data);
+            }
+        }
+    }
+
+    let last_chunk: Value = serde_json::from_str(&last_chunk.unwrap()).unwrap();
+    let usage = last_chunk.get("usage").unwrap().as_object().unwrap();
+    let cost = usage
+        .get("cost")
+        .expect("Expected `cost` key in streaming OpenAI usage")
+        .as_f64()
+        .unwrap();
+    assert!(
+        cost > 0.0,
+        "Expected positive cost from real OpenAI streaming provider, got {cost}"
     );
 }

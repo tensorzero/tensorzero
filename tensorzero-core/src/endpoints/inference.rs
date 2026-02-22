@@ -1262,9 +1262,18 @@ fn create_stream(
                 inference_ttft = Some(metadata.start_time.elapsed());
             }
 
-            // Strip usage
-            if let Some(u) = chunk.usage() {
-                usages.push(*u);
+            // Strip usage and compute cost per-chunk
+            if let Some(mut u) = chunk.usage().copied() {
+                if !metadata.cached
+                    && let Some(ref cost_config) = metadata.cost_config
+                {
+                    u.cost = crate::cost::compute_cost(
+                        chunk.raw_chunk(),
+                        cost_config,
+                        crate::cost::ResponseMode::Streaming,
+                    );
+                }
+                usages.push(u);
                 chunk.set_usage(None);
             }
 
@@ -1290,30 +1299,7 @@ fn create_stream(
 
         // If we saw multiple chunks with `usage`, compute the field-wise max and warn if they are non-cumulative
         // This is the current model's usage (used for database storage)
-        let mut model_inference_usage = aggregate_usage_from_single_streaming_model_inference(usages);
-
-        // Compute cost from the raw streaming response using the provider's cost config.
-        // For streaming, we use the last non-empty raw_chunk, since providers include
-        // usage/cost data in the final streaming chunk (not spread across chunks).
-        // Joining all chunks would produce JSONL or mixed text, not valid JSON.
-        if !metadata.cached
-            && let Some(ref cost_config) = metadata.cost_config
-        {
-            let raw_response = metadata.raw_response.clone().unwrap_or_else(|| {
-                buffer
-                    .iter()
-                    .rev()
-                    .map(InferenceResultChunk::raw_chunk)
-                    .find(|s| !s.is_empty())
-                    .unwrap_or_default()
-                    .to_string()
-            });
-            model_inference_usage.cost = crate::cost::compute_cost(
-                &raw_response,
-                cost_config,
-                crate::cost::ResponseMode::Streaming,
-            );
-        }
+        let model_inference_usage = aggregate_usage_from_single_streaming_model_inference(usages);
 
         // Then add the usage from previous inferences (e.g. best-of-N candidates)
         // This is the total usage for the TensorZero inference

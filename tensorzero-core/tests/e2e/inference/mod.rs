@@ -761,7 +761,7 @@ async fn test_tool_call() {
     assert!(result.get("ttft_ms").unwrap().is_null());
     assert_eq!(
         result.get("raw_response").unwrap().as_str().unwrap(),
-        serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap()
+        DUMMY_INFER_RESPONSE_RAW
     );
     assert_eq!(
         result.get("raw_request").unwrap().as_str().unwrap(),
@@ -1243,7 +1243,7 @@ async fn test_inference_json_success() {
     assert!(result.get("ttft_ms").unwrap().is_null());
     assert_eq!(
         result.get("raw_response").unwrap().as_str().unwrap(),
-        DUMMY_JSON_RESPONSE_RAW
+        DUMMY_INFER_RESPONSE_RAW
     );
     assert_eq!(
         result.get("raw_request").unwrap().as_str().unwrap(),
