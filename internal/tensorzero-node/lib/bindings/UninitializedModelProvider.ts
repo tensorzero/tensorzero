@@ -115,7 +115,7 @@ export type UninitializedModelProvider = {
       type: "together";
       model_name: string;
       api_key_location: string | null;
-      parse_think_blocks: boolean;
+      parse_think_blocks?: boolean;
     }
   | {
       type: "vllm";
