@@ -842,11 +842,8 @@ impl AutopilotClient {
     /// as the starting point for `stream_workspace_tool_calls` to avoid TOCTOU bugs.
     pub async fn pending_tool_calls(
         &self,
-        workspace_id: &str,
     ) -> Result<GatewayWorkspacePendingToolCallsResponse, AutopilotError> {
-        let url = self
-            .base_url
-            .join(&format!("/v1/workspaces/{workspace_id}/pending_tool_calls"))?;
+        let url = self.base_url.join("/v1/workspace/tool_calls/pending")?;
         let response = self
             .http_client
             .get(url)
@@ -899,15 +896,12 @@ impl AutopilotClient {
     /// `NotAvailable` authorization status.
     pub async fn stream_workspace_tool_calls(
         &self,
-        workspace_id: &str,
         params: StreamWorkspaceToolCallsParams,
     ) -> Result<
         impl Stream<Item = Result<GatewayStreamUpdate, AutopilotError>> + use<>,
         AutopilotError,
     > {
-        let mut url = self
-            .base_url
-            .join(&format!("/v1/workspaces/{workspace_id}/tool_calls/stream"))?;
+        let mut url = self.base_url.join("/v1/workspace/tool_calls/stream")?;
         if let Some(last_event_id) = params.last_event_id {
             url.query_pairs_mut()
                 .append_pair("last_event_id", &last_event_id.to_string());
