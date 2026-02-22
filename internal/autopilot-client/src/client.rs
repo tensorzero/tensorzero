@@ -1104,7 +1104,7 @@ impl AutopilotClient {
         // 2. Stream new tool calls
         let stream = self
             .stream_workspace_tool_calls(StreamWorkspaceToolCallsParams {
-                last_event_id: Some(pending.last_event_id),
+                last_event_id: pending.last_event_id,
             })
             .await?;
         tokio::pin!(stream);
