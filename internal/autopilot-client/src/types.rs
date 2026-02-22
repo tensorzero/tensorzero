@@ -817,7 +817,8 @@ pub struct ListSessionsResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspacePendingToolCallsResponse {
     pub pending_tool_calls: Vec<Event>,
-    pub last_event_id: Uuid,
+    /// If there are no events in the workspace yet this should return None
+    pub last_event_id: Option<Uuid>,
 }
 
 /// Response from listing workspace pending tool calls as seen by gateway consumers.
@@ -828,7 +829,8 @@ pub struct WorkspacePendingToolCallsResponse {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GatewayWorkspacePendingToolCallsResponse {
     pub pending_tool_calls: Vec<GatewayEvent>,
-    pub last_event_id: Uuid,
+    /// If there are no events in the workspace yet this should return None
+    pub last_event_id: Option<Uuid>,
 }
 
 /// Query parameters for listing config writes.
