@@ -53,6 +53,9 @@ pub struct EvaluationRunInfo {
     pub function_name: String,
     pub variant_name: String,
     pub last_inference_timestamp: DateTime<Utc>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<String>,
 }
 
 // =============================================================================
