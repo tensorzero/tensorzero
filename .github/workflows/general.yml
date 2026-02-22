@@ -775,6 +775,9 @@ jobs:
         with:
           version: "0.9.27"
 
+      - name: Install s5cmd
+        run: curl -fsSL https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-64bit.tar.gz | sudo tar xz -C /usr/local/bin s5cmd
+
       - name: Download container images
         run: |
           docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
@@ -1064,6 +1067,9 @@ jobs:
         with:
           version: "0.9.27"
 
+      - name: Install s5cmd
+        run: curl -fsSL https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-64bit.tar.gz | sudo tar xz -C /usr/local/bin s5cmd
+
       - name: Download ClickHouse fixtures
         run: |
           uv run ./ui/fixtures/download-small-fixtures.py
@@ -1176,6 +1182,9 @@ jobs:
           version: "0.9.27"
           # Without this, the post-install hook tries to prune and save the cache, but jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be already nukes /opt/hostedtoolcache/*, so it fails.
           enable-cache: "false"
+
+      - name: Install s5cmd
+        run: curl -fsSL https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-64bit.tar.gz | sudo tar xz -C /usr/local/bin s5cmd
 
       - name: Download ClickHouse fixtures
         run: |
