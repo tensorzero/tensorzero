@@ -38,7 +38,6 @@ routing = ["fireworks"]
 [models."kimi-k2p5-fireworks".providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/kimi-k2p5"
-parse_think_blocks = false
 
 [models."gpt-oss-20b-vllm"]
 routing = ["vllm"]
