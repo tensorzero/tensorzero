@@ -2,6 +2,9 @@ name: Build UI Container
 
 on:
   workflow_call:
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
 
 jobs:
   build-ui-container:
@@ -19,6 +22,12 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
@@ -34,16 +43,22 @@ jobs:
 
       - name: Build `ui` container
         run: |
-          docker buildx build --build-arg DEBUG_BUILD=1 --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f ui/Dockerfile . -t tensorzero/ui:sha-${{ github.sha }}
+          docker buildx build --build-arg DEBUG_BUILD=1 --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f ui/Dockerfile . -t tensorzero/ui-dev:sha-${{ github.sha }}
 
-      - name: Save `ui` container
-        run: docker save tensorzero/ui:sha-${{ github.sha }} > ui-container.tar
+      - name: Push `ui` container to DockerHub
+        run: docker push tensorzero/ui-dev:sha-${{ github.sha }}
 
-      - name: Upload `ui` container as an artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        with:
-          name: build-ui-container
-          path: ui-container.tar
-          retention-days: 1
-          if-no-files-found: error
-          overwrite: false
+      - name: Wait for image to be available on Docker Hub
+        run: |
+          IMAGE="tensorzero/ui-dev:sha-${{ github.sha }}"
+          echo "Waiting for ${IMAGE} to be available on Docker Hub..."
+          for i in $(seq 1 60); do
+            if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+              echo "Image ${IMAGE} is available on Docker Hub"
+              exit 0
+            fi
+            echo "Attempt ${i}/60: Image not yet available, waiting 5s..."
+            sleep 5
+          done
+          echo "Timed out waiting for ${IMAGE} to appear on Docker Hub"
+          exit 1

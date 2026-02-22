@@ -72,27 +72,24 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
-      # Permission to download artifacts
-      actions: read
 
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          pattern: build-{gateway,ui}-container
-          merge-multiple: true
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-      - name: Load `gateway` and `ui` containers
+      - name: Pull and retag `gateway` and `ui` containers
         run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-          # Retag the loaded images to match what docker-compose expects
-          docker tag tensorzero/gateway:sha-${{ github.sha }} tensorzero/gateway:latest
-          docker tag tensorzero/ui:sha-${{ github.sha }} tensorzero/ui:latest
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:latest
+          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:latest
 
       - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
         run: |
@@ -699,9 +696,9 @@ jobs:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
     permissions:
       contents: read
-      # Permission to download artifacts and for rust-cache
+      # Permission for rust-cache
       actions: read
-      # Permission to fetch GitHub OIDC token authentication for Namespace login
+      # Permission to fetch GitHub OIDC token authentication
       id-token: write
     needs:
       [
@@ -775,16 +772,21 @@ jobs:
         with:
           version: "0.9.27"
 
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
       - name: Download container images
         run: |
-          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
           # Retag the images to what we expect the names to be
-          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download ClickHouse fixtures
@@ -936,10 +938,8 @@ jobs:
     name: "Postgres tests"
     permissions:
       contents: read
-      # Permission to download artifacts and for rust-cache
+      # Permission for rust-cache
       actions: read
-      # Permission to fetch GitHub OIDC token authentication for Namespace login
-      id-token: write
     runs-on: ubuntu-latest
     needs: [build-gateway-container, build-fixtures-container]
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
@@ -972,21 +972,19 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
-
-      - name: Login to Namespace registry
-        run: nsc docker login
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download container images
         run: |
-          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Set container image tags
@@ -1015,8 +1013,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-      # Permission to fetch GitHub OIDC token authentication for Namespace login
-      id-token: write
     needs: [build-gateway-container, build-mock-provider-api-container]
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
@@ -1055,10 +1051,6 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
-
       - name: Install uv
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
@@ -1068,16 +1060,18 @@ jobs:
         run: |
           uv run ./ui/fixtures/download-small-fixtures.py
 
-      - name: Login to Namespace registry
-        run: nsc docker login
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Download container images
         run: |
-          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
-          docker pull nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/mock-provider-api:sha-${{ github.sha }} tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Set environment variables
@@ -1131,8 +1125,6 @@ jobs:
       contents: read
       # Permission for rust-cache
       actions: read
-      # Permission to fetch GitHub OIDC token authentication for Namespace login
-      id-token: write
     needs: [build-gateway-container]
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))
@@ -1185,16 +1177,16 @@ jobs:
       - name: Cleanup disk space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
 
-      - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
-
-      - name: Login to Namespace registry
-        run: nsc docker login
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
       - name: Download container images
         run: |
-          docker pull nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }}
-          docker tag nscr.io/igvf4asmf8kri/gateway:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
@@ -1271,6 +1263,8 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-ui-container:
     uses: ./.github/workflows/build-ui-container.yml
@@ -1279,6 +1273,8 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-mock-provider-api-container:
     uses: ./.github/workflows/build-mock-provider-api-container.yml
@@ -1287,6 +1283,8 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-fixtures-container:
     uses: ./.github/workflows/build-fixtures-container.yml
@@ -1308,6 +1306,7 @@ jobs:
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
     secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     needs: [build-gateway-container, build-mock-provider-api-container]
@@ -1329,39 +1328,39 @@ jobs:
         build-fixtures-container,
       ]
     secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
       FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
       FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
-      S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
 
   check-production-deployment-docker-compose:
     needs: [build-gateway-container]
     permissions:
       contents: read
-      # Permission to download artifacts
-      actions: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Download gateway container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          name: build-gateway-container
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-      - name: Load gateway container
+      - name: Pull and retag gateway container
         run: |
-          docker load < gateway-container.tar
-          docker tag tensorzero/gateway:sha-${{ github.sha }} tensorzero/gateway:latest
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:latest
 
       - name: Launch ClickHouse container for E2E tests
         run: |
@@ -1426,6 +1425,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/minikube.yml
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   mocked-batch-tests:
     permissions:
