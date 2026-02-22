@@ -306,10 +306,12 @@ impl JobHandle for FireworksSFTJobHandle {
                             extra_body: None,
                             timeouts: TimeoutsConfig::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: TimeoutsConfig::default(),
                     skip_relay: None,
+                    namespace: None,
                 }),
             };
             if !self.deploy_after_training {

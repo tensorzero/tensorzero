@@ -25,7 +25,7 @@ use futures::StreamExt;
 use image::{ImageFormat, ImageReader};
 use object_store::path::Path;
 
-use rand::Rng;
+use rand::RngExt;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
@@ -2087,11 +2087,17 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
     } else {
         raw_request_val.get("temperature")
     };
+    // Azure reasoning models only support temperature=1
+    let expected_temp = if provider.variant_name.contains("azure") {
+        1.0
+    } else {
+        0.123
+    };
     assert_eq!(
         temp.expect("Missing temperature")
             .as_f64()
             .expect("Temperature is not a number"),
-        0.123
+        expected_temp
     );
 }
 
@@ -2155,6 +2161,15 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "variant_name": provider.variant_name,
                 "pointer": "/temperature",
                 "value": 0.5
+            }
+        ])
+    } else if provider.variant_name.contains("azure") {
+        // Azure reasoning models only support temperature=1
+        json!([
+            {
+                "variant_name": provider.variant_name,
+                "pointer": "/temperature",
+                "value": 1
             }
         ])
     } else {
@@ -2296,6 +2311,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     let raw_request_val: serde_json::Value = serde_json::from_str::<Value>(raw_request).unwrap();
+    let is_azure_reasoning = provider.variant_name.contains("azure");
     let temp = if provider.variant_name.contains("aws-bedrock") {
         raw_request_val
             .get("inferenceConfig")
@@ -2313,17 +2329,20 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     } else {
         raw_request_val.get("temperature")
     };
+    // Azure reasoning models only support temperature=1
+    let expected_temp = if is_azure_reasoning { 1.0 } else { 0.5 };
     assert_eq!(
         temp.expect("Missing temperature")
             .as_f64()
             .expect("Temperature is not a number"),
-        0.5
+        expected_temp
     );
 
     // Skip top_p check for Claude models since they don't allow both temperature and top_p
     // to be specified at the same time.
+    // Also skip for Azure reasoning models which only support temperature=1 and no top_p.
     let is_claude_model = provider.model_name.to_lowercase().contains("claude");
-    if !is_claude_model {
+    if !is_claude_model && !is_azure_reasoning {
         let top_p = if provider.model_provider_name == "aws_bedrock" {
             raw_request_val.get("inferenceConfig").unwrap().get("top_p")
         } else if provider.model_provider_name == "google_ai_studio_gemini"
@@ -2642,13 +2661,15 @@ pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2
     // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
     // * Some AWS Bedrock models error when the last message is an assistant message
     // * Azure AI foundry seems to ignore trailing assistant messages
+    // * Azure gpt-5-mini with reasoning ignores trailing assistant messages
     // * xAI seems to also ignore them
     // * Hyperbolic seems to ignore these params
     // * Fireworks kimi-k2p5 ignores trailing assistant messages
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name == "aws_sagemaker"
         || provider.model_provider_name == "aws_bedrock"
-        || provider.variant_name == "azure-ai-foundry"
+        || provider.variant_name == "azure"
+        || provider.variant_name == "azure-kimi"
         || provider.variant_name == "hyperbolic"
         || provider.variant_name == "xai"
         || provider.variant_name == "fireworks"
@@ -3851,6 +3872,13 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     } else {
         UnfilteredInferenceExtraHeaders::default()
     };
+    // Disable cache on the first request to guarantee a miss regardless of prior test runs.
+    // The second request enables cache to populate it, then test the hit path.
+    let cache_options = if assert_response_is_cached {
+        json!({"enabled": "on", "lookback_s": 10})
+    } else {
+        json!({"enabled": "write_only"})
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -3867,7 +3895,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "stream": true,
         "include_original_response": include_original_response,
         "tags": {"key": tag_value},
-        "cache_options": {"enabled": "on", "lookback_s": 10},
+        "cache_options": cache_options,
         "extra_headers": extra_headers.extra_headers,
     });
 
@@ -3907,7 +3935,8 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         println!("API response chunk: {chunk_json:#?}");
 
         // The `original_chunk` field should only be set if we enable the `include_original_response` flag
-        if include_original_response {
+        // and the response is not cached (cached responses suppress raw provider data).
+        if include_original_response && !assert_response_is_cached {
             // The last chunk might be a usage chunk generated by TensorZero
             // (if the original stream didn't report usage), so don't check it
             if i != chunks.len() - 1 {
@@ -4142,7 +4171,14 @@ pub async fn test_inference_params_dynamic_credentials_inference_request_with_pr
     } else {
         120
     };
-    let chat_completion_params = if is_claude_model {
+    let is_azure_reasoning = provider.variant_name.contains("azure");
+    let chat_completion_params = if is_azure_reasoning {
+        // Azure gpt-5-mini with reasoning only supports seed and max_tokens
+        json!({
+            "seed": 1337,
+            "max_tokens": 1024,
+        })
+    } else if is_claude_model {
         json!({
             "temperature": 0.9,
             "seed": 1337,
@@ -4303,12 +4339,7 @@ pub async fn check_inference_params_response(
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    let temperature = inference_params
-        .get("temperature")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(temperature, 0.9);
+    let is_azure_reasoning = provider.variant_name.contains("azure");
     let seed = inference_params.get("seed").unwrap().as_u64().unwrap();
     assert_eq!(seed, 1337);
     let max_tokens = inference_params
@@ -4316,30 +4347,41 @@ pub async fn check_inference_params_response(
         .unwrap()
         .as_u64()
         .unwrap();
-    let expected_max_tokens: u64 = if provider.model_name.contains("kimi-k2p5") {
+    let expected_max_tokens: u64 = if is_azure_reasoning {
+        1024
+    } else if provider.model_name.contains("kimi-k2p5") {
         1500
     } else {
         120
     };
     assert_eq!(max_tokens, expected_max_tokens);
-    // Skip top_p check for Claude models since they don't allow both temperature and top_p
-    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
-    if !is_claude_model {
-        let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
-        assert_eq!(top_p, 0.9);
+    // Azure reasoning models only support seed and max_tokens
+    if !is_azure_reasoning {
+        let temperature = inference_params
+            .get("temperature")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        assert_eq!(temperature, 0.9);
+        // Skip top_p check for Claude models since they don't allow both temperature and top_p
+        let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+        if !is_claude_model {
+            let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
+            assert_eq!(top_p, 0.9);
+        }
+        let presence_penalty = inference_params
+            .get("presence_penalty")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        assert_eq!(presence_penalty, 0.1);
+        let frequency_penalty = inference_params
+            .get("frequency_penalty")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        assert_eq!(frequency_penalty, 0.2);
     }
-    let presence_penalty = inference_params
-        .get("presence_penalty")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(presence_penalty, 0.1);
-    let frequency_penalty = inference_params
-        .get("frequency_penalty")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(frequency_penalty, 0.2);
 
     if is_batch {
         assert!(result.get("processing_time_ms").unwrap().is_null());
@@ -4434,7 +4476,14 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
     } else {
         120
     };
-    let chat_completion_params = if is_claude_model {
+    let is_azure_reasoning = provider.variant_name.contains("azure");
+    let chat_completion_params = if is_azure_reasoning {
+        // Azure gpt-5-mini with reasoning only supports seed and max_tokens
+        json!({
+            "seed": 1337,
+            "max_tokens": 1024,
+        })
+    } else if is_claude_model {
         json!({
             "temperature": 0.9,
             "seed": 1337,
@@ -4598,12 +4647,6 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    let temperature = inference_params
-        .get("temperature")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(temperature, 0.9);
     let seed = inference_params.get("seed").unwrap().as_u64().unwrap();
     assert_eq!(seed, 1337);
     let max_tokens = inference_params
@@ -4611,30 +4654,41 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
         .unwrap()
         .as_u64()
         .unwrap();
-    let expected_max_tokens: u64 = if provider.model_name.contains("kimi-k2p5") {
+    let expected_max_tokens: u64 = if is_azure_reasoning {
+        1024
+    } else if provider.model_name.contains("kimi-k2p5") {
         1500
     } else {
         120
     };
     assert_eq!(max_tokens, expected_max_tokens);
-    // Skip top_p check for Claude models since they don't allow both temperature and top_p
-    let is_claude_model = provider.model_name.to_lowercase().contains("claude");
-    if !is_claude_model {
-        let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
-        assert_eq!(top_p, 0.9);
+    // Azure reasoning models only support seed and max_tokens
+    if !is_azure_reasoning {
+        let temperature = inference_params
+            .get("temperature")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        assert_eq!(temperature, 0.9);
+        // Skip top_p check for Claude models since they don't allow both temperature and top_p
+        let is_claude_model = provider.model_name.to_lowercase().contains("claude");
+        if !is_claude_model {
+            let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
+            assert_eq!(top_p, 0.9);
+        }
+        let presence_penalty = inference_params
+            .get("presence_penalty")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        assert_eq!(presence_penalty, 0.1);
+        let frequency_penalty = inference_params
+            .get("frequency_penalty")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        assert_eq!(frequency_penalty, 0.2);
     }
-    let presence_penalty = inference_params
-        .get("presence_penalty")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(presence_penalty, 0.1);
-    let frequency_penalty = inference_params
-        .get("frequency_penalty")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(frequency_penalty, 0.2);
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -9261,7 +9315,8 @@ pub async fn test_stop_sequences_inference_request_with_provider(
     client: &tensorzero::Client,
 ) {
     // OpenAI Responses doesn't support stop sequences
-    if provider.variant_name == "openai-responses" {
+    // Azure reasoning models don't support stop sequences
+    if provider.variant_name == "openai-responses" || provider.variant_name.contains("azure") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -11537,12 +11592,15 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let is_azure_reasoning = provider.variant_name.contains("azure");
     let max_tokens = if provider.model_name.contains("gemini-2.5-pro") {
         500
     } else if provider.model_name.starts_with("o1") {
         1000
     } else if provider.model_name.contains("kimi-k2p5") {
         1500
+    } else if is_azure_reasoning {
+        1024
     } else {
         100
     };

@@ -296,12 +296,13 @@ impl Variant for DiclConfig {
         // Refactored function call using the struct
         let mut inference_response = infer_model_request(args).await?;
 
-        // Add the embedding to the model inference results
+        // Add the embedding to the model inference results (at the beginning, so embedding
+        // entries appear before LLM entries in raw_response)
         inference_response
             .mut_model_inference_results()
             // This can only fail if the embedding response has a request with > 1 input,
             // which should never happen as we only send one input at a time
-            .push(embedding_response.try_into()?);
+            .insert(0, embedding_response.try_into()?);
         Ok(inference_response)
     }
 

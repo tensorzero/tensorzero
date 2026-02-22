@@ -1,0 +1,156 @@
+[functions.json_math]
+type = "json"
+schemas.system.path = "../../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../../fixtures/config/functions/basic_test/output_schema.json"
+
+[functions.json_math.variants.anthropic-haiku-4-5-thinking]
+type = "chat_completion"
+model = "claude-haiku-4-5-thinking"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "strict"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
+[functions.json_math.variants.anthropic-sonnet-4-6-reasoning]
+type = "chat_completion"
+model = "claude-sonnet-4-6"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "strict"
+max_tokens = 2048
+reasoning_effort = "low"
+
+[functions.json_math.variants.aws-bedrock-thinking]
+type = "chat_completion"
+model = "claude-sonnet-4-5-thinking-aws-bedrock"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+# AWS Bedrock doesn't support structured outputs yet, so use json_mode=off to avoid prefill conflicts with thinking
+json_mode = "off"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
+[functions.json_math.variants.gcp-vertex-anthropic-thinking]
+type = "chat_completion"
+model = "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+# GCP Vertex AI doesn't support structured outputs yet, so use json_mode=off to avoid prefill conflicts with thinking
+json_mode = "off"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
+[functions.json_math.variants.gcp-vertex-gemini-pro-thinking]
+type = "chat_completion"
+model = "gcp-gemini-2.5-pro-thinking"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 500
+# Set to minimum value to speed up tests and save tokens
+thinking_budget_tokens = 128
+
+[functions.json_math.variants.openai-gpt-5-mini]
+type = "chat_completion"
+model = "gpt-5-mini-responses"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+
+[functions.json_math.variants.groq-reasoning]
+type = "chat_completion"
+model = "groq-qwen3-32b"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 500
+
+[functions.json_math.variants.groq-reasoning-usage]
+type = "chat_completion"
+model = "groq-gpt-oss-20b"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "off"
+max_tokens = 500
+
+[functions.json_math.variants.deepseek-reasoner]
+type = "chat_completion"
+model = "deepseek-reasoner"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "off"
+max_tokens = 800
+
+[functions.json_math.variants.together-deepseek-r1]
+type = "chat_completion"
+model = "together-deepseek-r1"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "off"
+max_tokens = 800
+
+[functions.json_math.variants.mistral-reasoning]
+type = "chat_completion"
+model = "magistral-small-latest"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "off"
+max_tokens = 800
+
+[functions.json_math.variants.sglang-reasoning]
+type = "chat_completion"
+model = "Qwen/Qwen3-1.7B"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 1024
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true }]
+
+[functions.json_math.variants.vllm-reasoning]
+type = "chat_completion"
+model = "qwen3-1.7b-vllm"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 1024
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true }]
+
+[functions.json_math.variants.openrouter-grok-reasoning]
+type = "chat_completion"
+model = "grok-code-fast-1-openrouter"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+reasoning_effort = "low"
+
+[functions.json_math.variants.openrouter-claude-reasoning]
+type = "chat_completion"
+model = "claude-haiku-4-5-openrouter"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
+[functions.json_math.variants.xai-reasoning]
+type = "chat_completion"
+model = "grok-code-fast-1"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 800
+
+[functions.json_math.variants.fireworks-kimi-k2p5-reasoning]
+type = "chat_completion"
+model = "kimi-k2p5-fireworks-reasoning"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "off"
+max_tokens = 800
+
+[functions.json_math.variants.fireworks-kimi-k2p5]
+type = "chat_completion"
+model = "kimi-k2p5-fireworks"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "off"
+max_tokens = 1500
+
+[functions.json_math.variants.google-ai-studio-gemini-3-flash]
+type = "chat_completion"
+model = "gemini-3-flash"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 1000
+
+[functions.json_math.variants.google-ai-studio-gemini-2_5-pro]
+type = "chat_completion"
+model = "gemini-2.5-pro"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "on"
+max_tokens = 500

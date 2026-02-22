@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { Await } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
+import { HelpTooltip, docsUrl } from "~/components/ui/HelpTooltip";
 import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
 import { FunctionExperimentation } from "./FunctionExperimentation";
 import type { FunctionConfig } from "~/types/tensorzero";
@@ -22,7 +23,19 @@ export function ExperimentationSection({
 }: ExperimentationSectionProps) {
   return (
     <SectionLayout>
-      <SectionHeader heading="Experimentation" />
+      <SectionHeader
+        heading="Experimentation"
+        help={
+          <HelpTooltip
+            link={{
+              href: docsUrl("experimentation/run-static-ab-tests"),
+            }}
+          >
+            How traffic is distributed across variants. Weights represent the
+            probability each variant is selected for an inference.
+          </HelpTooltip>
+        }
+      />
       <Suspense
         key={`experimentation-${locationKey}`}
         fallback={<Skeleton className="h-32 w-full" />}

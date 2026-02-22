@@ -270,10 +270,12 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 )]),
                 timeouts: Default::default(),
                 skip_relay: false,
+                namespace: None,
             },
         )]);
 

@@ -1097,8 +1097,8 @@ class DatapointOrderBySearchRelevance:
     Relevance score of the search query in the input and output of the datapoint.
     Requires a search query (experimental). If it's not provided, we return an error.
 
-    Current relevance metric is very rudimentary (just term frequency), but we plan
-    to improve it in the future.
+    NOTE: Relevance ordering is not yet implemented for Postgres and currently
+    falls back to id ordering. See TODO(#6441).
     """
 
     direction: OrderDirection
@@ -1295,8 +1295,8 @@ class OrderBySearchRelevance:
     Relevance score of the search query in the input and output of the item.
     Requires a search query (experimental). If it's not provided, we return an error.
 
-    Current relevance metric is very rudimentary (just term frequency), but we plan
-    to improve it in the future.
+    NOTE: Relevance ordering is not yet implemented for Postgres and currently
+    falls back to id ordering. See TODO(#6441).
     """
 
     direction: OrderDirection
@@ -1693,6 +1693,7 @@ class StoredJsonInference:
     output: JsonInferenceOutput | None = None
     output_schema: Any | None = None
     processing_time_ms: int | None = None
+    snapshot_hash: str | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
     ttft_ms: int | None = None
 
@@ -2050,6 +2051,7 @@ class StoredChatInference:
     """
     Provider-specific tool configurations
     """
+    snapshot_hash: str | None = None
     tags: dict[str, str] | None = field(default_factory=lambda: {})
     tool_choice: ToolChoice | None = None
     """

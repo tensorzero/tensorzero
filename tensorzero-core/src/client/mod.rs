@@ -1288,7 +1288,8 @@ mod tests {
     use crate::feature_flags;
     use tempfile::NamedTempFile;
     #[tokio::test]
-    async fn test_missing_clickhouse() {
+    async fn test_gateway_fails_to_start_with_observability_and_missing_clickhouse_url() {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
@@ -1304,9 +1305,55 @@ mod tests {
         .expect_err("ClientBuilder should have failed");
         let err_msg = err.to_string();
         assert!(
-            err_msg.contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"),
+            err_msg.contains("Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"),
             "Bad error message: {err_msg}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_gateway_fails_to_start_with_observability_and_missing_postgres_url_and_postgres_primary()
+     {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
+        // With Postgres as primary datastore and observability enabled,
+        // the gateway should fail to start without a Postgres connection.
+        let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
+            clickhouse_url: None,
+            postgres_config: None,
+            valkey_url: None,
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .expect_err("Should fail without Postgres when it is the primary datastore and observability is enabled");
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"),
+            "error should mention the feature flag: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_gateway_starts_with_observability_and_postgres_connection_and_postgres_primary() {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
+        // With Postgres as primary datastore and a Postgres connection provided,
+        // the gateway should start even without ClickHouse.
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
+            clickhouse_url: None,
+            postgres_config: Some(PostgresConfig::ExistingConnectionInfo(
+                PostgresConnectionInfo::new_mock(true),
+            )),
+            valkey_url: None,
+            timeout: None,
+            verify_credentials: true,
+            allow_batch_writes: true,
+        })
+        .build()
+        .await
+        .expect("Embedded gateway should start with Postgres when it is the primary datastore");
     }
 
     #[tokio::test]
@@ -1446,6 +1493,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_log_no_clickhouse() {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
@@ -1470,6 +1518,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_log_no_config() {
+        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,

@@ -33,7 +33,7 @@ impl BatchInferenceQueries for ClickHouseConnectionInfo {
                         snapshot_hash
                     FROM BatchRequest
                     WHERE batch_id = {batch_id:UUID}
-                    ORDER BY timestamp DESC
+                    ORDER BY toUInt128(id) DESC
                     LIMIT 1
                     FORMAT JSONEachRow
                 "
@@ -59,7 +59,7 @@ impl BatchInferenceQueries for ClickHouseConnectionInfo {
                     FROM BatchIdByInferenceId bi
                     JOIN BatchRequest br ON bi.batch_id = br.batch_id
                     WHERE bi.inference_id = {inference_id:UUID} AND bi.batch_id = {batch_id:UUID}
-                    ORDER BY br.timestamp DESC
+                    ORDER BY toUInt128(br.id) DESC
                     LIMIT 1
                     FORMAT JSONEachRow
                 "
@@ -379,7 +379,7 @@ mod tests {
                         snapshot_hash
                     FROM BatchRequest
                     WHERE batch_id = {batch_id:UUID}
-                    ORDER BY timestamp DESC
+                    ORDER BY toUInt128(id) DESC
                     LIMIT 1",
                 );
                 assert_query_does_not_contain(query, "BatchIdByInferenceId");

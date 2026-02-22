@@ -5,4 +5,5 @@ mod delete_datapoints;
 mod delete_dataset;
 mod get_datapoints;
 mod list_datasets;
+mod tool_params_round_trip;
 mod update_datapoints;

@@ -24,8 +24,9 @@ use crate::cache::{
 };
 use crate::config::with_skip_credential_validation;
 use crate::config::{
-    OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
+    Namespace, OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
+use crate::cost::{CostConfig, load_cost_config};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
@@ -35,6 +36,7 @@ use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use tensorzero_types::UninitializedCostConfig;
 
 use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
@@ -88,19 +90,24 @@ pub struct ModelConfig {
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
     pub timeouts: TimeoutsConfig,
     pub skip_relay: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub namespace: Option<Namespace>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, UninitializedModelProvider>, // provider name => provider config
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_relay: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<Namespace>,
 }
 
 impl UninitializedModelConfig {
@@ -133,6 +140,15 @@ impl UninitializedModelConfig {
                 } else {
                     load_future.await
                 };
+                let cost = provider
+                    .cost
+                    .map(load_cost_config)
+                    .transpose()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!("models.{model_name}.providers.{name}.cost: {e}"),
+                        })
+                    })?;
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
@@ -146,6 +162,7 @@ impl UninitializedModelConfig {
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
                         discard_unknown_chunks: provider.discard_unknown_chunks,
+                        cost,
                     },
                 ))
             }
@@ -158,6 +175,7 @@ impl UninitializedModelConfig {
             providers,
             timeouts: self.timeouts,
             skip_relay,
+            namespace: self.namespace,
         })
     }
 }
@@ -961,11 +979,12 @@ pub struct UninitializedModelProvider {
     pub timeouts: TimeoutsConfig,
     /// If `true`, we emit a warning and discard chunks that we don't recognize
     /// (on a best-effort, per-provider basis).
-    /// By default, we produce an error in the stream
-    /// We can't meaningfully return unknown chunks to the user, as we don't
-    /// know how to correctly merge them.
+    /// By default, unknown chunks are forwarded as-is in the stream.
     #[serde(default)]
     pub discard_unknown_chunks: bool,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<UninitializedCostConfig>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -981,6 +1000,9 @@ pub struct ModelProvider {
     pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
     pub discard_unknown_chunks: bool,
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<CostConfig>,
 }
 
 impl ModelProvider {
@@ -2696,6 +2718,16 @@ pub const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
 
 pub type ModelTable = BaseModelTable<ModelConfig>;
 
+impl ModelTable {
+    /// Get the namespace of a statically-configured model, if any.
+    /// Returns `None` if the model is not in the table or has no namespace.
+    pub fn get_namespace(&self, model_name: &str) -> Option<&Namespace> {
+        self.table
+            .get(model_name)
+            .and_then(|m| m.namespace.as_ref())
+    }
+}
+
 impl ShorthandModelConfig for ModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
     const MODEL_TYPE: &str = "Model";
@@ -2826,10 +2858,12 @@ impl ShorthandModelConfig for ModelConfig {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         })
     }
 
@@ -2939,10 +2973,12 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
@@ -2969,6 +3005,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
 
         // Try inferring the good model only
@@ -3024,10 +3061,12 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3066,6 +3105,7 @@ mod tests {
             extra_headers: Default::default(),
             timeouts: Default::default(),
             discard_unknown_chunks: false,
+            cost: None,
         };
 
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
@@ -3109,6 +3149,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -3201,6 +3242,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -3237,6 +3279,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
                 (
@@ -3248,11 +3291,13 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
             ]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
 
         let model_name = "test model";
@@ -3324,10 +3369,12 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
@@ -3351,6 +3398,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let StreamResponseAndMessages {
             response:
@@ -3412,10 +3460,12 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let response = model_config
             .infer_stream(&request, &clients, "my_model")
@@ -3492,6 +3542,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
                 (
@@ -3503,11 +3554,13 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
             ]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
@@ -3531,6 +3584,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let StreamResponseAndMessages {
             response:
@@ -3600,10 +3654,12 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
@@ -3630,6 +3686,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3695,6 +3752,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3734,10 +3792,12 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
@@ -3764,6 +3824,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
 
         let request = ModelInferenceRequest {
@@ -3828,6 +3889,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3889,10 +3951,12 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
             skip_relay: false,
+            namespace: None,
         };
         let provider_types = ProviderTypesConfig::default();
         let model_table: ModelTable = ModelTable::new(

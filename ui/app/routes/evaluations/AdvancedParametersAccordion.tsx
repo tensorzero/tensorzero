@@ -7,6 +7,7 @@ import {
 } from "~/components/ui/accordion";
 import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
+import { HelpTooltip, docsUrl } from "~/components/ui/HelpTooltip";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 import { AdaptiveStoppingPrecision } from "./AdaptiveStoppingPrecision";
 
@@ -48,7 +49,17 @@ export function AdvancedParametersAccordion({
         <AccordionContent>
           <div className="space-y-6 px-3 pt-3">
             <div>
-              <Label>Inference Cache</Label>
+              <div className="flex items-center gap-1.5">
+                <Label>Inference Cache</Label>
+                <HelpTooltip
+                  link={{
+                    href: docsUrl("gateway/guides/inference-caching"),
+                  }}
+                >
+                  Reuse previous inference results for identical inputs, or
+                  always run fresh inferences.
+                </HelpTooltip>
+              </div>
               <RadioGroup
                 value={inferenceCache}
                 onValueChange={setInferenceCache}

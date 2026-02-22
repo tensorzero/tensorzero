@@ -364,6 +364,7 @@ async fn process_embedding_batch(
         relay: None,
         include_raw_usage: false,
         include_raw_response: false,
+        include_aggregated_response: false,
     };
 
     let response = embedding_model_config
@@ -594,6 +595,7 @@ mod tests {
                     provider_name: Arc::from("dummy"),
                     extra_body: None,
                     extra_headers: None,
+                    cost: None,
                 },
             );
             let embedding_model_config = EmbeddingModelConfig {

@@ -114,6 +114,12 @@ impl SnapshotHash {
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
+
+    /// Returns the lowercase hex representation of the hash.
+    /// This matches the format used by ClickHouse `lower(hex(...))` and Postgres `encode(..., 'hex')`.
+    pub fn to_hex_string(&self) -> String {
+        hex::encode(&*self.bytes)
+    }
 }
 
 impl std::fmt::Display for SnapshotHash {
@@ -155,6 +161,34 @@ impl<'de> Deserialize<'de> for SnapshotHash {
     {
         let s = String::deserialize(deserializer)?;
         s.parse::<SnapshotHash>().map_err(serde::de::Error::custom)
+    }
+}
+
+/// Maps `SnapshotHash` to Postgres BYTEA so it can be used directly in
+/// `push_bind` and `FromRow` without manual `as_bytes()`/`from_bytes()` conversion.
+impl sqlx::Type<sqlx::Postgres> for SnapshotHash {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <Vec<u8> as sqlx::Type<sqlx::Postgres>>::type_info()
+    }
+
+    fn compatible(ty: &sqlx::postgres::PgTypeInfo) -> bool {
+        <Vec<u8> as sqlx::Type<sqlx::Postgres>>::compatible(ty)
+    }
+}
+
+impl sqlx::Encode<'_, sqlx::Postgres> for SnapshotHash {
+    fn encode_by_ref(
+        &self,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        <&[u8] as sqlx::Encode<'_, sqlx::Postgres>>::encode_by_ref(&self.as_bytes(), buf)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SnapshotHash {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let bytes = <Vec<u8> as sqlx::Decode<'r, sqlx::Postgres>>::decode(value)?;
+        Ok(SnapshotHash::from_bytes(&bytes))
     }
 }
 
@@ -628,5 +662,42 @@ mod tests {
         assert_eq!(sorted1.get("a"), sorted2.get("a"));
         assert_eq!(sorted1.get("b"), sorted2.get("b"));
         assert_eq!(sorted1.get("c"), sorted2.get("c"));
+    }
+
+    #[test]
+    fn test_snapshot_hash_to_hex_string_matches_hex_encode_of_bytes() {
+        // Verify that to_hex_string() produces lowercase hex matching hex::encode(bytes),
+        // which is the same format as ClickHouse lower(hex(...)) and Postgres encode(..., 'hex').
+        let hash = SnapshotHash::new_test();
+        let hex_str = hash.to_hex_string();
+        let expected = hex::encode(hash.as_bytes());
+        assert_eq!(
+            hex_str, expected,
+            "to_hex_string() should match hex::encode(bytes)"
+        );
+        // Ensure it's lowercase hex, not decimal
+        assert!(
+            hex_str.chars().all(|c| c.is_ascii_hexdigit()),
+            "to_hex_string() should contain only hex characters"
+        );
+        assert_ne!(
+            hex_str,
+            hash.to_string(),
+            "hex representation should differ from decimal representation"
+        );
+    }
+
+    #[test]
+    fn test_snapshot_hash_hex_roundtrip_through_bytes() {
+        // Simulate the Postgres write/read path: SnapshotHash -> bytes -> from_bytes -> to_hex_string
+        // This should produce the same hex as the original hash.
+        let original = SnapshotHash::new_test();
+        let bytes = original.as_bytes().to_vec();
+        let reconstructed = SnapshotHash::from_bytes(&bytes);
+        assert_eq!(
+            original.to_hex_string(),
+            reconstructed.to_hex_string(),
+            "hex should be stable through bytes round-trip"
+        );
     }
 }

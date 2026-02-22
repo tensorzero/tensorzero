@@ -95,11 +95,25 @@ system_template = "../../../fixtures/config/functions/weather_helper/prompt/syst
 max_tokens = 2048
 thinking_budget_tokens = 1024
 
+[functions.weather_helper.variants.anthropic-sonnet-4-6-reasoning]
+type = "chat_completion"
+model = "claude-sonnet-4-6"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 2048
+reasoning_effort = "low"
+
 [functions.weather_helper.variants.azure]
 type = "chat_completion"
-model = "gpt-4o-mini-azure"
+model = "gpt-5-mini-azure"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
+reasoning_effort = "low"
+
+[functions.weather_helper.variants.azure-kimi]
+type = "chat_completion"
+model = "kimi-k2.5-azure"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 1024
 
 [functions.weather_helper.variants.fireworks]
 type = "chat_completion"

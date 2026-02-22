@@ -1,6 +1,7 @@
 //! E2E tests for the episodes endpoint.
 
 use reqwest::Client;
+use serde_json::json;
 use tensorzero_core::db::TableBoundsWithCount;
 use tensorzero_core::endpoints::episodes::internal::GetEpisodeInferenceCountResponse;
 use tensorzero_core::endpoints::episodes::internal::ListEpisodesResponse;
@@ -114,16 +115,10 @@ async fn test_query_episode_table_limit_zero() {
     let url = get_gateway_endpoint("/internal/episodes?limit=0");
 
     let resp = http_client.get(url).send().await.unwrap();
-    assert!(
-        resp.status().is_success(),
-        "query_episode_table with limit=0 request failed: status={:?}",
-        resp.status()
-    );
-
-    let response: ListEpisodesResponse = resp.json().await.unwrap();
-    assert!(
-        response.episodes.is_empty(),
-        "Expected empty result for limit=0"
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "query_episode_table with limit=0 should return 400"
     );
 }
 
@@ -187,5 +182,105 @@ async fn test_get_episode_inference_count_nonexistent_episode() {
     assert_eq!(
         response.inference_count, 0,
         "Nonexistent episode should have 0 inferences"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_query_episode_table_post_with_function_name() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/episodes");
+
+    let body = json!({
+        "limit": 10,
+        "function_name": "extract_entities"
+    });
+
+    let resp = http_client.post(url).json(&body).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "POST episodes with function_name failed: status={:?}",
+        resp.status()
+    );
+
+    let response: ListEpisodesResponse = resp.json().await.unwrap();
+    assert!(
+        !response.episodes.is_empty(),
+        "Expected at least one episode for function_name `extract_entities`"
+    );
+
+    for episode in &response.episodes {
+        assert!(
+            episode.count > 0,
+            "Episode should have at least one inference"
+        );
+        assert!(
+            episode.start_time <= episode.end_time,
+            "start_time should be <= end_time"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_query_episode_table_post_with_function_name_and_filter() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/episodes");
+
+    let body = json!({
+        "limit": 10,
+        "function_name": "extract_entities",
+        "filters": {
+            "type": "tag",
+            "key": "tensorzero::evaluation_name",
+            "value": "entity_extraction",
+            "comparison_operator": "="
+        }
+    });
+
+    let resp = http_client.post(url).json(&body).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "POST episodes with function_name + filter failed: status={:?}",
+        resp.status()
+    );
+
+    let response: ListEpisodesResponse = resp.json().await.unwrap();
+    assert!(
+        !response.episodes.is_empty(),
+        "Expected at least one episode matching function_name `extract_entities` with tag filter"
+    );
+
+    for episode in &response.episodes {
+        assert!(
+            episode.count > 0,
+            "Episode should have at least one inference"
+        );
+        assert!(
+            episode.start_time <= episode.end_time,
+            "start_time should be <= end_time"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_query_episode_table_post_nonexistent_function() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/episodes");
+
+    let body = json!({
+        "limit": 10,
+        "function_name": "nonexistent_function_12345"
+    });
+
+    let resp = http_client.post(url).json(&body).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "POST episodes with nonexistent function_name should succeed: status={:?}",
+        resp.status()
+    );
+
+    let response: ListEpisodesResponse = resp.json().await.unwrap();
+    assert!(
+        response.episodes.is_empty(),
+        "Expected no episodes for nonexistent function_name"
     );
 }

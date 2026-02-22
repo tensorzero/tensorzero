@@ -79,33 +79,6 @@ fn build_observability_routes() -> Router<AppStateData> {
 fn build_datasets_routes() -> Router<AppStateData> {
     Router::new()
         .route(
-            "/datasets/{dataset_name}/datapoints",
-            #[expect(deprecated)]
-            post(endpoints::datasets::create_datapoints_handler),
-        )
-        // TODO(#3459): Deprecated in #3721. Remove in a future release.
-        .route(
-            "/datasets/{dataset_name}/datapoints/bulk",
-            #[expect(deprecated)]
-            post(endpoints::datasets::bulk_insert_datapoints_handler),
-        )
-        .route(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
-            delete(endpoints::datasets::delete_datapoint_handler),
-        )
-        .route(
-            "/datasets/{dataset_name}/datapoints",
-            get(endpoints::datasets::list_datapoints_handler),
-        )
-        .route(
-            "/datasets/{dataset_name}",
-            delete(endpoints::datasets::stale_dataset_handler),
-        )
-        .route(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
-            get(endpoints::datasets::get_datapoint_handler),
-        )
-        .route(
             "/v1/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::v1::create_datapoints_handler)
                 .patch(endpoints::datasets::v1::update_datapoints_handler)

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use futures::StreamExt;
 use futures::future::{join_all, try_join_all};
 use indexmap::IndexMap;
-use rand::Rng;
+use rand::RngExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -234,7 +234,7 @@ impl Variant for MixtureOfNConfig {
                 stream_inference_from_non_stream(inference_result, inference_params)
             }
             InferenceOrStreamResult::Stream(stream, model_used_info) => {
-                Ok((stream, model_used_info))
+                Ok((stream, *model_used_info))
             }
         }
     }
@@ -328,7 +328,7 @@ enum InferenceOrStreamResult {
     NonStream(InferenceResult),
     /// We only produce `InferenceOrStreamResult::Stream` if the user requested a streaming inference,
     /// and the fuser successfully starts a stream.
-    Stream(InferenceResultStream, ModelUsedInfo),
+    Stream(InferenceResultStream, Box<ModelUsedInfo>),
 }
 
 /// Constructs an `infer_stream` response `(InferenceResultStream, ModelUsedInfo)`,
@@ -455,6 +455,7 @@ fn make_stream_from_non_stream(
                 usage,
                 raw_usage: raw_usage_entries.clone(),
                 raw_response: None, // Not used for fused stream chunks
+                aggregated_response: None,
             }))
         }
         InferenceResult::Json(json) => Ok(InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -466,6 +467,7 @@ fn make_stream_from_non_stream(
             provider_latency,
             raw_chunk: String::new(), // No actual streaming data for fake streams
             finish_reason: json.finish_reason,
+            aggregated_response: None,
         })),
     };
     Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
@@ -628,7 +630,7 @@ impl MixtureOfNConfig {
             )
             .await
             .map(|(stream, model_used_info)| {
-                InferenceOrStreamResult::Stream(stream, model_used_info)
+                InferenceOrStreamResult::Stream(stream, Box::new(model_used_info))
             })
         } else {
             inner_fuse_candidates(
@@ -1542,10 +1544,12 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
@@ -1576,6 +1580,7 @@ mod tests {
             relay: None,
             include_raw_usage: false,
             include_raw_response: false,
+            include_aggregated_response: false,
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1668,10 +1673,12 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1751,10 +1758,12 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
                     skip_relay: false,
+                    namespace: None,
                 },
             );
             let provider_types = ProviderTypesConfig::default();
@@ -1946,6 +1955,7 @@ mod tests {
                 provider_latency: None,
                 raw_chunk: String::new(), // No actual streaming data for fake streams
                 finish_reason: Some(FinishReason::Length),
+                aggregated_response: None,
             })),]
         );
     }

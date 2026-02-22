@@ -22,7 +22,7 @@ type = "chat"
 
 [functions.input_audio_test.variants.azure]
 type = "chat_completion"
-model = "azure-gpt-4o-audio-preview"
+model = "azure-gpt-audio-mini"
 
 [functions.input_audio_test.variants.gcp_vertex_gemini]
 type = "chat_completion"
@@ -34,20 +34,19 @@ model = "google_ai_studio_gemini::gemini-2.5-flash-lite"
 
 [functions.input_audio_test.variants.openai]
 type = "chat_completion"
-model = "openai::gpt-4o-audio-preview"
+model = "openai::gpt-audio-mini"
 
 [functions.input_audio_test.variants.openrouter]
 type = "chat_completion"
-model = "openrouter::openai/gpt-4o-audio-preview"
+model = "openrouter::openai/gpt-audio-mini"
 
-[models.azure-gpt-4o-audio-preview]
+[models.azure-gpt-audio-mini]
 routing = ["azure"]
 
-[models.azure-gpt-4o-audio-preview.providers.azure]
+[models.azure-gpt-audio-mini.providers.azure]
 type = "azure"
-api_key_location = "env::AZURE_OPENAI_EASTUS2_API_KEY"
-deployment_id = "gpt-4o-audio-preview"
-endpoint = "https://t0-eastus2-resource.openai.azure.com"
+deployment_id = "gpt-audio-mini"
+endpoint = "https://t0-dev-eastus2-resource.services.ai.azure.com"
 "#;
 
 /// Audio file of dogs barking

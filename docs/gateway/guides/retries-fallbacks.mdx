@@ -16,27 +16,27 @@ If we include multiple providers on the list, the gateway will try each one sequ
 In the example below, the gateway will first try OpenAI, and if that fails, it will try Azure.
 
 ```toml
-[models.gpt_4o_mini]
+[models.gpt_5_mini]
 # Try the following providers in order:
-# 1. `models.gpt_4o_mini.providers.openai`
-# 2. `models.gpt_4o_mini.providers.azure`
+# 1. `models.gpt_5_mini.providers.openai`
+# 2. `models.gpt_5_mini.providers.azure`
 routing = ["openai", "azure"]
 
-[models.gpt_4o_mini.providers.openai]
+[models.gpt_5_mini.providers.openai]
 type = "openai"
-model_name = "gpt-4o-mini-2024-07-18"
+model_name = "gpt-5-mini"
 
-[models.gpt_4o_mini.providers.azure]
+[models.gpt_5_mini.providers.azure]
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
+deployment_id = "gpt-5-mini"
 endpoint = "https://your-azure-openai-endpoint.openai.azure.com"
 
 [functions.extract_data]
 type = "chat"
 
-[functions.extract_data.variants.gpt_4o_mini]
+[functions.extract_data.variants.gpt_5_mini]
 type = "chat_completion"
-model = "gpt_4o_mini"
+model = "gpt_5_mini"
 ```
 
 For variant types that require multiple model inferences (e.g. best-of-N sampling), the `routing` fallback applies to each individual model inference separately.

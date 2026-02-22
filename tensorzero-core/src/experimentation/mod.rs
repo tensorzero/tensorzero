@@ -11,6 +11,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::config::Namespace;
 use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
@@ -133,9 +134,9 @@ impl ExperimentationConfigWithNamespaces {
     /// Get the experimentation config for a given namespace.
     /// If namespace is None or the namespace doesn't have a specific config,
     /// returns the base config.
-    pub fn get_for_namespace(&self, namespace: Option<&str>) -> &ExperimentationConfig {
+    pub fn get_for_namespace(&self, namespace: Option<&Namespace>) -> &ExperimentationConfig {
         match namespace {
-            Some(ns) => self.namespaces.get(ns).unwrap_or(&self.base),
+            Some(ns) => self.namespaces.get(ns.as_str()).unwrap_or(&self.base),
             None => &self.base,
         }
     }
@@ -185,25 +186,15 @@ impl UninitializedExperimentationConfigWithNamespaces {
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, crate::config::MetricConfig>,
-        function_name: &str,
+        _function_name: &str,
     ) -> Result<ExperimentationConfigWithNamespaces, Error> {
-        // Load the base config
-        let base = self.base.load(variants, metrics)?;
+        // Load the base config (no namespace)
+        let base = self.base.load(variants, metrics, None)?;
 
         // Load namespace-specific configs
         let mut loaded_namespaces = HashMap::new();
         for (namespace, config) in self.namespaces {
-            // Check that namespace configs don't use track_and_stop
-            if matches!(config, UninitializedExperimentationConfig::TrackAndStop(_)) {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "Namespace-specific experimentation config `functions.{function_name}.experimentation.namespaces.{namespace}` \
-                        cannot use `track_and_stop` type. Only `uniform` and `static_weights` are supported for namespace configs."
-                    ),
-                }));
-            }
-
-            let loaded_config = config.load(variants, metrics)?;
+            let loaded_config = config.load(variants, metrics, Some(namespace.clone()))?;
             loaded_namespaces.insert(namespace, loaded_config);
         }
 
@@ -219,6 +210,7 @@ impl UninitializedExperimentationConfig {
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, crate::config::MetricConfig>,
+        namespace: Option<String>,
     ) -> Result<ExperimentationConfig, Error> {
         // Check if any variant has a weight specified
         let variants_with_weights: Vec<&str> = variants
@@ -246,7 +238,7 @@ impl UninitializedExperimentationConfig {
                 Ok(ExperimentationConfig::Uniform(config.load(variants)?))
             }
             UninitializedExperimentationConfig::TrackAndStop(config) => Ok(
-                ExperimentationConfig::TrackAndStop(config.load(variants, metrics)?),
+                ExperimentationConfig::TrackAndStop(config.load(variants, metrics, namespace)?),
             ),
         }
     }
@@ -383,6 +375,21 @@ impl ExperimentationConfig {
                 }
             }
         })
+    }
+
+    /// Returns whether a variant name could be sampled by this experimentation config.
+    /// Empty allowed lists (e.g. default Uniform with no explicit candidates) means all variants
+    /// are eligible, so we return `true`.
+    pub fn could_sample_variant(&self, variant_name: &str) -> bool {
+        let allowed: Vec<&str> = match self {
+            Self::StaticWeights(c) => c.allowed_variants().collect(),
+            Self::Uniform(c) => c.allowed_variants().collect(),
+            Self::TrackAndStop(c) => c.allowed_variants().collect(),
+            #[cfg(test)]
+            Self::AlwaysFails(c) => c.allowed_variants().collect(),
+        };
+        // Empty means Uniform with no explicit candidates → all variants eligible
+        allowed.is_empty() || allowed.contains(&variant_name)
     }
 
     pub fn get_current_display_probabilities<'a>(
@@ -823,7 +830,8 @@ mod tests {
             base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
             namespaces: HashMap::new(),
         };
-        let result = config.get_for_namespace(Some("unknown"));
+        let ns = Namespace::new("unknown").unwrap();
+        let result = config.get_for_namespace(Some(&ns));
         assert!(
             matches!(result, ExperimentationConfig::Uniform(_)),
             "Unknown namespace should fall back to the base config"
@@ -845,7 +853,8 @@ mod tests {
             base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
             namespaces,
         };
-        let result = config.get_for_namespace(Some("mobile"));
+        let ns = Namespace::new("mobile").unwrap();
+        let result = config.get_for_namespace(Some(&ns));
         assert!(
             matches!(result, ExperimentationConfig::StaticWeights(_)),
             "Known namespace should return the namespace-specific config"
@@ -952,7 +961,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_namespace_config_track_and_stop_rejected() {
+    fn test_load_namespace_config_track_and_stop_succeeds() {
         let variants = make_variants_map(&["variant_a", "variant_b"]);
         let mut metrics = HashMap::new();
         metrics.insert(
@@ -985,17 +994,21 @@ mod tests {
 
         let result = uninitialized.load(&variants, &metrics, "test_fn");
         assert!(
-            result.is_err(),
-            "Namespace with `track_and_stop` type should be rejected"
+            result.is_ok(),
+            "Namespace with `track_and_stop` type should load successfully"
         );
-        let err_msg = result.unwrap_err().to_string();
+
+        let loaded = result.unwrap();
         assert!(
-            err_msg.contains("track_and_stop"),
-            "Error should mention `track_and_stop`: {err_msg}"
+            loaded.has_namespace_config("mobile"),
+            "Should have a `mobile` namespace config"
         );
         assert!(
-            err_msg.contains("mobile"),
-            "Error should mention the namespace name: {err_msg}"
+            matches!(
+                loaded.get_for_namespace(Some(&Namespace::new("mobile").unwrap())),
+                ExperimentationConfig::TrackAndStop(_)
+            ),
+            "The `mobile` namespace config should be TrackAndStop"
         );
     }
 }

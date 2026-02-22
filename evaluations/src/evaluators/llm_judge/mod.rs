@@ -125,6 +125,7 @@ pub async fn run_llm_judge_evaluator(
         include_original_response: false,
         include_raw_response: false,
         include_raw_usage: false,
+        include_aggregated_response: false,
         params: InferenceParams::default(),
         variant_name: None,
         dryrun: Some(false),

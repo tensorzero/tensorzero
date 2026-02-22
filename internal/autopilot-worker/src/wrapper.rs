@@ -369,8 +369,8 @@ mod tests {
         CreateDatapointsResponse, DeleteDatapointsResponse, FeedbackParams, FeedbackResponse,
         GetConfigResponse, GetDatapointsResponse, GetInferencesRequest, GetInferencesResponse,
         InferenceResponse, ListDatapointsRequest, ListDatasetsRequest, ListDatasetsResponse,
-        ListInferencesRequest, UpdateDatapointRequest, UpdateDatapointsResponse,
-        WriteConfigRequest, WriteConfigResponse,
+        ListEpisodesRequest, ListEpisodesResponse, ListInferencesRequest, UpdateDatapointRequest,
+        UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -411,6 +411,12 @@ mod tests {
                 &self,
                 params: durable_tools::ListSessionsParams,
             ) -> Result<durable_tools::ListSessionsResponse, TensorZeroClientError>;
+
+            async fn s3_initiate_upload(
+                &self,
+                session_id: Uuid,
+                request: durable_tools::S3UploadRequest,
+            ) -> Result<durable_tools::S3UploadResponse, TensorZeroClientError>;
 
             async fn action(
                 &self,
@@ -480,6 +486,11 @@ mod tests {
                 &self,
                 request: GetInferencesRequest,
             ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+            async fn list_episodes(
+                &self,
+                request: ListEpisodesRequest,
+            ) -> Result<ListEpisodesResponse, TensorZeroClientError>;
 
             async fn launch_optimization_workflow(
                 &self,
