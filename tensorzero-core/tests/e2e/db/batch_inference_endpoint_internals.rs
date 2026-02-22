@@ -392,7 +392,7 @@ async fn test_batch_request_has_snapshot_hash(clickhouse: ClickHouseConnectionIn
     database.clickhouse.sleep_for_writes_to_be_visible().await;
 
     let batch_request_query = format!(
-        "SELECT snapshot_hash FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
+        "SELECT snapshot_hash FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY toUInt128(id) DESC LIMIT 1 FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(batch_request_query)
