@@ -9,6 +9,7 @@
 //!      we start a new serverless deployment. When deploy_after_training is false, we skip
 //!      deployment and return immediately with the model output.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
 use std::time::Duration;
@@ -19,7 +20,6 @@ use http::StatusCode;
 use reqwest::multipart::{Form, Part};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 use std::fmt::Display;
 use std::sync::Arc;
 use url::Url;
@@ -42,11 +42,12 @@ use tensorzero_core::{
         fireworks_sft::{FireworksSFTConfig, FireworksSFTJobHandle},
     },
     providers::{
-        fireworks::{FIREWORKS_API_BASE, FireworksTool, PROVIDER_TYPE, prepare_fireworks_messages},
-        helpers::UrlParseErrExt,
-        openai::{
-            OpenAIMessagesConfig, OpenAIRequestMessage, tensorzero_to_openai_assistant_message,
+        fireworks::{
+            FIREWORKS_API_BASE, FireworksTool, PROVIDER_TYPE, prepare_fireworks_messages,
+            tensorzero_to_fireworks_assistant_message,
         },
+        helpers::UrlParseErrExt,
+        openai::{OpenAIMessagesConfig, OpenAIRequestMessage},
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
     utils::mock::get_mock_provider_api_base,
@@ -299,7 +300,7 @@ impl JobHandle for FireworksSFTJobHandle {
                         UninitializedModelProvider {
                             config: UninitializedProviderConfig::Fireworks {
                                 model_name: model_path.clone(),
-                                parse_think_blocks: true,
+                                parse_think_blocks: None,
                                 api_key_location: None,
                             },
                             extra_headers: None,
@@ -422,7 +423,7 @@ impl<'a> FireworksSupervisedRow<'a> {
         }
         let output_content_blocks: Vec<ContentBlock> =
             output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
-        let final_assistant_message = tensorzero_to_openai_assistant_message(
+        let final_assistant_message = tensorzero_to_fireworks_assistant_message(
             Cow::Owned(output_content_blocks),
             OpenAIMessagesConfig {
                 json_mode: None,
