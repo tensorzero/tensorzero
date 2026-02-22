@@ -1252,7 +1252,8 @@ model_name = "good"
 
     assert_eq!(
         new_response.status(),
-        http::StatusCode::INTERNAL_SERVER_ERROR
+        http::StatusCode::UNAUTHORIZED,
+        "Bad API key should be rejected by the downstream gateway with 401"
     );
     let body = new_response.text().await.unwrap();
     assert!(

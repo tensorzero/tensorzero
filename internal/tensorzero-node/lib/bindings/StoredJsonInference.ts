@@ -20,4 +20,5 @@ export type StoredJsonInference = {
   inference_params?: InferenceParams;
   processing_time_ms?: bigint;
   ttft_ms?: bigint;
+  snapshot_hash?: string;
 };
