@@ -74,6 +74,8 @@ from tensorzero.types import (
 )
 from uuid_utils import uuid7
 
+GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
+
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
@@ -237,7 +239,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
 @pytest.mark.asyncio
 async def test_async_client_build_http_sync():
     client_ = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         async_setup=False,
     )
     assert isinstance(client_, AsyncTensorZeroGateway)
@@ -1044,7 +1046,7 @@ async def test_async_feedback_invalid_input(
 @pytest.mark.asyncio
 async def test_async_tensorzero_error_http():
     async_client = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         verbose_errors=True,
         async_setup=False,
     )
@@ -1101,7 +1103,7 @@ async def test_async_dynamic_credentials(async_client: AsyncTensorZeroGateway):
 
 def test_sync_error():
     with pytest.raises(Exception) as exc_info:
-        with TensorZeroGateway.build_http(gateway_url="http://localhost:3000"):
+        with TensorZeroGateway.build_http(gateway_url=GATEWAY_URL):
             raise Exception("My error")
     assert str(exc_info.value) == "My error"
 
@@ -1109,7 +1111,7 @@ def test_sync_error():
 @pytest.mark.asyncio
 async def test_async_error():
     with pytest.raises(Exception) as exc_info:
-        client_fut = AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000")
+        client_fut = AsyncTensorZeroGateway.build_http(gateway_url=GATEWAY_URL)
         assert isinstance(client_fut, t.Awaitable)
         async with await client_fut:
             raise Exception("My error")
@@ -2178,7 +2180,7 @@ def test_sync_feedback_invalid_input(sync_client: TensorZeroGateway):
 
 def test_sync_tensorzero_error_http():
     sync_client = TensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         verbose_errors=True,
     )
     with pytest.raises(TensorZeroError) as excinfo:
@@ -2679,7 +2681,7 @@ async def test_async_err_in_stream(async_client: AsyncTensorZeroGateway):
 @pytest.mark.asyncio
 async def test_async_timeout_int_http():
     client_fut = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         timeout=1,
     )
     assert isinstance(client_fut, t.Awaitable)
@@ -2720,7 +2722,7 @@ async def test_async_timeout_int_embedded():
 @pytest.mark.asyncio
 async def test_async_timeout_float_http():
     client_fut = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         timeout=0.1,
     )
     assert inspect.isawaitable(client_fut)
@@ -2760,7 +2762,7 @@ async def test_async_timeout_float_embedded():
 
 def test_sync_timeout_invalid():
     with pytest.raises(ValueError) as exc_info:
-        TensorZeroGateway.build_http(gateway_url="http://localhost:3000", timeout=-1)
+        TensorZeroGateway.build_http(gateway_url=GATEWAY_URL, timeout=-1)
     assert "Invalid timeout: cannot convert float seconds to Duration: value is negative" == str(exc_info.value)
 
 
@@ -3614,7 +3616,7 @@ def test_sync_chat_function_named_template(sync_client: TensorZeroGateway):
 
 def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         verbose_errors=True,
     )
     assert client is not None
@@ -3632,7 +3634,7 @@ def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
 @pytest.mark.asyncio
 async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client_fut = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         verbose_errors=True,
     )
     assert inspect.isawaitable(client_fut)

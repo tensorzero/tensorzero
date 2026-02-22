@@ -16,6 +16,7 @@ import { v7 as uuidv7 } from "uuid";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { GATEWAY_URL } from "./helpers";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,7 +26,7 @@ let client: OpenAI;
 beforeAll(() => {
   client = new OpenAI({
     apiKey: "donotuse",
-    baseURL: "http://127.0.0.1:3000/openai/v1",
+    baseURL: `${GATEWAY_URL}/openai/v1`,
   });
 });
 
@@ -1426,7 +1427,7 @@ it("should handle multi-turn parallel tool calls using TensorZero gateway direct
 
   // First request to get tool calls
   const firstResponse = await fetch(
-    "http://127.0.0.1:3000/openai/v1/chat/completions",
+    `${GATEWAY_URL}/openai/v1/chat/completions`,
     {
       method: "POST",
       headers: {
@@ -1474,7 +1475,7 @@ it("should handle multi-turn parallel tool calls using TensorZero gateway direct
 
   // Second request with tool responses
   const secondResponse = await fetch(
-    "http://127.0.0.1:3000/openai/v1/chat/completions",
+    `${GATEWAY_URL}/openai/v1/chat/completions`,
     {
       method: "POST",
       headers: {
