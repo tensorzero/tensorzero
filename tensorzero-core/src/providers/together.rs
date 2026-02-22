@@ -517,12 +517,45 @@ pub async fn prepare_together_messages<'a>(
     request_messages: &'a [RequestMessage],
     config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<TogetherRequestMessage<'a>>, Error> {
+    // Convert all messages concurrently, then assemble in order.
+    // Each slot holds either converted OpenAI messages (for user) or a Together assistant message.
+    enum ConvertedMessage<'a> {
+        User(Vec<OpenAIRequestMessage<'a>>),
+        Assistant(TogetherRequestMessage<'a>),
+    }
+
+    let conversion_futures: Vec<_> = request_messages
+        .iter()
+        .map(|msg| async move {
+            match msg.role {
+                Role::User => {
+                    let openai_msgs = tensorzero_to_openai_messages(msg, config).await?;
+                    Ok(ConvertedMessage::User(openai_msgs))
+                }
+                Role::Assistant => {
+                    let msg = tensorzero_to_together_assistant_message(
+                        Cow::Borrowed(&msg.content),
+                        config,
+                    )
+                    .await?;
+                    Ok(ConvertedMessage::Assistant(msg))
+                }
+            }
+        })
+        .collect();
+
+    let converted: Vec<Result<ConvertedMessage<'a>, Error>> =
+        futures::future::join_all(conversion_futures).await;
+
     let mut messages: Vec<TogetherRequestMessage<'a>> = Vec::new();
 
-    for msg in request_messages {
-        match msg.role {
-            Role::User => {
-                let openai_msgs = tensorzero_to_openai_messages(msg, config).await?;
+    if let Some(system_msg) = tensorzero_to_together_system_message(system) {
+        messages.push(system_msg);
+    }
+
+    for result in converted {
+        match result? {
+            ConvertedMessage::User(openai_msgs) => {
                 for openai_msg in openai_msgs {
                     messages.push(match openai_msg {
                         OpenAIRequestMessage::User(u) => TogetherRequestMessage::User(u),
@@ -537,10 +570,7 @@ pub async fn prepare_together_messages<'a>(
                     });
                 }
             }
-            Role::Assistant => {
-                let msg =
-                    tensorzero_to_together_assistant_message(Cow::Borrowed(&msg.content), config)
-                        .await?;
+            ConvertedMessage::Assistant(msg) => {
                 // Skip empty assistant messages (same as the shared OpenAI path)
                 if let TogetherRequestMessage::Assistant(ref a) = msg
                     && a.content.is_none()
@@ -553,9 +583,6 @@ pub async fn prepare_together_messages<'a>(
         }
     }
 
-    if let Some(system_msg) = tensorzero_to_together_system_message(system) {
-        messages.insert(0, system_msg);
-    }
     Ok(messages)
 }
 
