@@ -1721,7 +1721,7 @@ impl UninitializedProviderConfig {
                 api_key_location,
                 parse_think_blocks,
             } => {
-                if !is_config_snapshot && parse_think_blocks == Some(false) {
+                if !is_config_snapshot && parse_think_blocks.is_some() {
                     // Deprecation: #6502 - 2026.5+
                     crate::utils::deprecation_warning(
                         "The `parse_think_blocks` option for `together` providers is deprecated and will be removed in a future release. Think blocks are now always parsed.",
