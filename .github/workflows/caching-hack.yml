@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Cleanup disk space
         if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        run: bash ci/free-disk-space.sh
       - name: Install Rust (from rust-toolchain.toml)
         run: |
           for attempt in 1 2 3; do
