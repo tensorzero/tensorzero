@@ -198,6 +198,7 @@ impl From<UninitializedConfig> for StoredConfig {
             provider_types,
             optimizers,
             embedding_models,
+            autopilot: _, // runtime-only, not stored
         } = config;
 
         Self {
@@ -256,6 +257,7 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            autopilot: Default::default(),
         })
     }
 }

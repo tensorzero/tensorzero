@@ -62,6 +62,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
         HashSet::new(), // available_tools
+        HashSet::new(), // tool_whitelist
     )
     .await
     .unwrap();

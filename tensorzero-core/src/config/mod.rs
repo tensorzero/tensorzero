@@ -103,6 +103,16 @@ pub async fn with_skip_credential_validation<T>(f: impl Future<Output = T>) -> T
     SKIP_CREDENTIAL_VALIDATION.scope((), f).await
 }
 
+/// Configuration for the autopilot system.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AutopilotConfig {
+    /// Tools that are automatically approved without manual intervention.
+    /// If unset, defaults to all nondestructive tools.
+    /// If set, replaces the default list entirely.
+    pub tool_whitelist: Option<Vec<String>>,
+}
+
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
@@ -123,6 +133,7 @@ pub struct Config {
     pub postgres: PostgresConfig,
     pub rate_limiting: RateLimitingConfig,
     pub http_client: TensorzeroHttpClient,
+    pub autopilot: AutopilotConfig,
     pub hash: SnapshotHash,
 }
 
@@ -873,6 +884,7 @@ struct ProcessedConfigInput {
     optimizers: HashMap<String, UninitializedOptimizerInfo>,
     postgres: PostgresConfig,
     rate_limiting: UninitializedRateLimitingConfig,
+    autopilot: AutopilotConfig,
 
     snapshot: ConfigSnapshot,
     /// All functions (user-defined + built-in), loaded and ready to use
@@ -927,6 +939,7 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
+                autopilot,
             } = config.clone();
 
             // Load ALL functions (user + built-in)
@@ -971,6 +984,7 @@ async fn process_config_input(
                 optimizers,
                 postgres,
                 rate_limiting,
+                autopilot,
                 snapshot,
                 functions: all_functions,
                 gateway_config,
@@ -1005,6 +1019,7 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
+                autopilot,
             } = original_snapshot
                 .config
                 .clone()
@@ -1031,6 +1046,7 @@ async fn process_config_input(
                 evaluations: evaluations.clone(),
                 provider_types: provider_types.clone(),
                 optimizers: optimizers.clone(),
+                autopilot: autopilot.clone(),
             };
 
             let extra_templates = original_snapshot.extra_templates.clone();
@@ -1066,6 +1082,7 @@ async fn process_config_input(
                 optimizers,
                 postgres: overlay_postgres,
                 rate_limiting: overlay_rate_limiting,
+                autopilot,
                 // unused
                 snapshot,
                 functions: all_functions,
@@ -1252,6 +1269,7 @@ impl Config {
             optimizers: uninitialized_optimizers,
             postgres,
             rate_limiting,
+            autopilot,
             snapshot,
             functions,
             gateway_config,
@@ -1335,6 +1353,7 @@ impl Config {
             postgres,
             rate_limiting: rate_limiting.try_into()?,
             http_client,
+            autopilot,
             hash: snapshot.hash.clone(),
         };
 
@@ -1703,6 +1722,8 @@ pub struct UninitializedConfig {
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
+    #[serde(default)]
+    pub autopilot: AutopilotConfig,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1760,6 +1781,8 @@ struct TomlUninitializedConfig {
     provider_types: ProviderTypesConfig,
     #[serde(default)]
     optimizers: HashMap<String, UninitializedOptimizerInfo>,
+    #[serde(default)]
+    autopilot: AutopilotConfig,
 }
 
 impl From<TomlUninitializedConfig> for UninitializedConfig {
@@ -1777,6 +1800,7 @@ impl From<TomlUninitializedConfig> for UninitializedConfig {
             evaluations: toml_config.evaluations,
             provider_types: toml_config.provider_types,
             optimizers: toml_config.optimizers,
+            autopilot: toml_config.autopilot,
         }
     }
 }

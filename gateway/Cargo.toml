@@ -12,6 +12,7 @@ evaluations = { path = "../evaluations" }
 axum = { workspace = true }
 tracing = { version = "0.1.43", features = ["log", "release_max_level_debug"] }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 mimalloc = "0.1.48"
 clap = { workspace = true }
 tower-http = { workspace = true, features = ["metrics", "decompression-gzip", "decompression-br", "decompression-zstd"] }
@@ -20,6 +21,7 @@ http = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
+autopilot-client = { path = "../internal/autopilot-client" }
 autopilot-worker = { path = "../internal/autopilot-worker" }
 autopilot-tools = { path = "../internal/autopilot-tools" }
 durable-tools = { path = "../internal/durable-tools" }

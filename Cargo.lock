@@ -2708,6 +2708,7 @@ name = "gateway"
 version = "2026.2.1"
 dependencies = [
  "async-stream",
+ "autopilot-client",
  "autopilot-tools",
  "autopilot-worker",
  "axum",
@@ -2734,6 +2735,7 @@ dependencies = [
  "tensorzero-unsafe-helpers",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tower-http",
  "tracing",
  "ts-rs",

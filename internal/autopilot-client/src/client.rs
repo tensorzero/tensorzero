@@ -62,6 +62,7 @@ pub struct AutopilotClientBuilder {
     tool_call_cache_capacity: u64,
     tool_call_cache_ttl: Duration,
     available_tools: Option<HashSet<String>>,
+    tool_whitelist: Option<HashSet<String>>,
 }
 
 impl Default for AutopilotClientBuilder {
@@ -77,6 +78,7 @@ impl Default for AutopilotClientBuilder {
             tool_call_cache_capacity: DEFAULT_TOOL_CALL_CACHE_CAPACITY,
             tool_call_cache_ttl: DEFAULT_TOOL_CALL_CACHE_TTL,
             available_tools: None,
+            tool_whitelist: None,
         }
     }
 }
@@ -156,6 +158,12 @@ impl AutopilotClientBuilder {
         self
     }
 
+    /// Sets the set of tool names that are automatically approved without manual intervention.
+    pub fn tool_whitelist(mut self, whitelist: HashSet<String>) -> Self {
+        self.tool_whitelist = Some(whitelist);
+        self
+    }
+
     /// Builds the [`AutopilotClient`].
     ///
     /// # Errors
@@ -220,6 +228,7 @@ impl AutopilotClientBuilder {
             spawn_client,
             tool_call_cache,
             available_tools: Arc::new(available_tools),
+            tool_whitelist: Arc::new(self.tool_whitelist.unwrap_or_default()),
         })
     }
 }
@@ -238,6 +247,8 @@ pub struct AutopilotClient {
     tool_call_cache: Cache<Uuid, EventPayloadToolCall>,
     /// Set of available tool names for filtering unknown tool calls.
     available_tools: Arc<HashSet<String>>,
+    /// Set of tool names that are automatically approved without manual intervention.
+    pub tool_whitelist: Arc<HashSet<String>>,
 }
 
 impl fmt::Debug for AutopilotClient {

@@ -643,6 +643,7 @@ impl ClientBuilder {
                                 http_client,
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
+                                HashSet::new(), // tool_whitelist not needed for embedded client
                             )
                             .await
                             .map_err(|e| {
@@ -691,6 +692,7 @@ impl ClientBuilder {
                                 http_client.clone(),
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
+                                HashSet::new(), // tool_whitelist not needed for embedded client
                             )
                             .await
                             .map_err(|e| {

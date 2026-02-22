@@ -401,6 +401,7 @@ pub struct AutopilotToolResult {
 pub enum ToolCallDecisionSource {
     Ui,
     Automatic,
+    Whitelist,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

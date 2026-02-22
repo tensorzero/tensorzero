@@ -261,6 +261,7 @@ async fn test_comment_feedback_validation_disabled() {
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
         HashSet::new(), // available_tools
+        HashSet::new(), // tool_whitelist
     )
     .await
     .unwrap();
@@ -1569,6 +1570,7 @@ async fn test_float_feedback_validation_disabled() {
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
         HashSet::new(), // available_tools
+        HashSet::new(), // tool_whitelist
     )
     .await
     .unwrap();
@@ -1912,6 +1914,7 @@ async fn test_boolean_feedback_validation_disabled() {
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
         HashSet::new(), // available_tools
+        HashSet::new(), // tool_whitelist
     )
     .await
     .unwrap();
