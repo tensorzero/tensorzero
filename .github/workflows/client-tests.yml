@@ -92,20 +92,6 @@ jobs:
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/download-provider-proxy-cache.sh
 
-      - name: Update Rust
-        run: |
-          for attempt in 1 2 3; do
-            if rustup update stable && rustup default stable; then
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Failed to update Rust after 3 attempts"
-              exit 1
-            fi
-            sleep $((10 * attempt))
-          done
-        shell: bash
-
       - name: Download gateway container image
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
