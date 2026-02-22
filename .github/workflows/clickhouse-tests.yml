@@ -90,11 +90,6 @@ jobs:
           path: |
             ./ui/fixtures/large-fixtures/
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
-        with:
-          version: "0.9.27"
-
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
@@ -110,11 +105,6 @@ jobs:
           docker tag tensorzero/gateway-e2e:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           # Retag fixtures as fixtures-postgres for docker-compose
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
-
-      - name: Download ClickHouse fixtures
-        run: |
-          uv run ./ui/fixtures/download-large-fixtures.py
-          uv run ./ui/fixtures/download-small-fixtures.py
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (non-replicated)
         if: matrix.replicated == false
