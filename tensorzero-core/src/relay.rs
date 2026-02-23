@@ -277,6 +277,7 @@ impl TensorzeroRelay {
                             (Some(total), Some(prompt)) => Some(total - prompt),
                             _ => None,
                         },
+                        cost: usage.tensorzero_cost,
                     })
                     .unwrap_or_default(),
                 model,

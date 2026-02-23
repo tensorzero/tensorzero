@@ -798,6 +798,7 @@ impl From<GCPVertexAnthropicUsage> for Usage {
         Usage {
             input_tokens: total_input_tokens,
             output_tokens: value.output_tokens,
+            cost: None,
         }
     }
 }

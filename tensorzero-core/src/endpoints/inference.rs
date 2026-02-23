@@ -30,6 +30,7 @@ use crate::config::snapshot::SnapshotHash;
 use crate::config::{
     Config, ErrorContext, Namespace, OtlpConfig, SchemaData, UninitializedVariantInfo,
 };
+use crate::cost::{CostConfig, compute_cost_from_streaming_chunks};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::InferenceQueries;
@@ -194,6 +195,8 @@ struct InferenceMetadata {
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts during model-level fallback.
     pub failed_raw_response: Vec<RawResponseEntry>,
+    /// Cost configuration from the provider, for computing cost after streaming completes.
+    pub cost_config: Option<CostConfig>,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -883,6 +886,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             model_inference_id: model_used_info.model_inference_id,
             include_aggregated_response,
             failed_raw_response: model_used_info.failed_raw_response,
+            cost_config: model_used_info.cost_config,
         };
 
         let stream = create_stream(
@@ -1244,6 +1248,7 @@ fn create_stream(
         // Then, send all chunks but strip usage and finish reason
         let mut usages: Vec<Usage> = vec![];
         let mut finish_reasons: Vec<FinishReason> = vec![];
+        let mut cost_raw_chunks: Vec<String> = vec![];
         let mut inference_ttft = None;
         while let Some(chunk) = stream.next().await {
             let mut chunk = match chunk {
@@ -1259,9 +1264,15 @@ fn create_stream(
                 inference_ttft = Some(metadata.start_time.elapsed());
             }
 
+            // Collect raw chunks for post-loop cost computation (independent of usage presence,
+            // since cost pointers may resolve from non-usage chunks)
+            if !metadata.cached && metadata.cost_config.is_some() {
+                cost_raw_chunks.push(chunk.raw_chunk().to_string());
+            }
+
             // Strip usage
-            if let Some(u) = chunk.usage() {
-                usages.push(*u);
+            if let Some(u) = chunk.usage().copied() {
+                usages.push(u);
                 chunk.set_usage(None);
             }
 
@@ -1287,7 +1298,15 @@ fn create_stream(
 
         // If we saw multiple chunks with `usage`, compute the field-wise max and warn if they are non-cumulative
         // This is the current model's usage (used for database storage)
-        let model_inference_usage = aggregate_usage_from_single_streaming_model_inference(usages);
+        let mut model_inference_usage = aggregate_usage_from_single_streaming_model_inference(usages);
+
+        // Compute cost from all collected raw chunks (handles both cumulative and split-usage providers)
+        if let Some(ref cost_config) = metadata.cost_config {
+            let chunk_refs: Vec<&str> = cost_raw_chunks.iter().map(|s| s.as_str()).collect();
+            model_inference_usage.cost =
+                compute_cost_from_streaming_chunks(&chunk_refs, cost_config).ok();
+        }
+
         // Then add the usage from previous inferences (e.g. best-of-N candidates)
         // This is the total usage for the TensorZero inference
         let inference_usage = aggregate_usage_across_model_inferences(
@@ -1403,6 +1422,7 @@ fn create_stream(
                 include_aggregated_response: _,
                 model_inference_id: _,
                 failed_raw_response: _,
+                cost_config: _,
             } = metadata;
 
             let config = config.clone();
@@ -1981,10 +2001,7 @@ impl InferenceResponseChunk {
         let usage = if cached {
             // `usage` represents billed tokens. We set values to 0 if TensorZero cached the inference.
             // Only include usage on chunks that originally had it (i.e., the final chunk).
-            inference_result.usage().map(|_| Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
-            })
+            inference_result.usage().map(|_| Usage::zero())
         } else {
             inference_result.usage().copied()
         };
@@ -2451,6 +2468,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             include_aggregated_response: false,
             failed_raw_response: vec![],
+            cost_config: None,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2522,6 +2540,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             include_aggregated_response: false,
             failed_raw_response: vec![],
+            cost_config: None,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -2919,6 +2938,7 @@ mod tests {
             model_inference_id: Uuid::now_v7(),
             include_aggregated_response: false,
             failed_raw_response: vec![],
+            cost_config: None,
         }
     }
 
@@ -2943,6 +2963,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             }),
             raw_usage: Some(raw_usage_entries.clone()),
             raw_response: None,
@@ -2995,6 +3016,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: None,
@@ -3031,6 +3053,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             }),
             raw_usage: None,
             raw_response: None,
@@ -3064,6 +3087,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             }),
             raw_usage: None,
             raw_response: None,
@@ -3111,6 +3135,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(30),
                 output_tokens: Some(20),
+                cost: None,
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: None,
@@ -3200,6 +3225,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3300,6 +3326,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3382,6 +3409,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3465,6 +3493,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(5),
+                cost: None,
             }),
             ..Default::default()
         });
@@ -3580,6 +3609,7 @@ mod tests {
                 usage: Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(5),
+                    cost: None,
                 },
                 latency: Latency::NonStreaming {
                     response_time: Duration::from_millis(100),

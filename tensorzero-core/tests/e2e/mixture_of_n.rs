@@ -87,6 +87,7 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(input_tokens),
                 output_tokens: Some(output_tokens),
+                cost: None,
             },
         )
     } else {
@@ -106,6 +107,7 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(input_tokens),
                 output_tokens: Some(output_tokens),
+                cost: None,
             },
         )
     };
@@ -153,6 +155,7 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
     let mut usage_sum = Usage {
         input_tokens: Some(0),
         output_tokens: Some(0),
+        cost: None,
     };
 
     for result in results {
@@ -209,6 +212,7 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(40),
                 output_tokens: Some(8),
+                cost: None,
             }
         );
     } else {
@@ -218,6 +222,7 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(40),
                 output_tokens: Some(4),
+                cost: None,
             }
         );
     }
@@ -230,6 +235,7 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
+                cost: None,
             }
         );
     } else {
@@ -981,7 +987,7 @@ async fn test_mixture_of_n_bad_fuser_streaming() {
             "variant_name":"mixture_of_n_variant_bad_fuser",
             "content":[],
             // Usage is accumulated from all 2 candidates (10+10 input tokens, 1+1 output tokens)
-            "usage":{"input_tokens":20,"output_tokens":2},
+            "usage":{"input_tokens":20,"output_tokens":2,"cost":0.00036},
             "finish_reason": "stop"
         }),
     );
@@ -1042,7 +1048,7 @@ async fn test_mixture_of_n_bad_fuser_streaming() {
           "inference_id": inference_id.to_string(),
           "raw_request": "raw request",
           "raw_response": "",
-          "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}",
+          "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 10,\n    \"completion_tokens\": 10,\n    \"total_tokens\": 20\n  }\n}",
           "model_name": "test",
           "model_provider_name": "good",
           "input_tokens": 10,
@@ -1073,7 +1079,7 @@ async fn test_mixture_of_n_bad_fuser_streaming() {
           "id": results[1].get("id").unwrap().as_str().unwrap(),
           "inference_id": inference_id.to_string(),
           "raw_request": "raw request",
-          "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}",
+          "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 10,\n    \"completion_tokens\": 10,\n    \"total_tokens\": 20\n  }\n}",
           "model_name": "test",
           "model_provider_name": "good",
           "input_tokens": 10,
@@ -1156,7 +1162,7 @@ async fn test_mixture_of_n_single_candidate_inner(stream: bool, episode_id: Uuid
                 "episode_id": episode_id.to_string(),
                 "variant_name":"mixture_of_n_variant",
                 "content":[],
-                "usage":{"input_tokens":10,"output_tokens":1},
+                "usage":{"input_tokens":10,"output_tokens":1,"cost":0.00018},
                 "finish_reason": "stop"
             })
         );
@@ -1227,7 +1233,7 @@ async fn test_mixture_of_n_single_candidate_inner(stream: bool, episode_id: Uuid
           "id": result.get("id").unwrap().as_str().unwrap(),
           "inference_id": inference_id.to_string(),
           "raw_request": "raw request",
-          "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}",
+          "raw_response": "{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 10,\n    \"completion_tokens\": 10,\n    \"total_tokens\": 20\n  }\n}",
           "model_name": "test",
           "model_provider_name": "good",
           "input_tokens": 10,

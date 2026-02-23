@@ -35,7 +35,7 @@ jobs:
       # (where the oidc token is not available)
 
       - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        uses: namespacelabs/nscloud-setup@f378676225212387f1283f4da878712af2c4cd60
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx

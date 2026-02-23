@@ -1377,10 +1377,7 @@ impl ModelInferenceResponseWithMetadata {
     /// So we need this function to compute the actual usage in order to send it in the HTTP response.
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
-            Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
-            }
+            Usage::zero()
         } else {
             self.usage
         }
@@ -1668,6 +1665,7 @@ impl ModelInferenceResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
+                cost: None,
             },
             provider_latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
@@ -2321,6 +2319,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            cost: None,
         };
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
@@ -3158,6 +3157,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 false,
             ),
@@ -3165,6 +3165,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
+                    cost: None,
                 },
                 false,
             ),
@@ -3190,6 +3191,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 false,
             ),
@@ -3197,6 +3199,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    cost: None,
                 },
                 false,
             ),
@@ -3222,6 +3225,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 false,
             ),
@@ -3229,6 +3233,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: None,
+                    cost: None,
                 },
                 false,
             ),
@@ -3254,6 +3259,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    cost: None,
                 },
                 false,
             ),
@@ -3261,6 +3267,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    cost: None,
                 },
                 false,
             ),
@@ -3281,12 +3288,13 @@ mod tests {
         assert_eq!(usage_all_none.output_tokens, None);
 
         // Test Case 5: Mixed cached and non-cached with None values
-        // Cached results return Usage { input_tokens: Some(0), output_tokens: Some(0) }
+        // Cached results return Usage::zero()
         let model_responses_mixed = vec![
             create_model_response(
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 true,
             ), // This will be treated as 0/0 due to cached=true
@@ -3294,6 +3302,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    cost: None,
                 },
                 false,
             ),
@@ -3368,6 +3377,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            cost: None,
         };
 
         // Create responses with different finish reasons and IDs
