@@ -7,6 +7,8 @@ on:
         required: true
         type: boolean
     secrets:
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
       R2_ACCESS_KEY_ID:
         required: true
       R2_SECRET_ACCESS_KEY:
@@ -22,9 +24,9 @@ jobs:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
     permissions:
       contents: read
-      # Permission to download artifacts and for rust-cache
+      # Permission for rust-cache
       actions: read
-      # Permission to fetch GitHub OIDC token authentication for Namespace login
+      # Permission to fetch GitHub OIDC token authentication
       id-token: write
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
@@ -90,21 +92,23 @@ jobs:
           path: |
             ./ui/fixtures/large-fixtures/
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          pattern: build-{gateway-e2e,mock-provider-api,fixtures}-container
-          merge-multiple: true
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
-      - name: Load container images
+      - name: Download container images
         run: |
-          docker load < gateway-e2e-container.tar
-          docker load < mock-provider-api-container.tar
-          docker load < fixtures-container.tar
+          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
+          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
           # Retag gateway-e2e as gateway so docker-compose migrations work
           docker tag tensorzero/gateway-e2e:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           # Retag fixtures as fixtures-postgres for docker-compose
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (non-replicated)
         if: matrix.replicated == false

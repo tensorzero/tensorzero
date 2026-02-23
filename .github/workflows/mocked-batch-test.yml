@@ -67,8 +67,8 @@ jobs:
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
@@ -80,31 +80,19 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Download mock-provider-api-container
-        continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-mock-provider-api-container
-          path: .
-
-      - name: Download gateway-container
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-gateway-container
-          path: .
-
-      - name: Load mock-provider-api-container
-        id: load-mock-provider-api
+      - name: Pull mock-provider-api container
+        id: pull-mock-provider-api
         continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
         run: |
-          docker load < mock-provider-api-container.tar
+          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
 
-      - name: Load gateway-container
+      - name: Pull gateway container
         run: |
-          docker load < gateway-container.tar
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
 
       - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG
-        if: steps.load-mock-provider-api.outcome == 'success' # Only run if artifact was successfully loaded
+        if: steps.pull-mock-provider-api.outcome == 'success' # Only run if pull was successful
         run: |
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 

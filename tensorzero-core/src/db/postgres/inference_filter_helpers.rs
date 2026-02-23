@@ -6,6 +6,7 @@ use crate::{
         BooleanMetricFilter, DemonstrationFeedbackFilter, FloatMetricFilter, InferenceFilter,
         TagFilter, TimeFilter,
     },
+    endpoints::stored_inferences::v1::types::TagComparisonOperator,
     error::{Error, ErrorDetails},
 };
 
@@ -149,20 +150,26 @@ fn apply_demonstration_feedback_filter(
 }
 
 fn apply_tag_filter(query_builder: &mut QueryBuilder<sqlx::Postgres>, tag: &TagFilter) {
-    let operator = tag.comparison_operator.to_postgres_operator();
-
-    // For Postgres JSONB, we use the ->> operator to extract text and compare
-    // We also check that the key exists.
-    // (The semantics for tag != value is "tag must exist and must not be equal to value".
-    query_builder.push("(i.tags ? ");
-    query_builder.push_bind(tag.key.clone());
-    query_builder.push(" AND i.tags->>");
-    query_builder.push_bind(tag.key.clone());
-    query_builder.push(" ");
-    query_builder.push(operator);
-    query_builder.push(" ");
-    query_builder.push_bind(tag.value.clone());
-    query_builder.push(")");
+    // Use JSONB containment (@>) for equality so GIN indexes on `tags` can be used.
+    // Keep `NotEqual` semantics as "key exists and value differs".
+    match tag.comparison_operator {
+        TagComparisonOperator::Equal => {
+            query_builder.push("i.tags @> jsonb_build_object(");
+            query_builder.push_bind(tag.key.clone());
+            query_builder.push(", ");
+            query_builder.push_bind(tag.value.clone());
+            query_builder.push(")");
+        }
+        TagComparisonOperator::NotEqual => {
+            query_builder.push("(i.tags ? ");
+            query_builder.push_bind(tag.key.clone());
+            query_builder.push(" AND NOT i.tags @> jsonb_build_object(");
+            query_builder.push_bind(tag.key.clone());
+            query_builder.push(", ");
+            query_builder.push_bind(tag.value.clone());
+            query_builder.push("))");
+        }
+    }
 }
 
 fn apply_time_filter(query_builder: &mut QueryBuilder<sqlx::Postgres>, time: &TimeFilter) {
@@ -355,7 +362,7 @@ mod tests {
         let sql = qb.sql();
         assert_query_equals(
             sql.as_str(),
-            "WHERE 1=1 AND (i.tags ? $1 AND i.tags->>$2 = $3)",
+            "WHERE 1=1 AND i.tags @> jsonb_build_object($1, $2)",
         );
     }
 
@@ -372,7 +379,7 @@ mod tests {
         let sql = qb.sql();
         assert_query_equals(
             sql.as_str(),
-            "WHERE 1=1 AND (i.tags ? $1 AND i.tags->>$2 != $3)",
+            "WHERE 1=1 AND (i.tags ? $1 AND NOT i.tags @> jsonb_build_object($2, $3))",
         );
     }
 
@@ -508,7 +515,7 @@ mod tests {
         let sql = qb.sql();
         assert_query_equals(
             sql.as_str(),
-            "WHERE 1=1 AND (i.tags ? $1 AND i.tags->>$2 = $3)",
+            "WHERE 1=1 AND i.tags @> jsonb_build_object($1, $2)",
         );
     }
 
@@ -535,7 +542,7 @@ mod tests {
         let sql = qb.sql();
         assert_query_equals(
             sql.as_str(),
-            "WHERE 1=1 AND ((i.tags ? $1 AND i.tags->>$2 = $3) AND i.created_at > $4)",
+            "WHERE 1=1 AND (i.tags @> jsonb_build_object($1, $2) AND i.created_at > $3)",
         );
     }
 
@@ -565,7 +572,7 @@ mod tests {
         let sql = qb.sql();
         assert_query_equals(
             sql.as_str(),
-            "WHERE 1=1 AND (i.tags ? $1 AND i.tags->>$2 = $3)",
+            "WHERE 1=1 AND i.tags @> jsonb_build_object($1, $2)",
         );
     }
 
@@ -591,7 +598,7 @@ mod tests {
         let sql = qb.sql();
         assert_query_equals(
             sql.as_str(),
-            "WHERE 1=1 AND ((i.tags ? $1 AND i.tags->>$2 = $3) OR (i.tags ? $4 AND i.tags->>$5 = $6))",
+            "WHERE 1=1 AND (i.tags @> jsonb_build_object($1, $2) OR i.tags @> jsonb_build_object($3, $4))",
         );
     }
 
@@ -610,7 +617,7 @@ mod tests {
         let sql = qb.sql();
         assert_query_equals(
             sql.as_str(),
-            "WHERE 1=1 AND NOT ((i.tags ? $1 AND i.tags->>$2 = $3))",
+            "WHERE 1=1 AND NOT (i.tags @> jsonb_build_object($1, $2))",
         );
     }
 
@@ -646,7 +653,7 @@ mod tests {
         let sql = qb.sql();
         assert_query_equals(
             sql.as_str(),
-            "WHERE 1=1 AND (((i.tags ? $1 AND i.tags->>$2 = $3) AND (i.tags ? $4 AND i.tags->>$5 = $6)) OR (i.tags ? $7 AND i.tags->>$8 = $9))",
+            "WHERE 1=1 AND ((i.tags @> jsonb_build_object($1, $2) AND i.tags @> jsonb_build_object($3, $4)) OR i.tags @> jsonb_build_object($5, $6))",
         );
     }
 

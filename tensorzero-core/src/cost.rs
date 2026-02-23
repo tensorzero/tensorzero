@@ -20,17 +20,16 @@ pub enum ResponseMode {
 
 /// Compute the cost of a provider response by resolving JSON pointers in the raw response
 /// and multiplying extracted values by configured rates.
-///
-/// Returns `Some(total)` if cost can be computed, `None` if:
-/// - The raw response is not valid JSON
-/// - A required field is missing or non-numeric
-/// - The computed total is negative
 pub fn compute_cost(
     raw_response: &str,
     cost_config: &CostConfig,
     mode: ResponseMode,
-) -> Option<Cost> {
-    let json: Value = serde_json::from_str(raw_response).ok()?;
+) -> Result<Cost, Error> {
+    let json: Value = serde_json::from_str(raw_response).map_err(|e| {
+        Error::new(ErrorDetails::CostComputation {
+            message: format!("raw response is not valid JSON: {e}"),
+        })
+    })?;
     let mut total = Decimal::ZERO;
 
     for entry in cost_config {
@@ -48,12 +47,20 @@ pub fn compute_cost(
         let value = json.pointer(pointer_str);
         match value {
             Some(v) => {
-                let numeric = value_to_decimal(v)?;
+                let numeric = value_to_decimal(v).ok_or_else(|| {
+                    Error::new(ErrorDetails::CostComputation {
+                        message: format!("value at JSON pointer `{pointer_str}` is not numeric"),
+                    })
+                })?;
                 total += numeric * entry.rate.cost_per_unit;
             }
             None => {
                 if entry.required {
-                    return None;
+                    return Err(Error::new(ErrorDetails::CostComputation {
+                        message: format!(
+                            "required field not found at JSON pointer `{pointer_str}`"
+                        ),
+                    }));
                 }
                 // Non-required missing field: skip (contributes 0)
             }
@@ -61,10 +68,14 @@ pub fn compute_cost(
     }
 
     if total < Decimal::ZERO {
-        return None;
+        return Err(Error::new(ErrorDetails::CostComputation {
+            message: format!(
+                "computed total cost is negative ({total}), which likely indicates a problematic cost configuration"
+            ),
+        }));
     }
 
-    Some(total)
+    Ok(total)
 }
 
 /// Compute cost from multiple streaming chunks by scanning all chunks per cost config pointer.
@@ -73,13 +84,10 @@ pub fn compute_cost(
 /// This correctly handles both:
 /// - Cumulative providers (e.g. OpenAI): the same pointer appears in multiple chunks with increasing values → max is correct.
 /// - Split-usage providers (e.g. Anthropic): different pointers resolve from different chunks → each max is that pointer's only value.
-///
-/// Returns `None` if a required pointer is not found in any chunk, if any resolved value is
-/// non-numeric, or if the total is negative.
 pub fn compute_cost_from_streaming_chunks(
     raw_chunks: &[&str],
     cost_config: &CostConfig,
-) -> Option<Cost> {
+) -> Result<Cost, Error> {
     let mut total = Decimal::ZERO;
 
     for entry in cost_config {
@@ -99,7 +107,11 @@ pub fn compute_cost_from_streaming_chunks(
             };
 
             if let Some(v) = json.pointer(pointer_str) {
-                let numeric = value_to_decimal(v)?;
+                let numeric = value_to_decimal(v).ok_or_else(|| {
+                    Error::new(ErrorDetails::CostComputation {
+                        message: format!("value at JSON pointer `{pointer_str}` is not numeric"),
+                    })
+                })?;
                 max_value = Some(match max_value {
                     Some(current) if current >= numeric => current,
                     _ => numeric,
@@ -113,17 +125,25 @@ pub fn compute_cost_from_streaming_chunks(
             }
             None => {
                 if entry.required {
-                    return None;
+                    return Err(Error::new(ErrorDetails::CostComputation {
+                        message: format!(
+                            "required field not found at JSON pointer `{pointer_str}`"
+                        ),
+                    }));
                 }
             }
         }
     }
 
     if total < Decimal::ZERO {
-        return None;
+        return Err(Error::new(ErrorDetails::CostComputation {
+            message: format!(
+                "computed total cost is negative ({total}), which likely indicates a problematic cost configuration"
+            ),
+        }));
     }
 
-    Some(total)
+    Ok(total)
 }
 
 /// Convert a JSON value to a Decimal. Handles integers, floats, and string representations.
@@ -713,12 +733,12 @@ cost_per_million = 3.0
                 false,
             ),
         ];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect("should compute cost successfully");
         let expected = Decimal::from(100) * Decimal::from(3) / Decimal::from(1_000_000)
             + Decimal::from(50) * Decimal::from(15) / Decimal::from(1_000_000);
         assert_eq!(
-            cost,
-            Some(expected),
+            cost, expected,
             "cost should be sum of (tokens * rate) for each entry"
         );
     }
@@ -731,10 +751,11 @@ cost_per_million = 3.0
             Decimal::from(1), // cost_per_unit = 1 means use value directly
             true,
         )];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect("should compute cost successfully");
         assert_eq!(
             cost,
-            Some(Decimal::new(5, 2)),
+            Decimal::new(5, 2),
             "should extract cost directly when rate is 1"
         );
     }
@@ -748,11 +769,11 @@ cost_per_million = 3.0
             Decimal::from(1) / Decimal::from(1_000_000),
             false,
         )];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect("should compute cost successfully");
         let expected = Decimal::from(200) / Decimal::from(1_000_000);
         assert_eq!(
-            cost,
-            Some(expected),
+            cost, expected,
             "non-streaming mode should use nonstreaming pointer"
         );
     }
@@ -766,26 +787,27 @@ cost_per_million = 3.0
             Decimal::from(1) / Decimal::from(1_000_000),
             false,
         )];
-        let cost = compute_cost(raw, &config, ResponseMode::Streaming);
+        let cost = compute_cost(raw, &config, ResponseMode::Streaming)
+            .expect("should compute cost successfully");
         let expected = Decimal::from(300) / Decimal::from(1_000_000);
         assert_eq!(
-            cost,
-            Some(expected),
+            cost, expected,
             "streaming mode should use streaming pointer"
         );
     }
 
     #[test]
-    fn test_compute_cost_required_field_missing_returns_none() {
+    fn test_compute_cost_required_field_missing_returns_err() {
         let raw = r#"{"usage": {"prompt_tokens": 100}}"#;
         let config = vec![
             unified_config("/usage/prompt_tokens", Decimal::from(1), false),
             unified_config("/usage/completion_tokens", Decimal::from(1), true), // required but missing
         ];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
-        assert_eq!(
-            cost, None,
-            "should return None when a required field is missing"
+        let err = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect_err("should return Err when a required field is missing");
+        assert!(
+            err.to_string().contains("required field not found"),
+            "should mention missing required field: {err}"
         );
     }
 
@@ -796,24 +818,29 @@ cost_per_million = 3.0
             unified_config("/usage/prompt_tokens", Decimal::from(1), false),
             unified_config("/usage/completion_tokens", Decimal::from(1), false), // not required
         ];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect("should compute cost successfully");
         assert_eq!(
             cost,
-            Some(Decimal::from(100)),
+            Decimal::from(100),
             "should skip non-required missing fields"
         );
     }
 
     #[test]
-    fn test_compute_cost_invalid_json_returns_none() {
+    fn test_compute_cost_invalid_json_returns_err() {
         let raw = "not valid json";
         let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
-        assert_eq!(cost, None, "should return None for invalid JSON");
+        let err = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect_err("should return Err for invalid JSON");
+        assert!(
+            err.to_string().contains("not valid JSON"),
+            "should mention invalid JSON: {err}"
+        );
     }
 
     #[test]
-    fn test_compute_cost_negative_total_returns_none() {
+    fn test_compute_cost_negative_total_returns_err() {
         // Set up a config where the total will be negative
         let raw = r#"{"tokens": 10}"#;
         let config = vec![unified_config(
@@ -821,30 +848,32 @@ cost_per_million = 3.0
             Decimal::new(-5, 0), // -5 per unit → total = -50
             false,
         )];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
-        assert_eq!(cost, None, "should return None when total cost is negative");
+        let err = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect_err("should return Err when total cost is negative");
+        assert!(
+            err.to_string().contains("negative"),
+            "should mention negative total: {err}"
+        );
     }
 
     #[test]
     fn test_compute_cost_empty_config() {
         let raw = r#"{"usage": {"tokens": 100}}"#;
         let config: CostConfig = vec![];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
-        assert_eq!(
-            cost,
-            Some(Decimal::ZERO),
-            "empty config should return Some(0)"
-        );
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect("should compute cost successfully");
+        assert_eq!(cost, Decimal::ZERO, "empty config should return Ok(0)");
     }
 
     #[test]
-    fn test_compute_cost_non_numeric_value_returns_none() {
+    fn test_compute_cost_non_numeric_value_returns_err() {
         let raw = r#"{"usage": {"tokens": "not_a_number"}}"#;
         let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
-        assert_eq!(
-            cost, None,
-            "should return None for non-numeric field values"
+        let err = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect_err("should return Err for non-numeric field values");
+        assert!(
+            err.to_string().contains("not numeric"),
+            "should mention non-numeric value: {err}"
         );
     }
 
@@ -852,20 +881,21 @@ cost_per_million = 3.0
     fn test_compute_cost_string_numeric_value() {
         let raw = r#"{"usage": {"tokens": "100"}}"#;
         let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
-        assert_eq!(
-            cost,
-            Some(Decimal::from(100)),
-            "should parse numeric strings"
-        );
+        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect("should compute cost successfully");
+        assert_eq!(cost, Decimal::from(100), "should parse numeric strings");
     }
 
     #[test]
-    fn test_compute_cost_boolean_value_returns_none() {
+    fn test_compute_cost_boolean_value_returns_err() {
         let raw = r#"{"usage": {"tokens": true}}"#;
         let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
-        let cost = compute_cost(raw, &config, ResponseMode::NonStreaming);
-        assert_eq!(cost, None, "should return None for boolean field values");
+        let err = compute_cost(raw, &config, ResponseMode::NonStreaming)
+            .expect_err("should return Err for boolean field values");
+        assert!(
+            err.to_string().contains("not numeric"),
+            "should mention non-numeric value: {err}"
+        );
     }
 
     // ========================================================================
@@ -894,11 +924,11 @@ cost_per_million = 3.0
             ),
         ];
         let chunks: Vec<&str> = vec![chunk1, chunk2];
-        let cost = compute_cost_from_streaming_chunks(&chunks, &config);
+        let cost = compute_cost_from_streaming_chunks(&chunks, &config)
+            .expect("should compute cost successfully");
         let expected = Decimal::from(69) * input_rate + Decimal::from(100) * output_rate;
         assert_eq!(
-            cost,
-            Some(expected),
+            cost, expected,
             "should sum costs from different chunks for split-usage providers"
         );
     }
@@ -920,12 +950,12 @@ cost_per_million = 3.0
             ),
         ];
         let chunks: Vec<&str> = vec![chunk];
-        let cost = compute_cost_from_streaming_chunks(&chunks, &config);
+        let cost = compute_cost_from_streaming_chunks(&chunks, &config)
+            .expect("should compute cost successfully");
         let expected = Decimal::from(100) * Decimal::from(3) / Decimal::from(1_000_000)
             + Decimal::from(50) * Decimal::from(15) / Decimal::from(1_000_000);
         assert_eq!(
-            cost,
-            Some(expected),
+            cost, expected,
             "should compute correct cost from a single chunk"
         );
     }
@@ -938,10 +968,11 @@ cost_per_million = 3.0
         let chunk3 = r#"{"usage": {"tokens": 150}}"#;
         let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
         let chunks: Vec<&str> = vec![chunk1, chunk2, chunk3];
-        let cost = compute_cost_from_streaming_chunks(&chunks, &config);
+        let cost = compute_cost_from_streaming_chunks(&chunks, &config)
+            .expect("should compute cost successfully");
         assert_eq!(
             cost,
-            Some(Decimal::from(150)),
+            Decimal::from(150),
             "should take the max value across cumulative chunks"
         );
     }
@@ -952,10 +983,11 @@ cost_per_million = 3.0
         let chunk2 = r#"{"usage": {"other": 20}}"#;
         let config = vec![unified_config("/usage/tokens", Decimal::from(1), true)];
         let chunks: Vec<&str> = vec![chunk1, chunk2];
-        let cost = compute_cost_from_streaming_chunks(&chunks, &config);
-        assert_eq!(
-            cost, None,
-            "should return None when a required field is not found in any chunk"
+        let err = compute_cost_from_streaming_chunks(&chunks, &config)
+            .expect_err("should return Err when a required field is not found in any chunk");
+        assert!(
+            err.to_string().contains("required field not found"),
+            "should mention missing required field: {err}"
         );
     }
 
@@ -963,11 +995,12 @@ cost_per_million = 3.0
     fn test_streaming_chunks_empty_chunks_list() {
         let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
         let chunks: Vec<&str> = vec![];
-        let cost = compute_cost_from_streaming_chunks(&chunks, &config);
+        let cost = compute_cost_from_streaming_chunks(&chunks, &config)
+            .expect("should compute cost successfully");
         assert_eq!(
             cost,
-            Some(Decimal::ZERO),
-            "empty chunks with non-required fields should return Some(0)"
+            Decimal::ZERO,
+            "empty chunks with non-required fields should return Ok(0)"
         );
     }
 
@@ -975,10 +1008,11 @@ cost_per_million = 3.0
     fn test_streaming_chunks_empty_chunks_required_field() {
         let config = vec![unified_config("/usage/tokens", Decimal::from(1), true)];
         let chunks: Vec<&str> = vec![];
-        let cost = compute_cost_from_streaming_chunks(&chunks, &config);
-        assert_eq!(
-            cost, None,
-            "empty chunks with required fields should return None"
+        let err = compute_cost_from_streaming_chunks(&chunks, &config)
+            .expect_err("should return Err for empty chunks with required fields");
+        assert!(
+            err.to_string().contains("required field not found"),
+            "should mention missing required field: {err}"
         );
     }
 
@@ -988,16 +1022,17 @@ cost_per_million = 3.0
         let chunk2 = r#"{"usage": {"tokens": 42}}"#;
         let config = vec![unified_config("/usage/tokens", Decimal::from(1), false)];
         let chunks: Vec<&str> = vec![chunk1, chunk2];
-        let cost = compute_cost_from_streaming_chunks(&chunks, &config);
+        let cost = compute_cost_from_streaming_chunks(&chunks, &config)
+            .expect("should compute cost successfully");
         assert_eq!(
             cost,
-            Some(Decimal::from(42)),
+            Decimal::from(42),
             "should skip invalid JSON chunks and use valid ones"
         );
     }
 
     #[test]
-    fn test_streaming_chunks_negative_total_returns_none() {
+    fn test_streaming_chunks_negative_total_returns_err() {
         let chunk = r#"{"tokens": 10}"#;
         let config = vec![unified_config(
             "/tokens",
@@ -1005,7 +1040,11 @@ cost_per_million = 3.0
             false,
         )];
         let chunks: Vec<&str> = vec![chunk];
-        let cost = compute_cost_from_streaming_chunks(&chunks, &config);
-        assert_eq!(cost, None, "should return None when total cost is negative");
+        let err = compute_cost_from_streaming_chunks(&chunks, &config)
+            .expect_err("should return Err when total cost is negative");
+        assert!(
+            err.to_string().contains("negative"),
+            "should mention negative total: {err}"
+        );
     }
 }

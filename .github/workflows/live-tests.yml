@@ -67,38 +67,20 @@ jobs:
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
 
-      - name: Download gateway container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          name: build-gateway-container
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-      - name: Download provider-proxy container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-provider-proxy-container
-
-      - name: Download gateway-e2e container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-gateway-e2e-container
-
-      - name: Download live-tests container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-live-tests-container
-
-      - name: Download fixtures container image
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-fixtures-container
-
-      - name: Load container images
+      - name: Pull container images
         run: |
-          docker load < gateway-container.tar
-          docker load < provider-proxy-container.tar
-          docker load < gateway-e2e-container.tar
-          docker load < live-tests-container.tar
-          docker load < fixtures-container.tar
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
+          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
+          docker pull tensorzero/live-tests:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
       - name: Restore provider-proxy cache
@@ -115,12 +97,6 @@ jobs:
         if: github.event_name != 'schedule'
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/download-provider-proxy-cache.sh
-
-      - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Write GCP JWT key to file
         env:
