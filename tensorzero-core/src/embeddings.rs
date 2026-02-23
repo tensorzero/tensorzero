@@ -10,7 +10,7 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write,
 };
 use crate::config::provider_types::ProviderTypesConfig;
-use crate::cost::{CostConfig, load_cost_config};
+use crate::cost::{CostConfig, ResponseMode, compute_cost, load_cost_config};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
@@ -218,11 +218,12 @@ impl EmbeddingModelConfig {
                     Ok(mut response) => {
                         // Compute cost from raw response using the provider's cost config
                         if let Some(cost_config) = &provider_config.cost {
-                            response.usage.cost = crate::cost::compute_cost(
+                            response.usage.cost = compute_cost(
                                 &response.raw_response,
                                 cost_config,
-                                crate::cost::ResponseMode::NonStreaming,
-                            );
+                                ResponseMode::NonStreaming,
+                            )
+                            .ok();
                         }
                         if clients.cache_options.enabled.write() && response.embeddings.len() == 1 {
                             let Some(first_embedding) = response.embeddings.first() else {

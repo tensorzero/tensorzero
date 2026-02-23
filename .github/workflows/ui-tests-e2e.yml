@@ -6,28 +6,30 @@ permissions:
 on:
   workflow_call:
     secrets:
+      ANTHROPIC_API_KEY:
+        required: false
       AWS_ACCESS_KEY_ID:
         required: true
       AWS_SECRET_ACCESS_KEY:
         required: true
-      OPENAI_API_KEY:
+      DOCKERHUB_LIMITED_TOKEN:
         required: true
       FIREWORKS_ACCOUNT_ID:
         required: true
       FIREWORKS_API_KEY:
         required: true
-      S3_ACCESS_KEY_ID:
-        required: true
-      S3_SECRET_ACCESS_KEY:
-        required: true
       GCP_JWT_KEY:
+        required: true
+      OPENAI_API_KEY:
         required: true
       R2_ACCESS_KEY_ID:
         required: true
       R2_SECRET_ACCESS_KEY:
         required: true
-      ANTHROPIC_API_KEY:
-        required: false
+      S3_ACCESS_KEY_ID:
+        required: true
+      S3_SECRET_ACCESS_KEY:
+        required: true
       TOGETHER_API_KEY:
         required: false
     inputs:
@@ -48,18 +50,20 @@ jobs:
         with:
           node-version: "24.13.0"
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          pattern: build-{gateway,ui,mock-provider-api,fixtures}-container
-          merge-multiple: true
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-      - name: Load container images
+      - name: Pull container images
         run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-          docker load < mock-provider-api-container.tar
-          docker load < fixtures-container.tar
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
+          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
 
       - name: Start docker containers without external network access
         working-directory: ui
@@ -128,18 +132,20 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          pattern: build-{gateway,ui,mock-provider-api,fixtures}-container
-          merge-multiple: true
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-      - name: Load container images
+      - name: Pull container images
         run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-          docker load < mock-provider-api-container.tar
-          docker load < fixtures-container.tar
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
+          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
@@ -243,18 +249,20 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          pattern: build-{gateway,ui,mock-provider-api,fixtures}-container
-          merge-multiple: true
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-      - name: Load container images
+      - name: Pull container images
         run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-          docker load < mock-provider-api-container.tar
-          docker load < fixtures-container.tar
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
+          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
 
       - name: Set common fixture environment variables
         working-directory: ui
@@ -365,21 +373,22 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Download container images
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          pattern: build-{gateway,gateway-e2e,ui,mock-provider-api,provider-proxy,fixtures}-container
-          merge-multiple: true
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-      - name: Load container images
-        continue-on-error: true
+      - name: Pull container images
         run: |
-          docker load < gateway-container.tar
-          docker load < gateway-e2e-container.tar
-          docker load < ui-container.tar
-          docker load < mock-provider-api-container.tar
-          docker load < provider-proxy-container.tar
-          docker load < fixtures-container.tar
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
+          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
+          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
 
       - name: Download provider-proxy cache from R2
         env:

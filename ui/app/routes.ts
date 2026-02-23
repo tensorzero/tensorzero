@@ -43,6 +43,14 @@ export default [
         "resolve_uuid/:uuid",
         "routes/api/tensorzero/resolve_uuid.route.ts",
       ),
+      route(
+        "inference_preview/:inference_id",
+        "routes/api/tensorzero/inference_preview.route.ts",
+      ),
+      route(
+        "episode_preview/:episode_id",
+        "routes/api/tensorzero/episode_preview.route.ts",
+      ),
     ]),
 
     route(

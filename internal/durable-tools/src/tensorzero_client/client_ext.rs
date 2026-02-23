@@ -484,6 +484,15 @@ impl TensorZeroClient for Client {
             .map_err(TensorZeroClientError::TensorZero)
     }
 
+    async fn delete_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroClientError> {
+        ClientExt::delete_dataset(self, dataset_name)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
     // ========== Inference Query Operations ==========
 
     async fn list_inferences(

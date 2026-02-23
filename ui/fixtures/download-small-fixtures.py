@@ -105,47 +105,33 @@ def rename_fixtures():
 
 
 # =============================================================================
-# Authenticated path: S3 sync (used in CI with R2 credentials)
+# Authenticated path: s5cmd download (used in CI with R2 credentials)
 # =============================================================================
 
 
-def sync_fixtures_from_r2(retries: int = 3) -> None:
-    """Sync fixtures from R2 using aws s3 sync with retry logic."""
+def download_fixtures_from_r2(retries: int = 3) -> None:
+    """Download fixtures from R2 using s5cmd with retry logic."""
+    batch_commands = "\n".join(f"cp s3://tensorzero-fixtures/{f} {FIXTURES_DIR}/" for f in FIXTURES.keys())
+
     cmd = [
-        "aws",
-        "s3",
-        "--region",
-        "auto",
+        "s5cmd",
         "--endpoint-url",
         R2_S3_ENDPOINT_URL,
-        "--no-progress",
-        "--cli-connect-timeout",
-        "30",
-        "--cli-read-timeout",
-        "180",
-        "sync",
-        "s3://tensorzero-fixtures/",
-        str(FIXTURES_DIR),
-        # Only download the files in `FIXTURES`
-        "--exclude",
-        "*",
-        *[arg for f in FIXTURES.keys() for arg in ("--include", f)],
+        "run",
     ]
 
     env = {
         "PATH": os.environ.get("PATH", ""),
         "AWS_ACCESS_KEY_ID": os.environ["R2_ACCESS_KEY_ID"],
         "AWS_SECRET_ACCESS_KEY": os.environ["R2_SECRET_ACCESS_KEY"],
-        "AWS_MAX_ATTEMPTS": "15",
-        "AWS_RETRY_MODE": "adaptive",
     }
 
     for attempt in range(retries):
-        print(f"Running aws s3 sync (attempt {attempt + 1} of {retries})...", flush=True)
-        result = subprocess.run(cmd, env=env)
+        print(f"Running s5cmd (attempt {attempt + 1} of {retries})...", flush=True)
+        result = subprocess.run(cmd, input=batch_commands, text=True, env=env)
 
         if result.returncode == 0:
-            print("Sync completed successfully. Verifying ETags...", flush=True)
+            print("Download completed successfully. Verifying ETags...", flush=True)
             try:
                 verify_etags()
                 rename_fixtures()
@@ -159,7 +145,7 @@ def sync_fixtures_from_r2(retries: int = 3) -> None:
                     raise
         else:
             print(
-                f"aws s3 sync failed with exit code {result.returncode} (attempt {attempt + 1} of {retries})",
+                f"s5cmd failed with exit code {result.returncode} (attempt {attempt + 1} of {retries})",
                 flush=True,
             )
 
@@ -168,7 +154,7 @@ def sync_fixtures_from_r2(retries: int = 3) -> None:
             print(f"Retrying in {sleep_time} seconds...", flush=True)
             time.sleep(sleep_time)
 
-    raise Exception(f"aws s3 sync failed after {retries} attempts")
+    raise Exception(f"s5cmd download failed after {retries} attempts")
 
 
 # =============================================================================
@@ -185,8 +171,8 @@ def main():
             "For local development without R2 credentials, use download-small-fixtures-http.py instead."
         )
 
-    print("R2 credentials found, downloading fixtures using `aws s3 sync`", flush=True)
-    sync_fixtures_from_r2()
+    print("R2 credentials found, downloading fixtures using `s5cmd`", flush=True)
+    download_fixtures_from_r2()
 
 
 if __name__ == "__main__":

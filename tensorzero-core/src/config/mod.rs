@@ -682,8 +682,21 @@ impl ConfigFileGlob {
     }
 
     pub fn new(glob: String) -> Result<Self, Error> {
-        // Build a matcher from the glob pattern
-        let matcher = globset::Glob::new(&glob)
+        // Build a matcher from the glob pattern.
+        // We enable `literal_separator` so that `*` and `?` do not match `/`.
+        // Without `literal_separator`, a glob like `/app/config/*.toml` would
+        // match both `/app/config/foo.toml` and `/app/config/somedir/foo.toml`.
+
+        // This warning can be removed in 2026.5+.
+        if glob.contains('*') && !glob.contains("**") {
+            tracing::warn!(
+                "Important: `--config-file {glob}` contains `*`. `*` no longer matches directory separators (e.g. `*.toml` will not match `subdir/foo.toml`). Use `**` for recursive matching (e.g. `**/*.toml` will match `subdir/foo.toml`)."
+            );
+        }
+
+        let matcher = globset::GlobBuilder::new(&glob)
+            .literal_separator(true)
+            .build()
             .map_err(|e| {
                 Error::new(ErrorDetails::Glob {
                     glob: glob.to_string(),

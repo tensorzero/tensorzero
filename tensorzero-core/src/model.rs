@@ -556,7 +556,8 @@ impl ModelConfig {
                                 &response.raw_response,
                                 cost_config,
                                 ResponseMode::NonStreaming,
-                            );
+                            )
+                            .ok();
                         }
 
                         // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,

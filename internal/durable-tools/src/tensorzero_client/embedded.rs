@@ -386,6 +386,18 @@ impl TensorZeroClient for EmbeddedClient {
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
+    async fn delete_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::datasets::v1::delete_dataset(
+            &self.app_state.get_delegating_database(),
+            &dataset_name,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
     // ========== Inference Query Operations ==========
 
     async fn list_inferences(
