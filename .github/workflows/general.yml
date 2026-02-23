@@ -860,15 +860,6 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
-        with:
-          version: "0.9.27"
-
-      - name: Download ClickHouse fixtures
-        run: |
-          uv run ./ui/fixtures/download-small-fixtures.py
-
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
