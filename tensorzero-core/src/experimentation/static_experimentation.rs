@@ -217,16 +217,6 @@ pub(crate) fn sample_weighted(
 }
 
 impl StaticExperimentationConfig {
-    /// Create a default config for the "omitted experimentation" case.
-    /// Uses all variants with equal weights — represented as empty candidates + empty fallback.
-    /// At runtime this is handled by the fallback in `ExperimentationConfig::sample()`.
-    pub fn all_variants_uniform() -> Self {
-        Self {
-            candidate_variants: WeightedVariants(BTreeMap::new()),
-            fallback_variants: Vec::new(),
-        }
-    }
-
     /// Validate that candidate and fallback variant names exist in the function's variants map,
     /// check for duplicates, and validate weights.
     /// This should be called during config loading to catch typos early.
@@ -273,12 +263,10 @@ impl StaticExperimentationConfig {
             }
         }
 
-        // If there are candidate variants but none have positive weight, and there are no
-        // fallback variants, sampling will always fail at runtime. Reject this at load time.
-        // (The all_variants_uniform() case has empty candidates AND empty fallbacks, which
-        // is handled separately by ExperimentationConfig::sample's uniform fallback.)
-        if !self.candidate_variants.is_empty()
-            && !self.candidate_variants.inner().values().any(|&w| w > 0.0)
+        // If no candidate has positive weight and there are no fallback variants,
+        // sampling will always fail at runtime. Reject this at load time.
+        // (This also catches explicitly empty `candidate_variants = []`.)
+        if !self.candidate_variants.inner().values().any(|&w| w > 0.0)
             && self.fallback_variants.is_empty()
         {
             return Err(Error::new(ErrorDetails::Config {
@@ -349,18 +337,6 @@ impl VariantSampler for StaticExperimentationConfig {
         active_variants: &'a HashMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
-        // If candidates are empty (all-variants-uniform case), return uniform over all active
-        if self.candidate_variants.is_empty() && self.fallback_variants.is_empty() {
-            if active_variants.is_empty() {
-                return Ok(HashMap::new());
-            }
-            let uniform_prob = 1.0 / active_variants.len() as f64;
-            return Ok(active_variants
-                .keys()
-                .map(|k| (k.as_str(), uniform_prob))
-                .collect());
-        }
-
         // Compute the total weight of variants present in active_variants
         let total_weight: f64 = active_variants
             .keys()
@@ -605,29 +581,6 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_static_config_all_variants_uniform() {
-        let config = StaticExperimentationConfig::all_variants_uniform();
-
-        // For the all_variants_uniform case, candidates is empty so the sampler
-        // will always go to fallback path (which is also empty → error).
-        // This is handled by the ExperimentationConfig::sample() fallback logic.
-        // The display_probabilities should return uniform over all active variants.
-        let active_variants: HashMap<_, _> =
-            create_test_variants(&["A", "B", "C"]).into_iter().collect();
-        let postgres = PostgresConnectionInfo::new_disabled();
-
-        let probs = config
-            .get_current_display_probabilities("test", &active_variants, &postgres)
-            .unwrap();
-
-        assert_eq!(probs.len(), 3, "Should have probabilities for all variants");
-        assert!(
-            (probs["A"] - 1.0 / 3.0).abs() < 1e-9,
-            "Should be uniform probability"
-        );
-    }
-
     #[test]
     fn test_static_config_validate_negative_weight() {
         let config = StaticExperimentationConfig {
@@ -763,6 +716,45 @@ mod tests {
         assert!(
             err.contains("no active candidate variants and no fallback variants"),
             "Error should explain the issue: {err}"
+        );
+    }
+
+    #[test]
+    fn test_static_config_validate_empty_candidates_no_fallbacks() {
+        let config = StaticExperimentationConfig {
+            candidate_variants: WeightedVariants::from_equal_weights(vec![]),
+            fallback_variants: vec![],
+        };
+
+        let function_variants: HashMap<_, _> =
+            create_test_variants(&["A", "B"]).into_iter().collect();
+
+        let result = config.validate(&function_variants);
+        assert!(
+            result.is_err(),
+            "Should reject config with empty candidates and no fallbacks"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("no active candidate variants and no fallback variants"),
+            "Error should explain the issue: {err}"
+        );
+    }
+
+    #[test]
+    fn test_static_config_validate_empty_candidates_with_fallbacks_ok() {
+        let config = StaticExperimentationConfig {
+            candidate_variants: WeightedVariants::from_equal_weights(vec![]),
+            fallback_variants: vec!["A".to_string()],
+        };
+
+        let function_variants: HashMap<_, _> =
+            create_test_variants(&["A", "B"]).into_iter().collect();
+
+        let result = config.validate(&function_variants);
+        assert!(
+            result.is_ok(),
+            "Empty candidates with fallbacks should be valid"
         );
     }
 

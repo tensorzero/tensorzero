@@ -104,21 +104,18 @@ fn check_duplicates_across_map(
 /// Legacy types (`Uniform`, `StaticWeights`, `TrackAndStop`) are converted to these
 /// during `load()`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
+    /// No experimentation configured — sample uniformly from all active variants.
+    #[default]
+    Default,
     Static(StaticExperimentationConfig),
     Adaptive(AdaptiveExperimentationConfig),
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     #[cfg(test)]
     AlwaysFails(AlwaysFailsConfig),
-}
-
-impl Default for ExperimentationConfig {
-    fn default() -> Self {
-        Self::Static(StaticExperimentationConfig::all_variants_uniform())
-    }
 }
 
 /// Holds the base experimentation config plus namespace-specific configs (loaded version).
@@ -260,9 +257,13 @@ impl UninitializedExperimentationConfig {
                         "Experimentation type `uniform` is deprecated. Use `static` instead."
                     );
                 }
-                let static_config = config.into_static_config();
-                static_config.validate(variants)?;
-                Ok(ExperimentationConfig::Static(static_config))
+                match config.into_static_config() {
+                    Some(static_config) => {
+                        static_config.validate(variants)?;
+                        Ok(ExperimentationConfig::Static(static_config))
+                    }
+                    None => Ok(ExperimentationConfig::Default),
+                }
             }
             UninitializedExperimentationConfig::StaticWeights(config) => {
                 if warn_deprecated {
@@ -335,8 +336,8 @@ impl ExperimentationConfig {
                 return Self::Static(config.into_static_config());
             }
         }
-        // Otherwise, default to all-variants-uniform
-        Self::Static(StaticExperimentationConfig::all_variants_uniform())
+        // Otherwise, default to uniform sampling over all variants
+        Self::Default
     }
 
     pub async fn setup(
@@ -347,6 +348,7 @@ impl ExperimentationConfig {
         cancel_token: CancellationToken,
     ) -> Result<(), Error> {
         match self {
+            Self::Default => Ok(()),
             Self::Static(config) => {
                 config
                     .setup(db, function_name, postgres, cancel_token)
@@ -375,6 +377,9 @@ impl ExperimentationConfig {
     ) -> Result<(String, Arc<VariantInfo>), Error> {
         // First try the variant-specific sampling
         let result = match self {
+            Self::Default => {
+                return sample_uniform(function_name, &episode_id, active_variants, None);
+            }
             Self::Static(config) => {
                 config
                     .sample(function_name, episode_id, active_variants, postgres)
@@ -400,12 +405,18 @@ impl ExperimentationConfig {
                 Err(e)
             } else {
                 let allowed: Vec<&str> = match self {
+                    Self::Default => {
+                        return Err(Error::new(ErrorDetails::Inference {
+                            message: format!(
+                                "Default experimentation config should not reach fallback logic for function `{function_name}`. {IMPOSSIBLE_ERROR_MESSAGE}"
+                            ),
+                        }));
+                    }
                     Self::Static(config) => config.allowed_variants().collect(),
                     Self::Adaptive(config) => config.allowed_variants().collect(),
                     #[cfg(test)]
                     Self::AlwaysFails(config) => config.allowed_variants().collect(),
                 };
-                // If allowed is empty (default Static with empty candidates), fall back to all variants
                 if allowed.is_empty() {
                     sample_uniform(function_name, &episode_id, active_variants, None)
                 } else {
@@ -416,16 +427,15 @@ impl ExperimentationConfig {
     }
 
     /// Returns whether a variant name could be sampled by this experimentation config.
-    /// Empty allowed lists (e.g. default Static with no explicit candidates) means all variants
-    /// are eligible, so we return `true`.
+    /// `Default` means all variants are eligible, so we return `true`.
     pub fn could_sample_variant(&self, variant_name: &str) -> bool {
         let allowed: Vec<&str> = match self {
+            Self::Default => return true,
             Self::Static(c) => c.allowed_variants().collect(),
             Self::Adaptive(c) => c.allowed_variants().collect(),
             #[cfg(test)]
             Self::AlwaysFails(c) => c.allowed_variants().collect(),
         };
-        // Empty means default Static with no explicit candidates → all variants eligible
         allowed.is_empty() || allowed.contains(&variant_name)
     }
 
@@ -436,6 +446,16 @@ impl ExperimentationConfig {
         postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         match self {
+            Self::Default => {
+                if active_variants.is_empty() {
+                    return Ok(HashMap::new());
+                }
+                let uniform_prob = 1.0 / active_variants.len() as f64;
+                Ok(active_variants
+                    .keys()
+                    .map(|k| (k.as_str(), uniform_prob))
+                    .collect())
+            }
             Self::Static(config) => {
                 config.get_current_display_probabilities(function_name, active_variants, postgres)
             }
@@ -813,7 +833,7 @@ mod tests {
         let config = ExperimentationConfigWithNamespaces::default();
         let result = config.get_for_namespace(None);
         assert!(
-            matches!(result, ExperimentationConfig::Static(_)),
+            matches!(result, ExperimentationConfig::Default),
             "None namespace should return the base config"
         );
     }
@@ -824,7 +844,7 @@ mod tests {
         let ns = Namespace::new("unknown").unwrap();
         let result = config.get_for_namespace(Some(&ns));
         assert!(
-            matches!(result, ExperimentationConfig::Static(_)),
+            matches!(result, ExperimentationConfig::Default),
             "Unknown namespace should fall back to the base config"
         );
     }
@@ -912,9 +932,9 @@ mod tests {
         assert!(
             matches!(
                 loaded.namespaces.get("mobile"),
-                Some(ExperimentationConfig::Static(_))
+                Some(ExperimentationConfig::Default)
             ),
-            "Loaded legacy `uniform` namespace should become Static"
+            "Loaded legacy `uniform` namespace with no candidates/fallbacks should become Default"
         );
     }
 

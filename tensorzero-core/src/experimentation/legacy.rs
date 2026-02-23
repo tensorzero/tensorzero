@@ -26,11 +26,12 @@ pub struct LegacyUniformExperimentationConfig {
 }
 
 impl LegacyUniformExperimentationConfig {
-    /// Convert to `StaticExperimentationConfig`.
+    /// Convert to `StaticExperimentationConfig`, or `None` if neither candidates
+    /// nor fallbacks are specified (meaning "use all variants uniformly").
     /// Validation is deferred to `StaticExperimentationConfig::validate()`.
-    pub fn into_static_config(self) -> StaticExperimentationConfig {
+    pub fn into_static_config(self) -> Option<StaticExperimentationConfig> {
         match (&self.candidate_variants, &self.fallback_variants) {
-            (None, None) => StaticExperimentationConfig::all_variants_uniform(),
+            (None, None) => None,
             (candidates, fallbacks) => {
                 let weighted = match candidates {
                     Some(names) => WeightedVariants::from_equal_weights(names.clone()),
@@ -39,10 +40,10 @@ impl LegacyUniformExperimentationConfig {
                         WeightedVariants::from_equal_weights(vec![])
                     }
                 };
-                StaticExperimentationConfig {
+                Some(StaticExperimentationConfig {
                     candidate_variants: weighted,
                     fallback_variants: fallbacks.clone().unwrap_or_default(),
-                }
+                })
             }
         }
     }

@@ -2735,8 +2735,8 @@ mod tests {
         let config = make_chat_function_config(ExperimentationConfigWithNamespaces::default());
         let exp = config.experimentation_for_namespace(None);
         assert!(
-            matches!(exp, ExperimentationConfig::Static(_)),
-            "None namespace should return the base (default static) config"
+            matches!(exp, ExperimentationConfig::Default),
+            "None namespace should return the base (default) config"
         );
     }
 
@@ -2770,7 +2770,7 @@ mod tests {
         let ns = Namespace::new("nonexistent").unwrap();
         let exp = config.experimentation_for_namespace(Some(&ns));
         assert!(
-            matches!(exp, ExperimentationConfig::Static(_)),
+            matches!(exp, ExperimentationConfig::Default),
             "Unknown namespace should fall back to the base config"
         );
     }
