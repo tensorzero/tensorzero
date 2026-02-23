@@ -175,7 +175,7 @@ pub enum UninitializedExperimentationConfig {
     // Legacy types (backward compat)
     StaticWeights(legacy::LegacyStaticWeightsExperimentationConfig),
     Uniform(legacy::LegacyUniformExperimentationConfig),
-    TrackAndStop(track_and_stop::LegacyUninitializedTrackAndStopExperimentationConfig),
+    TrackAndStop(track_and_stop::UninitializedTrackAndStopExperimentationConfig),
 }
 
 /// Wrapper struct that holds the base experimentation config plus namespace-specific configs.

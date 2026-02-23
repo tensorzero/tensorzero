@@ -25,9 +25,7 @@ use crate::{
 };
 
 use super::VariantSampler;
-use super::track_and_stop::{
-    LegacyUninitializedTrackAndStopExperimentationConfig, TrackAndStopConfig,
-};
+use super::track_and_stop::{TrackAndStopConfig, UninitializedTrackAndStopExperimentationConfig};
 
 /// Algorithm used for adaptive experimentation.
 /// Currently only `TrackAndStop` is supported.
@@ -64,7 +62,7 @@ pub struct UninitializedAdaptiveExperimentationConfig {
     pub objective: AdaptiveExperimentationObjective,
     // All track-and-stop fields are flattened in (since this is the only option at the moment)
     #[serde(flatten)]
-    pub inner: LegacyUninitializedTrackAndStopExperimentationConfig,
+    pub inner: UninitializedTrackAndStopExperimentationConfig,
 }
 
 /// Loaded adaptive experimentation config.
