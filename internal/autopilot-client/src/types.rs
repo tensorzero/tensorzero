@@ -729,12 +729,9 @@ pub struct StreamEventsParams {
 }
 
 /// Query parameters for streaming workspace tool calls.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StreamWorkspaceToolCallsParams {
     /// Resume streaming from this event ID (exclusive).
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_event_id: Option<Uuid>,
 }
@@ -823,9 +820,7 @@ pub struct WorkspacePendingToolCallsResponse {
 /// Response from listing workspace pending tool calls as seen by gateway consumers.
 ///
 /// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GatewayWorkspacePendingToolCallsResponse {
     pub pending_tool_calls: Vec<GatewayEvent>,
     /// If there are no events in the workspace yet this should return None
