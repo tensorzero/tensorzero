@@ -403,6 +403,7 @@ pub struct ObservabilityConfig {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClickHouseConfig {
+    /// When `true`, the gateway will not run ClickHouse schema migrations on startup.
     #[serde(default)]
     pub disable_automatic_migrations: bool,
 }
@@ -1763,7 +1764,16 @@ struct UninitializedGlobbedConfig {
 }
 
 impl UninitializedConfig {
-    /// Resolve deprecated `gateway.observability.disable_automatic_migrations` to `clickhouse.disable_automatic_migrations`.
+    /// Validate deprecated config fields, emitting warnings for deprecated locations
+    /// and erroring if both old and new locations are set.
+    ///
+    /// This does NOT migrate values from old fields to new ones. Value migration
+    /// is handled by `From<Stored*Config>` impls (for stored snapshots) and by
+    /// the consumer (for TOML configs).
+    pub(crate) fn resolve_deprecations(&mut self) -> Result<(), Error> {
+        self.resolve_clickhouse_config_deprecation()
+    }
+
     fn resolve_clickhouse_config_deprecation(&mut self) -> Result<(), Error> {
         let old = self.gateway.observability.disable_automatic_migrations;
         let new = self.clickhouse.disable_automatic_migrations;
@@ -1777,7 +1787,6 @@ impl UninitializedConfig {
             deprecation_warning(
                 "`gateway.observability.disable_automatic_migrations` is deprecated. Use `clickhouse.disable_automatic_migrations` instead.",
             );
-            self.clickhouse.disable_automatic_migrations = true;
         }
         Ok(())
     }
@@ -1859,7 +1868,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
                 })
             })?;
         let mut config: UninitializedConfig = toml_config.into();
-        config.resolve_clickhouse_config_deprecation()?;
+        config.resolve_deprecations()?;
         Ok(config)
     }
 }

@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::config::gateway::UninitializedGatewayConfig;
 use crate::config::provider_types::ProviderTypesConfig;
 use crate::config::{
     ClickHouseConfig, MetricConfig, PostgresConfig, UninitializedConfig,
@@ -133,8 +134,17 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
             embedding_models,
         } = stored;
 
+        let gateway_config: UninitializedGatewayConfig = gateway.into();
+
+        // Migrate deprecated `gateway.observability.disable_automatic_migrations`
+        // to `clickhouse.disable_automatic_migrations`.
+        let clickhouse = ClickHouseConfig {
+            disable_automatic_migrations: clickhouse.disable_automatic_migrations
+                || gateway_config.observability.disable_automatic_migrations,
+        };
+
         Ok(Self {
-            gateway: gateway.into(),
+            gateway: gateway_config,
             clickhouse,
             postgres,
             object_storage,
@@ -160,7 +170,7 @@ mod tests {
     use crate::embeddings::UninitializedEmbeddingModelConfig;
 
     /// Old snapshot with deprecated `gateway.observability.disable_automatic_migrations`
-    /// should parse and preserve the value through the StoredConfig → UninitializedConfig path.
+    /// should silently migrate to `clickhouse.disable_automatic_migrations`.
     #[test]
     fn test_stored_config_with_deprecated_disable_automatic_migrations() {
         let toml_str = r"
@@ -177,8 +187,8 @@ mod tests {
 
         let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
         assert!(
-            uninit.gateway.observability.disable_automatic_migrations,
-            "deprecated field should survive roundtrip to UninitializedConfig"
+            uninit.clickhouse.disable_automatic_migrations,
+            "deprecated field should be migrated to clickhouse config"
         );
     }
 

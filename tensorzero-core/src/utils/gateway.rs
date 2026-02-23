@@ -589,7 +589,8 @@ pub async fn setup_clickhouse(
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
-            disable_automatic_migrations: config.clickhouse.disable_automatic_migrations,
+            disable_automatic_migrations: config.clickhouse.disable_automatic_migrations
+                || config.gateway.observability.disable_automatic_migrations,
         })
         .await?;
     }
