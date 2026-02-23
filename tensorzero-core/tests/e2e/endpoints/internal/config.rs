@@ -328,6 +328,8 @@ async fn test_write_config_rejects_invalid_tool_ref() {
 [functions.test_invalid_tool_func]
 type = "chat"
 tools = ["nonexistent_tool_that_does_not_exist"]
+
+[functions.test_invalid_tool_func.variants]
 "#;
 
     let config: UninitializedConfig = toml::from_str(config_toml).unwrap();
@@ -354,7 +356,7 @@ async fn test_write_config_rejects_reserved_metric_name() {
 
     let config_toml = r#"
 [metrics.comment]
-type = "comment"
+type = "boolean"
 level = "inference"
 optimize = "max"
 "#;
