@@ -15,8 +15,8 @@ use std::sync::Arc;
 use crate::config::gateway::UninitializedGatewayConfig;
 use crate::config::provider_types::ProviderTypesConfig;
 use crate::config::{
-    MetricConfig, PostgresConfig, TimeoutsConfig, UninitializedConfig, UninitializedFunctionConfig,
-    UninitializedToolConfig,
+    ClickHouseConfig, MetricConfig, PostgresConfig, TimeoutsConfig, UninitializedConfig,
+    UninitializedFunctionConfig, UninitializedToolConfig,
 };
 use crate::embeddings::{UninitializedEmbeddingModelConfig, UninitializedEmbeddingProviderConfig};
 use crate::evaluations::UninitializedEvaluationConfig;
@@ -166,6 +166,8 @@ pub struct StoredConfig {
     #[serde(default)]
     pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
+    pub clickhouse: ClickHouseConfig,
+    #[serde(default)]
     pub postgres: PostgresConfig,
     pub object_storage: Option<StorageKind>,
     #[serde(default)]
@@ -195,6 +197,7 @@ impl From<UninitializedConfig> for StoredConfig {
         // Explicit destructuring ensures compile error if fields are added/removed
         let UninitializedConfig {
             gateway,
+            clickhouse,
             postgres,
             rate_limiting,
             object_storage,
@@ -210,6 +213,7 @@ impl From<UninitializedConfig> for StoredConfig {
 
         Self {
             gateway,
+            clickhouse,
             postgres,
             object_storage,
             models,
@@ -235,6 +239,7 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
         // Explicit destructuring ensures compile error if fields are added/removed
         let StoredConfig {
             gateway,
+            clickhouse,
             postgres,
             rate_limiting,
             object_storage,
@@ -250,6 +255,7 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
 
         Ok(Self {
             gateway,
+            clickhouse,
             postgres,
             object_storage,
             models,
