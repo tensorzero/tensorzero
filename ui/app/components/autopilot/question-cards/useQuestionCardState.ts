@@ -4,6 +4,18 @@ import type {
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 
+type StepAnswer =
+  | { status: "unanswered" }
+  | { status: "skipped" }
+  | { status: "answered_mc"; selected: Set<string> }
+  | { status: "answered_free"; text: string };
+
+type StepAnswers = Map<number, StepAnswer>;
+
+function getStep(answers: StepAnswers, idx: number): StepAnswer {
+  return answers.get(idx) ?? { status: "unanswered" };
+}
+
 export function useQuestionCardState(
   payload: EventPayloadUserQuestions,
   eventId: string,
@@ -13,166 +25,131 @@ export function useQuestionCardState(
   ) => void,
 ) {
   const [activeStep, setActiveStep] = useState(0);
-  const [selections, setSelections] = useState<Map<number, Set<string>>>(
-    () => new Map(),
-  );
-  const [freeTexts, setFreeTexts] = useState<Map<number, string>>(
-    () => new Map(),
-  );
-  const [skippedSteps, setSkippedSteps] = useState<Set<number>>(
-    () => new Set(),
-  );
+  const [answers, setAnswers] = useState<StepAnswers>(() => new Map());
 
   const questionCount = payload.questions.length;
   const isSingleQuestion = questionCount === 1;
   const isFirstStep = activeStep === 0;
   const isLastStep = activeStep === questionCount - 1;
 
-  const clearSkip = (questionIndex: number) => {
-    setSkippedSteps((prev) => {
-      if (!prev.has(questionIndex)) return prev;
-      const next = new Set(prev);
-      next.delete(questionIndex);
-      return next;
-    });
-  };
-
   const handleMcToggle = (questionIndex: number, value: string) => {
-    clearSkip(questionIndex);
-    setSelections((prev) => {
-      const next = new Map(prev);
+    setAnswers((prev) => {
       const question = payload.questions[questionIndex];
       if (question.type !== "multiple_choice") return prev;
-      const current = next.get(questionIndex) ?? new Set<string>();
 
+      const step = getStep(prev, questionIndex);
+      const current =
+        step.status === "answered_mc" ? step.selected : new Set<string>();
+
+      let updated: Set<string>;
       if (question.multi_select) {
-        const updated = new Set(current);
+        updated = new Set(current);
         if (updated.has(value)) {
           updated.delete(value);
         } else {
           updated.add(value);
         }
-        next.set(questionIndex, updated);
       } else {
-        next.set(questionIndex, new Set([value]));
+        updated = new Set([value]);
       }
+
+      const next = new Map(prev);
+      next.set(questionIndex, { status: "answered_mc", selected: updated });
       return next;
     });
   };
 
   const handleFreeTextChange = (questionIndex: number, text: string) => {
-    clearSkip(questionIndex);
-    setFreeTexts((prev) => {
+    setAnswers((prev) => {
       const next = new Map(prev);
-      next.set(questionIndex, text);
+      next.set(questionIndex, { status: "answered_free", text });
       return next;
     });
   };
 
   const isStepAnswered = (idx: number): boolean => {
-    const question = payload.questions[idx];
-    switch (question.type) {
-      case "multiple_choice": {
-        const selected = selections.get(idx);
-        return Boolean(selected && selected.size > 0);
-      }
-      case "free_response":
-        return (freeTexts.get(idx) ?? "").trim().length > 0;
-      default: {
-        const _exhaustiveCheck: never = question;
-        return _exhaustiveCheck;
-      }
+    const step = getStep(answers, idx);
+    switch (step.status) {
+      case "answered_mc":
+        return step.selected.size > 0;
+      case "answered_free":
+        return step.text.trim().length > 0;
+      case "unanswered":
+      case "skipped":
+        return false;
     }
   };
 
-  const isStepSkipped = (idx: number): boolean => skippedSteps.has(idx);
+  const isStepSkipped = (idx: number): boolean =>
+    getStep(answers, idx).status === "skipped";
 
   const isStepComplete = (idx: number): boolean =>
     isStepAnswered(idx) || isStepSkipped(idx);
 
   const buildResponses = (
-    skipped: Set<number>,
+    finalAnswers: StepAnswers,
   ): Record<string, UserQuestionAnswer> => {
     const responses: Record<string, UserQuestionAnswer> = {};
     payload.questions.forEach((question, idx) => {
-      if (skipped.has(idx)) {
-        responses[question.id] = { type: "skipped" };
-        return;
-      }
-      switch (question.type) {
-        case "multiple_choice": {
-          const selected = selections.get(idx);
-          if (!selected || selected.size === 0) return;
+      const step = getStep(finalAnswers, idx);
+      switch (step.status) {
+        case "skipped":
+        case "unanswered":
+          responses[question.id] = { type: "skipped" };
+          break;
+        case "answered_mc":
           responses[question.id] = {
             type: "multiple_choice",
-            selected: Array.from(selected),
+            selected: Array.from(step.selected),
           };
           break;
-        }
-        case "free_response":
+        case "answered_free":
           responses[question.id] = {
             type: "free_response",
-            text: freeTexts.get(idx) ?? "",
+            text: step.text,
           };
           break;
-        default: {
-          const _exhaustiveCheck: never = question;
-          return _exhaustiveCheck;
-        }
       }
     });
     return responses;
   };
 
-  const clearStepAnswers = (idx: number) => {
-    setSelections((prev) => {
-      if (!prev.has(idx)) return prev;
-      const next = new Map(prev);
-      next.delete(idx);
-      return next;
+  const markUnansweredAsSkipped = (base: StepAnswers): StepAnswers => {
+    const final = new Map(base);
+    payload.questions.forEach((_, idx) => {
+      if (!isStepAnswered(idx) && getStep(final, idx).status !== "skipped") {
+        final.set(idx, { status: "skipped" });
+      }
     });
-    setFreeTexts((prev) => {
-      if (!prev.has(idx)) return prev;
-      const next = new Map(prev);
-      next.delete(idx);
-      return next;
-    });
+    return final;
   };
 
   const handleSkipStep = () => {
-    clearStepAnswers(activeStep);
-    const newSkipped = new Set(skippedSteps);
-    newSkipped.add(activeStep);
+    const updated = new Map(answers);
+    updated.set(activeStep, { status: "skipped" });
 
     if (isLastStep) {
-      // Last (or only) step: skip all unanswered intermediates and submit.
-      // Covers both single-question and multi-question cases.
-      payload.questions.forEach((_, idx) => {
-        if (!isStepAnswered(idx)) newSkipped.add(idx);
-      });
-      onSubmit(eventId, buildResponses(newSkipped));
+      const final = markUnansweredAsSkipped(updated);
+      onSubmit(eventId, buildResponses(final));
     } else {
-      setSkippedSteps(newSkipped);
+      setAnswers(updated);
       setActiveStep((s) => s + 1);
     }
   };
 
   const handleSubmit = () => {
-    // Auto-skip any unanswered steps so the user doesn't get stuck
-    // when they've tab-jumped past intermediate questions.
-    const finalSkipped = new Set(skippedSteps);
-    payload.questions.forEach((_, idx) => {
-      if (!isStepAnswered(idx)) finalSkipped.add(idx);
-    });
-    onSubmit(eventId, buildResponses(finalSkipped));
+    const final = markUnansweredAsSkipped(answers);
+    onSubmit(eventId, buildResponses(final));
   };
 
   const getStepData = (idx: number) => {
     const question = payload.questions[idx];
+    const step = getStep(answers, idx);
     return {
       question,
-      selectedValues: selections.get(idx) ?? new Set<string>(),
-      freeText: freeTexts.get(idx) ?? "",
+      selectedValues:
+        step.status === "answered_mc" ? step.selected : new Set<string>(),
+      freeText: step.status === "answered_free" ? step.text : "",
       onToggle: (value: string) => handleMcToggle(idx, value),
       onFreeTextChange: (text: string) => handleFreeTextChange(idx, text),
     };
