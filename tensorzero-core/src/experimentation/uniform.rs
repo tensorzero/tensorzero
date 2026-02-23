@@ -75,6 +75,32 @@ pub struct UniformConfig {
 }
 
 impl UniformConfig {
+    /// Convert this UniformConfig to a StaticConfig.
+    /// Called after `load()` validation succeeds.
+    pub fn into_static_config(self) -> super::static_config::StaticConfig {
+        use super::static_config::{StaticConfig, WeightedVariants};
+
+        match (&self.candidate_variants, &self.fallback_variants) {
+            (None, None) => {
+                // Default uniform: all variants, no explicit candidates
+                StaticConfig::all_variants_uniform()
+            }
+            (candidates, fallbacks) => {
+                let weighted = match candidates {
+                    Some(names) => WeightedVariants::from_equal_weights(names.clone()),
+                    None => {
+                        // No candidates but fallbacks present → empty candidates
+                        WeightedVariants::from_equal_weights(vec![])
+                    }
+                };
+                StaticConfig {
+                    candidate_variants: weighted,
+                    fallback_variants: fallbacks.clone().unwrap_or_default(),
+                }
+            }
+        }
+    }
+
     /// Validate that the specified variants exist in the function's variants map
     pub fn load(
         &self,

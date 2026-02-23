@@ -18,9 +18,15 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 
 pub mod asymptotic_confidence_sequences;
+pub mod static_config;
 mod static_weights;
 pub mod track_and_stop;
 mod uniform;
+
+pub use static_config::{StaticConfig, WeightedVariants};
+pub use track_and_stop::{
+    AdaptiveAlgorithm, AdaptiveConfig, AdaptiveObjective, UninitializedAdaptiveConfig,
+};
 
 /// Check for duplicate variants within a list
 fn check_duplicates_within(variants: &[String], list_name: &str) -> Result<(), Error> {
@@ -95,17 +101,16 @@ fn check_duplicates_across_map(
     Ok(())
 }
 
+/// Runtime experimentation config — only two variants (plus test-only AlwaysFails).
+/// Legacy types (`Uniform`, `StaticWeights`, `TrackAndStop`) are converted to these
+/// during `load()`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
-    Uniform(uniform::UniformConfig),
-    StaticWeights(static_weights::StaticWeightsConfig),
-    // NOTE: this diverges from the spec due to technical limitations with `serde`
-    // (serde enums cannot be #[serde(flatten)])
-    // we can write a custom deserializer for this if we want
-    TrackAndStop(track_and_stop::TrackAndStopConfig),
+    Static(StaticConfig),
+    Adaptive(AdaptiveConfig),
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     #[cfg(test)]
     AlwaysFails(AlwaysFailsConfig),
@@ -113,7 +118,7 @@ pub enum ExperimentationConfig {
 
 impl Default for ExperimentationConfig {
     fn default() -> Self {
-        Self::Uniform(uniform::UniformConfig::default())
+        Self::Static(StaticConfig::all_variants_uniform())
     }
 }
 
@@ -156,12 +161,19 @@ impl ExperimentationConfigWithNamespaces {
     }
 }
 
+/// Uninitialized experimentation config — 5 variants for backward compatibility.
+/// The 3 legacy variants (`Uniform`, `StaticWeights`, `TrackAndStop`) are converted
+/// to the 2 new variants (`Static`, `Adaptive`) during `load()`.
 #[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UninitializedExperimentationConfig {
+    // New types
+    Static(StaticConfig),
+    Adaptive(UninitializedAdaptiveConfig),
+    // Legacy types (backward compat)
     StaticWeights(static_weights::StaticWeightsConfig),
     Uniform(uniform::UniformConfig),
     TrackAndStop(track_and_stop::UninitializedTrackAndStopConfig),
@@ -187,14 +199,16 @@ impl UninitializedExperimentationConfigWithNamespaces {
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, crate::config::MetricConfig>,
         _function_name: &str,
+        warn_deprecated: bool,
     ) -> Result<ExperimentationConfigWithNamespaces, Error> {
         // Load the base config (no namespace)
-        let base = self.base.load(variants, metrics, None)?;
+        let base = self.base.load(variants, metrics, None, warn_deprecated)?;
 
         // Load namespace-specific configs
         let mut loaded_namespaces = HashMap::new();
         for (namespace, config) in self.namespaces {
-            let loaded_config = config.load(variants, metrics, Some(namespace.clone()))?;
+            let loaded_config =
+                config.load(variants, metrics, Some(namespace.clone()), warn_deprecated)?;
             loaded_namespaces.insert(namespace, loaded_config);
         }
 
@@ -211,6 +225,7 @@ impl UninitializedExperimentationConfig {
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, crate::config::MetricConfig>,
         namespace: Option<String>,
+        warn_deprecated: bool,
     ) -> Result<ExperimentationConfig, Error> {
         // Check if any variant has a weight specified
         let variants_with_weights: Vec<&str> = variants
@@ -231,15 +246,46 @@ impl UninitializedExperimentationConfig {
         }
 
         match self {
-            UninitializedExperimentationConfig::StaticWeights(config) => {
-                Ok(ExperimentationConfig::StaticWeights(config))
+            // New types — pass through directly
+            UninitializedExperimentationConfig::Static(config) => {
+                Ok(ExperimentationConfig::Static(config))
             }
-            UninitializedExperimentationConfig::Uniform(config) => {
-                Ok(ExperimentationConfig::Uniform(config.load(variants)?))
-            }
-            UninitializedExperimentationConfig::TrackAndStop(config) => Ok(
-                ExperimentationConfig::TrackAndStop(config.load(variants, metrics, namespace)?),
+            UninitializedExperimentationConfig::Adaptive(config) => Ok(
+                ExperimentationConfig::Adaptive(config.load(variants, metrics, namespace)?),
             ),
+            // Legacy types — convert to new types with optional deprecation warnings
+            UninitializedExperimentationConfig::Uniform(config) => {
+                if warn_deprecated {
+                    tracing::warn!(
+                        "Experimentation type `uniform` is deprecated. Use `static` instead."
+                    );
+                }
+                let loaded = config.load(variants)?;
+                Ok(ExperimentationConfig::Static(loaded.into_static_config()))
+            }
+            UninitializedExperimentationConfig::StaticWeights(config) => {
+                if warn_deprecated {
+                    tracing::warn!(
+                        "Experimentation type `static_weights` is deprecated. Use `static` instead."
+                    );
+                }
+                Ok(ExperimentationConfig::Static(config.into_static_config()))
+            }
+            UninitializedExperimentationConfig::TrackAndStop(config) => {
+                if warn_deprecated {
+                    tracing::warn!(
+                        "Experimentation type `track_and_stop` is deprecated. Use `adaptive` instead."
+                    );
+                }
+                let adaptive = UninitializedAdaptiveConfig {
+                    algorithm: AdaptiveAlgorithm::TrackAndStop,
+                    objective: AdaptiveObjective::BestVariantIdentification,
+                    track_and_stop: config,
+                };
+                Ok(ExperimentationConfig::Adaptive(
+                    adaptive.load(variants, metrics, namespace)?,
+                ))
+            }
         }
     }
 }
@@ -273,21 +319,19 @@ pub trait VariantSampler {
 }
 
 impl ExperimentationConfig {
-    /// Note: in the future when we deprecate variant.weight we can simply use #[serde(default)]
-    /// and default to ExperimentationConfig::Uniform
-    ///
-    /// For now, we call this function from the
+    /// Build an `ExperimentationConfig` from the legacy `variant.weight` map.
+    /// Used when no `[experimentation]` section is present in config.
     pub fn legacy_from_variants_map(variants: &HashMap<String, Arc<VariantInfo>>) -> Self {
-        // We loop over the variants map and if any of them have weights we output a StaticWeightsConfig
-        // otherwise, we output a Uniform config
+        // If any variant has an explicit weight, build a Static config with those weights
         for variant in variants.values() {
             if variant.inner.weight().is_some() {
-                return Self::StaticWeights(
-                    static_weights::StaticWeightsConfig::legacy_from_variants_map(variants),
-                );
+                let config =
+                    static_weights::StaticWeightsConfig::legacy_from_variants_map(variants);
+                return Self::Static(config.into_static_config());
             }
         }
-        Self::Uniform(uniform::UniformConfig::default())
+        // Otherwise, default to all-variants-uniform
+        Self::Static(StaticConfig::all_variants_uniform())
     }
 
     pub async fn setup(
@@ -298,17 +342,12 @@ impl ExperimentationConfig {
         cancel_token: CancellationToken,
     ) -> Result<(), Error> {
         match self {
-            Self::StaticWeights(config) => {
+            Self::Static(config) => {
                 config
                     .setup(db, function_name, postgres, cancel_token)
                     .await
             }
-            Self::Uniform(config) => {
-                config
-                    .setup(db, function_name, postgres, cancel_token)
-                    .await
-            }
-            Self::TrackAndStop(config) => {
+            Self::Adaptive(config) => {
                 config
                     .setup(db, function_name, postgres, cancel_token)
                     .await
@@ -331,23 +370,18 @@ impl ExperimentationConfig {
     ) -> Result<(String, Arc<VariantInfo>), Error> {
         // First try the variant-specific sampling
         let result = match self {
-            Self::StaticWeights(config) => {
+            Self::Static(config) => {
                 config
                     .sample(function_name, episode_id, active_variants, postgres)
                     .await
             }
-            Self::Uniform(config) => {
+            Self::Adaptive(config) => {
                 config
                     .sample(function_name, episode_id, active_variants, postgres)
                     .await
             }
             #[cfg(test)]
             Self::AlwaysFails(config) => {
-                config
-                    .sample(function_name, episode_id, active_variants, postgres)
-                    .await
-            }
-            Self::TrackAndStop(config) => {
                 config
                     .sample(function_name, episode_id, active_variants, postgres)
                     .await
@@ -361,13 +395,12 @@ impl ExperimentationConfig {
                 Err(e)
             } else {
                 let allowed: Vec<&str> = match self {
-                    Self::StaticWeights(config) => config.allowed_variants().collect(),
-                    Self::Uniform(config) => config.allowed_variants().collect(),
+                    Self::Static(config) => config.allowed_variants().collect(),
+                    Self::Adaptive(config) => config.allowed_variants().collect(),
                     #[cfg(test)]
                     Self::AlwaysFails(config) => config.allowed_variants().collect(),
-                    Self::TrackAndStop(config) => config.allowed_variants().collect(),
                 };
-                // If allowed is empty (UniformConfig with None, None), fall back to all variants
+                // If allowed is empty (default Static with empty candidates), fall back to all variants
                 if allowed.is_empty() {
                     sample_uniform(function_name, &episode_id, active_variants, None)
                 } else {
@@ -378,17 +411,16 @@ impl ExperimentationConfig {
     }
 
     /// Returns whether a variant name could be sampled by this experimentation config.
-    /// Empty allowed lists (e.g. default Uniform with no explicit candidates) means all variants
+    /// Empty allowed lists (e.g. default Static with no explicit candidates) means all variants
     /// are eligible, so we return `true`.
     pub fn could_sample_variant(&self, variant_name: &str) -> bool {
         let allowed: Vec<&str> = match self {
-            Self::StaticWeights(c) => c.allowed_variants().collect(),
-            Self::Uniform(c) => c.allowed_variants().collect(),
-            Self::TrackAndStop(c) => c.allowed_variants().collect(),
+            Self::Static(c) => c.allowed_variants().collect(),
+            Self::Adaptive(c) => c.allowed_variants().collect(),
             #[cfg(test)]
             Self::AlwaysFails(c) => c.allowed_variants().collect(),
         };
-        // Empty means Uniform with no explicit candidates → all variants eligible
+        // Empty means default Static with no explicit candidates → all variants eligible
         allowed.is_empty() || allowed.contains(&variant_name)
     }
 
@@ -399,17 +431,14 @@ impl ExperimentationConfig {
         postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         match self {
-            Self::StaticWeights(config) => {
+            Self::Static(config) => {
                 config.get_current_display_probabilities(function_name, active_variants, postgres)
             }
-            Self::Uniform(config) => {
+            Self::Adaptive(config) => {
                 config.get_current_display_probabilities(function_name, active_variants, postgres)
             }
             #[cfg(test)]
             Self::AlwaysFails(config) => {
-                config.get_current_display_probabilities(function_name, active_variants, postgres)
-            }
-            Self::TrackAndStop(config) => {
                 config.get_current_display_probabilities(function_name, active_variants, postgres)
             }
         }
@@ -733,7 +762,7 @@ mod tests {
 
     // Tests for get_current_display_probabilities
     #[test]
-    fn test_get_current_display_probabilities_uniform() {
+    fn test_get_current_display_probabilities_static_default() {
         let mut active_variants = HashMap::new();
         for name in ["A", "B", "C"] {
             active_variants.insert(
@@ -753,7 +782,7 @@ mod tests {
             );
         }
 
-        let config = ExperimentationConfig::Uniform(uniform::UniformConfig::default());
+        let config = ExperimentationConfig::default();
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
             .get_current_display_probabilities("test", &active_variants, &postgres)
@@ -771,10 +800,10 @@ mod tests {
     }
 
     #[test]
-    fn test_get_current_display_probabilities_uniform_empty() {
+    fn test_get_current_display_probabilities_static_empty() {
         let active_variants = HashMap::new();
 
-        let config = ExperimentationConfig::Uniform(uniform::UniformConfig::default());
+        let config = ExperimentationConfig::default();
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
             .get_current_display_probabilities("test", &active_variants, &postgres)
@@ -813,27 +842,21 @@ mod tests {
 
     #[test]
     fn test_get_for_namespace_none_returns_base() {
-        let config = ExperimentationConfigWithNamespaces {
-            base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
-            namespaces: HashMap::new(),
-        };
+        let config = ExperimentationConfigWithNamespaces::default();
         let result = config.get_for_namespace(None);
         assert!(
-            matches!(result, ExperimentationConfig::Uniform(_)),
+            matches!(result, ExperimentationConfig::Static(_)),
             "None namespace should return the base config"
         );
     }
 
     #[test]
     fn test_get_for_namespace_unknown_returns_base() {
-        let config = ExperimentationConfigWithNamespaces {
-            base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
-            namespaces: HashMap::new(),
-        };
+        let config = ExperimentationConfigWithNamespaces::default();
         let ns = Namespace::new("unknown").unwrap();
         let result = config.get_for_namespace(Some(&ns));
         assert!(
-            matches!(result, ExperimentationConfig::Uniform(_)),
+            matches!(result, ExperimentationConfig::Static(_)),
             "Unknown namespace should fall back to the base config"
         );
     }
@@ -843,20 +866,22 @@ mod tests {
         let mut namespaces = HashMap::new();
         namespaces.insert(
             "mobile".to_string(),
-            ExperimentationConfig::StaticWeights(
-                static_weights::StaticWeightsConfig::legacy_from_variants_map(&make_variants_map(
-                    &["variant_a"],
-                )),
-            ),
+            ExperimentationConfig::Static(StaticConfig {
+                candidate_variants: WeightedVariants::from_map(BTreeMap::from([(
+                    "variant_a".to_string(),
+                    1.0,
+                )])),
+                fallback_variants: vec![],
+            }),
         );
         let config = ExperimentationConfigWithNamespaces {
-            base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            base: ExperimentationConfig::default(),
             namespaces,
         };
         let ns = Namespace::new("mobile").unwrap();
         let result = config.get_for_namespace(Some(&ns));
         assert!(
-            matches!(result, ExperimentationConfig::StaticWeights(_)),
+            matches!(result, ExperimentationConfig::Static(_)),
             "Known namespace should return the namespace-specific config"
         );
     }
@@ -864,12 +889,9 @@ mod tests {
     #[test]
     fn test_has_namespace_config() {
         let mut namespaces = HashMap::new();
-        namespaces.insert(
-            "mobile".to_string(),
-            ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
-        );
+        namespaces.insert("mobile".to_string(), ExperimentationConfig::default());
         let config = ExperimentationConfigWithNamespaces {
-            base: ExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            base: ExperimentationConfig::default(),
             namespaces,
         };
         assert!(
@@ -897,7 +919,7 @@ mod tests {
     // =========================================================================
 
     #[test]
-    fn test_load_namespace_config_uniform() {
+    fn test_load_namespace_config_uniform_legacy() {
         let variants = make_variants_map(&["variant_a", "variant_b"]);
         let metrics = HashMap::new();
 
@@ -909,28 +931,25 @@ mod tests {
             )]),
         };
 
-        let loaded = uninitialized.load(&variants, &metrics, "test_fn");
+        let loaded = uninitialized.load(&variants, &metrics, "test_fn", false);
         assert!(
             loaded.is_ok(),
-            "Namespace with `uniform` type should load successfully"
+            "Namespace with legacy `uniform` type should load successfully"
         );
         let loaded = loaded.unwrap();
         assert!(
             matches!(
                 loaded.namespaces.get("mobile"),
-                Some(ExperimentationConfig::Uniform(_))
+                Some(ExperimentationConfig::Static(_))
             ),
-            "Loaded namespace should be Uniform"
+            "Loaded legacy `uniform` namespace should become Static"
         );
     }
 
     #[test]
-    fn test_load_namespace_config_static_weights() {
+    fn test_load_namespace_config_static_weights_legacy() {
         let variants = make_variants_map(&["variant_a", "variant_b"]);
         let metrics = HashMap::new();
-
-        let mut candidate_variants = BTreeMap::new();
-        candidate_variants.insert("variant_a".to_string(), 1.0);
 
         let uninitialized = UninitializedExperimentationConfigWithNamespaces {
             base: UninitializedExperimentationConfig::Uniform(uniform::UniformConfig::default()),
@@ -945,23 +964,23 @@ mod tests {
             )]),
         };
 
-        let loaded = uninitialized.load(&variants, &metrics, "test_fn");
+        let loaded = uninitialized.load(&variants, &metrics, "test_fn", false);
         assert!(
             loaded.is_ok(),
-            "Namespace with `static_weights` type should load successfully"
+            "Namespace with legacy `static_weights` type should load successfully"
         );
         let loaded = loaded.unwrap();
         assert!(
             matches!(
                 loaded.namespaces.get("mobile"),
-                Some(ExperimentationConfig::StaticWeights(_))
+                Some(ExperimentationConfig::Static(_))
             ),
-            "Loaded namespace should be StaticWeights"
+            "Loaded legacy `static_weights` namespace should become Static"
         );
     }
 
     #[test]
-    fn test_load_namespace_config_track_and_stop_succeeds() {
+    fn test_load_namespace_config_track_and_stop_legacy() {
         let variants = make_variants_map(&["variant_a", "variant_b"]);
         let mut metrics = HashMap::new();
         metrics.insert(
@@ -992,10 +1011,10 @@ mod tests {
             )]),
         };
 
-        let result = uninitialized.load(&variants, &metrics, "test_fn");
+        let result = uninitialized.load(&variants, &metrics, "test_fn", false);
         assert!(
             result.is_ok(),
-            "Namespace with `track_and_stop` type should load successfully"
+            "Namespace with legacy `track_and_stop` type should load successfully"
         );
 
         let loaded = result.unwrap();
@@ -1006,9 +1025,128 @@ mod tests {
         assert!(
             matches!(
                 loaded.get_for_namespace(Some(&Namespace::new("mobile").unwrap())),
-                ExperimentationConfig::TrackAndStop(_)
+                ExperimentationConfig::Adaptive(_)
             ),
-            "The `mobile` namespace config should be TrackAndStop"
+            "The `mobile` namespace config should be Adaptive"
+        );
+    }
+
+    #[test]
+    fn test_load_static_type() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let metrics = HashMap::new();
+
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "static",
+                "candidate_variants": ["variant_a", "variant_b"]
+            }))
+            .unwrap();
+
+        let loaded = config.load(&variants, &metrics, None, false);
+        assert!(loaded.is_ok(), "Static type should load successfully");
+        assert!(
+            matches!(loaded.unwrap(), ExperimentationConfig::Static(_)),
+            "Should produce a Static config"
+        );
+    }
+
+    #[test]
+    fn test_load_static_type_with_weights() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let metrics = HashMap::new();
+
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "static",
+                "candidate_variants": {"variant_a": 0.7, "variant_b": 0.3}
+            }))
+            .unwrap();
+
+        let loaded = config.load(&variants, &metrics, None, false);
+        assert!(
+            loaded.is_ok(),
+            "Static type with weights should load successfully"
+        );
+        assert!(
+            matches!(loaded.unwrap(), ExperimentationConfig::Static(_)),
+            "Should produce a Static config"
+        );
+    }
+
+    #[test]
+    fn test_load_adaptive_type() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            crate::config::MetricConfig {
+                r#type: crate::config::MetricConfigType::Boolean,
+                level: crate::config::MetricConfigLevel::Inference,
+                optimize: crate::config::MetricConfigOptimize::Max,
+                description: None,
+            },
+        );
+
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "adaptive",
+                "metric": "test_metric",
+                "candidate_variants": ["variant_a", "variant_b"],
+                "min_samples_per_variant": 10,
+                "delta": 0.05,
+                "epsilon": 0.1,
+                "update_period_s": 60
+            }))
+            .unwrap();
+
+        let loaded = config.load(&variants, &metrics, None, false);
+        assert!(loaded.is_ok(), "Adaptive type should load successfully");
+        assert!(
+            matches!(loaded.unwrap(), ExperimentationConfig::Adaptive(_)),
+            "Should produce an Adaptive config"
+        );
+    }
+
+    #[test]
+    fn test_backward_compat_uniform_deserializes() {
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "uniform"
+            }))
+            .unwrap();
+        assert!(
+            matches!(config, UninitializedExperimentationConfig::Uniform(_)),
+            "Legacy `uniform` type should still deserialize"
+        );
+    }
+
+    #[test]
+    fn test_backward_compat_static_weights_deserializes() {
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "static_weights",
+                "candidate_variants": {"a": 1.0}
+            }))
+            .unwrap();
+        assert!(
+            matches!(config, UninitializedExperimentationConfig::StaticWeights(_)),
+            "Legacy `static_weights` type should still deserialize"
+        );
+    }
+
+    #[test]
+    fn test_backward_compat_track_and_stop_deserializes() {
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "track_and_stop",
+                "metric": "test_metric",
+                "candidate_variants": ["a", "b"]
+            }))
+            .unwrap();
+        assert!(
+            matches!(config, UninitializedExperimentationConfig::TrackAndStop(_)),
+            "Legacy `track_and_stop` type should still deserialize"
         );
     }
 }

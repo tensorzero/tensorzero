@@ -90,6 +90,15 @@ pub struct StaticWeightsConfig {
 }
 
 impl StaticWeightsConfig {
+    /// Convert this StaticWeightsConfig to the new StaticConfig.
+    pub fn into_static_config(self) -> super::static_config::StaticConfig {
+        use super::static_config::{StaticConfig, WeightedVariants};
+        StaticConfig {
+            candidate_variants: WeightedVariants::from_map(self.candidate_variants),
+            fallback_variants: self.fallback_variants,
+        }
+    }
+
     pub fn legacy_from_variants_map(variants: &HashMap<String, Arc<VariantInfo>>) -> Self {
         let mut candidate_variants = BTreeMap::new();
         let mut fallback_variants = Vec::new();

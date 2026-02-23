@@ -2735,8 +2735,8 @@ mod tests {
         let config = make_chat_function_config(ExperimentationConfigWithNamespaces::default());
         let exp = config.experimentation_for_namespace(None);
         assert!(
-            matches!(exp, ExperimentationConfig::Uniform(_)),
-            "None namespace should return the base (default uniform) config"
+            matches!(exp, ExperimentationConfig::Static(_)),
+            "None namespace should return the base (default static) config"
         );
     }
 
@@ -2745,12 +2745,12 @@ mod tests {
         let mut namespaces = HashMap::new();
         namespaces.insert(
             "mobile".to_string(),
-            ExperimentationConfig::StaticWeights(
-                serde_json::from_value(serde_json::json!({
-                    "candidate_variants": {"v1": 1.0}
-                }))
-                .unwrap(),
-            ),
+            ExperimentationConfig::Static(crate::experimentation::StaticConfig {
+                candidate_variants: crate::experimentation::WeightedVariants::from_map(
+                    std::collections::BTreeMap::from([("v1".to_string(), 1.0)]),
+                ),
+                fallback_variants: vec![],
+            }),
         );
         let config = make_chat_function_config(ExperimentationConfigWithNamespaces {
             base: ExperimentationConfig::default(),
@@ -2759,7 +2759,7 @@ mod tests {
         let ns = Namespace::new("mobile").unwrap();
         let exp = config.experimentation_for_namespace(Some(&ns));
         assert!(
-            matches!(exp, ExperimentationConfig::StaticWeights(_)),
+            matches!(exp, ExperimentationConfig::Static(_)),
             "Known namespace should return the namespace-specific config"
         );
     }
@@ -2770,7 +2770,7 @@ mod tests {
         let ns = Namespace::new("nonexistent").unwrap();
         let exp = config.experimentation_for_namespace(Some(&ns));
         assert!(
-            matches!(exp, ExperimentationConfig::Uniform(_)),
+            matches!(exp, ExperimentationConfig::Static(_)),
             "Unknown namespace should fall back to the base config"
         );
     }

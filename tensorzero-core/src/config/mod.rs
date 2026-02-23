@@ -2078,7 +2078,7 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics, function_name))
+                    .map(|config| config.load(&variants, metrics, function_name, true))
                     .transpose()?
                     .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
                         base: ExperimentationConfig::legacy_from_variants_map(&variants),
@@ -2175,7 +2175,7 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(|config| config.load(&variants, metrics, function_name))
+                    .map(|config| config.load(&variants, metrics, function_name, true))
                     .transpose()?
                     .unwrap_or_else(|| ExperimentationConfigWithNamespaces {
                         base: ExperimentationConfig::legacy_from_variants_map(&variants),

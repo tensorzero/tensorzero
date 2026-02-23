@@ -1224,6 +1224,112 @@ impl TrackAndStopState {
     }
 }
 
+/// Algorithm used for adaptive experimentation.
+/// Currently only `TrackAndStop` is supported.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum AdaptiveAlgorithm {
+    #[default]
+    TrackAndStop,
+}
+
+/// Objective for adaptive experimentation.
+/// Currently only `BestVariantIdentification` is supported.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum AdaptiveObjective {
+    #[default]
+    BestVariantIdentification,
+}
+
+/// Uninitialized adaptive experimentation config.
+/// Wraps a track-and-stop config (the only algorithm currently supported) with
+/// additional `algorithm` and `objective` fields.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct UninitializedAdaptiveConfig {
+    #[serde(default)]
+    pub algorithm: AdaptiveAlgorithm,
+    #[serde(default)]
+    pub objective: AdaptiveObjective,
+    // All track-and-stop fields are flattened in
+    #[serde(flatten)]
+    pub track_and_stop: UninitializedTrackAndStopConfig,
+}
+
+/// Loaded adaptive experimentation config.
+/// Wraps a loaded `TrackAndStopConfig` with `algorithm` and `objective` metadata.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AdaptiveConfig {
+    pub algorithm: AdaptiveAlgorithm,
+    pub objective: AdaptiveObjective,
+    #[serde(flatten)]
+    pub inner: TrackAndStopConfig,
+}
+
+impl UninitializedAdaptiveConfig {
+    pub fn load(
+        self,
+        variants: &HashMap<String, Arc<VariantInfo>>,
+        metrics: &HashMap<String, MetricConfig>,
+        namespace: Option<String>,
+    ) -> Result<AdaptiveConfig, Error> {
+        let inner = self.track_and_stop.load(variants, metrics, namespace)?;
+        Ok(AdaptiveConfig {
+            algorithm: self.algorithm,
+            objective: self.objective,
+            inner,
+        })
+    }
+}
+
+impl VariantSampler for AdaptiveConfig {
+    async fn setup(
+        &self,
+        db: Arc<dyn FeedbackQueries + Send + Sync>,
+        function_name: &str,
+        postgres: &PostgresConnectionInfo,
+        cancel_token: CancellationToken,
+    ) -> Result<(), Error> {
+        self.inner
+            .setup(db, function_name, postgres, cancel_token)
+            .await
+    }
+
+    async fn sample(
+        &self,
+        function_name: &str,
+        episode_id: Uuid,
+        active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
+    ) -> Result<(String, Arc<VariantInfo>), Error> {
+        self.inner
+            .sample(function_name, episode_id, active_variants, postgres)
+            .await
+    }
+
+    fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_ {
+        self.inner.allowed_variants()
+    }
+
+    fn get_current_display_probabilities<'a>(
+        &self,
+        function_name: &str,
+        active_variants: &'a HashMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
+    ) -> Result<HashMap<&'a str, f64>, Error> {
+        self.inner
+            .get_current_display_probabilities(function_name, active_variants, postgres)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
