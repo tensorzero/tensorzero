@@ -210,7 +210,7 @@ async fn test_raw_response_cache_behavior_streaming() {
             panic!("Expected streaming response");
         };
 
-        let mut raw_response_entries = Vec::new();
+        let mut raw_response = Vec::new();
         let mut found_raw_chunk = false;
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.unwrap();
@@ -230,10 +230,10 @@ async fn test_raw_response_cache_behavior_streaming() {
                 tensorzero::InferenceResponseChunk::Json(j) => j.raw_response.as_ref(),
             };
             if let Some(entries) = entries {
-                raw_response_entries.extend(entries.iter().cloned());
+                raw_response.extend(entries.iter().cloned());
             }
         }
-        (raw_response_entries, found_raw_chunk)
+        (raw_response, found_raw_chunk)
     }
 
     // First request: should be a cache miss
@@ -384,7 +384,7 @@ async fn test_raw_response_cache_disabled_streaming() {
 // ============================================================================
 
 /// Helper to make OpenAI-compatible request and get tensorzero_raw_response array.
-/// Returns `(raw_response_entries, found_raw_chunk)`.
+/// Returns `(raw_response, found_raw_chunk)`.
 /// `found_raw_chunk` is always `false` for non-streaming requests.
 async fn make_openai_request_to_gateway(
     base_url: &str,
@@ -433,7 +433,7 @@ async fn make_openai_request_to_gateway(
             .unwrap();
 
         // Collect raw_response entries and track raw_chunk presence
-        let mut raw_response_entries: Vec<Value> = Vec::new();
+        let mut raw_response: Vec<Value> = Vec::new();
         let mut found_raw_chunk = false;
 
         while let Some(chunk) = chunks.next().await {
@@ -450,7 +450,7 @@ async fn make_openai_request_to_gateway(
             if let Some(rr) = chunk_json.get("tensorzero_raw_response")
                 && let Some(arr) = rr.as_array()
             {
-                raw_response_entries.extend(arr.iter().cloned());
+                raw_response.extend(arr.iter().cloned());
             }
 
             if chunk_json.get("tensorzero_raw_chunk").is_some() {
@@ -458,7 +458,7 @@ async fn make_openai_request_to_gateway(
             }
         }
 
-        (raw_response_entries, found_raw_chunk)
+        (raw_response, found_raw_chunk)
     } else {
         let response = Client::new()
             .post(&url)

@@ -6,6 +6,7 @@ when using the native TensorZero Python SDK.
 """
 
 import asyncio
+import os
 import time
 
 import pytest
@@ -15,13 +16,15 @@ from uuid_utils.compat import uuid7
 
 from .helpers import verify_otlp_header_in_tempo
 
+GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
+
 
 @pytest.mark.tempo
 def test_otlp_traces_extra_headers_tempo():
     """Test that OTLP headers are actually sent to Tempo (requires Tempo running and HTTP gateway)."""
     # Only use HTTP gateway for this test (embedded doesn't send to external Tempo)
     client = TensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         verbose_errors=True,
     )
 
@@ -58,7 +61,7 @@ async def test_async_otlp_traces_extra_headers_tempo():
     """Test that OTLP headers are actually sent to Tempo with async client (requires Tempo running and HTTP gateway)."""
     # Only use HTTP gateway for this test (embedded doesn't send to external Tempo)
     client = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         verbose_errors=True,
         async_setup=False,
     )

@@ -439,7 +439,7 @@ impl BestOfNSamplingConfig {
             if clients.include_raw_response {
                 let failed_entries: Vec<_> = candidate_errors
                     .values()
-                    .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                    .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                     .collect();
                 if !failed_entries.is_empty()
                     && let Some(first) = selected.mut_model_inference_results().first_mut()
@@ -496,7 +496,7 @@ impl BestOfNSamplingConfig {
         if clients.include_raw_response {
             let failed_entries: Vec<_> = candidate_errors
                 .values()
-                .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                 .collect();
             if !failed_entries.is_empty()
                 && let Some(first) = selected_candidate.mut_model_inference_results().first_mut()
@@ -519,7 +519,7 @@ impl BestOfNSamplingConfig {
         // Inject evaluator failure raw_responses
         if clients.include_raw_response
             && let Some(eval_err) = &evaluator_error
-            && let Some(entries) = eval_err.extract_raw_response_entries()
+            && let Some(entries) = eval_err.extract_raw_response()
             && let Some(first) = selected_candidate.mut_model_inference_results().first_mut()
         {
             first.failed_raw_response.extend(entries);

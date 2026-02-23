@@ -3,8 +3,6 @@ name: Build Provider Proxy Container
 on:
   workflow_call:
     secrets:
-      DOCKERHUB_USERNAME:
-        required: true
       DOCKERHUB_LIMITED_TOKEN:
         required: true
 
@@ -45,18 +43,6 @@ jobs:
         run: |
           docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f provider-proxy/Dockerfile --target provider-proxy . -t tensorzero/provider-proxy:sha-${{ github.sha }}
 
-      - name: Save `provider-proxy` container
-        run: docker save tensorzero/provider-proxy:sha-${{ github.sha }} > provider-proxy-container.tar
-
-      - name: Upload `provider-proxy` container as an artifact
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        with:
-          name: build-provider-proxy-container
-          path: provider-proxy-container.tar
-          retention-days: 1
-          if-no-files-found: error
-          overwrite: false
-
       - name: Push `provider-proxy` container to DockerHub
         run: docker push tensorzero/provider-proxy:sha-${{ github.sha }}
 
@@ -64,13 +50,13 @@ jobs:
         run: |
           IMAGE="tensorzero/provider-proxy:sha-${{ github.sha }}"
           echo "Waiting for ${IMAGE} to be available on Docker Hub..."
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
               echo "Image ${IMAGE} is available on Docker Hub"
               exit 0
             fi
-            echo "Attempt ${i}/30: Image not yet available, waiting 10s..."
-            sleep 10
+            echo "Attempt ${i}/60: Image not yet available, waiting 5s..."
+            sleep 5
           done
           echo "Timed out waiting for ${IMAGE} to appear on Docker Hub"
           exit 1

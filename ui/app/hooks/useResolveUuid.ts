@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import type { ResolveUuidResponse } from "~/types/tensorzero";
+import { toResolveUuidApi } from "~/utils/urls";
 
 /**
  * Resolves a UUID to its entity type. Keyed fetcher deduplicates
@@ -17,9 +18,7 @@ export function useResolveUuid(uuid: string): {
 
   useEffect(() => {
     if (fetcher.state === "idle" && !fetcher.data) {
-      fetcher.load(
-        `/api/tensorzero/resolve_uuid/${encodeURIComponent(normalizedUuid)}`,
-      );
+      fetcher.load(toResolveUuidApi(normalizedUuid));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [normalizedUuid]);

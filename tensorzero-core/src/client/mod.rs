@@ -211,6 +211,7 @@ impl HTTPGateway {
                 let err_str = format!("Error in streaming response: {e:?}");
                 let inner_err = Error::new(ErrorDetails::StreamError {
                     source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
+                    raw_event: None,
                 });
                 if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = e
                 {
@@ -223,6 +224,7 @@ impl HTTPGateway {
                 return Err(TensorZeroError::Other {
                     source: Error::new(ErrorDetails::StreamError {
                         source: Box::new(inner_err),
+                        raw_event: None,
                     })
                     .into(),
                 });
@@ -241,6 +243,7 @@ impl HTTPGateway {
             let err_str = format!("Error in streaming response: {e:?}");
             let inner_err = Error::new(ErrorDetails::StreamError {
                 source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
+                raw_event: None,
             });
             if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = *e {
                 return Err(TensorZeroError::Http {
@@ -252,6 +255,7 @@ impl HTTPGateway {
             return Err(TensorZeroError::Other {
                 source: Error::new(ErrorDetails::StreamError {
                     source: Box::new(inner_err),
+                    raw_event: None,
                 })
                 .into(),
             });
@@ -267,7 +271,8 @@ impl HTTPGateway {
                                     val: e,
                                     debug: verbose_errors,
                                 })
-                            }))
+                            })),
+                            raw_event: None,
                         }))
                     }
                     Ok(e) => match e {
@@ -291,7 +296,8 @@ impl HTTPGateway {
                                             val: err,
                                             debug: verbose_errors,
                                         }),
-                                    }))
+                                    })),
+                                    raw_event: Some(message.data.clone()),
                                 }));
                             } else {
                                 let data: InferenceResponseChunk =

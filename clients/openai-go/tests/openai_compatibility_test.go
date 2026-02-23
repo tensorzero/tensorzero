@@ -41,10 +41,17 @@ var (
 	ctx     context.Context
 )
 
+func gatewayURL() string {
+	if url := os.Getenv("TENSORZERO_GATEWAY_URL"); url != "" {
+		return url
+	}
+	return "http://localhost:3000"
+}
+
 func TestMain(m *testing.M) {
 	ctx = context.Background()
 	client = openai.NewClient(
-		option.WithBaseURL("http://127.0.0.1:3000/openai/v1"),
+		option.WithBaseURL(gatewayURL()+"/openai/v1"),
 		option.WithAPIKey("donotuse"),
 	)
 	// Run the tests and exit with the result code
@@ -101,7 +108,7 @@ func overrideUserMessage(t *testing.T, data map[string]interface{}) openai.ChatC
 func sendRequestTzGateway(t *testing.T, body map[string]interface{}) (map[string]interface{}, error) {
 	// Send a request to the TensorZero gateway
 	t.Helper()
-	url := "http://127.0.0.1:3000/openai/v1/chat/completions"
+	url := gatewayURL() + "/openai/v1/chat/completions"
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)

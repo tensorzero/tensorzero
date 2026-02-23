@@ -890,7 +890,7 @@ async fn infer_model_request(
     if include_raw_response && !retry_errors.is_empty() {
         let mut retry_entries = Vec::new();
         for err in &retry_errors {
-            if let Some(entries) = err.extract_raw_response_entries() {
+            if let Some(entries) = err.extract_raw_response() {
                 retry_entries.extend(entries);
             }
         }
@@ -968,7 +968,7 @@ async fn infer_model_request_stream<'request>(
     if include_raw_response && !retry_errors.is_empty() {
         let mut retry_entries = Vec::new();
         for err in &retry_errors {
-            if let Some(entries) = err.extract_raw_response_entries() {
+            if let Some(entries) = err.extract_raw_response() {
                 retry_entries.extend(entries);
             }
         }
