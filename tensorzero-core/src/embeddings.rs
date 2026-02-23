@@ -421,11 +421,7 @@ pub struct EmbeddingProviderResponse {
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
     fn resource_usage(&self) -> RateLimitResourceUsage {
-        let cost = self
-            .usage
-            .cost
-            .map(decimal_dollars_to_nano_dollars)
-            .unwrap_or(0);
+        let cost = self.usage.cost.map(decimal_dollars_to_nano_dollars);
         if let Some(tokens) = self.usage.total_tokens() {
             RateLimitResourceUsage::Exact {
                 model_inferences: 1,

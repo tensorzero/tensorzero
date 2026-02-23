@@ -23,12 +23,16 @@ pub use rate_limiting_manager::RateLimitingManager;
 pub const NANO_DOLLARS_PER_DOLLAR: u64 = 1_000_000_000;
 
 /// Convert a dollar amount (f64) to nano-dollars (u64).
-/// Negative values are clamped to 0.
+/// Negative values are clamped to 0. Values that would overflow `u64` are clamped to `u64::MAX`.
 pub fn dollars_to_nano_dollars(dollars: f64) -> u64 {
     if dollars <= 0.0 {
         return 0;
     }
-    (dollars * NANO_DOLLARS_PER_DOLLAR as f64).round() as u64
+    let nano = (dollars * NANO_DOLLARS_PER_DOLLAR as f64).round();
+    if nano >= u64::MAX as f64 {
+        return u64::MAX;
+    }
+    nano as u64
 }
 
 /// Convert nano-dollars (u64) back to dollars (f64).
@@ -515,8 +519,8 @@ pub enum RateLimitResourceUsage {
     Exact {
         model_inferences: u64,
         tokens: u64,
-        /// Cost in nano-dollars. 0 means cost is unknown.
-        cost: u64,
+        /// Cost in nano-dollars. `None` means cost is unknown.
+        cost: Option<u64>,
     },
     /// We were only able to estimate the usage (e.g. if an error occurred in an inference stream,
     /// and there might have been additional usage chunks that we missed; or the provider did not report token usage).
@@ -526,8 +530,8 @@ pub enum RateLimitResourceUsage {
     UnderEstimate {
         model_inferences: u64,
         tokens: u64,
-        /// Cost in nano-dollars. 0 means cost is unknown.
-        cost: u64,
+        /// Cost in nano-dollars. `None` means cost is unknown.
+        cost: Option<u64>,
     },
 }
 
@@ -2254,13 +2258,13 @@ mod tests {
         let token_usage_exact = RateLimitResourceUsage::Exact {
             model_inferences: 1,
             tokens: 100, // Actual usage is 100 tokens
-            cost: 0,
+            cost: None,
         };
 
         let token_usage_underestimate = RateLimitResourceUsage::UnderEstimate {
             model_inferences: 1,
             tokens: 0, // This is what we use when usage is None
-            cost: 0,
+            cost: None,
         };
 
         // Verify that Exact usage allows refunds (when actual < estimate)

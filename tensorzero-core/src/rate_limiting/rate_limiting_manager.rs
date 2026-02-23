@@ -219,7 +219,9 @@ impl RateLimitingManager {
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
-                span.record("actual_usage.cost_nano_dollars", cost as i64);
+                if let Some(cost) = cost {
+                    span.record("actual_usage.cost_nano_dollars", cost as i64);
+                }
                 span.record("underestimate", false);
             }
             RateLimitResourceUsage::UnderEstimate {
@@ -229,7 +231,9 @@ impl RateLimitingManager {
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
-                span.record("actual_usage.cost_nano_dollars", cost as i64);
+                if let Some(cost) = cost {
+                    span.record("actual_usage.cost_nano_dollars", cost as i64);
+                }
                 span.record("underestimate", true);
             }
         }
@@ -244,7 +248,7 @@ impl RateLimitingManager {
             } = borrow;
 
             // Extract the actual value - we'll check 'Exact/UnderEstimate' further on
-            let mut actual_usage_this_request = match active_limit.limit.resource {
+            let actual_usage_this_request = match active_limit.limit.resource {
                 RateLimitResource::ModelInference => match actual_usage {
                     RateLimitResourceUsage::Exact {
                         model_inferences, ..
@@ -257,25 +261,27 @@ impl RateLimitingManager {
                     RateLimitResourceUsage::Exact { tokens, .. }
                     | RateLimitResourceUsage::UnderEstimate { tokens, .. } => tokens,
                 },
-                RateLimitResource::Cost => match actual_usage {
-                    RateLimitResourceUsage::Exact { cost, .. }
-                    | RateLimitResourceUsage::UnderEstimate { cost, .. } => cost,
-                },
+                RateLimitResource::Cost => {
+                    let cost = match actual_usage {
+                        RateLimitResourceUsage::Exact { cost, .. }
+                        | RateLimitResourceUsage::UnderEstimate { cost, .. } => cost,
+                    };
+                    match cost {
+                        Some(c) => c,
+                        None => {
+                            // When actual cost is unknown, skip the refund entirely.
+                            // We already consumed default_cost tickets up front, and without
+                            // knowing the real cost we can't make a meaningful adjustment.
+                            tracing::warn!(
+                                "Cost rate limiting is active but actual cost is not available. \
+                                 Skipping cost ticket adjustment. Configure cost on your model \
+                                 providers for accurate cost rate limiting."
+                            );
+                            continue;
+                        }
+                    }
+                }
             };
-
-            // When cost rate limiting is active but actual cost is unavailable (cost == 0),
-            // substitute default_cost to avoid a net change in the bucket
-            // (we estimated default_cost, so returning default_cost => no adjustment).
-            if active_limit.limit.resource == RateLimitResource::Cost
-                && actual_usage_this_request == 0
-            {
-                tracing::warn!(
-                    "Cost rate limiting is active but actual cost is not available. \
-                     Using `default_cost` for rate limit bookkeeping. Configure cost on \
-                     your model providers for accurate cost rate limiting."
-                );
-                actual_usage_this_request = self.config.default_cost_nano_dollars;
-            }
 
             match actual_usage_this_request.cmp(&receipt.tickets_consumed) {
                 std::cmp::Ordering::Greater => {
@@ -590,7 +596,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 100,
             model_inferences: 1,
-            cost: 0,
+            cost: None,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(result.is_ok(), "Should succeed when actual equals estimate");
@@ -625,7 +631,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 50,
             model_inferences: 1,
-            cost: 0,
+            cost: None,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(
@@ -663,7 +669,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 150,
             model_inferences: 1,
-            cost: 0,
+            cost: None,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(
@@ -701,7 +707,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::UnderEstimate {
             tokens: 50,
             model_inferences: 1,
-            cost: 0,
+            cost: None,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(result.is_ok(), "Should succeed with underestimate usage");
@@ -780,7 +786,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 100,
             model_inferences: 1,
-            cost: 500_000_000, // $0.50 actual cost
+            cost: Some(500_000_000), // $0.50 actual cost
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(
@@ -815,12 +821,12 @@ mod tests {
             .await
             .unwrap();
 
-        // Return with cost = 0 (unknown) — should use default_cost
+        // Return with cost = None (unknown) — should use default_cost
         // Since we estimated default_cost and "returned" default_cost, net adjustment = 0
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 100,
             model_inferences: 1,
-            cost: 0, // Unknown cost
+            cost: None, // Unknown cost
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(

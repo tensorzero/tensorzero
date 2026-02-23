@@ -922,10 +922,7 @@ fn wrap_provider_stream(
         otlp_config.apply_usage_to_model_provider_span(&span_clone, &aggregated_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            let cost = aggregated_usage
-                .cost
-                .map(decimal_dollars_to_nano_dollars)
-                .unwrap_or(0);
+            let cost = aggregated_usage.cost.map(decimal_dollars_to_nano_dollars);
             let usage = match (aggregated_usage.total_tokens(), errored) {
                 (Some(tokens), false) => {
                     RateLimitResourceUsage::Exact {

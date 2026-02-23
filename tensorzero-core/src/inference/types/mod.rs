@@ -1271,11 +1271,7 @@ pub struct ProviderInferenceResponse {
 
 impl ProviderInferenceResponse {
     pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        let cost = self
-            .usage
-            .cost
-            .map(decimal_dollars_to_nano_dollars)
-            .unwrap_or(0);
+        let cost = self.usage.cost.map(decimal_dollars_to_nano_dollars);
         match self.usage.total_tokens() {
             Some(tokens) => Ok(RateLimitResourceUsage::Exact {
                 model_inferences: 1,
