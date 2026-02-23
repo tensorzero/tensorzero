@@ -22,6 +22,7 @@ use super::inference::{
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
+use crate::cost::{ResponseMode, compute_cost};
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::InferenceQueries;
@@ -956,6 +957,17 @@ pub async fn write_completed_batch_inference<'a>(
         .function_name
         .clone();
     let function = config.get_function(function_name)?;
+    let model_config = config
+        .models
+        .get(
+            batch_request.model_name.as_ref(),
+            config.gateway.relay.as_ref(),
+        )
+        .await?;
+    let batch_cost_config = model_config
+        .as_ref()
+        .and_then(|m| m.providers.get(batch_request.model_provider_name.as_ref()))
+        .and_then(|provider| provider.effective_batch_cost_config());
     let mut inferences: Vec<InferenceResponse> = Vec::new();
     let mut inference_rows_to_write: Vec<InferenceDatabaseInsert> = Vec::new();
     let mut model_inference_rows_to_write: Vec<StoredModelInference> = Vec::new();
@@ -982,7 +994,7 @@ pub async fn write_completed_batch_inference<'a>(
             id: _,
             output,
             raw_response,
-            usage,
+            mut usage,
             finish_reason,
         } = match response.elements.remove(&inference_id) {
             Some(inference_response) => inference_response,
@@ -993,6 +1005,9 @@ pub async fn write_completed_batch_inference<'a>(
                 continue;
             }
         };
+        if let Some(cost_config) = batch_cost_config {
+            usage.cost = compute_cost(&raw_response, cost_config, ResponseMode::NonStreaming);
+        }
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             output: output.clone(),
@@ -1203,7 +1218,7 @@ fn convert_row_to_inference_response(
     let usage = Usage {
         input_tokens: row.input_tokens,
         output_tokens: row.output_tokens,
-        cost: None,
+        cost: row.cost,
     };
 
     match function {

@@ -504,7 +504,8 @@ fn build_get_completed_chat_batch_inferences_query(
                     cio.output::text as output,
                     SUM(mi.input_tokens)::INTEGER as input_tokens,
                     SUM(mi.output_tokens)::INTEGER as output_tokens,
-                    (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
+                    (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason,
+                    SUM(mi.cost) as cost
                 FROM tensorzero.chat_inferences ci
                 LEFT JOIN tensorzero.chat_inference_data cio ON cio.id = ci.id AND cio.created_at = ci.created_at
                 LEFT JOIN tensorzero.model_inferences mi ON ci.id = mi.inference_id
@@ -531,7 +532,8 @@ fn build_get_completed_chat_batch_inferences_query(
                     cio.output::text as output,
                     SUM(mi.input_tokens)::INTEGER as input_tokens,
                     SUM(mi.output_tokens)::INTEGER as output_tokens,
-                    (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
+                    (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason,
+                    SUM(mi.cost) as cost
                 FROM tensorzero.chat_inferences ci
                 LEFT JOIN tensorzero.chat_inference_data cio ON cio.id = ci.id AND cio.created_at = ci.created_at
                 LEFT JOIN tensorzero.model_inferences mi ON ci.id = mi.inference_id
@@ -581,7 +583,8 @@ fn build_get_completed_json_batch_inferences_query(
                     jio.output::text as output,
                     SUM(mi.input_tokens)::INTEGER as input_tokens,
                     SUM(mi.output_tokens)::INTEGER as output_tokens,
-                    (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
+                    (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason,
+                    SUM(mi.cost) as cost
                 FROM tensorzero.json_inferences ji
                 LEFT JOIN tensorzero.json_inference_data jio ON jio.id = ji.id AND jio.created_at = ji.created_at
                 LEFT JOIN tensorzero.model_inferences mi ON ji.id = mi.inference_id
@@ -608,7 +611,8 @@ fn build_get_completed_json_batch_inferences_query(
                     jio.output::text as output,
                     SUM(mi.input_tokens)::INTEGER as input_tokens,
                     SUM(mi.output_tokens)::INTEGER as output_tokens,
-                    (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
+                    (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason,
+                    SUM(mi.cost) as cost
                 FROM tensorzero.json_inferences ji
                 LEFT JOIN tensorzero.json_inference_data jio ON jio.id = ji.id AND jio.created_at = ji.created_at
                 LEFT JOIN tensorzero.model_inferences mi ON ji.id = mi.inference_id
@@ -732,6 +736,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for CompletedBatchInferenceRow
 
         let input_tokens: Option<i32> = row.try_get("input_tokens")?;
         let output_tokens: Option<i32> = row.try_get("output_tokens")?;
+        let cost: Option<rust_decimal::Decimal> = row.try_get("cost")?;
 
         Ok(CompletedBatchInferenceRow {
             inference_id: row.try_get("inference_id")?,
@@ -741,6 +746,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for CompletedBatchInferenceRow
             input_tokens: input_tokens.map(|t| t as u32),
             output_tokens: output_tokens.map(|t| t as u32),
             finish_reason,
+            cost,
         })
     }
 }
@@ -843,7 +849,8 @@ mod tests {
                 cio.output::text as output,
                 SUM(mi.input_tokens)::INTEGER as input_tokens,
                 SUM(mi.output_tokens)::INTEGER as output_tokens,
-                (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
+                (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason,
+                SUM(mi.cost) as cost
             FROM tensorzero.chat_inferences ci
             LEFT JOIN tensorzero.chat_inference_data cio ON cio.id = ci.id AND cio.created_at = ci.created_at
             LEFT JOIN tensorzero.model_inferences mi ON ci.id = mi.inference_id
@@ -877,7 +884,8 @@ mod tests {
                 cio.output::text as output,
                 SUM(mi.input_tokens)::INTEGER as input_tokens,
                 SUM(mi.output_tokens)::INTEGER as output_tokens,
-                (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
+                (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason,
+                SUM(mi.cost) as cost
             FROM tensorzero.chat_inferences ci
             LEFT JOIN tensorzero.chat_inference_data cio ON cio.id = ci.id AND cio.created_at = ci.created_at
             LEFT JOIN tensorzero.model_inferences mi ON ci.id = mi.inference_id
@@ -914,7 +922,8 @@ mod tests {
                 jio.output::text as output,
                 SUM(mi.input_tokens)::INTEGER as input_tokens,
                 SUM(mi.output_tokens)::INTEGER as output_tokens,
-                (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
+                (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason,
+                SUM(mi.cost) as cost
             FROM tensorzero.json_inferences ji
             LEFT JOIN tensorzero.json_inference_data jio ON jio.id = ji.id AND jio.created_at = ji.created_at
             LEFT JOIN tensorzero.model_inferences mi ON ji.id = mi.inference_id
@@ -948,7 +957,8 @@ mod tests {
                 jio.output::text as output,
                 SUM(mi.input_tokens)::INTEGER as input_tokens,
                 SUM(mi.output_tokens)::INTEGER as output_tokens,
-                (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason
+                (ARRAY_AGG(mi.finish_reason ORDER BY mi.id DESC))[1] as finish_reason,
+                SUM(mi.cost) as cost
             FROM tensorzero.json_inferences ji
             LEFT JOIN tensorzero.json_inference_data jio ON jio.id = ji.id AND jio.created_at = ji.created_at
             LEFT JOIN tensorzero.model_inferences mi ON ji.id = mi.inference_id
