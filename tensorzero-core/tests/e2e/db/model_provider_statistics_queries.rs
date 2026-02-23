@@ -4,8 +4,10 @@
 
 #![expect(clippy::print_stdout)]
 
+use rust_decimal::Decimal;
 use tensorzero::TimeWindow;
 use tensorzero_core::db::model_inferences::ModelInferenceQueries;
+use tensorzero_core::inference::types::{FinishReason, StoredModelInference};
 
 // ===== SHARED TESTS (both ClickHouse and Postgres) =====
 
@@ -318,6 +320,10 @@ async fn test_model_usage_monthly_specific_data(conn: impl ModelInferenceQueries
     assert_eq!(may_gemini.input_tokens, Some(2041389));
     assert_eq!(may_gemini.output_tokens, Some(6788));
     assert_eq!(may_gemini.count, Some(120));
+    assert_eq!(
+        may_gemini.cost, None,
+        "Cost should be None for fixture data that predates cost tracking"
+    );
 
     let may_gpt4o_mini = model_usage.iter().find(|u| {
         u.period_start.format("%Y-%m-%d").to_string() == "2025-05-01"
@@ -331,6 +337,10 @@ async fn test_model_usage_monthly_specific_data(conn: impl ModelInferenceQueries
     assert_eq!(may_gpt4o_mini.input_tokens, Some(983420));
     assert_eq!(may_gpt4o_mini.output_tokens, Some(149656));
     assert_eq!(may_gpt4o_mini.count, Some(2933));
+    assert_eq!(
+        may_gpt4o_mini.cost, None,
+        "Cost should be None for fixture data that predates cost tracking"
+    );
 
     // Test data from April 2025
     let april_claude = model_usage.iter().find(|u| {
@@ -345,6 +355,10 @@ async fn test_model_usage_monthly_specific_data(conn: impl ModelInferenceQueries
     assert_eq!(april_claude.input_tokens, Some(29859));
     assert_eq!(april_claude.output_tokens, Some(44380));
     assert_eq!(april_claude.count, Some(310));
+    assert_eq!(
+        april_claude.cost, None,
+        "Cost should be None for fixture data that predates cost tracking"
+    );
 
     // Test data from March 2025
     let march_llama = model_usage.iter().find(|u| {
@@ -359,6 +373,10 @@ async fn test_model_usage_monthly_specific_data(conn: impl ModelInferenceQueries
     assert_eq!(march_llama.input_tokens, Some(6363));
     assert_eq!(march_llama.output_tokens, Some(1349));
     assert_eq!(march_llama.count, Some(42));
+    assert_eq!(
+        march_llama.cost, None,
+        "Cost should be None for fixture data that predates cost tracking"
+    );
 
     // Test edge case from February 2025 (missing token data)
     let feb_data = model_usage.iter().find(|u| {
@@ -369,6 +387,10 @@ async fn test_model_usage_monthly_specific_data(conn: impl ModelInferenceQueries
         assert_eq!(feb_entry.input_tokens, None);
         assert_eq!(feb_entry.output_tokens, None);
         assert_eq!(feb_entry.count, Some(1));
+        assert_eq!(
+            feb_entry.cost, None,
+            "Cost should be None for fixture data that predates cost tracking"
+        );
     }
 
     // Verify we have expected time periods (March, April, May 2025)
@@ -486,6 +508,10 @@ async fn test_model_usage_daily_specific_data(conn: impl ModelInferenceQueries) 
     assert_eq!(may_23_data.input_tokens, Some(17015));
     assert_eq!(may_23_data.output_tokens, Some(113));
     assert_eq!(may_23_data.count, Some(1));
+    assert_eq!(
+        may_23_data.cost, None,
+        "Cost should be None for fixture data that predates cost tracking"
+    );
 
     // Model-specific assertions
     let model_names: std::collections::HashSet<_> =
@@ -730,3 +756,180 @@ async fn test_model_latency_cumulative_specific_data(conn: impl ModelInferenceQu
     }
 }
 make_db_test!(test_model_latency_cumulative_specific_data);
+
+// ===== COST AGGREGATION TESTS =====
+
+/// Helper to create model inferences with a unique model name and known cost values.
+fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
+    vec![
+        StoredModelInference {
+            id: uuid::Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
+            raw_request: Some("{}".to_string()),
+            raw_response: Some("{}".to_string()),
+            system: None,
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            response_time_ms: Some(200),
+            model_name: model_name.to_string(),
+            model_provider_name: "test-provider".to_string(),
+            ttft_ms: None,
+            cached: false,
+            cost: Some(Decimal::new(500, 6)), // 0.000500
+            finish_reason: Some(FinishReason::Stop),
+            snapshot_hash: None,
+            timestamp: None,
+        },
+        StoredModelInference {
+            id: uuid::Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
+            raw_request: Some("{}".to_string()),
+            raw_response: Some("{}".to_string()),
+            system: None,
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
+            input_tokens: Some(200),
+            output_tokens: Some(100),
+            response_time_ms: Some(300),
+            model_name: model_name.to_string(),
+            model_provider_name: "test-provider".to_string(),
+            ttft_ms: None,
+            cached: false,
+            cost: Some(Decimal::new(1500, 6)), // 0.001500
+            finish_reason: Some(FinishReason::Stop),
+            snapshot_hash: None,
+            timestamp: None,
+        },
+        StoredModelInference {
+            id: uuid::Uuid::now_v7(),
+            inference_id: uuid::Uuid::now_v7(),
+            raw_request: Some("{}".to_string()),
+            raw_response: Some("{}".to_string()),
+            system: None,
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
+            input_tokens: Some(300),
+            output_tokens: Some(150),
+            response_time_ms: Some(100),
+            model_name: model_name.to_string(),
+            model_provider_name: "test-provider".to_string(),
+            ttft_ms: None,
+            cached: false,
+            cost: None, // NULL cost — should be excluded from SUM
+            finish_reason: Some(FinishReason::Stop),
+            snapshot_hash: None,
+            timestamp: None,
+        },
+    ]
+}
+
+/// ClickHouse-only test: insert model inferences with known costs, then verify
+/// the materialized view aggregates the cost correctly.
+async fn test_cost_aggregation_clickhouse(
+    conn: tensorzero_core::db::clickhouse::ClickHouseConnectionInfo,
+) {
+    let model_name = format!("cost-aggregation-test-ch-{}", uuid::Uuid::now_v7());
+    let inferences = make_cost_test_inferences(&model_name);
+
+    conn.insert_model_inferences(&inferences).await.unwrap();
+
+    // Wait for the ClickHouse MV to process the inserts
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    let usage = conn
+        .get_model_usage_timeseries(TimeWindow::Cumulative, 1)
+        .await
+        .unwrap();
+
+    let our_model = usage.iter().find(|u| u.model_name == model_name);
+    assert!(
+        our_model.is_some(),
+        "Should find aggregated data for test model `{model_name}`"
+    );
+    let our_model = our_model.unwrap();
+
+    assert_eq!(
+        our_model.count,
+        Some(3),
+        "Should have 3 inferences for test model"
+    );
+    assert_eq!(
+        our_model.input_tokens,
+        Some(600),
+        "Input tokens should sum to 100 + 200 + 300 = 600"
+    );
+    assert_eq!(
+        our_model.output_tokens,
+        Some(300),
+        "Output tokens should sum to 50 + 100 + 150 = 300"
+    );
+    // SUM of costs: 0.000500 + 0.001500 = 0.002000 (NULL excluded)
+    assert_eq!(
+        our_model.cost,
+        Some(Decimal::new(2000, 6)),
+        "Cost should sum to 0.002000 (NULL costs excluded from SUM)"
+    );
+}
+
+#[tokio::test]
+async fn test_cost_aggregation_clickhouse_clickhouse() {
+    let conn = tensorzero_core::db::clickhouse::test_helpers::get_clickhouse().await;
+    test_cost_aggregation_clickhouse(conn).await;
+}
+
+/// Postgres-only test: insert model inferences with known costs, trigger the
+/// incremental refresh function, then verify the aggregated cost.
+#[tokio::test]
+async fn test_cost_aggregation_postgres() {
+    let conn = crate::db::get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    let model_name = format!("cost-aggregation-test-pg-{}", uuid::Uuid::now_v7());
+    let inferences = make_cost_test_inferences(&model_name);
+
+    conn.insert_model_inferences(&inferences).await.unwrap();
+
+    // Trigger the incremental refresh to populate the statistics table
+    sqlx::query(
+        "SELECT tensorzero.refresh_model_provider_statistics_incremental(full_refresh => TRUE)",
+    )
+    .execute(pool)
+    .await
+    .expect("refresh_model_provider_statistics_incremental should succeed");
+
+    let usage = conn
+        .get_model_usage_timeseries(TimeWindow::Cumulative, 1)
+        .await
+        .unwrap();
+
+    let our_model = usage.iter().find(|u| u.model_name == model_name);
+    assert!(
+        our_model.is_some(),
+        "Should find aggregated data for test model `{model_name}`"
+    );
+    let our_model = our_model.unwrap();
+
+    assert_eq!(
+        our_model.count,
+        Some(3),
+        "Should have 3 inferences for test model"
+    );
+    assert_eq!(
+        our_model.input_tokens,
+        Some(600),
+        "Input tokens should sum to 100 + 200 + 300 = 600"
+    );
+    assert_eq!(
+        our_model.output_tokens,
+        Some(300),
+        "Output tokens should sum to 50 + 100 + 150 = 300"
+    );
+    // SUM of costs: 0.000500 + 0.001500 = 0.002000 (NULL excluded)
+    assert_eq!(
+        our_model.cost,
+        Some(Decimal::new(2000, 6)),
+        "Cost should sum to 0.002000 (NULL costs excluded from SUM)"
+    );
+}

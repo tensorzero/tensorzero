@@ -17,6 +17,7 @@ use crate::db::datasets::DatasetQueries;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
+use rust_decimal::Decimal;
 
 pub type BatchWriterHandle = Shared<Pin<Box<dyn Future<Output = Result<(), String>> + Send>>>;
 
@@ -122,6 +123,9 @@ pub struct ModelUsageTimePoint {
     pub output_tokens: Option<u64>,
     #[serde(deserialize_with = "deserialize_option_u64")]
     pub count: Option<u64>,
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub cost: Option<Decimal>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -288,4 +292,76 @@ pub trait DICLQueries: Send + Sync {
         variant_name: &str,
         namespace: Option<&str>,
     ) -> Result<u64, Error>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_decimal::prelude::FromPrimitive;
+
+    #[test]
+    fn test_model_usage_time_point_serde_with_cost() {
+        let point = ModelUsageTimePoint {
+            period_start: DateTime::parse_from_rfc3339("2025-05-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+            model_name: "openai::gpt-4o".to_string(),
+            input_tokens: Some(1000),
+            output_tokens: Some(500),
+            count: Some(10),
+            cost: Decimal::from_f64(0.00123),
+        };
+
+        let json = serde_json::to_string(&point).unwrap();
+        assert!(
+            json.contains("\"cost\":0.00123"),
+            "Serialized JSON should contain cost as a float: {json}"
+        );
+
+        let deserialized: ModelUsageTimePoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            deserialized.cost, point.cost,
+            "Cost should round-trip through serde"
+        );
+        assert_eq!(deserialized.model_name, "openai::gpt-4o");
+        assert_eq!(deserialized.input_tokens, Some(1000));
+    }
+
+    #[test]
+    fn test_model_usage_time_point_serde_with_null_cost() {
+        let point = ModelUsageTimePoint {
+            period_start: DateTime::parse_from_rfc3339("2025-05-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+            model_name: "anthropic::claude-3-5-haiku".to_string(),
+            input_tokens: Some(2000),
+            output_tokens: Some(1000),
+            count: Some(5),
+            cost: None,
+        };
+
+        let json = serde_json::to_string(&point).unwrap();
+        assert!(
+            json.contains("\"cost\":null"),
+            "Serialized JSON should contain cost as null: {json}"
+        );
+
+        let deserialized: ModelUsageTimePoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            deserialized.cost, None,
+            "None cost should round-trip through serde"
+        );
+    }
+
+    #[test]
+    fn test_model_usage_time_point_serde_missing_cost_defaults_to_none() {
+        // Simulates deserialization from data that doesn't include a `cost` field
+        // (e.g., older ClickHouse data before the migration)
+        let json = r#"{"period_start":"2025-05-01T00:00:00Z","model_name":"test","input_tokens":"100","output_tokens":"50","count":"3"}"#;
+        let deserialized: ModelUsageTimePoint = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            deserialized.cost, None,
+            "Missing cost field should default to None"
+        );
+    }
 }
