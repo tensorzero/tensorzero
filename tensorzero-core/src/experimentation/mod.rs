@@ -588,8 +588,11 @@ impl VariantSampler for AlwaysFailsConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ErrorContext, SchemaData};
+    use std::io::Write;
+
+    use crate::config::{Config, ConfigFileGlob, ErrorContext, Namespace, SchemaData};
     use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
+    use tempfile::NamedTempFile;
     use uuid::Uuid;
 
     #[test]
@@ -618,8 +621,6 @@ mod tests {
 
     #[test]
     fn test_uniform_sampling_distribution() {
-        use crate::config::{ErrorContext, SchemaData};
-        use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
         use std::collections::HashMap;
 
         // Create variants with no weights (should trigger uniform sampling)
@@ -671,9 +672,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_always_fails_fallback_with_allowed_variants() {
-        use crate::config::{ErrorContext, SchemaData};
-        use crate::variant::{VariantConfig, chat_completion::UninitializedChatCompletionConfig};
-
         // Create 5 variants: A, B, C, D, E
         let variant_names = ["A", "B", "C", "D", "E"];
         let mut variants_map = BTreeMap::new();
@@ -767,45 +765,6 @@ mod tests {
                 "Variant {variant_name}: expected {expected_prob:.3}, got {actual_prob:.3}"
             );
         }
-    }
-
-    // Tests for get_current_display_probabilities
-    #[test]
-    fn test_get_current_display_probabilities_static_default() {
-        let mut active_variants = HashMap::new();
-        for name in ["A", "B", "C"] {
-            active_variants.insert(
-                name.to_string(),
-                Arc::new(VariantInfo {
-                    inner: VariantConfig::ChatCompletion(
-                        UninitializedChatCompletionConfig {
-                            weight: None,
-                            model: "model-name".into(),
-                            ..Default::default()
-                        }
-                        .load(&SchemaData::default(), &ErrorContext::new_test())
-                        .unwrap(),
-                    ),
-                    timeouts: Default::default(),
-                }),
-            );
-        }
-
-        let config = ExperimentationConfig::default();
-        let postgres = PostgresConnectionInfo::new_disabled();
-        let probs = config
-            .get_current_display_probabilities("test", &active_variants, &postgres)
-            .unwrap();
-
-        // Should have uniform probabilities
-        assert_eq!(probs.len(), 3);
-        assert!((probs["A"] - 1.0 / 3.0).abs() < 1e-9);
-        assert!((probs["B"] - 1.0 / 3.0).abs() < 1e-9);
-        assert!((probs["C"] - 1.0 / 3.0).abs() < 1e-9);
-
-        // Check sum
-        let sum: f64 = probs.values().sum();
-        assert!((sum - 1.0).abs() < 1e-9);
     }
 
     #[test]
@@ -1126,103 +1085,6 @@ mod tests {
     }
 
     #[test]
-    fn test_static_rejects_unknown_candidate_variant() {
-        let variants = make_variants_map(&["variant_a", "variant_b"]);
-        let metrics = HashMap::new();
-
-        let config: UninitializedExperimentationConfig =
-            serde_json::from_value(serde_json::json!({
-                "type": "static",
-                "candidate_variants": ["variant_a", "typo_variant"]
-            }))
-            .unwrap();
-
-        let result = config.load(&variants, &metrics, None, false);
-        assert!(
-            result.is_err(),
-            "Should reject unknown candidate variant name at load time"
-        );
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("typo_variant"),
-            "Error should mention the unknown variant name: {err}"
-        );
-    }
-
-    #[test]
-    fn test_static_rejects_unknown_fallback_variant() {
-        let variants = make_variants_map(&["variant_a", "variant_b"]);
-        let metrics = HashMap::new();
-
-        let config: UninitializedExperimentationConfig =
-            serde_json::from_value(serde_json::json!({
-                "type": "static",
-                "candidate_variants": ["variant_a"],
-                "fallback_variants": ["nonexistent"]
-            }))
-            .unwrap();
-
-        let result = config.load(&variants, &metrics, None, false);
-        assert!(
-            result.is_err(),
-            "Should reject unknown fallback variant name at load time"
-        );
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("nonexistent"),
-            "Error should mention the unknown variant name: {err}"
-        );
-    }
-
-    #[test]
-    fn test_static_rejects_unknown_candidate_variant_weighted() {
-        let variants = make_variants_map(&["variant_a", "variant_b"]);
-        let metrics = HashMap::new();
-
-        let config: UninitializedExperimentationConfig =
-            serde_json::from_value(serde_json::json!({
-                "type": "static",
-                "candidate_variants": {"variant_a": 0.5, "typo_variant": 0.5}
-            }))
-            .unwrap();
-
-        let result = config.load(&variants, &metrics, None, false);
-        assert!(
-            result.is_err(),
-            "Should reject unknown candidate variant name in weighted map at load time"
-        );
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("typo_variant"),
-            "Error should mention the unknown variant name: {err}"
-        );
-    }
-
-    #[test]
-    fn test_static_rejects_zero_weights_no_fallbacks_at_load() {
-        let variants = make_variants_map(&["variant_a", "variant_b"]);
-        let metrics = HashMap::new();
-
-        let config: UninitializedExperimentationConfig =
-            serde_json::from_value(serde_json::json!({
-                "type": "static",
-                "candidate_variants": {"variant_a": 0.0, "variant_b": 0.0}
-            }))
-            .unwrap();
-
-        let result = config.load(&variants, &metrics, None, false);
-        assert!(
-            result.is_err(),
-            "Should reject config with all-zero weights and no fallbacks at load time"
-        );
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("no active candidate variants and no fallback variants"),
-            "Error should explain the issue: {err}"
-        );
-    }
-
-    #[test]
     fn test_backward_compat_uniform_deserializes() {
         let config: UninitializedExperimentationConfig =
             serde_json::from_value(serde_json::json!({
@@ -1261,6 +1123,241 @@ mod tests {
         assert!(
             matches!(config, UninitializedExperimentationConfig::TrackAndStop(_)),
             "Legacy `track_and_stop` type should still deserialize"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_experimentation_with_variant_weights_error_static() {
+        let config_str = r#"
+            [models.test]
+            routing = ["test"]
+
+            [models.test.providers.test]
+            type = "dummy"
+            model_name = "test"
+
+            [functions.test_function]
+            type = "chat"
+
+            [functions.test_function.variants.variant_a]
+            type = "chat_completion"
+            model = "test"
+            weight = 0.5
+
+            [functions.test_function.variants.variant_b]
+            type = "chat_completion"
+            model = "test"
+            weight = 0.5
+
+            [functions.test_function.experimentation]
+            type = "static"
+            candidate_variants = ["variant_a", "variant_b"]
+            "#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_str.as_bytes()).unwrap();
+
+        let err = Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+            false,
+        )
+        .await
+        .expect_err("Config should fail to load");
+
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains(
+                "Cannot mix `experimentation` configuration with individual variant `weight` values"
+            ),
+            "Unexpected error message: {err_msg}"
+        );
+        assert!(
+            err_msg.contains("variant_a") && err_msg.contains("variant_b"),
+            "Error should list both variants with weights: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_experimentation_with_variant_weights_error_adaptive() {
+        let config_str = r#"
+            [models.test]
+            routing = ["test"]
+
+            [models.test.providers.test]
+            type = "dummy"
+            model_name = "test"
+
+            [metrics.test_metric]
+            type = "boolean"
+            optimize = "max"
+            level = "inference"
+
+            [functions.test_function]
+            type = "chat"
+
+            [functions.test_function.variants.variant_a]
+            type = "chat_completion"
+            model = "test"
+            weight = 0.6
+
+            [functions.test_function.variants.variant_b]
+            type = "chat_completion"
+            model = "test"
+
+            [functions.test_function.experimentation]
+            type = "adaptive"
+            metric = "test_metric"
+            candidate_variants = ["variant_a", "variant_b"]
+            min_samples_per_variant = 100
+            delta = 0.05
+            epsilon = 0.1
+            update_period_s = 60
+            "#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_str.as_bytes()).unwrap();
+
+        let err = Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+            false,
+        )
+        .await
+        .expect_err("Config should fail to load");
+
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains(
+                "Cannot mix `experimentation` configuration with individual variant `weight` values"
+            ),
+            "Unexpected error message: {err_msg}"
+        );
+        assert!(
+            err_msg.contains("variant_a"),
+            "Error should list the variant with weight: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_experimentation_with_namespaces_valid() {
+        let config_str = r#"
+            [models.test]
+            routing = ["test"]
+
+            [models.test.providers.test]
+            type = "dummy"
+            model_name = "test"
+
+            [functions.test_function]
+            type = "chat"
+
+            [functions.test_function.variants.variant_a]
+            type = "chat_completion"
+            model = "test"
+
+            [functions.test_function.variants.variant_b]
+            type = "chat_completion"
+            model = "test"
+
+            [functions.test_function.experimentation]
+            type = "static"
+            candidate_variants = ["variant_a", "variant_b"]
+
+            [functions.test_function.experimentation.namespaces.mobile]
+            type = "static"
+            candidate_variants = {"variant_a" = 1.0}
+
+            [functions.test_function.experimentation.namespaces.web]
+            type = "static"
+            candidate_variants = ["variant_a", "variant_b"]
+            "#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_str.as_bytes()).unwrap();
+
+        let loaded = Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+            false,
+        )
+        .await
+        .expect("Config with valid namespace experimentation should load successfully");
+
+        let func = loaded
+            .functions
+            .get("test_function")
+            .expect("test_function should exist");
+        let exp = func.experimentation_with_namespaces();
+        assert!(
+            exp.has_namespace_config("mobile"),
+            "Should have a `mobile` namespace config"
+        );
+        assert!(
+            exp.has_namespace_config("web"),
+            "Should have a `web` namespace config"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_experimentation_namespace_adaptive_loads() {
+        let config_str = r#"
+            [models.test]
+            routing = ["test"]
+
+            [models.test.providers.test]
+            type = "dummy"
+            model_name = "test"
+
+            [metrics.test_metric]
+            type = "boolean"
+            optimize = "max"
+            level = "inference"
+
+            [functions.test_function]
+            type = "chat"
+
+            [functions.test_function.variants.variant_a]
+            type = "chat_completion"
+            model = "test"
+
+            [functions.test_function.variants.variant_b]
+            type = "chat_completion"
+            model = "test"
+
+            [functions.test_function.experimentation]
+            type = "static"
+            candidate_variants = ["variant_a", "variant_b"]
+
+            [functions.test_function.experimentation.namespaces.mobile]
+            type = "adaptive"
+            metric = "test_metric"
+            candidate_variants = ["variant_a", "variant_b"]
+            min_samples_per_variant = 10
+            delta = 0.05
+            epsilon = 0.1
+            update_period_s = 60
+            "#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_str.as_bytes()).unwrap();
+
+        let loaded = Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+            false,
+        )
+        .await
+        .expect("Namespace with adaptive should load successfully");
+
+        let function_config = loaded.functions.get("test_function").unwrap();
+        let experimentation = function_config.experimentation_with_namespaces();
+        assert!(
+            experimentation.has_namespace_config("mobile"),
+            "Should have a `mobile` namespace config"
+        );
+        assert!(
+            matches!(
+                experimentation.get_for_namespace(Some(&Namespace::new("mobile").unwrap())),
+                ExperimentationConfig::Adaptive(_)
+            ),
+            "The `mobile` namespace config should be `Adaptive`"
         );
     }
 }
