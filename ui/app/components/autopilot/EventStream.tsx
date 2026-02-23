@@ -461,9 +461,10 @@ function renderEventTitle(event: GatewayEvent) {
       );
     }
     case "user_questions_answers": {
+      const answerCount = Object.keys(payload.responses).length;
       return (
         <span className="inline-flex items-center gap-2">
-          Question
+          {answerCount === 1 ? "Question" : "Questions"}
           <DotSeparator />
           {hasAnsweredResponse(payload.responses) ? "Answered" : "Skipped"}
         </span>
