@@ -4,16 +4,23 @@ import type {
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 
+enum StepStatus {
+  Unanswered = "unanswered",
+  Skipped = "skipped",
+  AnsweredMultipleChoice = "answered_multiple_choice",
+  AnsweredFreeResponse = "answered_free_response",
+}
+
 type StepAnswer =
-  | { status: "unanswered" }
-  | { status: "skipped" }
-  | { status: "answered_multiple_choice"; selected: Set<string> }
-  | { status: "answered_free_response"; text: string };
+  | { status: StepStatus.Unanswered }
+  | { status: StepStatus.Skipped }
+  | { status: StepStatus.AnsweredMultipleChoice; selected: Set<string> }
+  | { status: StepStatus.AnsweredFreeResponse; text: string };
 
 type StepAnswers = Map<number, StepAnswer>;
 
 function getStep(answers: StepAnswers, idx: number): StepAnswer {
-  return answers.get(idx) ?? { status: "unanswered" };
+  return answers.get(idx) ?? { status: StepStatus.Unanswered };
 }
 
 export function useQuestionCardState(
@@ -39,7 +46,7 @@ export function useQuestionCardState(
 
       const step = getStep(prev, questionIndex);
       const current =
-        step.status === "answered_multiple_choice"
+        step.status === StepStatus.AnsweredMultipleChoice
           ? step.selected
           : new Set<string>();
 
@@ -57,7 +64,7 @@ export function useQuestionCardState(
 
       const next = new Map(prev);
       next.set(questionIndex, {
-        status: "answered_multiple_choice",
+        status: StepStatus.AnsweredMultipleChoice,
         selected: updated,
       });
       return next;
@@ -67,7 +74,10 @@ export function useQuestionCardState(
   const handleFreeTextChange = (questionIndex: number, text: string) => {
     setAnswers((prev) => {
       const next = new Map(prev);
-      next.set(questionIndex, { status: "answered_free_response", text });
+      next.set(questionIndex, {
+        status: StepStatus.AnsweredFreeResponse,
+        text,
+      });
       return next;
     });
   };
@@ -75,12 +85,12 @@ export function useQuestionCardState(
   const isStepAnswered = (idx: number): boolean => {
     const step = getStep(answers, idx);
     switch (step.status) {
-      case "answered_multiple_choice":
+      case StepStatus.AnsweredMultipleChoice:
         return step.selected.size > 0;
-      case "answered_free_response":
+      case StepStatus.AnsweredFreeResponse:
         return step.text.trim().length > 0;
-      case "unanswered":
-      case "skipped":
+      case StepStatus.Unanswered:
+      case StepStatus.Skipped:
         return false;
       default: {
         const _exhaustiveCheck: never = step;
@@ -90,7 +100,7 @@ export function useQuestionCardState(
   };
 
   const isStepSkipped = (idx: number): boolean =>
-    getStep(answers, idx).status === "skipped";
+    getStep(answers, idx).status === StepStatus.Skipped;
 
   const isStepComplete = (idx: number): boolean =>
     isStepAnswered(idx) || isStepSkipped(idx);
@@ -102,17 +112,17 @@ export function useQuestionCardState(
     payload.questions.forEach((question, idx) => {
       const step = getStep(finalAnswers, idx);
       switch (step.status) {
-        case "skipped":
-        case "unanswered":
+        case StepStatus.Skipped:
+        case StepStatus.Unanswered:
           responses[question.id] = { type: "skipped" };
           break;
-        case "answered_multiple_choice":
+        case StepStatus.AnsweredMultipleChoice:
           responses[question.id] = {
             type: "multiple_choice",
             selected: Array.from(step.selected),
           };
           break;
-        case "answered_free_response":
+        case StepStatus.AnsweredFreeResponse:
           responses[question.id] = {
             type: "free_response",
             text: step.text,
@@ -130,8 +140,11 @@ export function useQuestionCardState(
   const markUnansweredAsSkipped = (base: StepAnswers): StepAnswers => {
     const final = new Map(base);
     payload.questions.forEach((_, idx) => {
-      if (!isStepAnswered(idx) && getStep(final, idx).status !== "skipped") {
-        final.set(idx, { status: "skipped" });
+      if (
+        !isStepAnswered(idx) &&
+        getStep(final, idx).status !== StepStatus.Skipped
+      ) {
+        final.set(idx, { status: StepStatus.Skipped });
       }
     });
     return final;
@@ -139,7 +152,7 @@ export function useQuestionCardState(
 
   const handleSkipStep = () => {
     const updated = new Map(answers);
-    updated.set(activeStep, { status: "skipped" });
+    updated.set(activeStep, { status: StepStatus.Skipped });
 
     if (isLastStep) {
       const final = markUnansweredAsSkipped(updated);
@@ -161,10 +174,11 @@ export function useQuestionCardState(
     return {
       question,
       selectedValues:
-        step.status === "answered_multiple_choice"
+        step.status === StepStatus.AnsweredMultipleChoice
           ? step.selected
           : new Set<string>(),
-      freeText: step.status === "answered_free_response" ? step.text : "",
+      freeText:
+        step.status === StepStatus.AnsweredFreeResponse ? step.text : "",
       onToggle: (value: string) => handleMcToggle(idx, value),
       onFreeTextChange: (text: string) => handleFreeTextChange(idx, text),
     };
