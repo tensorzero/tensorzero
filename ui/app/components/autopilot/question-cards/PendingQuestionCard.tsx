@@ -103,7 +103,7 @@ export function PendingQuestionCard({
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3">
           {payload.questions.map((q, idx) => (
             <StepTab
-              key={idx}
+              key={q.id}
               index={idx}
               label={q.header}
               state={getStepTabState(idx)}

@@ -289,6 +289,10 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       return {};
     case "user_questions_answers":
       return {};
+    default: {
+      const _exhaustiveCheck: never = payload;
+      return _exhaustiveCheck;
+    }
   }
 }
 

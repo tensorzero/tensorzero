@@ -23,7 +23,7 @@ import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
-import { PendingQuestionCard } from "~/components/autopilot/question-cards";
+import { PendingQuestionCard } from "~/components/autopilot/question-cards/PendingQuestionCard";
 import { ApplySessionConfigChangesButton } from "~/components/autopilot/ApplySessionConfigChangesButton";
 import { YoloModeToggle } from "~/components/autopilot/YoloModeToggle";
 import {

@@ -5,7 +5,6 @@ import type {
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 import { PendingQuestionCard } from "./PendingQuestionCard";
-import { CompletedQuestionCard } from "./CompletedQuestionCard";
 
 // ── Fixtures ──────────────────────────────────────────────────────────
 
@@ -113,19 +112,6 @@ const multiQuestionPayload: EventPayloadUserQuestions = {
       type: "free_response",
     },
   ],
-};
-
-const singleResponses: Record<string, UserQuestionAnswer> = {
-  q1: { type: "multiple_choice", selected: ["jwt"] },
-};
-
-const multiResponses: Record<string, UserQuestionAnswer> = {
-  q1: { type: "multiple_choice", selected: ["datefns"] },
-  q2: { type: "multiple_choice", selected: ["i18n", "tz"] },
-  q3: {
-    type: "free_response",
-    text: "We need timezone support because our users are global.",
-  },
 };
 
 // ── Meta ──────────────────────────────────────────────────────────────
@@ -252,47 +238,4 @@ const dummyArgs = {
 export const Interactive: Story = {
   args: dummyArgs,
   render: () => <InteractivePending />,
-};
-
-// ── CompletedQuestionCard ─────────────────────────────────────────────
-
-export const AnsweredSingle: Story = {
-  args: dummyArgs,
-  render: () => (
-    <div className="w-[500px] p-4">
-      <CompletedQuestionCard
-        payload={singleMcPayload}
-        responses={singleResponses}
-        eventId="evt-answered-1"
-        timestamp={new Date().toISOString()}
-      />
-    </div>
-  ),
-};
-
-export const AnsweredMulti: Story = {
-  args: dummyArgs,
-  render: () => (
-    <div className="w-[500px] p-4">
-      <CompletedQuestionCard
-        payload={multiQuestionPayload}
-        responses={multiResponses}
-        eventId="evt-answered-2"
-        timestamp={new Date().toISOString()}
-      />
-    </div>
-  ),
-};
-
-export const Skipped: Story = {
-  args: dummyArgs,
-  render: () => (
-    <div className="w-[500px] p-4">
-      <CompletedQuestionCard
-        payload={multiQuestionPayload}
-        eventId="evt-skipped-1"
-        timestamp={new Date().toISOString()}
-      />
-    </div>
-  ),
 };

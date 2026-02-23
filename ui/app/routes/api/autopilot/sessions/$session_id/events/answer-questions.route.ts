@@ -40,7 +40,11 @@ export async function action({ params, request }: ActionFunctionArgs) {
     });
   }
 
-  if (!body.responses || typeof body.responses !== "object") {
+  if (
+    !body.responses ||
+    typeof body.responses !== "object" ||
+    Array.isArray(body.responses)
+  ) {
     return new Response("`responses` is required", { status: 400 });
   }
 
