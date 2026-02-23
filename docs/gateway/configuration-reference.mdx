@@ -4246,25 +4246,6 @@ candidate_variants = ["prompt-v1", "prompt-v2", "prompt-v3"]
 # ...
 ```
 
-##### `metric`
-
-- **Type:** string
-- **Required:** yes
-
-The metric that should be tracked during the experiment.
-The metric is used to dynamically update the sampling probabilities for the variants in a way that is designed to quickly identify high performing variants.
-
-This must be one of the metrics defined in the `[metrics]` section.
-The adaptive algorithm can handle both inference-level and episode-level metrics.
-Plots based on the chosen metric are displayed in the `Experimentation` section of the `Functions` tab in the TensorZero UI.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.experimentation]
-# ...
-metric = "task-completed"
-# ...
-```
-
 ##### `delta`
 
 - **Type:** float
@@ -4341,6 +4322,25 @@ Feedback for fallback variants will not be used in the experiment itself; the sa
 [functions.draft-email.experimentation]
 candidate_variants = ["prompt-v1", "prompt-v2", "prompt-v3"]
 fallback_variants = ["fallback-prompt-a", "fallback-prompt-b"]
+# ...
+```
+
+##### `metric`
+
+- **Type:** string
+- **Required:** yes
+
+The metric that should be tracked during the experiment.
+The metric is used to dynamically update the sampling probabilities for the variants in a way that is designed to quickly identify high performing variants.
+
+This must be one of the metrics defined in the `[metrics]` section.
+The adaptive algorithm can handle both inference-level and episode-level metrics.
+Plots based on the chosen metric are displayed in the `Experimentation` section of the `Functions` tab in the TensorZero UI.
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+# ...
+metric = "task-completed"
 # ...
 ```
 
