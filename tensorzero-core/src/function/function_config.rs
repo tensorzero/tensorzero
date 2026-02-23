@@ -2745,7 +2745,7 @@ mod tests {
         let mut namespaces = HashMap::new();
         namespaces.insert(
             "mobile".to_string(),
-            ExperimentationConfig::Static(crate::experimentation::StaticConfig {
+            ExperimentationConfig::Static(crate::experimentation::StaticExperimentationConfig {
                 candidate_variants: crate::experimentation::WeightedVariants::from_map(
                     std::collections::BTreeMap::from([("v1".to_string(), 1.0)]),
                 ),

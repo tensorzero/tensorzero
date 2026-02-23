@@ -90,7 +90,7 @@ If both of those variants fail, the gateway will try the fallback variants in or
 type = "chat"
 
 [functions.extract_data.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["gpt_5_mini", "claude_haiku_4_5"]
 fallback_variants = ["grok_4", "gemini_2_5_flash"]
 
@@ -111,13 +111,13 @@ type = "chat_completion"
 model = "google_ai_studio_gemini::gemini-2.5-flash"
 ```
 
-You can also use static weights to control the sampling probabilities of candidate variants.
+You can also use weights to control the sampling probabilities of candidate variants.
 In the example below, the gateway will sample `gpt_5_mini` 70% of the time and `claude_haiku_4_5` 30% of the time.
 If both of those variants fail, the gateway will try the fallback variants sequentially.
 
 ```toml
 [functions.extract_data.experimentation]
-type = "static_weights"
+type = "static"
 candidate_variants = {"gpt_5_mini" = 0.7, "claude_haiku_4_5" = 0.3}
 fallback_variants = ["grok_4", "gemini_2_5_flash"]
 ```
@@ -138,7 +138,7 @@ In other words, the gateway will follow a strategy like the pseudocode below.
 
 ```python
 while variants:
-    # Sample according to experimentation config (uniform, static_weights, etc.)
+    # Sample according to experimentation config (static, adaptive, etc.)
     variant = sample_variant(variants)  # sampling without replacement
 
     for _ in range(num_retries + 1):

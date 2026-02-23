@@ -3568,6 +3568,6 @@ async fn test_experimentation_namespace_track_and_stop_loads() {
             experimentation.get_for_namespace(Some(&Namespace::new("mobile").unwrap())),
             crate::experimentation::ExperimentationConfig::Adaptive(_)
         ),
-        "The `mobile` namespace config should be Adaptive"
+        "The `mobile` namespace config should be `Adaptive`"
     );
 }

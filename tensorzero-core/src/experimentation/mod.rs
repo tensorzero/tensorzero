@@ -1,12 +1,11 @@
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use tensorzero_derive::TensorZeroDeserialize;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -16,18 +15,17 @@ use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
-
-pub mod asymptotic_confidence_sequences;
-pub mod static_config;
-mod static_weights;
-pub mod track_and_stop;
-mod uniform;
-
-pub use static_config::{StaticConfig, WeightedVariants};
-pub use track_and_stop::{
+pub use adaptive_experimentation::{
     AdaptiveExperimentationAlgorithm, AdaptiveExperimentationConfig,
     AdaptiveExperimentationObjective, UninitializedAdaptiveExperimentationConfig,
 };
+pub use static_experimentation::{StaticExperimentationConfig, WeightedVariants};
+
+pub mod adaptive_experimentation;
+pub mod asymptotic_confidence_sequences;
+mod legacy;
+pub mod static_experimentation;
+pub mod track_and_stop;
 
 /// Check for duplicate variants within a list
 fn check_duplicates_within(variants: &[String], list_name: &str) -> Result<(), Error> {
@@ -110,7 +108,7 @@ fn check_duplicates_across_map(
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
-    Static(StaticConfig),
+    Static(StaticExperimentationConfig),
     Adaptive(AdaptiveExperimentationConfig),
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     #[cfg(test)]
@@ -119,7 +117,7 @@ pub enum ExperimentationConfig {
 
 impl Default for ExperimentationConfig {
     fn default() -> Self {
-        Self::Static(StaticConfig::all_variants_uniform())
+        Self::Static(StaticExperimentationConfig::all_variants_uniform())
     }
 }
 
@@ -172,11 +170,11 @@ impl ExperimentationConfigWithNamespaces {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UninitializedExperimentationConfig {
     // New types
-    Static(StaticConfig),
+    Static(StaticExperimentationConfig),
     Adaptive(UninitializedAdaptiveExperimentationConfig),
     // Legacy types (backward compat)
-    StaticWeights(static_weights::LegacyStaticWeightsExperimentationConfig),
-    Uniform(uniform::LegacyUniformExperimentationConfig),
+    StaticWeights(legacy::LegacyStaticWeightsExperimentationConfig),
+    Uniform(legacy::LegacyUniformExperimentationConfig),
     TrackAndStop(track_and_stop::LegacyUninitializedTrackAndStopExperimentationConfig),
 }
 
@@ -247,8 +245,9 @@ impl UninitializedExperimentationConfig {
         }
 
         match self {
-            // New types — pass through directly
+            // New types — validate and pass through
             UninitializedExperimentationConfig::Static(config) => {
+                config.validate(variants)?;
                 Ok(ExperimentationConfig::Static(config))
             }
             UninitializedExperimentationConfig::Adaptive(config) => Ok(
@@ -261,8 +260,9 @@ impl UninitializedExperimentationConfig {
                         "Experimentation type `uniform` is deprecated. Use `static` instead."
                     );
                 }
-                let loaded = config.load(variants)?;
-                Ok(ExperimentationConfig::Static(loaded.into_static_config()))
+                let static_config = config.into_static_config();
+                static_config.validate(variants)?;
+                Ok(ExperimentationConfig::Static(static_config))
             }
             UninitializedExperimentationConfig::StaticWeights(config) => {
                 if warn_deprecated {
@@ -270,7 +270,9 @@ impl UninitializedExperimentationConfig {
                         "Experimentation type `static_weights` is deprecated. Use `static` instead."
                     );
                 }
-                Ok(ExperimentationConfig::Static(config.into_static_config()))
+                let static_config = config.into_static_config();
+                static_config.validate(variants)?;
+                Ok(ExperimentationConfig::Static(static_config))
             }
             UninitializedExperimentationConfig::TrackAndStop(config) => {
                 if warn_deprecated {
@@ -281,7 +283,7 @@ impl UninitializedExperimentationConfig {
                 let adaptive = UninitializedAdaptiveExperimentationConfig {
                     algorithm: AdaptiveExperimentationAlgorithm::TrackAndStop,
                     objective: AdaptiveExperimentationObjective::BestVariantIdentification,
-                    track_and_stop: config,
+                    inner: config,
                 };
                 Ok(ExperimentationConfig::Adaptive(
                     adaptive.load(variants, metrics, namespace)?,
@@ -327,12 +329,14 @@ impl ExperimentationConfig {
         for variant in variants.values() {
             if variant.inner.weight().is_some() {
                 let config =
-                    static_weights::LegacyStaticWeightsExperimentationConfig::legacy_from_variants_map(variants);
+                    legacy::LegacyStaticWeightsExperimentationConfig::legacy_from_variants_map(
+                        variants,
+                    );
                 return Self::Static(config.into_static_config());
             }
         }
         // Otherwise, default to all-variants-uniform
-        Self::Static(StaticConfig::all_variants_uniform())
+        Self::Static(StaticExperimentationConfig::all_variants_uniform())
     }
 
     pub async fn setup(
@@ -503,7 +507,11 @@ pub(crate) fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
     let hash_value = hasher.finalize();
     let truncated_hash =
         u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);
-    truncated_hash as f64 / u32::MAX as f64
+    // Divide by 2^32 (not u32::MAX) so the result is strictly in [0, 1).
+    // Using u32::MAX would allow exactly 1.0, which causes `sample_weighted`
+    // to miss all candidates when `cumulative_weight > random_threshold` is
+    // never satisfied (random_threshold == total_weight).
+    truncated_hash as f64 / (u32::MAX as f64 + 1.0)
 }
 
 /// Test-only config that always fails during sampling to test fallback logic
@@ -867,7 +875,7 @@ mod tests {
         let mut namespaces = HashMap::new();
         namespaces.insert(
             "mobile".to_string(),
-            ExperimentationConfig::Static(StaticConfig {
+            ExperimentationConfig::Static(StaticExperimentationConfig {
                 candidate_variants: WeightedVariants::from_map(BTreeMap::from([(
                     "variant_a".to_string(),
                     1.0,
@@ -926,12 +934,12 @@ mod tests {
 
         let uninitialized = UninitializedExperimentationConfigWithNamespaces {
             base: UninitializedExperimentationConfig::Uniform(
-                uniform::LegacyUniformExperimentationConfig::default(),
+                legacy::LegacyUniformExperimentationConfig::default(),
             ),
             namespaces: HashMap::from([(
                 "mobile".to_string(),
                 UninitializedExperimentationConfig::Uniform(
-                    uniform::LegacyUniformExperimentationConfig::default(),
+                    legacy::LegacyUniformExperimentationConfig::default(),
                 ),
             )]),
         };
@@ -958,7 +966,7 @@ mod tests {
 
         let uninitialized = UninitializedExperimentationConfigWithNamespaces {
             base: UninitializedExperimentationConfig::Uniform(
-                uniform::LegacyUniformExperimentationConfig::default(),
+                legacy::LegacyUniformExperimentationConfig::default(),
             ),
             namespaces: HashMap::from([(
                 "mobile".to_string(),
@@ -1002,7 +1010,7 @@ mod tests {
 
         let uninitialized = UninitializedExperimentationConfigWithNamespaces {
             base: UninitializedExperimentationConfig::Uniform(
-                uniform::LegacyUniformExperimentationConfig::default(),
+                legacy::LegacyUniformExperimentationConfig::default(),
             ),
             namespaces: HashMap::from([(
                 "mobile".to_string(),
@@ -1036,7 +1044,7 @@ mod tests {
                 loaded.get_for_namespace(Some(&Namespace::new("mobile").unwrap())),
                 ExperimentationConfig::Adaptive(_)
             ),
-            "The `mobile` namespace config should be Adaptive"
+            "The `mobile` namespace config should be `Adaptive`"
         );
     }
 
@@ -1114,6 +1122,103 @@ mod tests {
         assert!(
             matches!(loaded.unwrap(), ExperimentationConfig::Adaptive(_)),
             "Should produce an Adaptive config"
+        );
+    }
+
+    #[test]
+    fn test_static_rejects_unknown_candidate_variant() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let metrics = HashMap::new();
+
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "static",
+                "candidate_variants": ["variant_a", "typo_variant"]
+            }))
+            .unwrap();
+
+        let result = config.load(&variants, &metrics, None, false);
+        assert!(
+            result.is_err(),
+            "Should reject unknown candidate variant name at load time"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("typo_variant"),
+            "Error should mention the unknown variant name: {err}"
+        );
+    }
+
+    #[test]
+    fn test_static_rejects_unknown_fallback_variant() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let metrics = HashMap::new();
+
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "static",
+                "candidate_variants": ["variant_a"],
+                "fallback_variants": ["nonexistent"]
+            }))
+            .unwrap();
+
+        let result = config.load(&variants, &metrics, None, false);
+        assert!(
+            result.is_err(),
+            "Should reject unknown fallback variant name at load time"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("nonexistent"),
+            "Error should mention the unknown variant name: {err}"
+        );
+    }
+
+    #[test]
+    fn test_static_rejects_unknown_candidate_variant_weighted() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let metrics = HashMap::new();
+
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "static",
+                "candidate_variants": {"variant_a": 0.5, "typo_variant": 0.5}
+            }))
+            .unwrap();
+
+        let result = config.load(&variants, &metrics, None, false);
+        assert!(
+            result.is_err(),
+            "Should reject unknown candidate variant name in weighted map at load time"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("typo_variant"),
+            "Error should mention the unknown variant name: {err}"
+        );
+    }
+
+    #[test]
+    fn test_static_rejects_zero_weights_no_fallbacks_at_load() {
+        let variants = make_variants_map(&["variant_a", "variant_b"]);
+        let metrics = HashMap::new();
+
+        let config: UninitializedExperimentationConfig =
+            serde_json::from_value(serde_json::json!({
+                "type": "static",
+                "candidate_variants": {"variant_a": 0.0, "variant_b": 0.0}
+            }))
+            .unwrap();
+
+        let result = config.load(&variants, &metrics, None, false);
+        assert!(
+            result.is_err(),
+            "Should reject config with all-zero weights and no fallbacks at load time"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("no active candidate variants and no fallback variants"),
+            "Error should explain the issue: {err}"
         );
     }
 
