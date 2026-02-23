@@ -70,6 +70,8 @@ jobs:
 
       - name: Install Namespace CLI
         uses: GabrielBianconi/nscloud-setup@add-exponential-backoff-retry
+        with:
+          retries: 4
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e

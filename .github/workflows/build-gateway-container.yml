@@ -33,6 +33,8 @@ jobs:
 
       - name: Install Namespace CLI
         uses: GabrielBianconi/nscloud-setup@add-exponential-backoff-retry
+        with:
+          retries: 4
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx
