@@ -2,7 +2,6 @@ export * from "./AWSBedrockProvider";
 export * from "./AWSSagemakerProvider";
 export * from "./AdaptiveExperimentationAlgorithm";
 export * from "./AdaptiveExperimentationConfig";
-export * from "./AdaptiveExperimentationObjective";
 export * from "./AllowedTools";
 export * from "./AllowedToolsChoice";
 export * from "./AnthropicProvider";

@@ -16,7 +16,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 pub use adaptive_experimentation::{
     AdaptiveExperimentationAlgorithm, AdaptiveExperimentationConfig,
-    AdaptiveExperimentationObjective, UninitializedAdaptiveExperimentationConfig,
+    UninitializedAdaptiveExperimentationConfig,
 };
 pub use static_experimentation::{StaticExperimentationConfig, WeightedVariants};
 
@@ -259,7 +259,6 @@ impl UninitializedExperimentationConfig {
                 }
                 let adaptive = UninitializedAdaptiveExperimentationConfig {
                     algorithm: AdaptiveExperimentationAlgorithm::TrackAndStop,
-                    objective: AdaptiveExperimentationObjective::BestVariantIdentification,
                     inner: config,
                 };
                 Ok(ExperimentationConfig::Adaptive(

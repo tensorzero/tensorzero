@@ -1,12 +1,12 @@
 //! Generic adaptive experimentation types.
 //!
 //! This module defines the algorithm-agnostic wrapper types for adaptive experimentation.
-//! The `algorithm` and `objective` fields select the concrete strategy (currently only
-//! Track-and-Stop), while the inner config holds the algorithm-specific parameters.
+//! The `algorithm` field selects the concrete strategy (currently only Track-and-Stop),
+//! while the inner config holds the algorithm-specific parameters.
 //!
 //! When new adaptive algorithms are added, they should be added as variants to
-//! `AdaptiveExperimentationAlgorithm` and `AdaptiveExperimentationObjective`, and the
-//! `load()` method should dispatch to the appropriate algorithm-specific config.
+//! `AdaptiveExperimentationAlgorithm`, and the `load()` method should dispatch to the
+//! appropriate algorithm-specific config.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -38,41 +38,27 @@ pub enum AdaptiveExperimentationAlgorithm {
     TrackAndStop,
 }
 
-/// Objective for adaptive experimentation.
-/// Currently only `BestVariantIdentification` is supported.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(rename_all = "snake_case")]
-pub enum AdaptiveExperimentationObjective {
-    #[default]
-    BestVariantIdentification,
-}
-
 /// Uninitialized adaptive experimentation config.
 /// Wraps a track-and-stop config (the only algorithm currently supported) with
-/// additional `algorithm` and `objective` fields.
+/// an additional `algorithm` field.
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedAdaptiveExperimentationConfig {
     #[serde(default)]
     pub algorithm: AdaptiveExperimentationAlgorithm,
-    #[serde(default)]
-    pub objective: AdaptiveExperimentationObjective,
     // All track-and-stop fields are flattened in (since this is the only option at the moment)
     #[serde(flatten)]
     pub inner: UninitializedTrackAndStopExperimentationConfig,
 }
 
 /// Loaded adaptive experimentation config.
-/// Wraps a loaded `TrackAndStopConfig` with `algorithm` and `objective` metadata.
+/// Wraps a loaded `TrackAndStopConfig` with `algorithm` metadata.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AdaptiveExperimentationConfig {
     pub algorithm: AdaptiveExperimentationAlgorithm,
-    pub objective: AdaptiveExperimentationObjective,
     #[serde(flatten)]
     pub inner: TrackAndStopConfig,
 }
@@ -87,7 +73,6 @@ impl UninitializedAdaptiveExperimentationConfig {
         let inner = self.inner.load(variants, metrics, namespace)?;
         Ok(AdaptiveExperimentationConfig {
             algorithm: self.algorithm,
-            objective: self.objective,
             inner,
         })
     }
