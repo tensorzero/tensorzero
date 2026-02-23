@@ -394,6 +394,9 @@ pub enum ErrorDetails {
     Config {
         message: String,
     },
+    CostComputation {
+        message: String,
+    },
     ConfigSnapshotNotFound {
         snapshot_hash: String,
     },
@@ -796,6 +799,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
+            ErrorDetails::CostComputation { .. } => tracing::Level::WARN,
             ErrorDetails::ConfigSnapshotNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::ConfigSnapshotHashMismatch { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
@@ -961,6 +965,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::CostComputation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ConfigSnapshotNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ConfigSnapshotHashMismatch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1361,6 +1366,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Config { message } => {
                 write!(f, "{message}")
+            }
+            ErrorDetails::CostComputation { message } => {
+                write!(f, "Cost computation error: {message}")
             }
             ErrorDetails::ConfigSnapshotNotFound { snapshot_hash } => {
                 write!(f, "Config snapshot not found for hash: {snapshot_hash}")
