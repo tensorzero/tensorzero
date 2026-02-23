@@ -1762,12 +1762,18 @@ struct TomlUninitializedConfig {
     optimizers: HashMap<String, UninitializedOptimizerInfo>,
 }
 
-impl From<TomlUninitializedConfig> for UninitializedConfig {
-    fn from(toml_config: TomlUninitializedConfig) -> Self {
-        Self {
+impl TryFrom<TomlUninitializedConfig> for UninitializedConfig {
+    type Error = Error;
+
+    fn try_from(toml_config: TomlUninitializedConfig) -> Result<Self, Self::Error> {
+        let rate_limiting = toml_config
+            .rate_limiting
+            .try_into()
+            .map_err(|e: String| Error::new(ErrorDetails::Config { message: e }))?;
+        Ok(Self {
             gateway: toml_config.gateway,
             postgres: toml_config.postgres,
-            rate_limiting: toml_config.rate_limiting.into(),
+            rate_limiting,
             object_storage: toml_config.object_storage,
             models: toml_config.models,
             embedding_models: toml_config.embedding_models,
@@ -1777,7 +1783,7 @@ impl From<TomlUninitializedConfig> for UninitializedConfig {
             evaluations: toml_config.evaluations,
             provider_types: toml_config.provider_types,
             optimizers: toml_config.optimizers,
-        }
+        })
     }
 }
 
@@ -1796,7 +1802,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
                     message: format!("{}: {}", path, e.into_inner().message()),
                 })
             })?;
-        Ok(toml_config.into())
+        toml_config.try_into()
     }
 }
 

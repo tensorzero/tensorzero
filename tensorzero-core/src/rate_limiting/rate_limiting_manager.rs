@@ -139,7 +139,7 @@ impl RateLimitingManager {
     }
 
     /// Consume tickets for a rate-limited request.
-    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences))]
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences, estimated_usage.cost_nano_dollars))]
     pub async fn consume_tickets(
         self: &Arc<Self>,
         scope_info: &ScopeInfo,
@@ -165,14 +165,22 @@ impl RateLimitingManager {
         }
 
         let rate_limited_resources = self.config.get_rate_limited_resources(scope_info);
-        let rate_limit_resource_requests =
+        let mut rate_limit_resource_requests =
             rate_limited_request.estimated_resource_usage(&rate_limited_resources)?;
+
+        // Fill in cost estimation using default_cost when cost rate limiting is active
+        if rate_limited_resources.contains(&RateLimitResource::Cost) {
+            rate_limit_resource_requests.cost = Some(self.config.default_cost_nano_dollars);
+        }
 
         if let Some(tokens) = rate_limit_resource_requests.tokens {
             span.record("estimated_usage.tokens", tokens as i64);
         }
         if let Some(model_inferences) = rate_limit_resource_requests.model_inferences {
             span.record("estimated_usage.model_inferences", model_inferences as i64);
+        }
+        if let Some(cost) = rate_limit_resource_requests.cost {
+            span.record("estimated_usage.cost_nano_dollars", cost as i64);
         }
 
         // Consume tickets directly from the database
@@ -188,7 +196,7 @@ impl RateLimitingManager {
     }
 
     /// Return tickets based on actual resource usage.
-    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, underestimate))]
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, actual_usage.cost_nano_dollars, underestimate))]
     pub async fn return_tickets(
         &self,
         ticket_borrows: TicketBorrows,
@@ -212,17 +220,21 @@ impl RateLimitingManager {
             RateLimitResourceUsage::Exact {
                 tokens,
                 model_inferences,
+                cost,
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
+                span.record("actual_usage.cost_nano_dollars", cost as i64);
                 span.record("underestimate", false);
             }
             RateLimitResourceUsage::UnderEstimate {
                 tokens,
                 model_inferences,
+                cost,
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
+                span.record("actual_usage.cost_nano_dollars", cost as i64);
                 span.record("underestimate", true);
             }
         }
@@ -237,7 +249,7 @@ impl RateLimitingManager {
             } = borrow;
 
             // Extract the actual value - we'll check 'Exact/UnderEstimate' further on
-            let actual_usage_this_request = match active_limit.limit.resource {
+            let mut actual_usage_this_request = match active_limit.limit.resource {
                 RateLimitResource::ModelInference => match actual_usage {
                     RateLimitResourceUsage::Exact {
                         model_inferences, ..
@@ -250,7 +262,25 @@ impl RateLimitingManager {
                     RateLimitResourceUsage::Exact { tokens, .. }
                     | RateLimitResourceUsage::UnderEstimate { tokens, .. } => tokens,
                 },
+                RateLimitResource::Cost => match actual_usage {
+                    RateLimitResourceUsage::Exact { cost, .. }
+                    | RateLimitResourceUsage::UnderEstimate { cost, .. } => cost,
+                },
             };
+
+            // When cost rate limiting is active but actual cost is unavailable (cost == 0),
+            // substitute default_cost to avoid a net change in the bucket
+            // (we estimated default_cost, so returning default_cost => no adjustment).
+            if active_limit.limit.resource == RateLimitResource::Cost
+                && actual_usage_this_request == 0
+            {
+                tracing::warn!(
+                    "Cost rate limiting is active but actual cost is not available. \
+                     Using `default_cost` for rate limit bookkeeping. Configure cost on \
+                     your model providers for accurate cost rate limiting."
+                );
+                actual_usage_this_request = self.config.default_cost_nano_dollars;
+            }
 
             match actual_usage_this_request.cmp(&receipt.tickets_consumed) {
                 std::cmp::Ordering::Greater => {
@@ -346,7 +376,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         });
         let manager = RateLimitingManager::new(config, Arc::new(PostgresConnectionInfo::Disabled));
 
@@ -378,6 +408,7 @@ mod tests {
             Ok(EstimatedRateLimitResourceUsage {
                 tokens: Some(self.tokens),
                 model_inferences: Some(self.model_inferences),
+                cost: None,
             })
         }
     }
@@ -461,7 +492,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: false,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -490,7 +521,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -516,7 +547,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -540,7 +571,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -558,6 +589,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 100,
             model_inferences: 1,
+            cost: 0,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(result.is_ok(), "Should succeed when actual equals estimate");
@@ -574,7 +606,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -592,6 +624,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 50,
             model_inferences: 1,
+            cost: 0,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(
@@ -611,7 +644,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -629,6 +662,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 150,
             model_inferences: 1,
+            cost: 0,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(
@@ -648,7 +682,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
         let scope_info = make_scope_info(vec![]);
@@ -666,8 +700,165 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::UnderEstimate {
             tokens: 50,
             model_inferences: 1,
+            cost: 0,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(result.is_ok(), "Should succeed with underestimate usage");
+    }
+
+    fn make_cost_limit(capacity: u64) -> Arc<RateLimit> {
+        Arc::new(RateLimit {
+            resource: RateLimitResource::Cost,
+            interval: RateLimitInterval::Day,
+            capacity,
+            refill_rate: capacity,
+        })
+    }
+
+    #[tokio::test]
+    async fn test_consume_tickets_with_cost_limit() {
+        let mock = create_mock_client_success();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_cost_limit(10_000_000_000)], // $10.00
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = Arc::new(RateLimitingConfig {
+            rules: vec![rule],
+            enabled: true,
+            default_cost_nano_dollars: 1_000_000_000, // $1.00
+            ..Default::default()
+        });
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+        let request = MockRateLimitedRequest {
+            tokens: 100,
+            model_inferences: 1,
+        };
+
+        let result = manager.consume_tickets(&scope_info, &request).await;
+        assert!(
+            result.is_ok(),
+            "Should succeed with cost limit when within budget"
+        );
+        let borrows = result.unwrap();
+        assert_eq!(
+            borrows.borrows().len(),
+            1,
+            "Should have one borrow for cost limit"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_return_tickets_cost_with_exact_usage() {
+        let mock = create_mock_client_success();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_cost_limit(10_000_000_000)],
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = Arc::new(RateLimitingConfig {
+            rules: vec![rule],
+            enabled: true,
+            default_cost_nano_dollars: 1_000_000_000,
+            ..Default::default()
+        });
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+        let request = MockRateLimitedRequest {
+            tokens: 100,
+            model_inferences: 1,
+        };
+
+        let borrows = manager
+            .consume_tickets(&scope_info, &request)
+            .await
+            .unwrap();
+
+        // Return with exact cost known
+        let actual_usage = RateLimitResourceUsage::Exact {
+            tokens: 100,
+            model_inferences: 1,
+            cost: 500_000_000, // $0.50 actual cost
+        };
+        let result = manager.return_tickets(borrows, actual_usage).await;
+        assert!(
+            result.is_ok(),
+            "Should succeed when returning with exact cost"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_return_tickets_cost_unknown_uses_default() {
+        let mock = create_mock_client_success();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_cost_limit(10_000_000_000)],
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = Arc::new(RateLimitingConfig {
+            rules: vec![rule],
+            enabled: true,
+            default_cost_nano_dollars: 1_000_000_000,
+            ..Default::default()
+        });
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+        let request = MockRateLimitedRequest {
+            tokens: 100,
+            model_inferences: 1,
+        };
+
+        let borrows = manager
+            .consume_tickets(&scope_info, &request)
+            .await
+            .unwrap();
+
+        // Return with cost = 0 (unknown) — should use default_cost
+        // Since we estimated default_cost and "returned" default_cost, net adjustment = 0
+        let actual_usage = RateLimitResourceUsage::Exact {
+            tokens: 100,
+            model_inferences: 1,
+            cost: 0, // Unknown cost
+        };
+        let result = manager.return_tickets(borrows, actual_usage).await;
+        assert!(
+            result.is_ok(),
+            "Should succeed when cost is unknown (uses default_cost fallback)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_consume_tickets_combined_cost_and_token_limits() {
+        let mock = create_mock_client_success();
+        let rule = RateLimitingConfigRule {
+            limits: vec![make_cost_limit(10_000_000_000), make_token_limit(1000)],
+            scope: RateLimitingConfigScopes::new(vec![]).unwrap(),
+            priority: RateLimitingConfigPriority::Always,
+        };
+        let config = Arc::new(RateLimitingConfig {
+            rules: vec![rule],
+            enabled: true,
+            default_cost_nano_dollars: 1_000_000_000,
+            ..Default::default()
+        });
+        let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
+        let scope_info = make_scope_info(vec![]);
+        let request = MockRateLimitedRequest {
+            tokens: 100,
+            model_inferences: 1,
+        };
+
+        let result = manager.consume_tickets(&scope_info, &request).await;
+        assert!(
+            result.is_ok(),
+            "Should succeed with combined cost and token limits"
+        );
+        let borrows = result.unwrap();
+        assert_eq!(
+            borrows.borrows().len(),
+            2,
+            "Should have borrows for both cost and token limits"
+        );
     }
 }

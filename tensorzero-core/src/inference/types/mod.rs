@@ -101,7 +101,8 @@ use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::usage::aggregate_usage_across_model_inferences;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
-    RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
+    RateLimitedInputContent, RateLimitedRequest, decimal_dollars_to_nano_dollars,
+    get_estimated_tokens,
 };
 use crate::serde_util::{deserialize_optional_json_string, serialize_optional_json_string};
 use crate::tool::{
@@ -1186,6 +1187,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
         Ok(EstimatedRateLimitResourceUsage {
             model_inferences,
             tokens,
+            cost: None, // Filled in by the rate limiting manager using default_cost
         })
     }
 }
@@ -1262,14 +1264,21 @@ pub struct ProviderInferenceResponse {
 
 impl ProviderInferenceResponse {
     pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+        let cost = self
+            .usage
+            .cost
+            .map(decimal_dollars_to_nano_dollars)
+            .unwrap_or(0);
         match self.usage.total_tokens() {
             Some(tokens) => Ok(RateLimitResourceUsage::Exact {
                 model_inferences: 1,
                 tokens: tokens as u64,
+                cost,
             }),
             None => Ok(RateLimitResourceUsage::UnderEstimate {
                 model_inferences: 1,
                 tokens: 0,
+                cost,
             }),
         }
     }
