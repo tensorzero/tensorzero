@@ -281,13 +281,10 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       return {
         description: payload.message,
       };
+    case "user_questions":
+    case "user_questions_answers":
     case "visualization":
     case "unknown":
-      // Visualization events render their own content, no text description needed
-      return {};
-    case "user_questions":
-      return {};
-    case "user_questions_answers":
       return {};
     default: {
       const _exhaustiveCheck: never = payload;

@@ -7,8 +7,8 @@ import type {
 type StepAnswer =
   | { status: "unanswered" }
   | { status: "skipped" }
-  | { status: "answered_mc"; selected: Set<string> }
-  | { status: "answered_free"; text: string };
+  | { status: "answered_multiple_choice"; selected: Set<string> }
+  | { status: "answered_free_response"; text: string };
 
 type StepAnswers = Map<number, StepAnswer>;
 
@@ -39,7 +39,9 @@ export function useQuestionCardState(
 
       const step = getStep(prev, questionIndex);
       const current =
-        step.status === "answered_mc" ? step.selected : new Set<string>();
+        step.status === "answered_multiple_choice"
+          ? step.selected
+          : new Set<string>();
 
       let updated: Set<string>;
       if (question.multi_select) {
@@ -54,7 +56,10 @@ export function useQuestionCardState(
       }
 
       const next = new Map(prev);
-      next.set(questionIndex, { status: "answered_mc", selected: updated });
+      next.set(questionIndex, {
+        status: "answered_multiple_choice",
+        selected: updated,
+      });
       return next;
     });
   };
@@ -62,7 +67,7 @@ export function useQuestionCardState(
   const handleFreeTextChange = (questionIndex: number, text: string) => {
     setAnswers((prev) => {
       const next = new Map(prev);
-      next.set(questionIndex, { status: "answered_free", text });
+      next.set(questionIndex, { status: "answered_free_response", text });
       return next;
     });
   };
@@ -70,9 +75,9 @@ export function useQuestionCardState(
   const isStepAnswered = (idx: number): boolean => {
     const step = getStep(answers, idx);
     switch (step.status) {
-      case "answered_mc":
+      case "answered_multiple_choice":
         return step.selected.size > 0;
-      case "answered_free":
+      case "answered_free_response":
         return step.text.trim().length > 0;
       case "unanswered":
       case "skipped":
@@ -97,13 +102,13 @@ export function useQuestionCardState(
         case "unanswered":
           responses[question.id] = { type: "skipped" };
           break;
-        case "answered_mc":
+        case "answered_multiple_choice":
           responses[question.id] = {
             type: "multiple_choice",
             selected: Array.from(step.selected),
           };
           break;
-        case "answered_free":
+        case "answered_free_response":
           responses[question.id] = {
             type: "free_response",
             text: step.text,
@@ -148,8 +153,10 @@ export function useQuestionCardState(
     return {
       question,
       selectedValues:
-        step.status === "answered_mc" ? step.selected : new Set<string>(),
-      freeText: step.status === "answered_free" ? step.text : "",
+        step.status === "answered_multiple_choice"
+          ? step.selected
+          : new Set<string>(),
+      freeText: step.status === "answered_free_response" ? step.text : "",
       onToggle: (value: string) => handleMcToggle(idx, value),
       onFreeTextChange: (text: string) => handleFreeTextChange(idx, text),
     };
