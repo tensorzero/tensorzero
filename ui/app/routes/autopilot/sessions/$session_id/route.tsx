@@ -689,6 +689,7 @@ function AutopilotSessionEventsPageContent({
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
     interruptedSessionRef.current = sessionId;
+    setPendingUserQuestions([]);
     interruptFetcher.submit(null, {
       method: "POST",
       action: `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/actions/interrupt`,

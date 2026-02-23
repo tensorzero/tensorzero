@@ -145,11 +145,11 @@ export function PendingQuestionCard({
           </div>
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="ghost"
               size="xs"
               disabled={isLoading}
               onClick={state.handleSkipStep}
-              className="text-fg-muted"
+              className="text-purple-700 hover:text-purple-800 dark:text-purple-300 dark:hover:text-purple-200"
             >
               Skip
             </Button>
