@@ -68,6 +68,7 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
+use rust_decimal::Decimal;
 use schemars::JsonSchema;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -1576,6 +1577,8 @@ pub struct StoredModelInference {
     pub model_provider_name: String,
     pub ttft_ms: Option<u32>,
     pub cached: bool,
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub cost: Option<Decimal>,
     pub finish_reason: Option<FinishReason>,
     pub snapshot_hash: Option<SnapshotHash>,
     /// Materialized column in ClickHouse - only present when reading from the database.
@@ -1742,6 +1745,12 @@ impl StoredModelInference {
             _ => None,
         };
 
+        let cost = if result.cached {
+            Some(Decimal::ZERO)
+        } else {
+            result.usage.cost
+        };
+
         let stored_input_messages = match result.input_messages {
             RequestMessagesOrBatch::Message(input_messages) => {
                 // In the the future, we might want to support writing 'partially broken' input messages to ClickHouse,
@@ -1770,6 +1779,7 @@ impl StoredModelInference {
             model_provider_name: result.model_provider_name.to_string(),
             model_name: result.model_name.to_string(),
             cached: result.cached,
+            cost,
             finish_reason: result.finish_reason,
             input_messages: Some(stored_input_messages),
             snapshot_hash: Some(snapshot_hash),
