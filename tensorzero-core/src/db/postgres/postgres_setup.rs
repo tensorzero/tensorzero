@@ -264,47 +264,24 @@ async fn create_trigram_index_for_table(
         return Ok(());
     }
 
-    // Partitioned table: create indexes on each partition concurrently (no lock)
+    // Partitioned table: create the parent index first with ON ONLY so that any
+    // partitions created after this point automatically inherit the index.
+    // Then create indexes concurrently on existing partitions and attach them.
     create_and_attach_partition_indexes(pool, table, column, &partitions).await?;
-
-    // Re-check for partitions that may have been created while we were working.
-    // `ON ONLY` doesn't recurse to existing partitions, so any partition created
-    // between our initial get_partitions and CREATE INDEX ON ONLY would be missed.
-    // Once the parent index exists, new partitions created *after* this point get
-    // auto-indexed by Postgres.
-    let current_partitions = get_partitions(pool, table).await?;
-    let new_partitions: Vec<&String> = current_partitions
-        .iter()
-        .filter(|p| !partitions.contains(p))
-        .collect();
-
-    if !new_partitions.is_empty() {
-        tracing::info!(
-            "Found {} new partition(s) for `{table}` created during index setup, indexing them",
-            new_partitions.len()
-        );
-        for partition in &new_partitions {
-            create_partition_index_concurrently(pool, table, column, partition).await?;
-        }
-        attach_partition_indexes(pool, table, column, current_partitions.as_ref()).await?;
-    }
 
     Ok(())
 }
 
-/// Creates indexes concurrently on each partition, creates the parent index with
-/// `ON ONLY`, and attaches partition indexes to the parent.
+/// Creates the parent index with `ON ONLY` first (so new partitions auto-inherit),
+/// then creates indexes concurrently on each existing partition and attaches them.
 async fn create_and_attach_partition_indexes(
     pool: &PgPool,
     table: &str,
     column: &str,
     partitions: &[String],
 ) -> Result<(), Error> {
-    for partition in partitions {
-        create_partition_index_concurrently(pool, table, column, partition).await?;
-    }
-
-    // Create parent index with ONLY (no recursion to partitions, no data to scan)
+    // Create parent index with ONLY first so that any partitions created after
+    // this point automatically inherit the index from Postgres.
     // TODO(shuyangli): this is not quoted, so special characters (uppercase, hyphens, etc) could break it;
     // we control these names so it's not a big deal today, but consider quoting this in the future.
     let parent_index = format!("idx_{table}_{column}_trgm");
@@ -322,6 +299,10 @@ async fn create_and_attach_partition_indexes(
                 ),
             })
         })?;
+
+    for partition in partitions {
+        create_partition_index_concurrently(pool, table, column, partition).await?;
+    }
 
     attach_partition_indexes(pool, table, column, partitions).await
 }
