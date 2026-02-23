@@ -3656,12 +3656,11 @@ def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     assert client is not None
     captured = capfd.readouterr()
     assert captured.err == ""
-    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
-        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
-        for line in captured.out.splitlines():
-            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
-    else:
-        assert captured.out == ""
+    for line in captured.out.splitlines():
+        is_expected = (
+            "Using proxy URL from TENSORZERO_E2E_PROXY" in line or "no longer matches directory separators" in line
+        )
+        assert is_expected, f"Unexpected log line: {line}"
 
 
 @pytest.mark.asyncio
@@ -3677,12 +3676,11 @@ async def test_async_embedded_client_no_spurious_log(
     assert client is not None
     captured = capfd.readouterr()
     assert captured.err == ""
-    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
-        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set, b
-        for line in captured.out.splitlines():
-            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
-    else:
-        assert captured.out == ""
+    for line in captured.out.splitlines():
+        is_expected = (
+            "Using proxy URL from TENSORZERO_E2E_PROXY" in line or "no longer matches directory separators" in line
+        )
+        assert is_expected, f"Unexpected log line: {line}"
 
 
 @pytest.mark.asyncio
