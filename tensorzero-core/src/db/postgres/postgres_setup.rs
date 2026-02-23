@@ -211,28 +211,37 @@ async fn get_partitions(pool: &PgPool, table: &str) -> Result<Vec<String>, Error
     })
 }
 
-/// Returns whether a given index (by name in `tensorzero` schema) is already
-/// attached as a partition of some parent index via `pg_inherits`.
-async fn is_index_attached(pool: &PgPool, index_name: &str) -> Result<bool, Error> {
-    sqlx::query_scalar(
+/// Returns the set of partition table names that already have an index attached to
+/// the given parent index. This handles both our explicitly named indexes and
+/// Postgres auto-created ones, and performs a single database round-trip.
+async fn get_partitions_with_attached_index(
+    pool: &PgPool,
+    parent_index_name: &str,
+) -> Result<std::collections::HashSet<String>, Error> {
+    let rows: Vec<String> = sqlx::query_scalar(
         r"
-        SELECT EXISTS(
-            SELECT 1 FROM pg_inherits
-            JOIN pg_class child ON pg_inherits.inhrelid = child.oid
-            JOIN pg_namespace ns ON child.relnamespace = ns.oid
-            WHERE child.relname = $1
-              AND ns.nspname = 'tensorzero'
-        )
+        SELECT partition_tbl.relname::TEXT
+        FROM pg_inherits
+        JOIN pg_class child_idx ON pg_inherits.inhrelid = child_idx.oid
+        JOIN pg_class parent_idx ON pg_inherits.inhparent = parent_idx.oid
+        JOIN pg_namespace ns ON parent_idx.relnamespace = ns.oid
+        JOIN pg_index pi ON pi.indexrelid = child_idx.oid
+        JOIN pg_class partition_tbl ON pi.indrelid = partition_tbl.oid
+        WHERE parent_idx.relname = $1
+          AND ns.nspname = 'tensorzero'
         ",
     )
-    .bind(index_name)
-    .fetch_one(pool)
+    .bind(parent_index_name)
+    .fetch_all(pool)
     .await
     .map_err(|e| {
         Error::new(ErrorDetails::PostgresQuery {
-            message: format!("Failed to check index attachment for `{index_name}`: {e}"),
+            message: format!(
+                "Failed to query partitions with indexes attached to `{parent_index_name}`: {e}"
+            ),
         })
-    })
+    })?;
+    Ok(rows.into_iter().collect())
 }
 
 /// Creates a trigram GIN index on `table.column`, handling partitioned tables by
@@ -300,11 +309,20 @@ async fn create_and_attach_partition_indexes(
             })
         })?;
 
+    // Fetch all partitions that already have an index attached to the parent in one round-trip.
+    // This covers both our explicitly named indexes and Postgres auto-created ones
+    // (e.g. when a partition was added after the parent index already existed).
+    let already_indexed = get_partitions_with_attached_index(pool, &parent_index).await?;
+
     for partition in partitions {
+        if already_indexed.contains(partition.as_str()) {
+            continue;
+        }
         create_partition_index_concurrently(pool, table, column, partition).await?;
+        attach_partition_index(pool, &parent_index, partition, column).await?;
     }
 
-    attach_partition_indexes(pool, table, column, partitions).await
+    Ok(())
 }
 
 /// Creates a trigram index concurrently on a single partition.
@@ -334,33 +352,25 @@ async fn create_partition_index_concurrently(
     Ok(())
 }
 
-/// Attaches any partition indexes that aren't yet attached to the parent index.
-async fn attach_partition_indexes(
+/// Attaches a single partition's index to the parent index.
+async fn attach_partition_index(
     pool: &PgPool,
-    table: &str,
+    parent_index: &str,
+    partition: &str,
     column: &str,
-    partitions: &[String],
 ) -> Result<(), Error> {
-    let parent_index = format!("idx_{table}_{column}_trgm");
-    for partition in partitions {
-        let partition_index = format!("idx_{partition}_{column}_trgm");
-        if is_index_attached(pool, &partition_index).await? {
-            continue;
-        }
-        let sql = format!(
-            "ALTER INDEX tensorzero.{parent_index} \
-             ATTACH PARTITION tensorzero.{partition_index}"
-        );
-        sqlx::raw_sql(AssertSqlSafe(sql))
-            .execute(pool)
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::PostgresQuery {
-                    message: format!(
-                        "Failed to attach `{partition_index}` to `{parent_index}`: {e}"
-                    ),
-                })
-            })?;
-    }
+    let partition_index = format!("idx_{partition}_{column}_trgm");
+    let sql = format!(
+        "ALTER INDEX tensorzero.{parent_index} \
+         ATTACH PARTITION tensorzero.{partition_index}"
+    );
+    sqlx::raw_sql(AssertSqlSafe(sql))
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresQuery {
+                message: format!("Failed to attach `{partition_index}` to `{parent_index}`: {e}"),
+            })
+        })?;
     Ok(())
 }
