@@ -30,22 +30,16 @@ impl LegacyUniformExperimentationConfig {
     /// nor fallbacks are specified (meaning "use all variants uniformly").
     /// Validation is deferred to `StaticExperimentationConfig::validate()`.
     pub fn into_static_config(self) -> Option<StaticExperimentationConfig> {
-        match (&self.candidate_variants, &self.fallback_variants) {
-            (None, None) => None,
-            (candidates, fallbacks) => {
-                let weighted = match candidates {
-                    Some(names) => WeightedVariants::from_equal_weights(names.clone()),
-                    None => {
-                        // No candidates but fallbacks present → empty candidates
-                        WeightedVariants::from_equal_weights(vec![])
-                    }
-                };
-                Some(StaticExperimentationConfig {
-                    candidate_variants: weighted,
-                    fallback_variants: fallbacks.clone().unwrap_or_default(),
-                })
-            }
+        if self.candidate_variants.is_none() && self.fallback_variants.is_none() {
+            return None;
         }
+
+        let candidate_variants =
+            WeightedVariants::from_equal_weights(self.candidate_variants.unwrap_or_default());
+        Some(StaticExperimentationConfig {
+            candidate_variants,
+            fallback_variants: self.fallback_variants.unwrap_or_default(),
+        })
     }
 }
 

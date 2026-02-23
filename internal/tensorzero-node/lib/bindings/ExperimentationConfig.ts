@@ -8,5 +8,6 @@ import type { StaticExperimentationConfig } from "./StaticExperimentationConfig"
  * during `load()`.
  */
 export type ExperimentationConfig =
+  | { type: "default" }
   | ({ type: "static" } & StaticExperimentationConfig)
   | ({ type: "adaptive" } & AdaptiveExperimentationConfig);

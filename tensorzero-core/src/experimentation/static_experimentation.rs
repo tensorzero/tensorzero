@@ -14,7 +14,7 @@ use crate::{
     variant::VariantInfo,
 };
 
-use super::{VariantSampler, check_duplicates_across_map, check_duplicates_within};
+use super::{VariantSampler, check_duplicates_across, check_duplicates_within};
 
 /// Unified static experimentation config that replaces both `uniform` and `static_weights`.
 ///
@@ -250,7 +250,7 @@ impl StaticExperimentationConfig {
         check_duplicates_within(&self.fallback_variants, "fallback_variants")?;
 
         // Check for duplicates across candidate_variants and fallback_variants
-        check_duplicates_across_map(self.candidate_variants.keys(), &self.fallback_variants)?;
+        check_duplicates_across(self.candidate_variants.keys(), &self.fallback_variants)?;
 
         // Validate that all weights are non-negative
         for (name, weight) in self.candidate_variants.inner() {
@@ -356,16 +356,14 @@ impl VariantSampler for StaticExperimentationConfig {
                 .find(|variant_name| active_variants.contains_key(*variant_name));
 
             if let Some(selected_variant) = first_active_fallback {
-                let mut probabilities: HashMap<&'a str, f64> = HashMap::new();
-                for key in active_variants.keys() {
-                    if self.fallback_variants.contains(key) {
-                        if key == selected_variant {
-                            probabilities.insert(key.as_str(), 1.0);
-                        } else {
-                            probabilities.insert(key.as_str(), 0.0);
-                        }
-                    }
-                }
+                let probabilities: HashMap<&'a str, f64> = active_variants
+                    .keys()
+                    .filter(|key| self.fallback_variants.contains(key))
+                    .map(|key| {
+                        let prob = if key == selected_variant { 1.0 } else { 0.0 };
+                        (key.as_str(), prob)
+                    })
+                    .collect();
                 Ok(probabilities)
             } else {
                 Err(ErrorDetails::NoFallbackVariantsRemaining.into())

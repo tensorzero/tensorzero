@@ -373,7 +373,7 @@ impl UninitializedTrackAndStopExperimentationConfig {
         }
 
         // Check for duplicates across both lists
-        check_duplicates_across(&self.candidate_variants, &self.fallback_variants)?;
+        check_duplicates_across(self.candidate_variants.iter(), &self.fallback_variants)?;
 
         // Validate min_samples_per_variant >= 1
         if self.min_samples_per_variant < 1 {

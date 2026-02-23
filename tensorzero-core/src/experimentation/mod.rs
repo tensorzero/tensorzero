@@ -1,9 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 use tensorzero_derive::TensorZeroDeserialize;
@@ -30,19 +29,18 @@ pub mod track_and_stop;
 /// Check for duplicate variants within a list
 fn check_duplicates_within(variants: &[String], list_name: &str) -> Result<(), Error> {
     let mut seen = HashSet::new();
-    let mut duplicates = Vec::new();
-
-    for variant in variants {
-        if !seen.insert(variant) && !duplicates.contains(&variant.as_str()) {
-            duplicates.push(variant.as_str());
-        }
-    }
+    let duplicates: Vec<&str> = variants
+        .iter()
+        .filter(|v| !seen.insert(v.as_str()))
+        .map(String::as_str)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
 
     if !duplicates.is_empty() {
         return Err(Error::new(ErrorDetails::Config {
             message: format!(
-                "`{}` contains duplicate entries: {}",
-                list_name,
+                "`{list_name}` contains duplicate entries: {}",
                 duplicates.join(", ")
             ),
         }));
@@ -51,42 +49,20 @@ fn check_duplicates_within(variants: &[String], list_name: &str) -> Result<(), E
     Ok(())
 }
 
-/// Check for duplicate variants across candidate_variants and fallback_variants
-fn check_duplicates_across(candidates: &[String], fallbacks: &[String]) -> Result<(), Error> {
-    let candidate_set: HashSet<_> = candidates.iter().collect();
-    let mut duplicates = Vec::new();
-
-    for fallback in fallbacks {
-        if candidate_set.contains(fallback) && !duplicates.contains(&fallback.as_str()) {
-            duplicates.push(fallback.as_str());
-        }
-    }
-
-    if !duplicates.is_empty() {
-        return Err(Error::new(ErrorDetails::Config {
-            message: format!(
-                "variants cannot appear in both `candidate_variants` and `fallback_variants`: {}",
-                duplicates.join(", ")
-            ),
-        }));
-    }
-
-    Ok(())
-}
-
-/// Check for duplicate variants across candidate_variants (from a map) and fallback_variants
-fn check_duplicates_across_map(
-    candidate_keys: impl Iterator<Item = impl AsRef<str>>,
+/// Check for duplicate variants across candidate_variants and fallback_variants.
+/// Candidates can be provided as any iterator of string-like items.
+fn check_duplicates_across(
+    candidates: impl Iterator<Item = impl AsRef<str>>,
     fallbacks: &[String],
 ) -> Result<(), Error> {
-    let candidate_set: HashSet<_> = candidate_keys.map(|s| s.as_ref().to_string()).collect();
-    let mut duplicates = Vec::new();
-
-    for fallback in fallbacks {
-        if candidate_set.contains(fallback) && !duplicates.contains(&fallback.as_str()) {
-            duplicates.push(fallback.as_str());
-        }
-    }
+    let candidate_set: HashSet<String> = candidates.map(|s| s.as_ref().to_string()).collect();
+    let duplicates: Vec<&str> = fallbacks
+        .iter()
+        .filter(|f| candidate_set.contains(f.as_str()))
+        .map(String::as_str)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
 
     if !duplicates.is_empty() {
         return Err(Error::new(ErrorDetails::Config {
@@ -201,17 +177,17 @@ impl UninitializedExperimentationConfigWithNamespaces {
         let base = self.base.load(variants, metrics, None, warn_deprecated)?;
 
         // Load namespace-specific configs
-        let mut loaded_namespaces = HashMap::new();
-        for (namespace, config) in self.namespaces {
-            let loaded_config =
-                config.load(variants, metrics, Some(namespace.clone()), warn_deprecated)?;
-            loaded_namespaces.insert(namespace, loaded_config);
-        }
+        let namespaces = self
+            .namespaces
+            .into_iter()
+            .map(|(namespace, config)| {
+                let loaded =
+                    config.load(variants, metrics, Some(namespace.clone()), warn_deprecated)?;
+                Ok((namespace, loaded))
+            })
+            .collect::<Result<HashMap<_, _>, Error>>()?;
 
-        Ok(ExperimentationConfigWithNamespaces {
-            base,
-            namespaces: loaded_namespaces,
-        })
+        Ok(ExperimentationConfigWithNamespaces { base, namespaces })
     }
 }
 
@@ -293,6 +269,7 @@ impl UninitializedExperimentationConfig {
         }
     }
 }
+
 pub trait VariantSampler {
     async fn setup(
         &self,
@@ -417,11 +394,12 @@ impl ExperimentationConfig {
                     #[cfg(test)]
                     Self::AlwaysFails(config) => config.allowed_variants().collect(),
                 };
-                if allowed.is_empty() {
-                    sample_uniform(function_name, &episode_id, active_variants, None)
+                let filter = if allowed.is_empty() {
+                    None
                 } else {
-                    sample_uniform(function_name, &episode_id, active_variants, Some(&allowed))
-                }
+                    Some(allowed.as_slice())
+                };
+                sample_uniform(function_name, &episode_id, active_variants, filter)
             }
         })
     }
