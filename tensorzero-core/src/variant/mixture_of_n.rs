@@ -603,7 +603,7 @@ impl MixtureOfNConfig {
             if include_raw_response {
                 let failed_entries: Vec<_> = candidate_errors
                     .values()
-                    .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                    .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                     .collect();
                 if !failed_entries.is_empty()
                     && let Some(first) = selected.mut_model_inference_results().first_mut()
@@ -669,7 +669,7 @@ impl MixtureOfNConfig {
                 if include_raw_response {
                     let failed_entries: Vec<_> = candidate_errors
                         .values()
-                        .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                        .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                         .collect();
                     if !failed_entries.is_empty()
                         && let Some(first) =
@@ -688,7 +688,7 @@ impl MixtureOfNConfig {
                 // Inject fuser failure raw_responses
                 if include_raw_response
                     && let Some(fuser_err) = &fuser_error
-                    && let Some(entries) = fuser_err.extract_raw_response_entries()
+                    && let Some(entries) = fuser_err.extract_raw_response()
                     && let Some(first) = inference_result.mut_model_inference_results().first_mut()
                 {
                     first.failed_raw_response.extend(entries);
@@ -706,7 +706,7 @@ impl MixtureOfNConfig {
                 if include_raw_response {
                     let failed_entries: Vec<_> = candidate_errors
                         .values()
-                        .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                        .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                         .collect();
                     if !failed_entries.is_empty()
                         && let Some(first) =
