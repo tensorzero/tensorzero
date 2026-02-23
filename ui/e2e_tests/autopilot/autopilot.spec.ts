@@ -79,10 +79,11 @@ test("should create a session, send a message, approve tool calls, and get a res
   // Wait for the new session page
   await expect(page).toHaveURL(/\/autopilot\/sessions\/new/);
 
-  // Find the message textarea and type a message asking about available functions
+  // Find the message textarea and type a message that triggers a non-whitelisted tool
+  // (delete_datapoints is not in the default whitelist, so it requires manual approval)
   const messageInput = page.getByRole("textbox");
   await messageInput.fill(
-    "What functions are available in my TensorZero config?",
+    "Use the delete_datapoints tool to delete datapoint ID '00000000-0000-7000-0000-000000000000' from dataset 'foo'. Call the tool directly without using any other tools first.",
   );
 
   // Send the message (button has aria-label="Send message")
@@ -94,43 +95,19 @@ test("should create a session, send a message, approve tool calls, and get a res
   });
 
   // Verify the message appears in the conversation
-  await expect(
-    page.getByText("What functions are available in my TensorZero config?"),
-  ).toBeVisible();
+  await expect(page.getByText("Use the delete_datapoints tool")).toBeVisible();
 
-  // Wait for and approve tool calls as they appear
-  // Keep approving until we see the final response containing "basic_test"
-  const maxApprovalAttempts = 10;
-  for (let i = 0; i < maxApprovalAttempts; i++) {
-    // Check if we already have the expected response
-    const hasResponse = await page
-      .getByText("basic_test", { exact: false })
-      .first()
-      .isVisible()
-      .catch(() => false);
+  // Wait for the Approve button to appear (delete_datapoints is not whitelisted for auto-approval)
+  const approveButton = page.getByRole("button", { name: "Approve" }).first();
+  await expect(approveButton).toBeVisible({ timeout: 60000 });
 
-    if (hasResponse) {
-      break;
-    }
+  // Approve the tool call
+  await approveButton.click();
 
-    // Look for an approve button and click it if found
-    const approveButton = page.getByRole("button", { name: "Approve" }).first();
-    const isApproveVisible = await approveButton.isVisible().catch(() => false);
-
-    if (isApproveVisible) {
-      await approveButton.click();
-      // Wait a bit for the tool to execute and new content to appear
-      await page.waitForTimeout(2000);
-    } else {
-      // No approve button visible, wait a bit and check again
-      await page.waitForTimeout(2000);
-    }
-  }
-
-  // Verify the response contains "basic_test" (a function from the test fixtures)
-  await expect(
-    page.getByText("basic_test", { exact: false }).first(),
-  ).toBeVisible({ timeout: 60000 });
+  // Verify the tool result appeared (confirming tool was approved and executed)
+  await expect(page.getByText("Tool Result").first()).toBeVisible({
+    timeout: 60000,
+  });
 });
 
 test.describe("Chat input validation", () => {
@@ -306,9 +283,11 @@ test.describe("Tool call authorization deduplication", () => {
 
     await page.goto("/autopilot/sessions/new");
 
+    // Use a non-whitelisted tool so the Approve button appears
+    // (delete_datapoints is not in the default whitelist)
     const messageInput = page.getByRole("textbox");
     await messageInput.fill(
-      "What functions are available in my TensorZero config?",
+      "Use the delete_datapoints tool to delete datapoint ID '00000000-0000-7000-0000-000000000000' from dataset 'foo'. Call the tool directly without using any other tools first.",
     );
     await page.getByRole("button", { name: "Send message" }).click();
 
@@ -373,9 +352,11 @@ test.describe("Tool call authorization deduplication", () => {
 
     await page.goto("/autopilot/sessions/new");
 
+    // Use a non-whitelisted tool so the Reject button appears
+    // (delete_datapoints is not in the default whitelist)
     const messageInput = page.getByRole("textbox");
     await messageInput.fill(
-      "What functions are available in my TensorZero config?",
+      "Use the delete_datapoints tool to delete datapoint ID '00000000-0000-7000-0000-000000000000' from dataset 'foo'. Call the tool directly without using any other tools first.",
     );
     await page.getByRole("button", { name: "Send message" }).click();
 
