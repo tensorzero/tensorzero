@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     sync::Arc,
 };
 use tensorzero_derive::TensorZeroDeserialize;
@@ -33,7 +33,7 @@ fn check_duplicates_within(variants: &[String], list_name: &str) -> Result<(), E
         .iter()
         .filter(|v| !seen.insert(v.as_str()))
         .map(String::as_str)
-        .collect::<HashSet<_>>()
+        .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
 
@@ -60,7 +60,7 @@ fn check_duplicates_across(
         .iter()
         .filter(|f| candidate_set.contains(f.as_str()))
         .map(String::as_str)
-        .collect::<HashSet<_>>()
+        .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
 
