@@ -1,7 +1,7 @@
 //! Tests for Postgres setup: pg_cron and trigram indexes.
 
 use crate::db::get_test_postgres;
-use sqlx::PgPool;
+use sqlx::{AssertSqlSafe, PgPool};
 use tensorzero_core::db::postgres::postgres_setup;
 
 // ===== pg_cron tests =====
@@ -161,6 +161,89 @@ async fn test_setup_trigram_indexes_is_idempotent() {
     postgres_setup::check_trigram_indexes_configured_correctly(pool)
         .await
         .expect("Trigram indexes should still be valid after running setup twice");
+}
+
+/// Tests that `setup_trigram_indexes` is idempotent when new partitions are created
+/// between runs. When the parent index exists (via ON ONLY), Postgres auto-creates
+/// and auto-attaches indexes on new partitions. A subsequent `setup_trigram_indexes`
+/// must detect these auto-created indexes and skip them rather than failing on
+/// `ALTER INDEX ... ATTACH PARTITION`.
+#[tokio::test]
+async fn test_setup_trigram_indexes_idempotent_with_new_partitions() {
+    let conn = get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    // Ensure trigram indexes are set up (parent indexes exist)
+    postgres_setup::setup_trigram_indexes(pool)
+        .await
+        .expect("Initial setup_trigram_indexes should succeed");
+
+    // Create new partitions for day 8 (beyond the 0..7 range that create_partitions covers).
+    // Because parent indexes exist, Postgres will auto-create and auto-attach indexes.
+    let partitioned_tables_with_trigrams = ["chat_inference_data", "json_inference_data"];
+    let mut created_partitions = Vec::new();
+    for table in partitioned_tables_with_trigrams {
+        let partition_name: String = sqlx::query_scalar(AssertSqlSafe(format!(
+            "SELECT '{table}_' || to_char(CURRENT_DATE + 8, 'YYYY_MM_DD')"
+        )))
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("Failed to compute partition name for `{table}`: {e}"));
+
+        let sql = format!(
+            "CREATE TABLE IF NOT EXISTS tensorzero.{partition_name} \
+             PARTITION OF tensorzero.{table} \
+             FOR VALUES FROM (CURRENT_DATE + 8) TO (CURRENT_DATE + 9)"
+        );
+        sqlx::raw_sql(AssertSqlSafe(sql))
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| {
+                panic!("Failed to create partition `{partition_name}` for `{table}`: {e}")
+            });
+
+        // Verify Postgres auto-created an index on the new partition
+        let has_auto_index: bool = sqlx::query_scalar(
+            r"
+            SELECT EXISTS(
+                SELECT 1 FROM pg_indexes
+                WHERE schemaname = 'tensorzero'
+                  AND tablename = $1
+            )
+            ",
+        )
+        .bind(&partition_name)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| {
+            panic!("Failed to check auto-created index on `{partition_name}`: {e}")
+        });
+
+        assert!(
+            has_auto_index,
+            "Postgres should auto-create indexes on new partition `{partition_name}` because parent index exists"
+        );
+
+        created_partitions.push(partition_name);
+    }
+
+    // Re-run trigram setup — this must not fail despite the auto-created indexes
+    postgres_setup::setup_trigram_indexes(pool).await.expect(
+        "setup_trigram_indexes should succeed after new partitions with auto-created indexes",
+    );
+
+    postgres_setup::check_trigram_indexes_configured_correctly(pool)
+        .await
+        .expect("Trigram indexes should still be valid after re-running setup with new partitions");
+
+    // Clean up: drop the partitions we created
+    for partition_name in &created_partitions {
+        let sql = format!("DROP TABLE IF EXISTS tensorzero.{partition_name}");
+        sqlx::raw_sql(AssertSqlSafe(sql))
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("Failed to drop partition `{partition_name}`: {e}"));
+    }
 }
 
 /// Tests that trigram indexes exist on all expected tables and columns,
