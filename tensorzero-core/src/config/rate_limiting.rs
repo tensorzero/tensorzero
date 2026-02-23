@@ -73,8 +73,10 @@ impl TryFrom<TomlUninitializedRateLimitingConfig> for UninitializedRateLimitingC
         // Validate and convert default_cost
         let default_cost_nano_dollars = match toml_config.default_cost {
             Some(cost) => {
-                if cost < 0.0 {
-                    return Err(format!("`default_cost` must be non-negative, got {cost}"));
+                if !cost.is_finite() || cost < 0.0 {
+                    return Err(format!(
+                        "`default_cost` must be a finite non-negative number, got {cost}"
+                    ));
                 }
                 dollars_to_nano_dollars(cost)
             }
@@ -174,18 +176,22 @@ impl<'de> Deserialize<'de> for TomlRateLimitingConfigRule {
                             })?;
                         match cost_value {
                             CostCapacityHelper::Amount(amount) => {
-                                if amount < 0.0 {
+                                if !amount.is_finite() || amount < 0.0 {
                                     return Err(serde::de::Error::custom(
-                                        "Cost rate limit value must be non-negative",
+                                        "Cost rate limit value must be a finite non-negative number",
                                     ));
                                 }
                                 let nano = dollars_to_nano_dollars(amount);
                                 (nano, nano)
                             }
                             CostCapacityHelper::Bucket(bucket) => {
-                                if bucket.capacity < 0.0 || bucket.refill_rate < 0.0 {
+                                if !bucket.capacity.is_finite()
+                                    || !bucket.refill_rate.is_finite()
+                                    || bucket.capacity < 0.0
+                                    || bucket.refill_rate < 0.0
+                                {
                                     return Err(serde::de::Error::custom(
-                                        "Cost rate limit `capacity` and `refill_rate` must be non-negative",
+                                        "Cost rate limit `capacity` and `refill_rate` must be finite non-negative numbers",
                                     ));
                                 }
                                 (
@@ -1608,6 +1614,27 @@ mod tests {
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
         let result: Result<UninitializedRateLimitingConfig, _> = toml_config.try_into();
         assert!(result.is_err(), "Negative default_cost should be rejected");
+    }
+
+    #[test]
+    fn test_nan_default_cost_rejected() {
+        // NaN cannot be represented directly in TOML, so we construct the config manually
+        let toml_config = TomlUninitializedRateLimitingConfig {
+            default_cost: Some(f64::NAN),
+            ..Default::default()
+        };
+        let result: Result<UninitializedRateLimitingConfig, _> = toml_config.try_into();
+        assert!(result.is_err(), "NaN default_cost should be rejected");
+    }
+
+    #[test]
+    fn test_infinity_default_cost_rejected() {
+        let toml_config = TomlUninitializedRateLimitingConfig {
+            default_cost: Some(f64::INFINITY),
+            ..Default::default()
+        };
+        let result: Result<UninitializedRateLimitingConfig, _> = toml_config.try_into();
+        assert!(result.is_err(), "Infinite default_cost should be rejected");
     }
 
     #[test]
