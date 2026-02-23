@@ -8,5 +8,8 @@ import type { GatewayEvent } from "./GatewayEvent";
  */
 export type GatewayWorkspacePendingToolCallsResponse = {
   pending_tool_calls: Array<GatewayEvent>;
-  last_event_id: string;
+  /**
+   * If there are no events in the workspace yet this should return None
+   */
+  last_event_id: string | null;
 };
