@@ -204,6 +204,7 @@ mod tests {
             inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         })
     }
 

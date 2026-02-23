@@ -201,7 +201,7 @@ impl EmbeddingModelConfig {
                         // Collect raw response entries from failed providers before the cache hit
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                if let Some(entries) = error.extract_raw_response_entries() {
+                                if let Some(entries) = error.extract_raw_response() {
                                     cache_lookup.failed_raw_response.extend(entries);
                                 }
                             }
@@ -246,7 +246,7 @@ impl EmbeddingModelConfig {
                         // Collect raw response entries from failed providers for fallback reporting
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                if let Some(entries) = error.extract_raw_response_entries() {
+                                if let Some(entries) = error.extract_raw_response() {
                                     embedding_response.failed_raw_response.extend(entries);
                                 }
                             }

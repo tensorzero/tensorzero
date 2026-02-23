@@ -147,7 +147,8 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 any(inference_function_name) AS function_name,
                 any(variant_name) AS variant_name,
                 any(dataset_name) AS dataset_name,
-                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
+                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp,
+                if(isNull(any(inner_snapshot_hash)), NULL, lower(hex(any(inner_snapshot_hash)))) AS snapshot_hash
             FROM (
                 SELECT
                     maxIf(value, key = 'tensorzero::evaluation_run_id') AS evaluation_run_id,
@@ -155,7 +156,8 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     maxIf(value, key = 'tensorzero::dataset_name') AS dataset_name,
                     any(function_name) AS inference_function_name,
                     any(variant_name) AS variant_name,
-                    max(toUInt128(inference_id)) AS max_inference_id
+                    max(toUInt128(inference_id)) AS max_inference_id,
+                    any(snapshot_hash) AS inner_snapshot_hash
                 FROM TagInference
                 WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
                 GROUP BY inference_id

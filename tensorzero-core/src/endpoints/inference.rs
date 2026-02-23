@@ -623,7 +623,7 @@ pub async fn inference(
                 let output = if params.include_raw_response {
                     let failed_raw_response: Vec<RawResponseEntry> = variant_errors
                         .values()
-                        .flat_map(|error| error.extract_raw_response_entries().unwrap_or_default())
+                        .flat_map(|error| error.extract_raw_response().unwrap_or_default())
                         .collect();
                     if failed_raw_response.is_empty() {
                         output
