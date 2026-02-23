@@ -71,5 +71,5 @@ export type ModelInference = {
   /**
    * Cost of the inference.
    */
-  cost: number | null;
+  cost: number | undefined;
 };
