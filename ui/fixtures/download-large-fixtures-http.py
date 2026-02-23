@@ -12,6 +12,7 @@ import hashlib
 import os
 import time
 
+import pyarrow.parquet as pq
 import requests
 from download_fixtures_consts import LARGE_FIXTURES as FIXTURES
 from download_fixtures_consts import LARGE_FIXTURES_DIR, PART_SIZE, R2_PUBLIC_BUCKET_URL
@@ -144,8 +145,6 @@ def main():
     LARGE_FIXTURES_DIR.mkdir(exist_ok=True)
     print("Downloading fixtures via public HTTP...", flush=True)
     download_fixtures_http()
-
-    import pyarrow.parquet as pq
 
     for fixture in FIXTURES:
         print(f"Fixture {fixture}:", flush=True)
