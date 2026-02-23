@@ -74,7 +74,7 @@ serde_json = { workspace = true }
 http = { workspace = true }
 serde_path_to_error = { workspace = true }
 sha2 = "0.10.9"
-strum = { version = "0.27.1", features = ["derive"] }
+strum = { version = "0.28.0", features = ["derive"] }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 toml = { workspace = true }
