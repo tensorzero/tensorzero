@@ -24,7 +24,7 @@ use crate::providers::azure::AzureProvider;
 use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
-    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse,
+    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, RateLimitingConfig,
     decimal_dollars_to_nano_dollars, get_estimated_tokens,
 };
 use crate::{
@@ -357,6 +357,7 @@ impl RateLimitedRequest for EmbeddingRequest {
     fn estimated_resource_usage(
         &self,
         resources: &[RateLimitResource],
+        rate_limiting_config: &RateLimitingConfig,
     ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let EmbeddingRequest {
             input,
@@ -376,10 +377,16 @@ impl RateLimitedRequest for EmbeddingRequest {
             None
         };
 
+        let cost = if resources.contains(&RateLimitResource::Cost) {
+            Some(rate_limiting_config.default_cost_nano_dollars)
+        } else {
+            None
+        };
+
         Ok(EstimatedRateLimitResourceUsage {
             model_inferences,
             tokens,
-            cost: None, // Filled in by the rate limiting manager using default_cost
+            cost,
         })
     }
 }

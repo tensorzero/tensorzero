@@ -165,13 +165,8 @@ impl RateLimitingManager {
         }
 
         let rate_limited_resources = self.config.get_rate_limited_resources(scope_info);
-        let mut rate_limit_resource_requests =
-            rate_limited_request.estimated_resource_usage(&rate_limited_resources)?;
-
-        // Fill in cost estimation using default_cost when cost rate limiting is active
-        if rate_limited_resources.contains(&RateLimitResource::Cost) {
-            rate_limit_resource_requests.cost = Some(self.config.default_cost_nano_dollars);
-        }
+        let rate_limit_resource_requests =
+            rate_limited_request.estimated_resource_usage(&rate_limited_resources, &self.config)?;
 
         if let Some(tokens) = rate_limit_resource_requests.tokens {
             span.record("estimated_usage.tokens", tokens as i64);
@@ -403,12 +398,18 @@ mod tests {
     impl RateLimitedRequest for MockRateLimitedRequest {
         fn estimated_resource_usage(
             &self,
-            _resources: &[RateLimitResource],
+            resources: &[RateLimitResource],
+            rate_limiting_config: &RateLimitingConfig,
         ) -> Result<EstimatedRateLimitResourceUsage, Error> {
+            let cost = if resources.contains(&RateLimitResource::Cost) {
+                Some(rate_limiting_config.default_cost_nano_dollars)
+            } else {
+                None
+            };
             Ok(EstimatedRateLimitResourceUsage {
                 tokens: Some(self.tokens),
                 model_inferences: Some(self.model_inferences),
-                cost: None,
+                cost,
             })
         }
     }

@@ -101,8 +101,8 @@ use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::usage::aggregate_usage_across_model_inferences;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
-    RateLimitedInputContent, RateLimitedRequest, decimal_dollars_to_nano_dollars,
-    get_estimated_tokens,
+    RateLimitedInputContent, RateLimitedRequest, RateLimitingConfig,
+    decimal_dollars_to_nano_dollars, get_estimated_tokens,
 };
 use crate::serde_util::{deserialize_optional_json_string, serialize_optional_json_string};
 use crate::tool::{
@@ -1138,6 +1138,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
     fn estimated_resource_usage(
         &self,
         resources: &[RateLimitResource],
+        rate_limiting_config: &RateLimitingConfig,
     ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let ModelInferenceRequest {
             inference_id: _,
@@ -1184,10 +1185,16 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             None
         };
 
+        let cost = if resources.contains(&RateLimitResource::Cost) {
+            Some(rate_limiting_config.default_cost_nano_dollars)
+        } else {
+            None
+        };
+
         Ok(EstimatedRateLimitResourceUsage {
             model_inferences,
             tokens,
-            cost: None, // Filled in by the rate limiting manager using default_cost
+            cost,
         })
     }
 }

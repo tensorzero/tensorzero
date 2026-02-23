@@ -993,6 +993,7 @@ pub trait RateLimitedRequest {
     fn estimated_resource_usage(
         &self,
         resources: &[RateLimitResource],
+        rate_limiting_config: &RateLimitingConfig,
     ) -> Result<EstimatedRateLimitResourceUsage, Error>;
 }
 
