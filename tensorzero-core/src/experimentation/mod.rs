@@ -25,7 +25,8 @@ mod uniform;
 
 pub use static_config::{StaticConfig, WeightedVariants};
 pub use track_and_stop::{
-    AdaptiveAlgorithm, AdaptiveConfig, AdaptiveObjective, UninitializedAdaptiveConfig,
+    AdaptiveExperimentationAlgorithm, AdaptiveExperimentationConfig,
+    AdaptiveExperimentationObjective, UninitializedAdaptiveExperimentationConfig,
 };
 
 /// Check for duplicate variants within a list
@@ -110,7 +111,7 @@ fn check_duplicates_across_map(
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
     Static(StaticConfig),
-    Adaptive(AdaptiveConfig),
+    Adaptive(AdaptiveExperimentationConfig),
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     #[cfg(test)]
     AlwaysFails(AlwaysFailsConfig),
@@ -172,11 +173,11 @@ impl ExperimentationConfigWithNamespaces {
 pub enum UninitializedExperimentationConfig {
     // New types
     Static(StaticConfig),
-    Adaptive(UninitializedAdaptiveConfig),
+    Adaptive(UninitializedAdaptiveExperimentationConfig),
     // Legacy types (backward compat)
-    StaticWeights(static_weights::StaticWeightsConfig),
-    Uniform(uniform::UniformConfig),
-    TrackAndStop(track_and_stop::UninitializedTrackAndStopConfig),
+    StaticWeights(static_weights::LegacyStaticWeightsExperimentationConfig),
+    Uniform(uniform::LegacyUniformExperimentationConfig),
+    TrackAndStop(track_and_stop::LegacyUninitializedTrackAndStopExperimentationConfig),
 }
 
 /// Wrapper struct that holds the base experimentation config plus namespace-specific configs.
@@ -277,9 +278,9 @@ impl UninitializedExperimentationConfig {
                         "Experimentation type `track_and_stop` is deprecated. Use `adaptive` instead."
                     );
                 }
-                let adaptive = UninitializedAdaptiveConfig {
-                    algorithm: AdaptiveAlgorithm::TrackAndStop,
-                    objective: AdaptiveObjective::BestVariantIdentification,
+                let adaptive = UninitializedAdaptiveExperimentationConfig {
+                    algorithm: AdaptiveExperimentationAlgorithm::TrackAndStop,
+                    objective: AdaptiveExperimentationObjective::BestVariantIdentification,
                     track_and_stop: config,
                 };
                 Ok(ExperimentationConfig::Adaptive(
@@ -326,7 +327,7 @@ impl ExperimentationConfig {
         for variant in variants.values() {
             if variant.inner.weight().is_some() {
                 let config =
-                    static_weights::StaticWeightsConfig::legacy_from_variants_map(variants);
+                    static_weights::LegacyStaticWeightsExperimentationConfig::legacy_from_variants_map(variants);
                 return Self::Static(config.into_static_config());
             }
         }
@@ -924,10 +925,14 @@ mod tests {
         let metrics = HashMap::new();
 
         let uninitialized = UninitializedExperimentationConfigWithNamespaces {
-            base: UninitializedExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            base: UninitializedExperimentationConfig::Uniform(
+                uniform::LegacyUniformExperimentationConfig::default(),
+            ),
             namespaces: HashMap::from([(
                 "mobile".to_string(),
-                UninitializedExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+                UninitializedExperimentationConfig::Uniform(
+                    uniform::LegacyUniformExperimentationConfig::default(),
+                ),
             )]),
         };
 
@@ -952,7 +957,9 @@ mod tests {
         let metrics = HashMap::new();
 
         let uninitialized = UninitializedExperimentationConfigWithNamespaces {
-            base: UninitializedExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            base: UninitializedExperimentationConfig::Uniform(
+                uniform::LegacyUniformExperimentationConfig::default(),
+            ),
             namespaces: HashMap::from([(
                 "mobile".to_string(),
                 UninitializedExperimentationConfig::StaticWeights(
@@ -994,7 +1001,9 @@ mod tests {
         );
 
         let uninitialized = UninitializedExperimentationConfigWithNamespaces {
-            base: UninitializedExperimentationConfig::Uniform(uniform::UniformConfig::default()),
+            base: UninitializedExperimentationConfig::Uniform(
+                uniform::LegacyUniformExperimentationConfig::default(),
+            ),
             namespaces: HashMap::from([(
                 "mobile".to_string(),
                 UninitializedExperimentationConfig::TrackAndStop(

@@ -67,14 +67,14 @@ pub(crate) fn sample_uniform(
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-pub struct UniformConfig {
+pub struct LegacyUniformExperimentationConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     candidate_variants: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     fallback_variants: Option<Vec<String>>,
 }
 
-impl UniformConfig {
+impl LegacyUniformExperimentationConfig {
     /// Convert this UniformConfig to a StaticConfig.
     /// Called after `load()` validation succeeds.
     pub fn into_static_config(self) -> super::static_config::StaticConfig {
@@ -169,7 +169,7 @@ impl UniformConfig {
     }
 }
 
-impl VariantSampler for UniformConfig {
+impl VariantSampler for LegacyUniformExperimentationConfig {
     async fn setup(
         &self,
         _db: Arc<dyn FeedbackQueries + Send + Sync>,
@@ -446,7 +446,7 @@ mod tests {
     #[tokio::test]
     async fn test_uniform_config_default() {
         // Test default config (None, None)
-        let config = UniformConfig::default();
+        let config = LegacyUniformExperimentationConfig::default();
         let variants = create_test_variants(&["A", "B", "C"]);
         let mut active_variants = variants.clone();
         let episode_id = Uuid::now_v7();
@@ -464,7 +464,7 @@ mod tests {
     #[tokio::test]
     async fn test_uniform_config_explicit_candidates() {
         // Test explicit candidates
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec!["A".to_string(), "B".to_string()]),
             fallback_variants: None,
         };
@@ -494,7 +494,7 @@ mod tests {
     #[tokio::test]
     async fn test_uniform_config_fallback_only() {
         // Test fallback only (None candidates with Some fallbacks)
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: None,
             fallback_variants: Some(vec!["B".to_string(), "C".to_string()]),
         };
@@ -516,7 +516,7 @@ mod tests {
     #[tokio::test]
     async fn test_uniform_distribution() {
         // Test that uniform sampling produces equal distribution
-        let config = UniformConfig::default();
+        let config = LegacyUniformExperimentationConfig::default();
         let variants = create_test_variants(&["A", "B", "C"]);
 
         let sample_size = 10_000;
@@ -548,7 +548,7 @@ mod tests {
 
     #[test]
     fn test_load_validation_invalid_candidate() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec!["A".to_string(), "INVALID".to_string()]),
             fallback_variants: None,
         };
@@ -567,7 +567,7 @@ mod tests {
 
     #[test]
     fn test_load_validation_invalid_fallback() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: None,
             fallback_variants: Some(vec!["A".to_string(), "INVALID".to_string()]),
         };
@@ -586,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_load_validation_empty_candidates_no_fallbacks() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec![]),
             fallback_variants: None,
         };
@@ -605,7 +605,7 @@ mod tests {
 
     #[test]
     fn test_get_current_display_probabilities_all_variants() {
-        let config = UniformConfig::default();
+        let config = LegacyUniformExperimentationConfig::default();
         let active_variants: HashMap<_, _> =
             create_test_variants(&["A", "B", "C"]).into_iter().collect();
         let postgres = PostgresConnectionInfo::new_disabled();
@@ -626,7 +626,7 @@ mod tests {
 
     #[test]
     fn test_get_current_display_probabilities_explicit_candidates() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec!["A".to_string(), "B".to_string()]),
             fallback_variants: None,
         };
@@ -651,7 +651,7 @@ mod tests {
 
     #[test]
     fn test_get_current_display_probabilities_fallback() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec![]),
             fallback_variants: Some(vec!["B".to_string(), "C".to_string()]),
         };
@@ -676,7 +676,7 @@ mod tests {
     #[test]
     fn test_consistent_behavior_no_zero_probabilities_in_candidate_mode() {
         // Test that candidate mode doesn't include variants with 0 probability
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec!["A".to_string()]),
             fallback_variants: None,
         };
@@ -704,7 +704,7 @@ mod tests {
     fn test_consistent_behavior_no_zero_probabilities_in_fallback_mode() {
         // Test that fallback mode doesn't include variants with 0 probability
         // when there are other active variants not in the fallback list
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec![]),
             fallback_variants: Some(vec!["B".to_string(), "C".to_string()]),
         };
@@ -734,7 +734,7 @@ mod tests {
         let postgres = PostgresConnectionInfo::new_disabled();
 
         // Candidate mode: 2 candidates out of 5 active variants
-        let candidate_config = UniformConfig {
+        let candidate_config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec!["X".to_string(), "Y".to_string()]),
             fallback_variants: None,
         };
@@ -758,7 +758,7 @@ mod tests {
         assert!(!candidate_probs.contains_key("V"));
 
         // Fallback mode: 2 fallback variants out of 5 active variants
-        let fallback_config = UniformConfig {
+        let fallback_config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec![]),
             fallback_variants: Some(vec!["X".to_string(), "Y".to_string()]),
         };
@@ -784,7 +784,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_validation_empty_both() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec![]),
             fallback_variants: Some(vec![]),
         };
@@ -804,7 +804,7 @@ mod tests {
     async fn test_setup_validation_none_candidates_empty_fallbacks() {
         // This is the bug scenario: candidate_variants: None, fallback_variants: Some([])
         // Should be rejected because it would fail at runtime
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: None,
             fallback_variants: Some(vec![]),
         };
@@ -830,7 +830,7 @@ mod tests {
     async fn test_setup_validation_none_candidates_with_fallbacks() {
         // This should pass: candidate_variants: None, fallback_variants: Some([...])
         // Runtime will use only fallbacks
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: None,
             fallback_variants: Some(vec!["A".to_string(), "B".to_string()]),
         };
@@ -850,7 +850,7 @@ mod tests {
     async fn test_setup_validation_none_none() {
         // This should pass: candidate_variants: None, fallback_variants: None
         // Runtime will use all variants
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: None,
             fallback_variants: None,
         };
@@ -868,7 +868,7 @@ mod tests {
 
     #[test]
     fn test_load_validation_duplicate_candidates() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec!["A".to_string(), "B".to_string(), "A".to_string()]),
             fallback_variants: None,
         };
@@ -884,7 +884,7 @@ mod tests {
 
     #[test]
     fn test_load_validation_duplicate_fallbacks() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec!["A".to_string()]),
             fallback_variants: Some(vec!["B".to_string(), "C".to_string(), "B".to_string()]),
         };
@@ -900,7 +900,7 @@ mod tests {
 
     #[test]
     fn test_load_validation_duplicate_across_lists() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec!["A".to_string(), "B".to_string()]),
             fallback_variants: Some(vec!["B".to_string(), "C".to_string()]),
         };
@@ -918,7 +918,7 @@ mod tests {
 
     #[test]
     fn test_load_validation_multiple_duplicates_across_lists() {
-        let config = UniformConfig {
+        let config = LegacyUniformExperimentationConfig {
             candidate_variants: Some(vec!["A".to_string(), "B".to_string(), "C".to_string()]),
             fallback_variants: Some(vec!["B".to_string(), "C".to_string(), "D".to_string()]),
         };

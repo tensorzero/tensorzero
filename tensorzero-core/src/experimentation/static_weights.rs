@@ -80,7 +80,7 @@ pub(crate) fn sample_static_weights(
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct StaticWeightsConfig {
+pub struct LegacyStaticWeightsExperimentationConfig {
     // Map from variant name to weight. Zero weights exclude variants from weighted sampling.
     // We enforce that weights are non-negative during setup validation.
     candidate_variants: BTreeMap<String, f64>,
@@ -89,7 +89,7 @@ pub struct StaticWeightsConfig {
     fallback_variants: Vec<String>,
 }
 
-impl StaticWeightsConfig {
+impl LegacyStaticWeightsExperimentationConfig {
     /// Convert this StaticWeightsConfig to the new StaticConfig.
     pub fn into_static_config(self) -> super::static_config::StaticConfig {
         use super::static_config::{StaticConfig, WeightedVariants};
@@ -121,7 +121,7 @@ impl StaticWeightsConfig {
     }
 }
 
-impl VariantSampler for StaticWeightsConfig {
+impl VariantSampler for LegacyStaticWeightsExperimentationConfig {
     async fn setup(
         &self,
         _db: Arc<dyn FeedbackQueries + Send + Sync>,
@@ -287,7 +287,7 @@ mod tests {
     #[tokio::test]
     async fn test_weighted_sampling() {
         let variants_map = create_variants(&[("A", Some(1.0)), ("B", Some(2.0)), ("C", Some(3.0))]);
-        let config = StaticWeightsConfig::legacy_from_variants_map(
+        let config = LegacyStaticWeightsExperimentationConfig::legacy_from_variants_map(
             &variants_map
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
@@ -308,7 +308,7 @@ mod tests {
     #[tokio::test]
     async fn test_fallback_variants() {
         let variants_map = create_variants(&[("A", Some(0.0)), ("B", None), ("C", None)]);
-        let config = StaticWeightsConfig::legacy_from_variants_map(
+        let config = LegacyStaticWeightsExperimentationConfig::legacy_from_variants_map(
             &variants_map
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
@@ -327,7 +327,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_variants_error() {
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants: BTreeMap::new(),
             fallback_variants: Vec::new(),
         };
@@ -343,7 +343,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_error_no_positive_weights_no_fallbacks() {
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants: BTreeMap::new(),
             fallback_variants: Vec::new(),
         };
@@ -372,7 +372,7 @@ mod tests {
         candidate_variants.insert("A".to_string(), 0.0);
         candidate_variants.insert("B".to_string(), 0.0);
 
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants,
             fallback_variants: Vec::new(),
         };
@@ -398,7 +398,7 @@ mod tests {
     async fn test_weighted_distribution() {
         // Test that the weighted sampling produces the expected distribution
         let variants_map = create_variants(&[("A", Some(1.0)), ("B", Some(2.0)), ("C", Some(3.0))]);
-        let config = StaticWeightsConfig::legacy_from_variants_map(
+        let config = LegacyStaticWeightsExperimentationConfig::legacy_from_variants_map(
             &variants_map
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
@@ -864,7 +864,7 @@ mod tests {
         candidate_variants.insert("B".to_string(), 2.0);
         candidate_variants.insert("C".to_string(), 3.0);
 
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants,
             fallback_variants: vec![],
         };
@@ -892,7 +892,7 @@ mod tests {
         let active_variants: HashMap<_, _> =
             create_test_variants(&["A", "B", "C"]).into_iter().collect();
 
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants: BTreeMap::new(), // No weights
             fallback_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
         };
@@ -923,7 +923,7 @@ mod tests {
         candidate_variants.insert("B".to_string(), 2.0); // Not active
         candidate_variants.insert("C".to_string(), 3.0);
 
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants,
             fallback_variants: vec![],
         };
@@ -950,7 +950,7 @@ mod tests {
         let active_variants: HashMap<_, _> =
             create_test_variants(&["B", "C"]).into_iter().collect();
 
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants: BTreeMap::new(),
             fallback_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
         };
@@ -976,7 +976,7 @@ mod tests {
         let active_variants: HashMap<_, _> =
             create_test_variants(&["A", "B"]).into_iter().collect();
 
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants: BTreeMap::new(),
             fallback_variants: vec!["C".to_string(), "D".to_string()],
         };
@@ -989,7 +989,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_validation_duplicate_fallbacks() {
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants: BTreeMap::from([("A".to_string(), 1.0)]),
             fallback_variants: vec!["B".to_string(), "C".to_string(), "B".to_string()],
         };
@@ -1011,7 +1011,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_validation_duplicate_across_lists() {
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants: BTreeMap::from([("A".to_string(), 1.0), ("B".to_string(), 2.0)]),
             fallback_variants: vec!["B".to_string(), "C".to_string()],
         };
@@ -1035,7 +1035,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_validation_multiple_duplicates_across_lists() {
-        let config = StaticWeightsConfig {
+        let config = LegacyStaticWeightsExperimentationConfig {
             candidate_variants: BTreeMap::from([
                 ("A".to_string(), 1.0),
                 ("B".to_string(), 2.0),
