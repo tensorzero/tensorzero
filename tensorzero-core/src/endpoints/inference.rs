@@ -1263,11 +1263,14 @@ fn create_stream(
                 inference_ttft = Some(metadata.start_time.elapsed());
             }
 
-            // Strip usage and collect raw chunks for post-loop cost computation
+            // Collect raw chunks for post-loop cost computation (independent of usage presence,
+            // since cost pointers may resolve from non-usage chunks)
+            if !metadata.cached && metadata.cost_config.is_some() {
+                cost_raw_chunks.push(chunk.raw_chunk().to_string());
+            }
+
+            // Strip usage
             if let Some(u) = chunk.usage().copied() {
-                if !metadata.cached && metadata.cost_config.is_some() {
-                    cost_raw_chunks.push(chunk.raw_chunk().to_string());
-                }
                 usages.push(u);
                 chunk.set_usage(None);
             }
