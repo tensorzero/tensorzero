@@ -82,6 +82,10 @@ export function useQuestionCardState(
       case "unanswered":
       case "skipped":
         return false;
+      default: {
+        const _exhaustiveCheck: never = step;
+        return _exhaustiveCheck;
+      }
     }
   };
 
@@ -114,6 +118,10 @@ export function useQuestionCardState(
             text: step.text,
           };
           break;
+        default: {
+          const _exhaustiveCheck: never = step;
+          return _exhaustiveCheck;
+        }
       }
     });
     return responses;
