@@ -16,7 +16,7 @@ use tracing::Span;
 
 use super::{
     RateLimitResource, RateLimitResourceUsage, RateLimitedRequest, RateLimitingBackend,
-    RateLimitingConfig, ScopeInfo, TicketBorrow, TicketBorrows, nano_dollars_to_dollars,
+    RateLimitingConfig, ScopeInfo, TicketBorrow, TicketBorrows, nano_cost_to_cost,
 };
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::rate_limiting::{ConsumeTicketsRequest, DisabledRateLimitQueries, RateLimitQueries};
@@ -139,7 +139,7 @@ impl RateLimitingManager {
     }
 
     /// Consume tickets for a rate-limited request.
-    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences, estimated_usage.cost_dollars))]
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences, estimated_usage.cost))]
     pub async fn consume_tickets(
         self: &Arc<Self>,
         scope_info: &ScopeInfo,
@@ -175,10 +175,7 @@ impl RateLimitingManager {
             span.record("estimated_usage.model_inferences", model_inferences as i64);
         }
         if let Some(cost) = rate_limit_resource_requests.cost {
-            span.record(
-                "estimated_usage.cost_dollars",
-                nano_dollars_to_dollars(cost),
-            );
+            span.record("estimated_usage.cost", nano_cost_to_cost(cost));
         }
 
         // Consume tickets directly from the database
@@ -194,7 +191,7 @@ impl RateLimitingManager {
     }
 
     /// Return tickets based on actual resource usage.
-    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, actual_usage.cost_dollars, underestimate))]
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, actual_usage.cost, underestimate))]
     pub async fn return_tickets(
         &self,
         ticket_borrows: TicketBorrows,
@@ -223,7 +220,7 @@ impl RateLimitingManager {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
                 if let Some(cost) = cost {
-                    span.record("actual_usage.cost_dollars", nano_dollars_to_dollars(cost));
+                    span.record("actual_usage.cost", nano_cost_to_cost(cost));
                 }
                 span.record("underestimate", false);
             }
@@ -235,7 +232,7 @@ impl RateLimitingManager {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
                 if let Some(cost) = cost {
-                    span.record("actual_usage.cost_dollars", nano_dollars_to_dollars(cost));
+                    span.record("actual_usage.cost", nano_cost_to_cost(cost));
                 }
                 span.record("underestimate", true);
             }

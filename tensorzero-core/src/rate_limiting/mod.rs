@@ -36,8 +36,8 @@ pub fn dollars_to_nano_dollars(dollars: f64) -> u64 {
 }
 
 /// Convert nano-dollars (u64) back to dollars (f64).
-pub fn nano_dollars_to_dollars(nano: u64) -> f64 {
-    nano as f64 / NANO_DOLLARS_PER_DOLLAR as f64
+pub fn nano_cost_to_cost(cost: u64) -> f64 {
+    cost as f64 / NANO_DOLLARS_PER_DOLLAR as f64
 }
 
 /// Convert a `Decimal` dollar amount to nano-dollars (u64).
@@ -315,8 +315,8 @@ impl Serialize for FailedRateLimit {
         // For Cost resources, convert nano-dollars to dollars for display
         match self.resource {
             RateLimitResource::Cost => {
-                state.serialize_field("requested", &nano_dollars_to_dollars(self.requested))?;
-                state.serialize_field("available", &nano_dollars_to_dollars(self.available))?;
+                state.serialize_field("requested", &nano_cost_to_cost(self.requested))?;
+                state.serialize_field("available", &nano_cost_to_cost(self.available))?;
             }
             _ => {
                 state.serialize_field("requested", &self.requested)?;
@@ -2493,7 +2493,7 @@ mod tests {
         );
 
         let nano = 1_500_000_000u64;
-        let dollars = nano_dollars_to_dollars(nano);
+        let dollars = nano_cost_to_cost(nano);
         assert!(
             (dollars - 1.5).abs() < f64::EPSILON,
             "1.5 billion nano-dollars should be $1.50"
