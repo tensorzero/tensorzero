@@ -123,6 +123,7 @@ async def main():
         print(f"  Status: {job_info.status} — waiting 30s...")
         await asyncio.sleep(30)
 
+    assert job_info.output is not None
     variant_configs = job_info.output["content"]
 
     for variant_name, variant_config in variant_configs.items():
