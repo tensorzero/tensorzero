@@ -96,7 +96,9 @@ pub use tensorzero_core::inference::types::{
     Base64File, ContentBlockChunk, File, ObjectStoragePointer, Role, System, Unknown, UnknownChunk,
     UrlFile, Usage,
 };
-pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
+pub use tensorzero_core::optimization::{
+    OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerConfig,
+};
 pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredChatInferenceDatabase, StoredInference,
     StoredInferenceDatabase, StoredJsonInference,
@@ -1125,6 +1127,17 @@ impl ClientExt for Client {
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
+                if matches!(
+                    params.optimization_config.inner,
+                    UninitializedOptimizerConfig::GEPA(_)
+                ) {
+                    return Err(TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidRequest {
+                            message: "GEPA must be launched via the HTTP gateway's `/experimental_optimization_workflow` endpoint, not the embedded client".to_string(),
+                        })
+                        .into(),
+                    });
+                }
                 Ok(Box::pin(with_embedded_timeout(*timeout, async {
                     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
                         Arc::new(gateway.handle.app_state.get_delegating_database());
@@ -1157,6 +1170,17 @@ impl ClientExt for Client {
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
+                if matches!(
+                    params.optimizer_config.inner,
+                    UninitializedOptimizerConfig::GEPA(_)
+                ) {
+                    return Err(TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidRequest {
+                            message: "GEPA must be launched via the HTTP gateway's `/experimental_optimization_workflow` endpoint, not the embedded client".to_string(),
+                        })
+                        .into(),
+                    });
+                }
                 Box::pin(with_embedded_timeout(*timeout, async {
                     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
                         Arc::new(gateway.handle.app_state.get_delegating_database());

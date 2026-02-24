@@ -188,8 +188,8 @@ def test_sync_together_sft(
 
 
 @pytest.mark.mock
-def test_sync_gepa_chat(
-    embedded_sync_client: TensorZeroGateway,
+def test_sync_gepa_errors_in_embedded_mode(
+    embedded_sync_client_using_postgres: TensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
 ):
     optimization_config = GEPAConfig(
@@ -200,16 +200,12 @@ def test_sync_gepa_chat(
         initial_variants=["anthropic"],
     )
 
-    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
-        train_samples=chat_function_rendered_samples,
-        val_samples=chat_function_rendered_samples,
-        optimization_config=optimization_config,
-    )
-    while True:
-        job_info = embedded_sync_client.experimental_poll_optimization(job_handle=optimization_job_handle)
-        if job_info.status == OptimizationJobStatus.Completed:
-            break
-        sleep(1)
+    with pytest.raises(Exception, match="GEPA must be launched via the HTTP gateway"):
+        embedded_sync_client_using_postgres.experimental_launch_optimization(
+            train_samples=chat_function_rendered_samples,
+            val_samples=chat_function_rendered_samples,
+            optimization_config=optimization_config,
+        )
 
 
 @pytest.mark.mock
@@ -376,32 +372,6 @@ async def test_async_together_sft(
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
         val_samples=None,
-        optimization_config=optimization_config,
-    )
-    while True:
-        job_info = await embedded_async_client.experimental_poll_optimization(job_handle=optimization_job_handle)
-        if job_info.status == OptimizationJobStatus.Completed:
-            break
-        sleep(1)
-
-
-@pytest.mark.mock
-@pytest.mark.asyncio
-async def test_async_gepa_json(
-    embedded_async_client: AsyncTensorZeroGateway,
-    json_function_rendered_samples: List[RenderedSample],
-):
-    optimization_config = GEPAConfig(
-        function_name="json_success",
-        evaluation_name="json_evaluation",
-        analysis_model="openai::gpt-4o-mini",
-        mutation_model="openai::gpt-4o-mini",
-        initial_variants=["anthropic", "openai"],
-    )
-
-    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
-        train_samples=json_function_rendered_samples,
-        val_samples=json_function_rendered_samples,
         optimization_config=optimization_config,
     )
     while True:
