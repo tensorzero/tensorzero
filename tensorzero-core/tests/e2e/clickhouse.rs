@@ -809,6 +809,7 @@ async fn test_clickhouse_migration_manager() {
         model_provider_name: String::new(),
         ttft_ms: None,
         cached: false,
+        cost: None,
         finish_reason: None,
         snapshot_hash: Some(SnapshotHash::new_test()),
         timestamp: None,

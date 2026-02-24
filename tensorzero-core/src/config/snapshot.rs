@@ -58,7 +58,7 @@ use super::UninitializedConfig;
 /// db.write_config_snapshot(&snapshot).await?;
 /// ```
 #[expect(clippy::manual_non_exhaustive)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ConfigSnapshot {
     /// The config in a form suitable for serialization to TOML for database storage.
     /// Uses `StoredConfig` instead of `UninitializedConfig` to support backward-compatible

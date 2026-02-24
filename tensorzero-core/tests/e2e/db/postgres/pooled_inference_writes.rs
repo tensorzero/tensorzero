@@ -91,6 +91,7 @@ fn make_model_inference(inference_id: Uuid) -> StoredModelInference {
         model_provider_name: "test-provider".to_string(),
         ttft_ms: None,
         cached: false,
+        cost: None,
         finish_reason: Some(FinishReason::Stop),
         snapshot_hash: None,
         timestamp: None,

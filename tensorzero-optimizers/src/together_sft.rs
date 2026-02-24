@@ -31,10 +31,10 @@ use tensorzero_core::{
     },
     providers::{
         helpers::UrlParseErrExt,
-        openai::tensorzero_to_openai_assistant_message,
-        openai::{OpenAIMessagesConfig, OpenAIRequestMessage, OpenAITool},
+        openai::{OpenAIMessagesConfig, OpenAITool},
         together::prepare_together_messages,
-        together::{PROVIDER_TYPE, TOGETHER_API_BASE},
+        together::tensorzero_to_together_assistant_message,
+        together::{PROVIDER_TYPE, TOGETHER_API_BASE, TogetherRequestMessage},
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
     utils::mock::get_mock_provider_api_base,
@@ -340,7 +340,7 @@ impl JobHandle for TogetherSFTJobHandle {
                 let model_provider = UninitializedModelProvider {
                     config: UninitializedProviderConfig::Together {
                         model_name: model_name.clone(),
-                        parse_think_blocks: true,
+                        parse_think_blocks: None,
                         api_key_location: None,
                     },
                     extra_headers: None,
@@ -365,7 +365,7 @@ impl JobHandle for TogetherSFTJobHandle {
 
 #[derive(Debug, Serialize)]
 pub struct TogetherSupervisedRow<'a> {
-    messages: Vec<OpenAIRequestMessage<'a>>,
+    messages: Vec<TogetherRequestMessage<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<OpenAITool<'a>>,
 }
@@ -419,7 +419,7 @@ impl<'a> TogetherSupervisedRow<'a> {
         }
         let output_content_blocks: Vec<ContentBlock> =
             output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
-        let final_assistant_message = tensorzero_to_openai_assistant_message(
+        let final_assistant_message = tensorzero_to_together_assistant_message(
             Cow::Owned(output_content_blocks),
             OpenAIMessagesConfig {
                 json_mode: None,
