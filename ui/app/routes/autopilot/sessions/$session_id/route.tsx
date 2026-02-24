@@ -660,13 +660,16 @@ function AutopilotSessionEventsPageContent({
       setIsQuestionSubmitting(true);
       try {
         const res = await fetch(
-          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/answer-questions`,
+          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              user_questions_event_id: eventId,
-              responses,
+              payload: {
+                type: "user_questions_answers",
+                user_questions_event_id: eventId,
+                responses,
+              },
             }),
           },
         );
