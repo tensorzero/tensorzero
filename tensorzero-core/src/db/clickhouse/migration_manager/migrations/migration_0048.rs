@@ -150,27 +150,9 @@ impl Migration for Migration0048<'_> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
             r"
-        -- 1. Drop the MV that includes total_cost
-        DROP TABLE IF EXISTS ModelProviderStatisticsView{on_cluster_name} SYNC;
-
-        -- 2. Remove the total_cost column
-        ALTER TABLE ModelProviderStatistics{on_cluster_name} DROP COLUMN total_cost;
-
-        -- 3. Recreate the MV without total_cost (restores statistics collection)
-        CREATE MATERIALIZED VIEW IF NOT EXISTS ModelProviderStatisticsView{on_cluster_name}
-        TO ModelProviderStatistics
-        AS
-        SELECT
-            model_name,
-            model_provider_name,
-            toStartOfMinute(timestamp) as minute,
-            quantilesTDigestState({qs})(response_time_ms) as response_time_ms_quantiles,
-            quantilesTDigestState({qs})(ttft_ms) as ttft_ms_quantiles,
-            sumState(input_tokens) as total_input_tokens,
-            sumState(output_tokens) as total_output_tokens,
-            countState() as count
-        FROM ModelInference
-        GROUP BY model_name, model_provider_name, minute;"
+            DROP TABLE IF EXISTS ModelProviderStatisticsView{on_cluster_name} SYNC;
+            ALTER TABLE ModelProviderStatistics{on_cluster_name} DROP COLUMN total_cost;
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ModelProviderStatisticsView{on_cluster_name} TO ModelProviderStatistics AS SELECT model_name, model_provider_name, toStartOfMinute(timestamp) as minute, quantilesTDigestState({qs})(response_time_ms) as response_time_ms_quantiles, quantilesTDigestState({qs})(ttft_ms) as ttft_ms_quantiles, sumState(input_tokens) as total_input_tokens, sumState(output_tokens) as total_output_tokens, countState() as count FROM ModelInference GROUP BY model_name, model_provider_name, minute;"
         )
     }
 
