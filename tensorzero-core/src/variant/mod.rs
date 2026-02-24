@@ -15,6 +15,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::config::{PathWithContents, TimeoutsConfig};
+use crate::cost::CostConfig;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -211,7 +212,7 @@ pub struct ModelUsedInfo {
     /// Raw response entries from failed provider attempts during model-level fallback.
     pub failed_raw_response: Vec<RawResponseEntry>,
     /// Cost configuration from the provider, for computing cost after streaming completes.
-    pub cost_config: Option<crate::cost::CostConfig>,
+    pub cost_config: Option<CostConfig>,
 }
 
 pub trait Variant {

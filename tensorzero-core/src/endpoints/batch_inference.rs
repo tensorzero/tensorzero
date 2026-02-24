@@ -1006,7 +1006,7 @@ pub async fn write_completed_batch_inference<'a>(
             }
         };
         if let Some(cost_config) = batch_cost_config {
-            usage.cost = compute_cost(&raw_response, cost_config, ResponseMode::NonStreaming);
+            usage.cost = compute_cost(&raw_response, cost_config, ResponseMode::NonStreaming).ok();
         }
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),

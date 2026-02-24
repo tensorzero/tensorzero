@@ -1,12 +1,14 @@
 use std::borrow::Cow;
 
+use crate::error::warn_discarded_thought_block;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::{ContentBlock, Role};
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::{
-    http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID,
+    http::TensorZeroEventSource, providers::helpers_thinking_block::REASONING_FIELD_CHUNK_ID,
     tool::FunctionTool,
 };
 use futures::StreamExt;
@@ -16,6 +18,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
+use tensorzero_types_providers::fireworks::*;
 use tokio::time::Instant;
 use url::Url;
 
@@ -49,9 +52,10 @@ use uuid::Uuid;
 use super::{
     helpers_thinking_block::{ThinkingState, process_think_blocks},
     openai::{
-        OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolChoice,
-        OpenAIToolType, OpenAIUsage, get_chat_url, handle_openai_error,
-        tensorzero_to_openai_messages,
+        OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFunction,
+        OpenAIRequestFunctionCall, OpenAIRequestMessage, OpenAIRequestToolCall,
+        OpenAISystemRequestMessage, OpenAIToolChoice, OpenAIToolType, get_chat_url,
+        handle_openai_error, tensorzero_to_openai_messages,
     },
 };
 
@@ -77,29 +81,19 @@ pub struct FireworksProvider {
     model_name: String,
     #[serde(skip)]
     credentials: FireworksCredentials,
-    parse_think_blocks: bool,
 }
 
 impl FireworksProvider {
-    pub fn new(
-        model_name: String,
-        credentials: FireworksCredentials,
-        parse_think_blocks: bool,
-    ) -> Self {
+    pub fn new(model_name: String, credentials: FireworksCredentials) -> Self {
         FireworksProvider {
             model_name,
             credentials,
-            parse_think_blocks,
         }
     }
 
     pub fn model_name(&self) -> &str {
         &self.model_name
     }
-}
-
-pub fn default_parse_think_blocks() -> bool {
-    true
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -250,7 +244,6 @@ impl InferenceProvider for FireworksProvider {
                 raw_request,
                 generic_request: request,
                 raw_response,
-                parse_think_blocks: self.parse_think_blocks,
                 model_inference_id,
             }
             .try_into()?)
@@ -319,13 +312,7 @@ impl InferenceProvider for FireworksProvider {
         )
         .await?;
         // Use our own stream implementation to handle thinking blocks
-        let stream = stream_fireworks(
-            event_source,
-            start_time,
-            self.parse_think_blocks,
-            model_inference_id,
-        )
-        .peekable();
+        let stream = stream_fireworks(event_source, start_time, model_inference_id).peekable();
         Ok((stream, raw_request))
     }
 
@@ -519,14 +506,268 @@ pub async fn prepare_fireworks_messages<'a>(
     messages: &'a [RequestMessage],
     config: OpenAIMessagesConfig<'a>,
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut output_messages = Vec::with_capacity(messages.len());
-    for message in messages {
-        output_messages.extend(tensorzero_to_openai_messages(message, config).await?);
+    // Convert all messages concurrently, then assemble in order.
+    enum ConvertedMessage<'a> {
+        Assistant(OpenAIRequestMessage<'a>),
+        Other(Vec<OpenAIRequestMessage<'a>>),
     }
+
+    let conversion_futures: Vec<_> = messages
+        .iter()
+        .map(|msg| async move {
+            match msg.role {
+                Role::Assistant => {
+                    let m = tensorzero_to_fireworks_assistant_message(
+                        Cow::Borrowed(&msg.content),
+                        config,
+                    )
+                    .await?;
+                    Ok(ConvertedMessage::Assistant(m))
+                }
+                Role::User => {
+                    let openai_msgs = tensorzero_to_openai_messages(msg, config).await?;
+                    Ok(ConvertedMessage::Other(openai_msgs))
+                }
+            }
+        })
+        .collect();
+
+    let converted: Vec<Result<ConvertedMessage<'a>, Error>> =
+        futures::future::join_all(conversion_futures).await;
+
+    let mut output_messages: Vec<OpenAIRequestMessage<'a>> = Vec::new();
+
     if let Some(system_msg) = tensorzero_to_fireworks_system_message(system) {
-        output_messages.insert(0, system_msg);
+        output_messages.push(system_msg);
     }
+
+    for result in converted {
+        match result? {
+            ConvertedMessage::Assistant(msg) => {
+                if !msg.no_content() {
+                    output_messages.push(msg);
+                }
+            }
+            ConvertedMessage::Other(msgs) => {
+                output_messages.extend(msgs);
+            }
+        }
+    }
+
     Ok(output_messages)
+}
+
+/// Converts assistant content blocks to a Fireworks-compatible request message.
+///
+/// Dispatches thought blocks based on `extra_data.reasoning_format`:
+/// - `"reasoning_field"` or `None` → accumulated into the `reasoning_content` field
+/// - `"think_tags"` → wrapped in `<think>…</think>` and prepended to content blocks
+pub async fn tensorzero_to_fireworks_assistant_message<'a>(
+    content_blocks: Cow<'a, [ContentBlock]>,
+    messages_config: OpenAIMessagesConfig<'a>,
+) -> Result<OpenAIRequestMessage<'a>, Error> {
+    let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
+        Cow::Borrowed(content_blocks) => content_blocks.iter().map(Cow::Borrowed).collect(),
+        Cow::Owned(content_blocks) => content_blocks.into_iter().map(Cow::Owned).collect(),
+    };
+
+    let mut assistant_content_blocks = Vec::new();
+    let mut assistant_tool_calls = Vec::new();
+    let mut reasoning_content: Option<Cow<'_, str>> = None;
+    let mut think_tag_texts: Vec<String> = Vec::new();
+    let mut thought_blocks_for_discard: Vec<Cow<'_, Thought>> = Vec::new();
+
+    for block in content_block_cows {
+        match block {
+            Cow::Borrowed(ContentBlock::Text(tensorzero_types::content::Text { text })) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Text {
+                    text: Cow::Borrowed(text),
+                });
+            }
+            Cow::Owned(ContentBlock::Text(tensorzero_types::content::Text { text })) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Text {
+                    text: Cow::Owned(text),
+                });
+            }
+            Cow::Borrowed(ContentBlock::ToolCall(tool_call)) => {
+                assistant_tool_calls.push(OpenAIRequestToolCall {
+                    id: Cow::Borrowed(&tool_call.id),
+                    r#type: OpenAIToolType::Function,
+                    function: OpenAIRequestFunctionCall {
+                        name: Cow::Borrowed(&tool_call.name),
+                        arguments: Cow::Borrowed(&tool_call.arguments),
+                    },
+                });
+            }
+            Cow::Owned(ContentBlock::ToolCall(tool_call)) => {
+                assistant_tool_calls.push(OpenAIRequestToolCall {
+                    id: Cow::Owned(tool_call.id),
+                    r#type: OpenAIToolType::Function,
+                    function: OpenAIRequestFunctionCall {
+                        name: Cow::Owned(tool_call.name),
+                        arguments: Cow::Owned(tool_call.arguments),
+                    },
+                });
+            }
+            Cow::Borrowed(ContentBlock::ToolResult(_))
+            | Cow::Owned(ContentBlock::ToolResult(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: "Tool results are not supported in assistant messages".to_string(),
+                }));
+            }
+            Cow::Borrowed(ContentBlock::File(file)) => {
+                assistant_content_blocks
+                    .push(super::openai::prepare_file_message(file, messages_config).await?);
+            }
+            Cow::Owned(ContentBlock::File(ref file)) => {
+                assistant_content_blocks
+                    .push(super::openai::prepare_file_message(file, messages_config).await?);
+            }
+            Cow::Borrowed(ContentBlock::Thought(thought)) => {
+                debug_assert!(
+                    thought.provider_type.as_deref().is_none()
+                        || thought.provider_type.as_deref() == Some(messages_config.provider_type)
+                );
+
+                let format = thought
+                    .extra_data
+                    .as_ref()
+                    .and_then(|d| d.get("reasoning_format"))
+                    .and_then(|v| v.as_str());
+
+                match format {
+                    Some("think_tags") => {
+                        if let Some(text) = &thought.text {
+                            think_tag_texts.push(text.clone());
+                        }
+                    }
+                    Some("reasoning_field") | None => {
+                        if let Some(text) = &thought.text {
+                            match &mut reasoning_content {
+                                Some(existing) => {
+                                    let combined = format!("{}\n\n{}", existing.as_ref(), text);
+                                    reasoning_content = Some(Cow::Owned(combined));
+                                }
+                                None => {
+                                    reasoning_content = Some(Cow::Borrowed(text));
+                                }
+                            }
+                        }
+                    }
+                    Some(other) => {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: format!(
+                                "Unknown `reasoning_format` value in thought `extra_data`: `{other}`"
+                            ),
+                        }));
+                    }
+                }
+
+                thought_blocks_for_discard.push(Cow::Borrowed(thought));
+            }
+            Cow::Owned(ContentBlock::Thought(thought)) => {
+                debug_assert!(
+                    thought.provider_type.as_deref().is_none()
+                        || thought.provider_type.as_deref() == Some(messages_config.provider_type)
+                );
+
+                let format = thought
+                    .extra_data
+                    .as_ref()
+                    .and_then(|d| d.get("reasoning_format"))
+                    .and_then(|v| v.as_str());
+
+                match format {
+                    Some("think_tags") => {
+                        if let Some(text) = &thought.text {
+                            think_tag_texts.push(text.clone());
+                        }
+                    }
+                    Some("reasoning_field") | None => {
+                        if let Some(text) = &thought.text {
+                            match &mut reasoning_content {
+                                Some(existing) => {
+                                    let combined = format!("{}\n\n{}", existing.as_ref(), text);
+                                    reasoning_content = Some(Cow::Owned(combined));
+                                }
+                                None => {
+                                    reasoning_content = Some(Cow::Owned(text.clone()));
+                                }
+                            }
+                        }
+                    }
+                    Some(other) => {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: format!(
+                                "Unknown `reasoning_format` value in thought `extra_data`: `{other}`"
+                            ),
+                        }));
+                    }
+                }
+
+                thought_blocks_for_discard.push(Cow::Owned(thought));
+            }
+            Cow::Borrowed(ContentBlock::Unknown(tensorzero_types::content::Unknown {
+                data,
+                ..
+            })) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Unknown {
+                    data: Cow::Borrowed(data),
+                });
+            }
+            Cow::Owned(ContentBlock::Unknown(tensorzero_types::content::Unknown {
+                data, ..
+            })) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Unknown {
+                    data: Cow::Owned(data),
+                });
+            }
+        }
+    }
+
+    // Prepend think-tag reasoning to content blocks
+    if !think_tag_texts.is_empty() {
+        let combined = think_tag_texts.join("\n\n");
+        let think_block = format!("<think>{combined}</think>");
+        assistant_content_blocks.insert(
+            0,
+            OpenAIContentBlock::Text {
+                text: Cow::Owned(think_block),
+            },
+        );
+    }
+
+    let content = match assistant_content_blocks.len() {
+        0 => None,
+        _ => Some(assistant_content_blocks),
+    };
+
+    let tool_calls = match assistant_tool_calls.len() {
+        0 => None,
+        _ => Some(assistant_tool_calls),
+    };
+
+    // Most providers require at least one content element or tool call in
+    // assistant messages, so reasoning_content alone is not enough.
+    // Drop reasoning_content and warn when there's nothing else to carry it.
+    if content.is_none() && tool_calls.is_none() {
+        for thought in &thought_blocks_for_discard {
+            warn_discarded_thought_block(messages_config.provider_type, thought);
+        }
+    }
+    let reasoning_content = if content.is_some() || tool_calls.is_some() {
+        reasoning_content
+    } else {
+        None
+    };
+
+    Ok(OpenAIRequestMessage::Assistant(
+        OpenAIAssistantRequestMessage {
+            content,
+            tool_calls,
+            reasoning_content,
+        },
+    ))
 }
 
 fn tensorzero_to_fireworks_system_message(
@@ -571,48 +812,12 @@ impl<'a> From<&'a FunctionToolConfig> for FireworksTool<'a> {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct FireworksResponseFunctionCall {
-    name: String,
-    arguments: String,
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct FireworksResponseToolCall {
-    id: String,
-    r#type: OpenAIToolType,
-    function: FireworksResponseFunctionCall,
-}
-
-impl From<FireworksResponseToolCall> for ToolCall {
-    fn from(fireworks_tool_call: FireworksResponseToolCall) -> Self {
-        ToolCall {
-            id: fireworks_tool_call.id,
-            name: fireworks_tool_call.function.name,
-            arguments: fireworks_tool_call.function.arguments,
-        }
+fn fireworks_tool_call_to_tensorzero(fireworks_tool_call: FireworksResponseToolCall) -> ToolCall {
+    ToolCall {
+        id: fireworks_tool_call.id,
+        name: fireworks_tool_call.function.name,
+        arguments: fireworks_tool_call.function.arguments,
     }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct FireworksResponseMessage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<FireworksResponseToolCall>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
-enum FireworksFinishReason {
-    Stop,
-    Length,
-    ToolCalls,
-    ContentFilter,
-    #[serde(other)]
-    Unknown,
 }
 
 impl From<FireworksFinishReason> for FinishReason {
@@ -627,66 +832,11 @@ impl From<FireworksFinishReason> for FinishReason {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct FireworksResponseChoice {
-    index: u8,
-    message: FireworksResponseMessage,
-    finish_reason: Option<FireworksFinishReason>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct FireworksResponse {
-    choices: Vec<FireworksResponseChoice>,
-    usage: OpenAIUsage,
-}
-
-// Streaming-specific structs
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct FireworksFunctionCallChunk {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    arguments: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct FireworksToolCallChunk {
-    index: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    function: FireworksFunctionCallChunk,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct FireworksDelta {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<FireworksToolCallChunk>>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct FireworksChatChunkChoice {
-    delta: FireworksDelta,
-    #[serde(default)]
-    finish_reason: Option<FireworksFinishReason>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct FireworksChatChunk {
-    choices: Vec<FireworksChatChunkChoice>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<OpenAIUsage>,
-}
-
 /// Streams the Fireworks response events and converts them into ProviderInferenceResponseChunks
 /// This function handles parsing and processing of thinking blocks with proper state tracking
 fn stream_fireworks(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
-    parse_think_blocks: bool,
     model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
@@ -731,7 +881,6 @@ fn stream_fireworks(
                                 latency,
                                 &mut tool_call_ids,
                                 &mut thinking_state,
-                                parse_think_blocks,
                                 model_inference_id,
                                 PROVIDER_TYPE,
                             )
@@ -748,15 +897,15 @@ fn stream_fireworks(
 ///
 /// This function handles the conversion of Fireworks chat chunks into TensorZero chunks.
 /// It processes the content and tool calls from the Fireworks response, updating the tool call IDs and names.
-/// If parsing think blocks is enabled, it also processes the thinking state and extracts reasoning.
-#[expect(clippy::too_many_arguments)]
+/// Think blocks in content are always parsed; reasoning from the `reasoning_content` field
+/// is tagged with `reasoning_format: "reasoning_field"`, while `<think>` tags are tagged
+/// with `reasoning_format: "think_tags"`.
 fn fireworks_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: FireworksChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     thinking_state: &mut ThinkingState,
-    parse_think_blocks: bool,
     model_inference_id: Uuid,
     provider_type: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
@@ -778,7 +927,7 @@ fn fireworks_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(OpenAIUsage::into);
+    let usage = chunk.usage.map(|u| u.into());
     let mut finish_reason = None;
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
@@ -791,40 +940,32 @@ fn fireworks_to_tensorzero_chunk(
                 signature: None,
                 summary_id: None,
                 summary_text: None,
-                id: THINK_CHUNK_ID.to_string(),
+                id: REASONING_FIELD_CHUNK_ID.to_string(),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
-                extra_data: None,
+                extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
             }));
         }
-        if let Some(text) = choice.delta.content {
-            if parse_think_blocks {
-                if !thinking_state.update(&text, PROVIDER_TYPE, ApiType::ChatCompletions)? {
-                    match thinking_state {
-                        ThinkingState::Normal | ThinkingState::Finished => {
-                            content.push(ContentBlockChunk::Text(TextChunk {
-                                text: text.to_string(),
-                                id: thinking_state.get_id(),
-                            }));
-                        }
-                        ThinkingState::Thinking => {
-                            content.push(ContentBlockChunk::Thought(ThoughtChunk {
-                                text: Some(text.to_string()),
-                                signature: None,
-                                summary_id: None,
-                                summary_text: None,
-                                id: thinking_state.get_id(),
-                                provider_type: Some(PROVIDER_TYPE.to_string()),
-                                extra_data: None,
-                            }));
-                        }
-                    }
+        if let Some(text) = choice.delta.content
+            && !thinking_state.update(&text, PROVIDER_TYPE, ApiType::ChatCompletions)?
+        {
+            match thinking_state {
+                ThinkingState::Normal | ThinkingState::Finished => {
+                    content.push(ContentBlockChunk::Text(TextChunk {
+                        text: text.to_string(),
+                        id: thinking_state.get_id(),
+                    }));
                 }
-            } else {
-                // Just add the text verbatim if we're not parsing think blocks.
-                content.push(ContentBlockChunk::Text(TextChunk {
-                    text: text.to_string(),
-                    id: "0".to_string(),
-                }));
+                ThinkingState::Thinking => {
+                    content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some(text.to_string()),
+                        signature: None,
+                        summary_id: None,
+                        summary_text: None,
+                        id: thinking_state.get_id(),
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
+                    }));
+                }
             }
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
@@ -879,7 +1020,6 @@ struct FireworksResponseWithMetadata<'a> {
     latency: Latency,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
-    parse_think_blocks: bool,
     model_inference_id: Uuid,
 }
 
@@ -892,7 +1032,6 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             raw_request,
             generic_request,
             raw_response,
-            parse_think_blocks,
             model_inference_id,
         } = value;
         if response.choices.len() != 1 {
@@ -930,23 +1069,19 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 signature: None,
                 summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
-                extra_data: None,
+                extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
             }));
         }
         if let Some(raw_text) = message.content {
-            let (clean_text, extracted_reasoning) = process_think_blocks(
-                &raw_text,
-                parse_think_blocks,
-                PROVIDER_TYPE,
-                ApiType::ChatCompletions,
-            )?;
+            let (clean_text, extracted_reasoning) =
+                process_think_blocks(&raw_text, true, PROVIDER_TYPE, ApiType::ChatCompletions)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
                     text: Some(reasoning),
                     signature: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
-                    extra_data: None,
+                    extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
                 }));
             }
             if !clean_text.is_empty() {
@@ -955,7 +1090,9 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    fireworks_tool_call_to_tensorzero(tool_call),
+                ));
             }
         }
         let raw_usage = fireworks_usage_from_raw_response(&raw_response).map(|usage| {
@@ -997,12 +1134,13 @@ fn fireworks_usage_from_raw_response(raw_response: &str) -> Option<Value> {
 mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
+    use tensorzero_types_providers::openai::OpenAIUsage;
     use uuid::Uuid;
 
     use super::*;
 
     use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
-    use crate::providers::openai::{OpenAIToolType, OpenAIUsage};
+    use crate::providers::openai::OpenAIToolType;
     use crate::providers::openai::{SpecificToolChoice, SpecificToolFunction};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
@@ -1048,48 +1186,7 @@ mod tests {
             },
         };
 
-        // Test with parsing enabled
-        let fireworks_response_with_metadata = FireworksResponseWithMetadata {
-            response: valid_response.clone(),
-            raw_response: "test_response".to_string(),
-            latency: Latency::NonStreaming {
-                response_time: Duration::from_secs(0),
-            },
-            raw_request: serde_json::to_string(
-                &FireworksRequest::new("test-model", &generic_request)
-                    .await
-                    .unwrap(),
-            )
-            .unwrap(),
-            generic_request: &generic_request,
-            parse_think_blocks: true,
-            model_inference_id: Uuid::now_v7(),
-        };
-
-        let inference_response: ProviderInferenceResponse =
-            fireworks_response_with_metadata.try_into().unwrap();
-
-        // Should have two content blocks: thought and text
-        assert_eq!(inference_response.output.len(), 2);
-
-        // First block should be a thought
-        match &inference_response.output[0] {
-            ContentBlockOutput::Thought(thought) => {
-                assert_eq!(thought.text, Some("This is reasoning".to_string()));
-                assert_eq!(thought.signature, None);
-            }
-            _ => panic!("Expected a thought block"),
-        }
-
-        // Second block should be text
-        match &inference_response.output[1] {
-            ContentBlockOutput::Text(text) => {
-                assert_eq!(text.text, "Hello  world".to_string());
-            }
-            _ => panic!("Expected a text block"),
-        }
-
-        // Test with parsing disabled
+        // Think blocks are always parsed now
         let fireworks_response_with_metadata = FireworksResponseWithMetadata {
             response: valid_response,
             raw_response: "test_response".to_string(),
@@ -1103,20 +1200,37 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
-            parse_think_blocks: false,
             model_inference_id: Uuid::now_v7(),
         };
 
         let inference_response: ProviderInferenceResponse =
             fireworks_response_with_metadata.try_into().unwrap();
 
-        // Should have only one content block with the original text
-        assert_eq!(inference_response.output.len(), 1);
+        // Should have two content blocks: thought and text
+        assert_eq!(
+            inference_response.output.len(),
+            2,
+            "expected thought + text blocks"
+        );
 
-        // Block should be text with thinking tags preserved
+        // First block should be a thought with think_tags format
         match &inference_response.output[0] {
+            ContentBlockOutput::Thought(thought) => {
+                assert_eq!(thought.text, Some("This is reasoning".to_string()));
+                assert_eq!(thought.signature, None);
+                assert_eq!(
+                    thought.extra_data,
+                    Some(serde_json::json!({"reasoning_format": "think_tags"})),
+                    "expected think_tags reasoning_format"
+                );
+            }
+            _ => panic!("Expected a thought block"),
+        }
+
+        // Second block should be text
+        match &inference_response.output[1] {
             ContentBlockOutput::Text(text) => {
-                assert_eq!(text.text, test_response_with_thinking);
+                assert_eq!(text.text, "Hello  world".to_string());
             }
             _ => panic!("Expected a text block"),
         }
@@ -1270,7 +1384,6 @@ mod tests {
             )
             .unwrap(),
             generic_request: &generic_request,
-            parse_think_blocks: false,
             model_inference_id: Uuid::now_v7(),
         };
         let inference_response: ProviderInferenceResponse =
@@ -1313,7 +1426,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1353,7 +1465,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1399,7 +1510,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             model_inference_id,
             PROVIDER_TYPE,
         )
@@ -1455,14 +1565,12 @@ mod tests {
         let mut tool_call_ids = Vec::new();
         let mut thinking_state = ThinkingState::Normal;
 
-        // With parsing enabled
         let result = fireworks_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk.clone(),
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1492,7 +1600,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1500,12 +1607,18 @@ mod tests {
 
         // Should still be in Thinking state
         assert!(matches!(thinking_state, ThinkingState::Thinking));
-        // Content should be added as thought
-        assert_eq!(result.content.len(), 1);
-        assert!(matches!(result.content[0], ContentBlockChunk::Thought(_)));
+        // Content should be added as thought with think_tags format
+        assert_eq!(result.content.len(), 1, "expected one thought chunk");
         if let ContentBlockChunk::Thought(thought) = &result.content[0] {
             assert_eq!(thought.text, Some("reasoning".to_string()));
             assert_eq!(thought.id, "1");
+            assert_eq!(
+                thought.extra_data,
+                Some(serde_json::json!({"reasoning_format": "think_tags"})),
+                "expected think_tags reasoning_format on streaming thought"
+            );
+        } else {
+            panic!("Expected a thought chunk");
         }
 
         // Close the thinking block
@@ -1527,7 +1640,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1557,7 +1669,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1567,45 +1678,342 @@ mod tests {
         assert!(matches!(thinking_state, ThinkingState::Finished));
         // Content should be added as text
         assert_eq!(result.content.len(), 1);
-        assert!(matches!(result.content[0], ContentBlockChunk::Text(_)));
         if let ContentBlockChunk::Text(text) = &result.content[0] {
             assert_eq!(text.text, "Final answer");
             assert_eq!(text.id, "2");
+        } else {
+            panic!("Expected a text chunk");
         }
     }
 
     #[tokio::test]
-    async fn test_fireworks_to_tensorzero_chunk_without_think_parsing() {
+    async fn test_fireworks_to_tensorzero_chunk_reasoning_content() {
+        // Test that streaming reasoning_content delta uses REASONING_FIELD_CHUNK_ID
         let chunk = FireworksChatChunk {
             choices: vec![FireworksChatChunkChoice {
                 delta: FireworksDelta {
-                    content: Some("Hello <think>should not parse</think>".to_string()),
-                    reasoning_content: None,
+                    content: None,
+                    reasoning_content: Some("step-by-step reasoning".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: Some(FireworksFinishReason::Stop),
+                finish_reason: None,
             }],
             usage: None,
         };
-        let mut tool_call_ids = vec![];
+
+        let mut tool_call_ids = Vec::new();
         let mut thinking_state = ThinkingState::Normal;
-        let message = fireworks_to_tensorzero_chunk(
+
+        let result = fireworks_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk,
-            Duration::from_millis(50),
+            Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            false,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
         .unwrap();
+
+        assert_eq!(result.content.len(), 1, "expected one thought chunk");
+        if let ContentBlockChunk::Thought(thought) = &result.content[0] {
+            assert_eq!(thought.text, Some("step-by-step reasoning".to_string()));
+            assert_eq!(
+                thought.id,
+                REASONING_FIELD_CHUNK_ID.to_string(),
+                "expected REASONING_FIELD_CHUNK_ID for reasoning_content"
+            );
+            assert_eq!(
+                thought.extra_data,
+                Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+                "expected reasoning_field format"
+            );
+        } else {
+            panic!("Expected a thought chunk");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_fireworks_response_with_reasoning_content_field() {
+        // Test non-streaming response with reasoning_content field
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let response = FireworksResponse {
+            choices: vec![FireworksResponseChoice {
+                index: 0,
+                finish_reason: Some(FireworksFinishReason::Stop),
+                message: FireworksResponseMessage {
+                    reasoning_content: Some("I need to think about this".to_string()),
+                    content: Some("The answer is 42".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: Some(5),
+                completion_tokens: Some(15),
+            },
+        };
+
+        let fireworks_response_with_metadata = FireworksResponseWithMetadata {
+            response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            raw_request: "test_request".to_string(),
+            generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
+        };
+
+        let result: ProviderInferenceResponse =
+            fireworks_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(result.output.len(), 2, "expected thought + text blocks");
+
+        // First block: thought from reasoning_content field
+        match &result.output[0] {
+            ContentBlockOutput::Thought(thought) => {
+                assert_eq!(thought.text, Some("I need to think about this".to_string()));
+                assert_eq!(
+                    thought.extra_data,
+                    Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+                    "expected reasoning_field format for reasoning_content"
+                );
+            }
+            _ => panic!("Expected a thought block"),
+        }
+
+        // Second block: text content
+        match &result.output[1] {
+            ContentBlockOutput::Text(text) => {
+                assert_eq!(text.text, "The answer is 42");
+            }
+            _ => panic!("Expected a text block"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_fireworks_response_with_both_reasoning_sources() {
+        // Test non-streaming response with both reasoning_content field AND <think> tags
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let response = FireworksResponse {
+            choices: vec![FireworksResponseChoice {
+                index: 0,
+                finish_reason: Some(FireworksFinishReason::Stop),
+                message: FireworksResponseMessage {
+                    reasoning_content: Some("field reasoning".to_string()),
+                    content: Some("<think>tag reasoning</think>The final answer".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: Some(5),
+                completion_tokens: Some(15),
+            },
+        };
+
+        let fireworks_response_with_metadata = FireworksResponseWithMetadata {
+            response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            raw_request: "test_request".to_string(),
+            generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
+        };
+
+        let result: ProviderInferenceResponse =
+            fireworks_response_with_metadata.try_into().unwrap();
+
         assert_eq!(
-            message.content,
-            vec![ContentBlockChunk::Text(TextChunk {
-                text: "Hello <think>should not parse</think>".to_string(),
-                id: "0".to_string(),
-            })]
+            result.output.len(),
+            3,
+            "expected reasoning_field thought + think_tags thought + text"
+        );
+
+        // First: reasoning_content field thought
+        match &result.output[0] {
+            ContentBlockOutput::Thought(thought) => {
+                assert_eq!(thought.text, Some("field reasoning".to_string()));
+                assert_eq!(
+                    thought.extra_data,
+                    Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+                );
+            }
+            _ => panic!("Expected a thought block from reasoning_content"),
+        }
+
+        // Second: think tag thought
+        match &result.output[1] {
+            ContentBlockOutput::Thought(thought) => {
+                assert_eq!(thought.text, Some("tag reasoning".to_string()));
+                assert_eq!(
+                    thought.extra_data,
+                    Some(serde_json::json!({"reasoning_format": "think_tags"})),
+                );
+            }
+            _ => panic!("Expected a thought block from think tags"),
+        }
+
+        // Third: text content
+        match &result.output[2] {
+            ContentBlockOutput::Text(text) => {
+                assert_eq!(text.text, "The final answer");
+            }
+            _ => panic!("Expected a text block"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tensorzero_to_fireworks_assistant_message_reasoning_field() {
+        // Thought with reasoning_field format should go to reasoning_content
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("my reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+            }),
+            ContentBlock::Text(tensorzero_types::content::Text {
+                text: "the answer".to_string(),
+            }),
+        ];
+        let config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let msg = tensorzero_to_fireworks_assistant_message(Cow::Borrowed(&content_blocks), config)
+            .await
+            .unwrap();
+        if let OpenAIRequestMessage::Assistant(assistant) = msg {
+            assert_eq!(
+                assistant.reasoning_content,
+                Some(Cow::Borrowed("my reasoning")),
+                "expected reasoning_content to contain the thought"
+            );
+            assert!(
+                assistant.content.is_some(),
+                "expected content to be present"
+            );
+        } else {
+            panic!("Expected an Assistant message");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tensorzero_to_fireworks_assistant_message_think_tags() {
+        // Thought with think_tags format should be wrapped in <think> tags in content
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("tag reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
+            }),
+            ContentBlock::Text(tensorzero_types::content::Text {
+                text: "the answer".to_string(),
+            }),
+        ];
+        let config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let msg = tensorzero_to_fireworks_assistant_message(Cow::Borrowed(&content_blocks), config)
+            .await
+            .unwrap();
+        if let OpenAIRequestMessage::Assistant(assistant) = msg {
+            assert_eq!(
+                assistant.reasoning_content, None,
+                "reasoning_content should be None for think_tags"
+            );
+            let content = assistant.content.unwrap();
+            // First block should be the think tag wrapper
+            assert_eq!(content.len(), 2, "expected think tag block + text block");
+            match &content[0] {
+                OpenAIContentBlock::Text { text } => {
+                    assert_eq!(text.as_ref(), "<think>tag reasoning</think>");
+                }
+                _ => panic!("Expected text content block with think tags"),
+            }
+        } else {
+            panic!("Expected an Assistant message");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tensorzero_to_fireworks_assistant_message_invalid_reasoning_format() {
+        // Thought with an unknown reasoning_format should return an error
+        let content_blocks = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "unknown_format"})),
+            }),
+            ContentBlock::Text(tensorzero_types::content::Text {
+                text: "the answer".to_string(),
+            }),
+        ];
+        let config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let result =
+            tensorzero_to_fireworks_assistant_message(Cow::Owned(content_blocks), config).await;
+        assert!(result.is_err(), "should error on unknown reasoning_format");
+        let err = result.unwrap_err();
+        let details = err.get_details();
+        assert!(
+            matches!(details, ErrorDetails::InvalidMessage { message } if message.contains("unknown_format")),
+            "error should mention the unknown format value"
         );
     }
 
@@ -1640,7 +2048,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1684,7 +2091,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )

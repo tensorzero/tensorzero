@@ -1,15 +1,16 @@
 use std::{borrow::Cow, time::Duration};
 
-use crate::inference::types::RequestMessage;
+use crate::error::warn_discarded_thought_block;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::{ContentBlock, RequestMessage, Role};
 use crate::providers::openai::OpenAIMessagesConfig;
-use futures::{StreamExt, future::try_join_all};
+use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
@@ -40,14 +41,21 @@ use crate::{
     tool::{ToolCall, ToolCallChunk},
 };
 
-use super::helpers_thinking_block::{ThinkingState, process_think_blocks};
+use super::helpers_thinking_block::{
+    REASONING_FIELD_CHUNK_ID, ThinkingState, process_think_blocks,
+};
 use super::openai::{
-    OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolType, OpenAIUsage, get_chat_url,
-    handle_openai_error, tensorzero_to_openai_messages,
+    OpenAIContentBlock, OpenAIRequestMessage, OpenAIRequestToolCall, OpenAISystemRequestMessage,
+    OpenAIToolRequestMessage, OpenAIUserRequestMessage, get_chat_url, handle_openai_error,
+    prepare_file_message, serialize_optional_text_content_vec, tensorzero_to_openai_messages,
 };
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{
     ChatCompletionTool, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
+};
+use tensorzero_types_providers::together::{
+    TogetherChatChunk, TogetherFinishReason, TogetherResponse, TogetherResponseChoice,
+    TogetherResponseToolCall,
 };
 use uuid::Uuid;
 
@@ -68,23 +76,13 @@ pub struct TogetherProvider {
     model_name: String,
     #[serde(skip)]
     credentials: TogetherCredentials,
-    parse_think_blocks: bool,
-}
-
-pub fn default_parse_think_blocks() -> bool {
-    true
 }
 
 impl TogetherProvider {
-    pub fn new(
-        model_name: String,
-        credentials: TogetherCredentials,
-        parse_think_blocks: bool,
-    ) -> Self {
+    pub fn new(model_name: String, credentials: TogetherCredentials) -> Self {
         TogetherProvider {
             model_name,
             credentials,
-            parse_think_blocks,
         }
     }
 
@@ -242,7 +240,6 @@ impl InferenceProvider for TogetherProvider {
                 },
                 raw_request: raw_request.clone(),
                 generic_request: request,
-                parse_think_blocks: self.parse_think_blocks,
                 model_inference_id,
             }
             .try_into()?)
@@ -315,13 +312,7 @@ impl InferenceProvider for TogetherProvider {
             request_builder,
         )
         .await?;
-        let stream = stream_together(
-            event_source,
-            start_time,
-            self.parse_think_blocks,
-            model_inference_id,
-        )
-        .peekable();
+        let stream = stream_together(event_source, start_time, model_inference_id).peekable();
         Ok((stream, raw_request))
     }
 
@@ -360,6 +351,28 @@ enum TogetherResponseFormat<'a> {
     },
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct TogetherAssistantRequestMessage<'a> {
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_optional_text_content_vec"
+    )]
+    content: Option<Vec<OpenAIContentBlock<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<Cow<'a, str>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "role", rename_all = "lowercase")]
+pub enum TogetherRequestMessage<'a> {
+    System(OpenAISystemRequestMessage<'a>),
+    User(OpenAIUserRequestMessage<'a>),
+    Assistant(TogetherAssistantRequestMessage<'a>),
+    Tool(OpenAIToolRequestMessage<'a>),
+}
+
 /// This struct defines the supported parameters for the Together inference API
 /// See the [Together API documentation](https://docs.together.ai/docs/chat-overview)
 /// for more details.
@@ -369,7 +382,7 @@ enum TogetherResponseFormat<'a> {
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(Default))]
 struct TogetherRequest<'a> {
-    messages: Vec<OpenAIRequestMessage<'a>>,
+    messages: Vec<TogetherRequestMessage<'a>>,
     #[cfg_attr(test, serde(default))]
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -503,75 +516,270 @@ pub async fn prepare_together_messages<'a>(
     system: Option<&'a str>,
     request_messages: &'a [RequestMessage],
     config: OpenAIMessagesConfig<'a>,
-) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
-    let mut messages: Vec<_> = try_join_all(
-        request_messages
-            .iter()
-            .map(|msg| tensorzero_to_openai_messages(msg, config)),
-    )
-    .await?
-    .into_iter()
-    .flatten()
-    .collect();
+) -> Result<Vec<TogetherRequestMessage<'a>>, Error> {
+    // Convert all messages concurrently, then assemble in order.
+    // Each slot holds either converted OpenAI messages (for user) or a Together assistant message.
+    enum ConvertedMessage<'a> {
+        User(Vec<OpenAIRequestMessage<'a>>),
+        Assistant(TogetherRequestMessage<'a>),
+    }
+
+    let conversion_futures: Vec<_> = request_messages
+        .iter()
+        .map(|msg| async move {
+            match msg.role {
+                Role::User => {
+                    let openai_msgs = tensorzero_to_openai_messages(msg, config).await?;
+                    Ok(ConvertedMessage::User(openai_msgs))
+                }
+                Role::Assistant => {
+                    let msg = tensorzero_to_together_assistant_message(
+                        Cow::Borrowed(&msg.content),
+                        config,
+                    )
+                    .await?;
+                    Ok(ConvertedMessage::Assistant(msg))
+                }
+            }
+        })
+        .collect();
+
+    let converted: Vec<Result<ConvertedMessage<'a>, Error>> =
+        futures::future::join_all(conversion_futures).await;
+
+    let mut messages: Vec<TogetherRequestMessage<'a>> = Vec::new();
 
     if let Some(system_msg) = tensorzero_to_together_system_message(system) {
-        messages.insert(0, system_msg);
+        messages.push(system_msg);
     }
+
+    for result in converted {
+        match result? {
+            ConvertedMessage::User(openai_msgs) => {
+                for openai_msg in openai_msgs {
+                    messages.push(match openai_msg {
+                        OpenAIRequestMessage::User(u) => TogetherRequestMessage::User(u),
+                        OpenAIRequestMessage::Tool(t) => TogetherRequestMessage::Tool(t),
+                        other => {
+                            return Err(Error::new(ErrorDetails::InvalidMessage {
+                                message: format!(
+                                    "Unexpected message type from user message conversion: {other:?}"
+                                ),
+                            }));
+                        }
+                    });
+                }
+            }
+            ConvertedMessage::Assistant(msg) => {
+                // Skip empty assistant messages (same as the shared OpenAI path)
+                if let TogetherRequestMessage::Assistant(ref a) = msg
+                    && a.content.is_none()
+                    && a.tool_calls.is_none()
+                {
+                    continue;
+                }
+                messages.push(msg);
+            }
+        }
+    }
+
     Ok(messages)
 }
 
-fn tensorzero_to_together_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
+pub async fn tensorzero_to_together_assistant_message<'a>(
+    content_blocks: Cow<'a, [ContentBlock]>,
+    messages_config: OpenAIMessagesConfig<'a>,
+) -> Result<TogetherRequestMessage<'a>, Error> {
+    let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
+        Cow::Borrowed(content_blocks) => content_blocks.iter().map(Cow::Borrowed).collect(),
+        Cow::Owned(content_blocks) => content_blocks.into_iter().map(Cow::Owned).collect(),
+    };
+
+    let mut assistant_content_blocks = Vec::new();
+    let mut assistant_tool_calls = Vec::new();
+    let mut reasoning_field_text: Option<String> = None;
+    let mut think_tag_text: Option<String> = None;
+    let mut thought_blocks: Vec<Cow<'_, Thought>> = Vec::new();
+
+    for block in content_block_cows {
+        match block {
+            Cow::Borrowed(ContentBlock::Text(Text { text })) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Text {
+                    text: Cow::Borrowed(text),
+                });
+            }
+            Cow::Owned(ContentBlock::Text(Text { text })) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Text {
+                    text: Cow::Owned(text),
+                });
+            }
+            Cow::Borrowed(ContentBlock::ToolCall(tool_call)) => {
+                assistant_tool_calls.push(OpenAIRequestToolCall::from(tool_call));
+            }
+            Cow::Owned(ContentBlock::ToolCall(tool_call)) => {
+                assistant_tool_calls.push(OpenAIRequestToolCall::from(tool_call));
+            }
+            Cow::Borrowed(ContentBlock::ToolResult(_))
+            | Cow::Owned(ContentBlock::ToolResult(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message: "Tool results are not supported in assistant messages".to_string(),
+                }));
+            }
+            Cow::Borrowed(ContentBlock::File(file)) => {
+                assistant_content_blocks.push(prepare_file_message(file, messages_config).await?);
+            }
+            Cow::Owned(ContentBlock::File(ref file)) => {
+                assistant_content_blocks.push(prepare_file_message(file, messages_config).await?);
+            }
+            Cow::Borrowed(ContentBlock::Thought(thought)) => {
+                thought_blocks.push(Cow::Borrowed(thought));
+                collect_thought_by_format(
+                    thought.text.as_deref(),
+                    thought.extra_data.as_ref(),
+                    &mut reasoning_field_text,
+                    &mut think_tag_text,
+                )?;
+            }
+            Cow::Owned(ContentBlock::Thought(thought)) => {
+                collect_thought_by_format(
+                    thought.text.as_deref(),
+                    thought.extra_data.as_ref(),
+                    &mut reasoning_field_text,
+                    &mut think_tag_text,
+                )?;
+                thought_blocks.push(Cow::Owned(thought));
+            }
+            Cow::Borrowed(ContentBlock::Unknown(crate::inference::types::Unknown {
+                data, ..
+            })) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Unknown {
+                    data: Cow::Borrowed(data),
+                });
+            }
+            Cow::Owned(ContentBlock::Unknown(crate::inference::types::Unknown {
+                data, ..
+            })) => {
+                assistant_content_blocks.push(OpenAIContentBlock::Unknown {
+                    data: Cow::Owned(data),
+                });
+            }
+        }
+    }
+
+    // If there are <think> tag thoughts, prepend them to content as `<think>...</think>`
+    if let Some(think_text) = think_tag_text {
+        let wrapped = format!("<think>{think_text}</think>");
+        // Prepend to existing content blocks
+        assistant_content_blocks.insert(
+            0,
+            OpenAIContentBlock::Text {
+                text: Cow::Owned(wrapped),
+            },
+        );
+    }
+
+    let content = if assistant_content_blocks.is_empty() {
+        None
+    } else {
+        Some(assistant_content_blocks)
+    };
+
+    let tool_calls = if assistant_tool_calls.is_empty() {
+        None
+    } else {
+        Some(assistant_tool_calls)
+    };
+
+    // Drop reasoning and warn when there's nothing else to carry it.
+    if content.is_none() && tool_calls.is_none() {
+        for thought in &thought_blocks {
+            warn_discarded_thought_block(messages_config.provider_type, thought);
+        }
+    }
+    let reasoning = if content.is_some() || tool_calls.is_some() {
+        reasoning_field_text.map(Cow::Owned)
+    } else {
+        None
+    };
+
+    Ok(TogetherRequestMessage::Assistant(
+        TogetherAssistantRequestMessage {
+            content,
+            tool_calls,
+            reasoning,
+        },
+    ))
+}
+
+/// Dispatches a thought's text to either `reasoning_field_text` or `think_tag_text`
+/// based on the `reasoning_format` value in `extra_data`.
+fn collect_thought_by_format(
+    text: Option<&str>,
+    extra_data: Option<&Value>,
+    reasoning_field_text: &mut Option<String>,
+    think_tag_text: &mut Option<String>,
+) -> Result<(), Error> {
+    let Some(text) = text else {
+        return Ok(());
+    };
+
+    let format = extra_data
+        .and_then(|d| d.get("reasoning_format"))
+        .and_then(|v| v.as_str());
+
+    match format {
+        Some("reasoning_field") | None => {
+            // `None` defaults to reasoning field for backward compatibility
+            match reasoning_field_text {
+                Some(existing) => {
+                    existing.push_str("\n\n");
+                    existing.push_str(text);
+                }
+                None => {
+                    *reasoning_field_text = Some(text.to_string());
+                }
+            }
+        }
+        Some("think_tags") => match think_tag_text {
+            Some(existing) => {
+                existing.push_str("\n\n");
+                existing.push_str(text);
+            }
+            None => {
+                *think_tag_text = Some(text.to_string());
+            }
+        },
+        Some(other) => {
+            return Err(Error::new(ErrorDetails::InvalidMessage {
+                message: format!(
+                    "Unknown `reasoning_format` value in thought `extra_data`: `{other}`"
+                ),
+            }));
+        }
+    }
+
+    Ok(())
+}
+
+fn tensorzero_to_together_system_message(
+    system: Option<&str>,
+) -> Option<TogetherRequestMessage<'_>> {
     system.map(|instructions| {
-        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+        TogetherRequestMessage::System(OpenAISystemRequestMessage {
             content: Cow::Borrowed(instructions),
         })
     })
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct TogetherResponseFunctionCall {
-    name: String,
-    arguments: String,
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct TogetherResponseToolCall {
-    id: String,
-    r#type: OpenAIToolType,
-    function: TogetherResponseFunctionCall,
-}
-
-impl From<TogetherResponseToolCall> for ToolCall {
-    fn from(together_tool_call: TogetherResponseToolCall) -> Self {
-        ToolCall {
-            id: together_tool_call.id,
-            name: together_tool_call.function.name,
-            arguments: together_tool_call.function.arguments,
-        }
+fn together_tool_call_to_tool_call(together_tool_call: TogetherResponseToolCall) -> ToolCall {
+    ToolCall {
+        id: together_tool_call.id,
+        name: together_tool_call.function.name,
+        arguments: together_tool_call.function.arguments,
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherResponseMessage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<TogetherResponseToolCall>>,
-}
-
 // The thinking block processing has been moved to helpers_thinking_block.rs
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
-enum TogetherFinishReason {
-    Stop,
-    Eos,
-    Length,
-    ToolCalls,
-    FunctionCall,
-    #[serde(other)]
-    Unknown,
-}
 
 impl From<TogetherFinishReason> for FinishReason {
     fn from(finish_reason: TogetherFinishReason) -> Self {
@@ -586,28 +794,12 @@ impl From<TogetherFinishReason> for FinishReason {
     }
 }
 
-// Leaving out logprobs and finish_reason for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct TogetherResponseChoice {
-    index: u8,
-    message: TogetherResponseMessage,
-    finish_reason: Option<TogetherFinishReason>,
-}
-
-// Leaving out id, created, model, service_tier, system_fingerprint, object for now
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct TogetherResponse {
-    choices: Vec<TogetherResponseChoice>,
-    usage: OpenAIUsage,
-}
-
 struct TogetherResponseWithMetadata<'a> {
     response: TogetherResponse,
     latency: Latency,
     raw_response: String,
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
-    parse_think_blocks: bool,
     model_inference_id: Uuid,
 }
 
@@ -620,7 +812,6 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             raw_response,
             raw_request,
             generic_request,
-            parse_think_blocks,
             model_inference_id,
         } = value;
         if response.choices.len() != 1 {
@@ -651,20 +842,25 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_response: Some(raw_response.clone()),
             }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning {
+            content.push(ContentBlockOutput::Thought(Thought {
+                text: Some(reasoning),
+                signature: None,
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+            }));
+        }
         if let Some(raw_text) = message.content {
-            let (clean_text, extracted_reasoning) = process_think_blocks(
-                &raw_text,
-                parse_think_blocks,
-                PROVIDER_TYPE,
-                ApiType::ChatCompletions,
-            )?;
+            let (clean_text, extracted_reasoning) =
+                process_think_blocks(&raw_text, true, PROVIDER_TYPE, ApiType::ChatCompletions)?;
             if let Some(reasoning) = extracted_reasoning {
                 content.push(ContentBlockOutput::Thought(Thought {
                     text: Some(reasoning),
                     signature: None,
                     summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
-                    extra_data: None,
+                    extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
                 }));
             }
             if !clean_text.is_empty() {
@@ -673,7 +869,9 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(
+                    together_tool_call_to_tool_call(tool_call),
+                ));
             }
         }
         let raw_usage = together_usage_from_raw_response(&raw_response).map(|usage| {
@@ -710,7 +908,6 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
 fn stream_together(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
-    parse_think_blocks: bool,
     model_inference_id: Uuid,
 ) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
@@ -755,7 +952,6 @@ fn stream_together(
                                 latency,
                                 &mut tool_call_ids,
                                 &mut thinking_state,
-                                parse_think_blocks,
                                 model_inference_id,
                                 PROVIDER_TYPE,
                             )
@@ -772,15 +968,13 @@ fn stream_together(
 ///
 /// This function handles the conversion of Together chat chunks into TensorZero chunks.
 /// It processes the content and tool calls from the Together response, updating the tool call IDs and names.
-/// If parsing think blocks is enabled, it also processes the thinking state and extracts reasoning.
-#[expect(clippy::too_many_arguments)]
+/// It also processes the thinking state and extracts reasoning from `<think>` tags.
 fn together_to_tensorzero_chunk(
     raw_message: String,
     mut chunk: TogetherChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     thinking_state: &mut ThinkingState,
-    parse_think_blocks: bool,
     model_inference_id: Uuid,
     provider_type: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
@@ -809,35 +1003,38 @@ fn together_to_tensorzero_chunk(
         if let Some(reason) = choice.finish_reason {
             finish_reason = Some(reason.into());
         }
-        if let Some(text) = choice.delta.content {
-            if parse_think_blocks {
-                if !thinking_state.update(&text, PROVIDER_TYPE, ApiType::ChatCompletions)? {
-                    match thinking_state {
-                        ThinkingState::Normal | ThinkingState::Finished => {
-                            content.push(ContentBlockChunk::Text(TextChunk {
-                                text,
-                                id: thinking_state.get_id(),
-                            }));
-                        }
-                        ThinkingState::Thinking => {
-                            content.push(ContentBlockChunk::Thought(ThoughtChunk {
-                                text: Some(text),
-                                signature: None,
-                                summary_id: None,
-                                summary_text: None,
-                                id: thinking_state.get_id(),
-                                provider_type: Some(PROVIDER_TYPE.to_string()),
-                                extra_data: None,
-                            }));
-                        }
-                    }
+        if let Some(reasoning) = choice.delta.reasoning {
+            content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                text: Some(reasoning),
+                signature: None,
+                summary_id: None,
+                summary_text: None,
+                id: REASONING_FIELD_CHUNK_ID.to_string(),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+            }));
+        }
+        if let Some(text) = choice.delta.content
+            && !thinking_state.update(&text, PROVIDER_TYPE, ApiType::ChatCompletions)?
+        {
+            match thinking_state {
+                ThinkingState::Normal | ThinkingState::Finished => {
+                    content.push(ContentBlockChunk::Text(TextChunk {
+                        text,
+                        id: thinking_state.get_id(),
+                    }));
                 }
-            } else {
-                // Just add the text verbatim if we're not parsing think blocks.
-                content.push(ContentBlockChunk::Text(TextChunk {
-                    text,
-                    id: "0".to_string(),
-                }));
+                ThinkingState::Thinking => {
+                    content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some(text),
+                        signature: None,
+                        summary_id: None,
+                        summary_text: None,
+                        id: thinking_state.get_id(),
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
+                    }));
+                }
             }
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
@@ -892,47 +1089,6 @@ fn together_usage_from_raw_response(raw_response: &str) -> Option<Value> {
         .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherFunctionCallChunk {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    arguments: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherToolCallChunk {
-    index: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
-    // If we were to do this better, we would need to check the type field
-    function: TogetherFunctionCallChunk,
-}
-
-// This doesn't include role
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherDelta {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<TogetherToolCallChunk>>,
-}
-
-// This doesn't include logprobs, finish_reason, and index
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherChatChunkChoice {
-    delta: TogetherDelta,
-    finish_reason: Option<TogetherFinishReason>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct TogetherChatChunk {
-    choices: Vec<TogetherChatChunkChoice>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<OpenAIUsage>,
-}
-
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
@@ -942,6 +1098,11 @@ mod tests {
     use super::*;
 
     use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
+    use tensorzero_types_providers::together::{
+        TogetherChatChunkChoice, TogetherDelta, TogetherFunctionCallChunk, TogetherResponseMessage,
+        TogetherToolCallChunk,
+    };
+
     use crate::providers::chat_completions::{
         ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
         ChatCompletionToolChoice, ChatCompletionToolType,
@@ -1045,6 +1206,7 @@ mod tests {
                 message: TogetherResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
+                    reasoning: None,
                 },
                 finish_reason: None,
             }],
@@ -1088,7 +1250,6 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
             together_response_with_metadata.try_into().unwrap();
@@ -1115,6 +1276,7 @@ mod tests {
                 message: TogetherResponseMessage {
                     content: Some("<think>hmmm</think>Hello, world!".to_string()),
                     tool_calls: None,
+                    reasoning: None,
                 },
                 finish_reason: None,
             }],
@@ -1137,7 +1299,6 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
             together_response_with_metadata.try_into().unwrap();
@@ -1149,7 +1310,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: Some("together".to_string()),
-                extra_data: None,
+                extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
             })
         );
         assert_eq!(
@@ -1165,6 +1326,7 @@ mod tests {
                 message: TogetherResponseMessage {
                     content: Some("Hello <think>hmmm</think> world!".to_string()),
                     tool_calls: None,
+                    reasoning: None,
                 },
                 finish_reason: None,
             }],
@@ -1187,7 +1349,6 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
             together_response_with_metadata.try_into().unwrap();
@@ -1199,7 +1360,7 @@ mod tests {
                 signature: None,
                 summary: None,
                 provider_type: Some("together".to_string()),
-                extra_data: None,
+                extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
             })
         );
         assert_eq!(
@@ -1221,6 +1382,7 @@ mod tests {
                             .to_string(),
                     ),
                     tool_calls: None,
+                    reasoning: None,
                 },
                 finish_reason: None,
             }],
@@ -1264,7 +1426,6 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: true,
         };
 
         let inference_response: ProviderInferenceResponse = metadata.try_into().unwrap();
@@ -1293,39 +1454,6 @@ mod tests {
         if let ContentBlockOutput::Text(text) = &inference_response.output[1] {
             assert_eq!(text.text, "This is the answer".to_string());
         }
-
-        // With parsing disabled
-        let metadata = TogetherResponseWithMetadata {
-            response: response_with_thinking,
-            raw_response: "test_response".to_string(),
-            latency: Latency::NonStreaming {
-                response_time: Duration::from_secs(0),
-            },
-            raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request)
-                    .await
-                    .unwrap(),
-            )
-            .unwrap(),
-            generic_request: &generic_request,
-            model_inference_id: Uuid::now_v7(),
-            parse_think_blocks: false,
-        };
-
-        let inference_response: ProviderInferenceResponse = metadata.try_into().unwrap();
-
-        // We should have one content block with the raw text
-        assert_eq!(inference_response.output.len(), 1);
-        assert!(matches!(
-            inference_response.output[0],
-            ContentBlockOutput::Text(_)
-        ));
-        if let ContentBlockOutput::Text(text) = &inference_response.output[0] {
-            assert_eq!(
-                text.text,
-                "<think>This is the reasoning process</think>This is the answer"
-            );
-        }
     }
 
     #[tokio::test]
@@ -1335,6 +1463,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: Some("<think>".to_string()),
+                    reasoning: None,
                     tool_calls: None,
                 },
                 finish_reason: None,
@@ -1345,14 +1474,12 @@ mod tests {
         let mut tool_call_ids = Vec::new();
         let mut thinking_state = ThinkingState::Normal;
 
-        // With parsing enabled
         let result = together_to_tensorzero_chunk(
             "my_raw_chunk".to_string(),
             chunk,
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1368,6 +1495,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: Some("reasoning".to_string()),
+                    reasoning: None,
                     tool_calls: None,
                 },
                 finish_reason: None,
@@ -1381,7 +1509,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1402,6 +1529,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: Some("</think>".to_string()),
+                    reasoning: None,
                     tool_calls: None,
                 },
                 finish_reason: None,
@@ -1415,7 +1543,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1431,6 +1558,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: Some("Final answer".to_string()),
+                    reasoning: None,
                     tool_calls: None,
                 },
                 finish_reason: None,
@@ -1444,7 +1572,6 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1467,6 +1594,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: Some("Hello".to_string()),
+                    reasoning: None,
                     tool_calls: None,
                 },
                 finish_reason: Some(TogetherFinishReason::Stop),
@@ -1481,7 +1609,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1499,6 +1626,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: None,
+                    reasoning: None,
                     tool_calls: Some(vec![TogetherToolCallChunk {
                         index: 0,
                         id: None,
@@ -1518,7 +1646,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1537,6 +1664,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: None,
+                    reasoning: None,
                     tool_calls: Some(vec![TogetherToolCallChunk {
                         index: 1,
                         id: None,
@@ -1556,7 +1684,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1577,6 +1704,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: None,
+                    reasoning: None,
                     tool_calls: Some(vec![TogetherToolCallChunk {
                         index: 1,
                         id: Some("id2".to_string()),
@@ -1596,7 +1724,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1642,7 +1769,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             model_inference_id,
             PROVIDER_TYPE,
         )
@@ -1683,6 +1809,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: Some("<think>".to_string()),
+                    reasoning: None,
                     tool_calls: None,
                 },
                 finish_reason: Some(TogetherFinishReason::Stop),
@@ -1695,7 +1822,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1708,6 +1834,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: Some("some thinking content".to_string()),
+                    reasoning: None,
                     tool_calls: None,
                 },
                 finish_reason: Some(TogetherFinishReason::Stop),
@@ -1720,7 +1847,6 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
@@ -1734,7 +1860,7 @@ mod tests {
                 summary_text: None,
                 id: "1".to_string(),
                 provider_type: Some("together".to_string()),
-                extra_data: None,
+                extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
             })]
         );
         assert!(matches!(thinking_state, ThinkingState::Thinking));
@@ -1744,6 +1870,7 @@ mod tests {
             choices: vec![TogetherChatChunkChoice {
                 delta: TogetherDelta {
                     content: Some("</think>".to_string()),
+                    reasoning: None,
                     tool_calls: None,
                 },
                 finish_reason: Some(TogetherFinishReason::Stop),
@@ -1756,47 +1883,12 @@ mod tests {
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut thinking_state,
-            true,
             Uuid::now_v7(),
             PROVIDER_TYPE,
         )
         .unwrap();
         assert!(message.content.is_empty());
         assert!(matches!(thinking_state, ThinkingState::Finished));
-    }
-
-    #[test]
-    fn test_together_to_tensorzero_chunk_without_think_parsing() {
-        let chunk = TogetherChatChunk {
-            choices: vec![TogetherChatChunkChoice {
-                delta: TogetherDelta {
-                    content: Some("Hello <think>should not parse</think>".to_string()),
-                    tool_calls: None,
-                },
-                finish_reason: Some(TogetherFinishReason::Stop),
-            }],
-            usage: None,
-        };
-        let mut tool_call_ids = vec![];
-        let mut thinking_state = ThinkingState::Normal;
-        let message = together_to_tensorzero_chunk(
-            "my_raw_chunk".to_string(),
-            chunk,
-            Duration::from_millis(50),
-            &mut tool_call_ids,
-            &mut thinking_state,
-            false,
-            Uuid::now_v7(),
-            PROVIDER_TYPE,
-        )
-        .unwrap();
-        assert_eq!(
-            message.content,
-            vec![ContentBlockChunk::Text(TextChunk {
-                text: "Hello <think>should not parse</think>".to_string(),
-                id: "0".to_string(),
-            })]
-        );
     }
 
     #[test]
@@ -1824,5 +1916,488 @@ mod tests {
         assert!(logs_contain(
             "Together does not support the inference parameter `verbosity`"
         ));
+    }
+
+    // ===== Output tests for reasoning field =====
+
+    #[tokio::test]
+    async fn test_non_streaming_reasoning_field() {
+        // Response with `reasoning` field should produce a Thought with reasoning_format = "reasoning_field"
+        let response = TogetherResponse {
+            choices: vec![TogetherResponseChoice {
+                index: 0,
+                message: TogetherResponseMessage {
+                    content: Some("The answer is 42.".to_string()),
+                    tool_calls: None,
+                    reasoning: Some("Let me think step by step...".to_string()),
+                },
+                finish_reason: Some(TogetherFinishReason::Stop),
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
+            },
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let metadata = TogetherResponseWithMetadata {
+            response,
+            raw_response: "{}".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            raw_request: "{}".to_string(),
+            generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
+        };
+        let result: ProviderInferenceResponse = metadata.try_into().unwrap();
+        assert_eq!(
+            result.output.len(),
+            2,
+            "expected a Thought block and a Text block"
+        );
+        assert_eq!(
+            result.output[0],
+            ContentBlockOutput::Thought(Thought {
+                text: Some("Let me think step by step...".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("together".to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+            })
+        );
+        assert_eq!(
+            result.output[1],
+            ContentBlockOutput::Text(Text {
+                text: "The answer is 42.".to_string()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_non_streaming_think_tags_extra_data() {
+        // Response with <think> tags should produce a Thought with reasoning_format = "think_tags"
+        let response = TogetherResponse {
+            choices: vec![TogetherResponseChoice {
+                index: 0,
+                message: TogetherResponseMessage {
+                    content: Some(
+                        "<think>Step by step reasoning</think>The answer is 42.".to_string(),
+                    ),
+                    tool_calls: None,
+                    reasoning: None,
+                },
+                finish_reason: Some(TogetherFinishReason::Stop),
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
+            },
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let metadata = TogetherResponseWithMetadata {
+            response,
+            raw_response: "{}".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            raw_request: "{}".to_string(),
+            generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
+        };
+        let result: ProviderInferenceResponse = metadata.try_into().unwrap();
+        assert_eq!(
+            result.output.len(),
+            2,
+            "expected a Thought block and a Text block"
+        );
+        assert_eq!(
+            result.output[0],
+            ContentBlockOutput::Thought(Thought {
+                text: Some("Step by step reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("together".to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
+            })
+        );
+        assert_eq!(
+            result.output[1],
+            ContentBlockOutput::Text(Text {
+                text: "The answer is 42.".to_string()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_non_streaming_both_reasoning_field_and_think_tags() {
+        // Response with both `reasoning` field and <think> tags should produce two Thought blocks
+        let response = TogetherResponse {
+            choices: vec![TogetherResponseChoice {
+                index: 0,
+                message: TogetherResponseMessage {
+                    content: Some("<think>Tag reasoning</think>The answer is 42.".to_string()),
+                    tool_calls: None,
+                    reasoning: Some("Field reasoning".to_string()),
+                },
+                finish_reason: Some(TogetherFinishReason::Stop),
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
+            },
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let metadata = TogetherResponseWithMetadata {
+            response,
+            raw_response: "{}".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            raw_request: "{}".to_string(),
+            generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
+        };
+        let result: ProviderInferenceResponse = metadata.try_into().unwrap();
+        assert_eq!(
+            result.output.len(),
+            3,
+            "expected reasoning_field Thought, think_tags Thought, and Text"
+        );
+        // First: reasoning field thought
+        assert_eq!(
+            result.output[0],
+            ContentBlockOutput::Thought(Thought {
+                text: Some("Field reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("together".to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+            })
+        );
+        // Second: think tags thought
+        assert_eq!(
+            result.output[1],
+            ContentBlockOutput::Thought(Thought {
+                text: Some("Tag reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("together".to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
+            })
+        );
+        // Third: text
+        assert_eq!(
+            result.output[2],
+            ContentBlockOutput::Text(Text {
+                text: "The answer is 42.".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_streaming_reasoning_field() {
+        // Streaming delta with `reasoning` field should produce ThoughtChunk with reasoning_format = "reasoning_field"
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: None,
+                    reasoning: Some("thinking...".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+            }],
+            usage: None,
+        };
+        let mut tool_call_ids = Vec::new();
+        let mut thinking_state = ThinkingState::Normal;
+        let result = together_to_tensorzero_chunk(
+            "raw".to_string(),
+            chunk,
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut thinking_state,
+            Uuid::now_v7(),
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+        assert_eq!(
+            result.content.len(),
+            1,
+            "expected one ThoughtChunk from reasoning field"
+        );
+        assert_eq!(
+            result.content[0],
+            ContentBlockChunk::Thought(ThoughtChunk {
+                text: Some("thinking...".to_string()),
+                signature: None,
+                summary_id: None,
+                summary_text: None,
+                id: REASONING_FIELD_CHUNK_ID.to_string(),
+                provider_type: Some("together".to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+            })
+        );
+    }
+
+    #[test]
+    fn test_deserialization_reasoning_content_alias() {
+        // `reasoning_content` should deserialize as `reasoning` via the alias
+        let json = r#"{"content":"hello","reasoning_content":"thinking"}"#;
+        let msg: TogetherResponseMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            msg.reasoning,
+            Some("thinking".to_string()),
+            "`reasoning_content` alias should populate `reasoning`"
+        );
+        assert_eq!(msg.content, Some("hello".to_string()));
+
+        // Same for delta
+        let json = r#"{"content":"hello","reasoning_content":"thinking"}"#;
+        let delta: TogetherDelta = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            delta.reasoning,
+            Some("thinking".to_string()),
+            "`reasoning_content` alias should populate `reasoning` in delta"
+        );
+    }
+
+    // ===== Input tests for assistant message building =====
+
+    #[tokio::test]
+    async fn test_assistant_message_reasoning_field_format() {
+        // Thought with reasoning_format = "reasoning_field" → serializes with `reasoning` field
+        let content = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("step by step".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("together".to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "reasoning_field"})),
+            }),
+            ContentBlock::Text(Text {
+                text: "answer".to_string(),
+            }),
+        ];
+        let config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: true,
+        };
+        let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
+            .await
+            .unwrap();
+        let serialized = serde_json::to_value(&msg).unwrap();
+        assert_eq!(
+            serialized["reasoning"], "step by step",
+            "expected `reasoning` field in serialized output"
+        );
+        assert_eq!(serialized["role"], "assistant");
+        // Content should be just "answer" (no <think> wrapping)
+        assert_eq!(
+            serialized["content"], "answer",
+            "expected content to be the text block only"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_assistant_message_think_tags_format() {
+        // Thought with reasoning_format = "think_tags" → wraps in <think>...</think> in content
+        let content = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("my reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("together".to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "think_tags"})),
+            }),
+            ContentBlock::Text(Text {
+                text: "answer".to_string(),
+            }),
+        ];
+        let config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: true,
+        };
+        let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
+            .await
+            .unwrap();
+        let serialized = serde_json::to_value(&msg).unwrap();
+        // No `reasoning` field
+        assert!(
+            serialized.get("reasoning").is_none(),
+            "should not have `reasoning` field for think_tags format"
+        );
+        // Content should contain both the <think> wrapper and the answer text
+        // When there are two content blocks, it serializes as an array
+        let content_val = &serialized["content"];
+        if content_val.is_string() {
+            // Single text block → check it contains <think>
+            let text = content_val.as_str().unwrap();
+            assert!(
+                text.contains("<think>my reasoning</think>"),
+                "expected content to contain <think> wrapper, got: {text}"
+            );
+        } else if content_val.is_array() {
+            let texts: Vec<&str> = content_val
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|v| {
+                    if v["type"] == "text" {
+                        v["text"].as_str()
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let joined = texts.join("");
+            assert!(
+                joined.contains("<think>my reasoning</think>"),
+                "expected content blocks to contain <think> wrapper, got: {joined}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_assistant_message_no_thoughts() {
+        // Assistant message with no thoughts → no `reasoning` field
+        let content = vec![ContentBlock::Text(Text {
+            text: "just text".to_string(),
+        })];
+        let config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: true,
+        };
+        let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
+            .await
+            .unwrap();
+        let serialized = serde_json::to_value(&msg).unwrap();
+        assert!(
+            serialized.get("reasoning").is_none(),
+            "should not have `reasoning` field when there are no thoughts"
+        );
+        assert_eq!(serialized["content"], "just text");
+    }
+
+    #[tokio::test]
+    async fn test_assistant_message_backward_compat_no_extra_data() {
+        // Thought with extra_data: None → defaults to `reasoning` field (backward compat)
+        let content = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("old reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("together".to_string()),
+                extra_data: None,
+            }),
+            ContentBlock::Text(Text {
+                text: "answer".to_string(),
+            }),
+        ];
+        let config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: true,
+        };
+        let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
+            .await
+            .unwrap();
+        let serialized = serde_json::to_value(&msg).unwrap();
+        assert_eq!(
+            serialized["reasoning"], "old reasoning",
+            "thought with no extra_data should default to `reasoning` field"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_assistant_message_invalid_reasoning_format() {
+        // Thought with an unknown reasoning_format → error
+        let content = vec![
+            ContentBlock::Thought(Thought {
+                text: Some("reasoning".to_string()),
+                signature: None,
+                summary: None,
+                provider_type: Some("together".to_string()),
+                extra_data: Some(serde_json::json!({"reasoning_format": "unknown_format"})),
+            }),
+            ContentBlock::Text(Text {
+                text: "answer".to_string(),
+            }),
+        ];
+        let config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: true,
+        };
+        let result = tensorzero_to_together_assistant_message(Cow::Owned(content), config).await;
+        assert!(result.is_err(), "should error on unknown reasoning_format");
+        let err = result.unwrap_err();
+        let details = err.get_details();
+        assert!(
+            matches!(details, ErrorDetails::InvalidMessage { message } if message.contains("unknown_format")),
+            "error should mention the unknown format value"
+        );
     }
 }

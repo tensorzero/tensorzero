@@ -86,7 +86,7 @@ pub struct ModelInference {
 
     /// Cost of the inference.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | undefined"))]
     pub cost: Option<Decimal>,
 }
 

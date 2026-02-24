@@ -568,7 +568,8 @@ impl ModelConfig {
                                 &response.raw_response,
                                 cost_config,
                                 ResponseMode::NonStreaming,
-                            );
+                            )
+                            .ok();
                         }
 
                         // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
@@ -1403,8 +1404,8 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
-        #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
-        parse_think_blocks: bool,
+        #[serde(default)]
+        parse_think_blocks: Option<bool>,
     },
     Mistral {
         model_name: String,
@@ -1433,8 +1434,8 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
-        #[serde(default = "crate::providers::together::default_parse_think_blocks")]
-        parse_think_blocks: bool,
+        #[serde(default)]
+        parse_think_blocks: Option<bool>,
     },
     VLLM {
         model_name: String,
@@ -1611,16 +1612,22 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
                 parse_think_blocks,
-            } => ProviderConfig::Fireworks(FireworksProvider::new(
-                model_name,
-                FireworksKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                parse_think_blocks,
-            )),
+            } => {
+                if !is_config_snapshot && parse_think_blocks.is_some() {
+                    crate::utils::deprecation_warning(
+                        "The `parse_think_blocks` option for `fireworks` providers is deprecated and will be removed in a future release. Think blocks are now always parsed.",
+                    );
+                }
+                ProviderConfig::Fireworks(FireworksProvider::new(
+                    model_name,
+                    FireworksKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                ))
+            }
             UninitializedProviderConfig::GCPVertexAnthropic {
                 model_id,
                 location,
@@ -1751,16 +1758,23 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
                 parse_think_blocks,
-            } => ProviderConfig::Together(TogetherProvider::new(
-                model_name,
-                TogetherKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                parse_think_blocks,
-            )),
+            } => {
+                if !is_config_snapshot && parse_think_blocks.is_some() {
+                    // Deprecation: #6502 - 2026.5+
+                    crate::utils::deprecation_warning(
+                        "The `parse_think_blocks` option for `together` providers is deprecated and will be removed in a future release. Think blocks are now always parsed.",
+                    );
+                }
+                ProviderConfig::Together(TogetherProvider::new(
+                    model_name,
+                    TogetherKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                ))
+            }
             UninitializedProviderConfig::VLLM {
                 model_name,
                 api_base,
@@ -2789,7 +2803,6 @@ impl ShorthandModelConfig for ModelConfig {
                 FireworksKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                crate::providers::fireworks::default_parse_think_blocks(),
             )),
             "google_ai_studio_gemini" => {
                 ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider::new(
@@ -2861,7 +2874,6 @@ impl ShorthandModelConfig for ModelConfig {
                 TogetherKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                crate::providers::together::default_parse_think_blocks(),
             )),
             "xai" => ProviderConfig::XAI(XAIProvider::new(
                 model_name,

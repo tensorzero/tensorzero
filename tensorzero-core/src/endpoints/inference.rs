@@ -30,6 +30,7 @@ use crate::config::snapshot::SnapshotHash;
 use crate::config::{
     Config, ErrorContext, Namespace, OtlpConfig, SchemaData, UninitializedVariantInfo,
 };
+use crate::cost::{CostConfig, compute_cost_from_streaming_chunks};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::InferenceQueries;
@@ -195,7 +196,7 @@ struct InferenceMetadata {
     /// Raw response entries from failed provider attempts during model-level fallback.
     pub failed_raw_response: Vec<RawResponseEntry>,
     /// Cost configuration from the provider, for computing cost after streaming completes.
-    pub cost_config: Option<crate::cost::CostConfig>,
+    pub cost_config: Option<CostConfig>,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -1303,7 +1304,7 @@ fn create_stream(
         if let Some(ref cost_config) = metadata.cost_config {
             let chunk_refs: Vec<&str> = cost_raw_chunks.iter().map(|s| s.as_str()).collect();
             model_inference_usage.cost =
-                crate::cost::compute_cost_from_streaming_chunks(&chunk_refs, cost_config);
+                compute_cost_from_streaming_chunks(&chunk_refs, cost_config).ok();
         }
 
         // Then add the usage from previous inferences (e.g. best-of-N candidates)
