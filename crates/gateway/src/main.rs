@@ -682,6 +682,7 @@ async fn spawn_autopilot_worker_if_configured(
     let worker_options = WorkerOptions {
         poll_interval: Duration::from_secs(1),
         concurrency: 8,
+        claim_timeout: Duration::from_secs(3600),
         ..Default::default()
     };
     let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts, worker_options);
