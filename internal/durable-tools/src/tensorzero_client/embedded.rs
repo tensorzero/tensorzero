@@ -24,6 +24,9 @@ use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsRequest, DeleteDatapointsRequest,
     GetDatapointsRequest, UpdateDatapointsRequest,
 };
+use tensorzero_core::endpoints::embeddings::{
+    EmbeddingResponse, EmbeddingsParams, embeddings as core_embeddings,
+};
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
 use tensorzero_core::endpoints::inference::inference;
@@ -89,6 +92,25 @@ impl TensorZeroClient for EmbeddedClient {
             InferenceOutput::NonStreaming(response) => Ok(response),
             InferenceOutput::Streaming(_) => Err(TensorZeroClientError::StreamingNotSupported),
         }
+    }
+
+    async fn embeddings(
+        &self,
+        params: EmbeddingsParams,
+    ) -> Result<EmbeddingResponse, TensorZeroClientError> {
+        core_embeddings(
+            self.app_state.config.clone(),
+            &self.app_state.http_client,
+            self.app_state.clickhouse_connection_info.clone(),
+            self.app_state.postgres_connection_info.clone(),
+            self.app_state.cache_manager.clone(),
+            self.app_state.deferred_tasks.clone(),
+            self.app_state.rate_limiting_manager.clone(),
+            params,
+            None, // No API key in embedded mode
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
     async fn feedback(

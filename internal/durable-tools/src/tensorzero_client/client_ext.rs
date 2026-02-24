@@ -22,10 +22,15 @@ use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::db::feedback::FeedbackQueries;
+use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
 use tensorzero_core::endpoints::feedback::internal::{
     LatestFeedbackIdByMetricResponse, get_latest_feedback_id_by_metric,
 };
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
+use tensorzero_core::endpoints::openai_compatible::types::embeddings::{
+    OpenAICompatibleEmbeddingParams, OpenAIEmbedding, OpenAIEmbeddingResponse,
+};
+use tensorzero_core::inference::types::Usage;
 use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_optimizers::endpoints::{
     LaunchOptimizationWorkflowParams, launch_optimization_workflow, poll_optimization,
@@ -50,6 +55,79 @@ impl TensorZeroClient for Client {
         match Client::inference(self, params).await? {
             InferenceOutput::NonStreaming(response) => Ok(response),
             InferenceOutput::Streaming(_) => Err(TensorZeroClientError::StreamingNotSupported),
+        }
+    }
+
+    async fn embeddings(
+        &self,
+        params: EmbeddingsParams,
+    ) -> Result<EmbeddingResponse, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(_) => {
+                let openai_params = OpenAICompatibleEmbeddingParams {
+                    input: params.input,
+                    model: format!("tensorzero::embedding_model_name::{}", params.model_name),
+                    dimensions: params.dimensions,
+                    encoding_format: params.encoding_format,
+                    tensorzero_credentials: params.credentials,
+                    tensorzero_dryrun: params.dryrun,
+                    tensorzero_cache_options: Some(params.cache_options),
+                    tensorzero_include_raw_response: params.include_raw_response,
+                };
+
+                let http_response = Client::http_embeddings(self, openai_params, None)
+                    .await
+                    .map_err(TensorZeroClientError::TensorZero)?;
+
+                let OpenAIEmbeddingResponse::List {
+                    data,
+                    model,
+                    usage,
+                    tensorzero_raw_response,
+                } = http_response.response;
+
+                let embeddings = data
+                    .into_iter()
+                    .map(|e| {
+                        let OpenAIEmbedding::Embedding { embedding, .. } = e;
+                        embedding
+                    })
+                    .collect();
+
+                let model = model
+                    .strip_prefix("tensorzero::embedding_model_name::")
+                    .unwrap_or(&model)
+                    .to_string();
+
+                Ok(EmbeddingResponse {
+                    embeddings,
+                    usage: Usage {
+                        input_tokens: usage.as_ref().and_then(|u| u.prompt_tokens),
+                        output_tokens: None,
+                        cost: usage.as_ref().and_then(|u| u.tensorzero_cost),
+                    },
+                    model,
+                    tensorzero_raw_response,
+                })
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => tensorzero_core::endpoints::embeddings::embeddings(
+                gateway.handle.app_state.config.clone(),
+                &gateway.handle.app_state.http_client,
+                gateway.handle.app_state.clickhouse_connection_info.clone(),
+                gateway.handle.app_state.postgres_connection_info.clone(),
+                gateway.handle.app_state.cache_manager.clone(),
+                gateway.handle.app_state.deferred_tasks.clone(),
+                gateway.handle.app_state.rate_limiting_manager.clone(),
+                params,
+                None,
+            )
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            }),
         }
     }
 
