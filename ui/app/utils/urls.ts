@@ -45,6 +45,14 @@ export function toEpisodeApiUrl(episodeId: string): string {
 }
 
 // ============================================================================
+// Observability - Model Inferences
+// ============================================================================
+
+export function toModelInferenceApiUrl(id: string): string {
+  return `/api/model-inference/${encodeURIComponent(id)}`;
+}
+
+// ============================================================================
 // Datasets
 // ============================================================================
 
@@ -123,6 +131,7 @@ export function toResolvedObjectUrl(
     case "json_datapoint":
       return toDatapointUrl(obj.dataset_name, uuid);
     case "model_inference":
+      return toInferenceUrl(obj.inference_id);
     case "boolean_feedback":
     case "float_feedback":
     case "comment_feedback":
