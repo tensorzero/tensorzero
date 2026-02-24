@@ -1,5 +1,5 @@
 use reqwest::Url;
-use tensorzero_core::feature_flags;
+use tensorzero_core::db::delegating_connection::PrimaryDatastore;
 
 lazy_static::lazy_static! {
     static ref GATEWAY_URL: String = std::env::var("TENSORZERO_GATEWAY_URL")
@@ -14,7 +14,7 @@ lazy_static::lazy_static! {
 /// against both databases.
 #[expect(dead_code)]
 pub fn is_postgres_test() -> bool {
-    feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get()
+    PrimaryDatastore::from_test_env() == PrimaryDatastore::Postgres
 }
 
 /// Skips the current test if running against Postgres.

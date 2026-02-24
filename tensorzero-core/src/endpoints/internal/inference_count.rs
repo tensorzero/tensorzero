@@ -611,9 +611,9 @@ mod tests {
         assert_eq!(result.inference_count, 10);
     }
 
-    // Tests for ENABLE_POSTGRES_AS_PRIMARY_DATASTORE flag dispatch
-    // Note: The business logic functions take `&impl InferenceCountQueries` and are database-agnostic.
-    // The flag only affects which connection the handlers pass to the business logic.
+    // Tests for Postgres primary datastore dispatch.
+    // The business logic functions take `&impl InferenceCountQueries` and are database-agnostic.
+    // The primary datastore setting only affects which connection the handlers pass to the business logic.
     // These tests verify the Postgres implementation can be invoked through the same interface.
 
     #[tokio::test]

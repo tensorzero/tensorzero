@@ -1,0 +1,6 @@
+# Override file for Postgres-as-primary-datastore tests.
+# Include this alongside the tensorzero.*.toml files via a glob like:
+#   {tensorzero,pg}.*.toml
+
+[gateway.observability]
+backend = "postgres"

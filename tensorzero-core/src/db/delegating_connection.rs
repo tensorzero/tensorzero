@@ -71,6 +71,18 @@ pub enum PrimaryDatastore {
     Postgres,
 }
 
+impl PrimaryDatastore {
+    /// Reads the primary datastore from `TENSORZERO_PRIMARY_DATASTORE` env var.
+    /// Returns `Postgres` if set to "postgres", otherwise `ClickHouse`.
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn from_test_env() -> Self {
+        match std::env::var("TENSORZERO_PRIMARY_DATASTORE").as_deref() {
+            Ok("postgres") => PrimaryDatastore::Postgres,
+            _ => PrimaryDatastore::ClickHouse,
+        }
+    }
+}
+
 /// A delegating database implementation that wraps both ClickHouse and Postgres.
 ///
 /// Both ClickHouse and Postgres connections wrap an Arc<> under the hood, so this is safe and cheap to clone.
@@ -966,19 +978,13 @@ mod test_helpers_impl {
     use crate::db::clickhouse::test_helpers::get_clickhouse;
     use crate::db::postgres::test_helpers::get_postgres;
     use crate::db::test_helpers::TestDatabaseHelpers;
-    use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
     use async_trait::async_trait;
 
     impl DelegatingDatabaseConnection {
         pub async fn new_for_e2e_test() -> Self {
             let clickhouse = get_clickhouse().await;
             let postgres = get_postgres().await;
-            // Temporary: derive from feature flag until M2-Step3 removes it
-            let primary = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-                PrimaryDatastore::Postgres
-            } else {
-                PrimaryDatastore::ClickHouse
-            };
+            let primary = PrimaryDatastore::from_test_env();
             Self::new(clickhouse, postgres, primary)
         }
     }

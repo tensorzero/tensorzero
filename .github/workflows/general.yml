@@ -931,7 +931,7 @@ jobs:
       - name: Set Postgres as primary datastore
         if: matrix.database == 'postgres'
         run: |
-          echo "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=1" >> $GITHUB_ENV
+          echo "TENSORZERO_PRIMARY_DATASTORE=postgres" >> $GITHUB_ENV
 
       - name: Launch dependency services
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
@@ -941,7 +941,12 @@ jobs:
 
       - name: Launch the gateway for E2E tests
         run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
+          if [ "${{ matrix.database }}" = "postgres" ]; then
+            CONFIG_GLOB="tensorzero-core/tests/e2e/config/{tensorzero,pg}.*.toml"
+          else
+            CONFIG_GLOB="tensorzero-core/tests/e2e/config/tensorzero.*.toml"
+          fi
+          cargo run --bin gateway --features e2e_tests -- --config-file "$CONFIG_GLOB" > e2e_logs.txt 2>&1 &
           count=0
           max_attempts=20
           while ! curl http://localhost:3000/health; do
