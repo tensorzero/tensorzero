@@ -384,6 +384,7 @@ async fn embed_insert_example(
             &clients,
             &(&provider_config).into(),
             &Default::default(),
+            "test_embedding_model",
         )
         .await
         .unwrap();

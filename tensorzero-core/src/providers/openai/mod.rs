@@ -930,6 +930,7 @@ impl EmbeddingProvider for OpenAIProvider {
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
         extra_headers: &FullExtraHeadersConfig,
+        model_name: &str,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self
             .credentials
@@ -963,7 +964,7 @@ impl EmbeddingProvider for OpenAIProvider {
             &FullExtraBodyConfig::default(), // No overrides supported
             extra_headers,
             model_provider_data,
-            &self.model_name,
+            model_name,
             request_body_value,
             request_builder,
         )

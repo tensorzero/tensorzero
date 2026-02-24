@@ -892,6 +892,7 @@ impl EmbeddingProvider for DummyProvider {
         dynamic_api_keys: &InferenceCredentials,
         _model_provider_data: &EmbeddingProviderRequestInfo,
         _extra_headers: &FullExtraHeadersConfig,
+        _model_name: &str,
     ) -> Result<EmbeddingProviderResponse, Error> {
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {

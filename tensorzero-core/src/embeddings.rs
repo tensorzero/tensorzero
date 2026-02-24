@@ -204,7 +204,13 @@ impl EmbeddingModelConfig {
                     }
                 }
                 let response = provider_config
-                    .embed(request, clients, &provider_config.into(), &extra_headers)
+                    .embed(
+                        request,
+                        clients,
+                        &provider_config.into(),
+                        &extra_headers,
+                        model_name,
+                    )
                     .await;
 
                 match response {
@@ -550,6 +556,7 @@ pub trait EmbeddingProvider {
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
         extra_headers: &FullExtraHeadersConfig,
+        model_name: &str,
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
 }
 
@@ -610,6 +617,7 @@ impl EmbeddingProviderInfo {
         clients: &InferenceClients,
         model_provider_data: &EmbeddingProviderRequestInfo,
         extra_headers: &FullExtraHeadersConfig,
+        model_name: &str,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
             .rate_limiting_manager
@@ -621,6 +629,7 @@ impl EmbeddingProviderInfo {
             &clients.credentials,
             model_provider_data,
             extra_headers,
+            model_name,
         );
         let response = if let Some(timeout_ms) = self.timeout_ms {
             let timeout = Duration::from_millis(timeout_ms);
@@ -732,6 +741,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
         extra_headers: &FullExtraHeadersConfig,
+        model_name: &str,
     ) -> Result<EmbeddingProviderResponse, Error> {
         match self {
             EmbeddingProviderConfig::OpenAI(provider) => {
@@ -742,6 +752,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
                         dynamic_api_keys,
                         model_provider_data,
                         extra_headers,
+                        model_name,
                     )
                     .await
             }
@@ -753,6 +764,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
                         dynamic_api_keys,
                         model_provider_data,
                         extra_headers,
+                        model_name,
                     )
                     .await
             }
@@ -764,6 +776,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
                         dynamic_api_keys,
                         model_provider_data,
                         extra_headers,
+                        model_name,
                     )
                     .await
             }
@@ -776,6 +789,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
                         dynamic_api_keys,
                         model_provider_data,
                         extra_headers,
+                        model_name,
                     )
                     .await
             }

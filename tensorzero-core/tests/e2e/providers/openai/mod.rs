@@ -1453,24 +1453,28 @@ async fn test_embedding_sanity_check() {
 
     // Compute all 3 embeddings concurrently
     let extra_headers = Default::default();
+    let model_name = "test_embedding_model";
     let (response_a, response_b, response_c) = tokio::join!(
         provider_config.embed(
             &embedding_request_a,
             &clients,
             &request_info,
-            &extra_headers
+            &extra_headers,
+            model_name,
         ),
         provider_config.embed(
             &embedding_request_b,
             &clients,
             &request_info,
-            &extra_headers
+            &extra_headers,
+            model_name,
         ),
         provider_config.embed(
             &embedding_request_c,
             &clients,
             &request_info,
-            &extra_headers
+            &extra_headers,
+            model_name,
         )
     );
 

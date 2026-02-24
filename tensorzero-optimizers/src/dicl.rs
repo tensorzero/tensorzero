@@ -118,7 +118,7 @@ impl Optimizer for DiclOptimizationConfig {
             .collect::<Result<Vec<String>, _>>()?;
 
         // Process embeddings with batching and concurrency control
-        let all_embeddings = process_embeddings_with_batching( 
+        let all_embeddings = process_embeddings_with_batching(
             &config,
             &self.embedding_model,
             client,

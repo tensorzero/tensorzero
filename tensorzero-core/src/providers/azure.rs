@@ -391,6 +391,7 @@ impl EmbeddingProvider for AzureProvider {
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
         extra_headers: &FullExtraHeadersConfig,
+        model_name: &str,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self
             .credentials
@@ -419,7 +420,7 @@ impl EmbeddingProvider for AzureProvider {
             &FullExtraBodyConfig::default(), // No overrides supported
             extra_headers,
             model_provider_data,
-            &self.deployment_id,
+            model_name,
             request_body_value,
             request_builder,
         )
