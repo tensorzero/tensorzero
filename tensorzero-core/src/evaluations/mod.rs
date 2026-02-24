@@ -75,6 +75,7 @@ pub enum EvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
     LLMJudge(LLMJudgeConfig),
+    ToolUse(ToolUseConfig),
 }
 
 /// Minimal function configuration for evaluation purposes.
@@ -106,16 +107,20 @@ impl From<&FunctionConfig> for EvaluationFunctionConfig {
 pub type EvaluationFunctionConfigTable = HashMap<String, EvaluationFunctionConfig>;
 
 impl EvaluatorConfig {
+    // TODO(shuyangli): Remove this config option and make it a CLI flag instead.
     pub fn cutoff(&self) -> Option<f32> {
         match self {
             EvaluatorConfig::ExactMatch(config) => config.cutoff,
             EvaluatorConfig::LLMJudge(config) => config.cutoff,
+            EvaluatorConfig::ToolUse(config) => config.cutoff,
         }
     }
 
     pub fn optimize(&self) -> MetricConfigOptimize {
         match self {
-            EvaluatorConfig::ExactMatch(_) => MetricConfigOptimize::Max,
+            EvaluatorConfig::ExactMatch(_) | EvaluatorConfig::ToolUse(_) => {
+                MetricConfigOptimize::Max
+            }
             EvaluatorConfig::LLMJudge(config) => config.optimize.into(),
         }
     }
@@ -123,7 +128,7 @@ impl EvaluatorConfig {
     /// Returns true if this evaluator produces Bernoulli (boolean) outputs
     pub fn is_bernoulli(&self) -> bool {
         match self {
-            EvaluatorConfig::ExactMatch(_) => true,
+            EvaluatorConfig::ExactMatch(_) | EvaluatorConfig::ToolUse(_) => true,
             EvaluatorConfig::LLMJudge(config) => {
                 matches!(config.output_type, LLMJudgeOutputType::Boolean)
             }
@@ -136,6 +141,53 @@ impl EvaluatorConfig {
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cutoff: Option<f32>,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum ToolUseBehavior {
+    /// The inference must not contain any tool calls.
+    None,
+    /// None of the listed tools may appear in the inference's tool calls.
+    NoneOf,
+    /// The inference must contain at least one tool call (any tool).
+    Any,
+    /// At least one of the listed tools must appear in the inference's tool calls.
+    AnyOf,
+    /// All of the listed tools must appear in the inference's tool calls.
+    AllOf,
+}
+
+impl std::fmt::Display for ToolUseBehavior {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToolUseBehavior::None => write!(f, "none"),
+            ToolUseBehavior::NoneOf => write!(f, "none_of"),
+            ToolUseBehavior::Any => write!(f, "any"),
+            ToolUseBehavior::AnyOf => write!(f, "any_of"),
+            ToolUseBehavior::AllOf => write!(f, "all_of"),
+        }
+    }
+}
+
+/// Evaluator that checks whether an inference's tool calls match the expected behavior.
+///
+/// `tools` is required for `none_of`, `any_of`, and `all_of` behaviors,
+/// and must not be specified for `none` and `any`.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(deny_unknown_fields)]
+pub struct ToolUseConfig {
+    /// The matching rule to apply to the inference's tool calls.
+    pub behavior: ToolUseBehavior,
+    /// Tool names to match against. Required for `none_of`, `any_of`, and `all_of` behaviors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cutoff: Option<f32>,
 }
@@ -408,6 +460,7 @@ pub enum UninitializedEvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
     LLMJudge(UninitializedLLMJudgeConfig),
+    ToolUse(ToolUseConfig),
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
@@ -579,6 +632,57 @@ impl UninitializedEvaluatorConfig {
                     MetricConfig {
                         r#type: params.output_type.into(),
                         optimize: params.optimize.into(),
+                        level: MetricConfigLevel::Inference,
+                        description: None,
+                    },
+                ))
+            }
+            UninitializedEvaluatorConfig::ToolUse(config) => {
+                match &config.behavior {
+                    ToolUseBehavior::None | ToolUseBehavior::Any => {
+                        if config.tools.is_some() {
+                            return Err(ErrorDetails::Config {
+                                message: format!(
+                                    "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                                     `tools` should not be specified when behavior is `{}`",
+                                    config.behavior,
+                                ),
+                            }
+                            .into());
+                        }
+                    }
+                    ToolUseBehavior::NoneOf | ToolUseBehavior::AnyOf | ToolUseBehavior::AllOf => {
+                        match &config.tools {
+                            None => {
+                                return Err(ErrorDetails::Config {
+                                    message: format!(
+                                        "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                                         `tools` must be a non-empty list when behavior is `{}`",
+                                        config.behavior,
+                                    ),
+                                }
+                                .into());
+                            }
+                            Some(tools) if tools.is_empty() => {
+                                return Err(ErrorDetails::Config {
+                                    message: format!(
+                                        "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                                         `tools` must be a non-empty list when behavior is `{}`",
+                                        config.behavior,
+                                    ),
+                                }
+                                .into());
+                            }
+                            Some(_) => {}
+                        }
+                    }
+                }
+                Ok((
+                    EvaluatorConfig::ToolUse(config),
+                    None,
+                    MetricConfig {
+                        r#type: MetricConfigType::Boolean,
+                        optimize: MetricConfigOptimize::Max,
                         level: MetricConfigLevel::Inference,
                         description: None,
                     },
@@ -1307,17 +1411,22 @@ mod tests {
             let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_ok());
 
-            let (config, additional_functions, metric_configs) = result.unwrap();
+            let (config, additional_functions, metric_configs) =
+                result.expect("exact match evaluation config should load successfully");
             assert_eq!(config.function_name, function_name);
             assert_eq!(
                 config.description.as_deref(),
                 Some("evaluation description")
             );
             assert_eq!(config.evaluators.len(), 1);
-            match config.evaluators.get("em_evaluator").unwrap() {
-                EvaluatorConfig::ExactMatch(params) => assert_eq!(params.cutoff, Some(0.4)),
-                EvaluatorConfig::LLMJudge(_) => panic!("Expected ExactMatch evaluator"),
-            }
+            let EvaluatorConfig::ExactMatch(params) = config
+                .evaluators
+                .get("em_evaluator")
+                .expect("em_evaluator should exist")
+            else {
+                panic!("Expected ExactMatch evaluator")
+            };
+            assert_eq!(params.cutoff, Some(0.4));
             // No additional function configs for exact match
             assert_eq!(additional_functions.len(), 0);
 
@@ -1333,7 +1442,9 @@ mod tests {
             assert!(metric_configs.contains_key(&metric_config_name));
 
             // Verify all properties of the metric config
-            let metric_config = metric_configs.get(&metric_config_name).unwrap();
+            let metric_config = metric_configs
+                .get(&metric_config_name)
+                .expect("metric config should exist");
             assert_eq!(metric_config.r#type, MetricConfigType::Boolean);
             assert_eq!(metric_config.optimize, MetricConfigOptimize::Max);
             assert_eq!(metric_config.level, MetricConfigLevel::Inference);
@@ -1399,7 +1510,7 @@ mod tests {
 
             let (config, additional_functions, metric_configs) = uninitialized_config
                 .load(&functions, evaluation_name)
-                .unwrap();
+                .expect("LLM judge boolean evaluation config should load successfully");
             assert_eq!(config.evaluators.len(), 1);
             assert_eq!(
                 config.description.as_deref(),
@@ -1407,21 +1518,23 @@ mod tests {
             );
 
             // Verify LLM judge evaluator config
-            match config.evaluators.get("llm_judge_evaluation").unwrap() {
-                EvaluatorConfig::LLMJudge(judge_config) => {
-                    assert!(matches!(
-                        judge_config.output_type,
-                        LLMJudgeOutputType::Boolean
-                    ));
-                    assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
-                    assert!(!judge_config.include.reference_output);
-                    assert_eq!(
-                        judge_config.description.as_deref(),
-                        Some("llm judge description")
-                    );
-                }
-                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
-            }
+            let EvaluatorConfig::LLMJudge(judge_config) = config
+                .evaluators
+                .get("llm_judge_evaluation")
+                .expect("llm_judge_evaluation should exist")
+            else {
+                panic!("Expected LLMJudge evaluator config")
+            };
+            assert!(matches!(
+                judge_config.output_type,
+                LLMJudgeOutputType::Boolean
+            ));
+            assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
+            assert!(!judge_config.include.reference_output);
+            assert_eq!(
+                judge_config.description.as_deref(),
+                Some("llm judge description")
+            );
 
             // Verify additional function config was created
             assert_eq!(additional_functions.len(), 1);
@@ -1430,16 +1543,15 @@ mod tests {
             assert!(additional_functions.contains_key(&function_name));
 
             // Verify the function config has the correct type
-            match additional_functions[&function_name].as_ref() {
-                FunctionConfig::Json(json_config) => {
-                    assert_eq!(json_config.variants.len(), 1);
-                    assert!(json_config.variants.contains_key("test_variant"));
-                    assert!(json_config.schemas.get_implicit_system_schema().is_none());
-                    assert!(json_config.schemas.get_implicit_user_schema().is_some());
-                    assert!(json_config.output_schema.value.is_object());
-                }
-                FunctionConfig::Chat(_) => panic!("Expected Json function config"),
-            }
+            let FunctionConfig::Json(json_config) = additional_functions[&function_name].as_ref()
+            else {
+                panic!("Expected Json function config")
+            };
+            assert_eq!(json_config.variants.len(), 1);
+            assert!(json_config.variants.contains_key("test_variant"));
+            assert!(json_config.schemas.get_implicit_system_schema().is_none());
+            assert!(json_config.schemas.get_implicit_user_schema().is_some());
+            assert!(json_config.output_schema.value.is_object());
 
             // Verify the metrics
             assert_eq!(metric_configs.len(), 1);
@@ -1454,16 +1566,20 @@ mod tests {
             assert!(metric_configs.contains_key(&metric_config_name));
 
             // Verify all properties of the metric config
-            let metric_config = metric_configs.get(&metric_config_name).unwrap();
+            let metric_config = metric_configs
+                .get(&metric_config_name)
+                .expect("metric config should exist for LLM judge boolean");
             assert_eq!(metric_config.r#type, MetricConfigType::Boolean);
             assert_eq!(metric_config.optimize, MetricConfigOptimize::Min);
             assert_eq!(metric_config.level, MetricConfigLevel::Inference);
 
             // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
-            let llm_judge_evaluation = match config.evaluators.get("llm_judge_evaluation").unwrap()
-            {
-                EvaluatorConfig::LLMJudge(config) => config,
-                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator"),
+            let EvaluatorConfig::LLMJudge(llm_judge_evaluation) = config
+                .evaluators
+                .get("llm_judge_evaluation")
+                .expect("llm_judge_evaluation should exist")
+            else {
+                panic!("Expected LLMJudge evaluator")
             };
             assert_eq!(
                 MetricConfigType::from(llm_judge_evaluation.output_type),
@@ -1537,7 +1653,7 @@ mod tests {
 
             let (config, additional_functions, metric_configs) = uninitialized_config
                 .load(&functions, evaluation_name)
-                .unwrap();
+                .expect("LLM judge float evaluation config should load successfully");
             assert_eq!(config.evaluators.len(), 1);
             assert_eq!(
                 config.description.as_deref(),
@@ -1545,21 +1661,23 @@ mod tests {
             );
 
             // Verify LLM judge evaluator config
-            match config.evaluators.get("llm_judge_float").unwrap() {
-                EvaluatorConfig::LLMJudge(judge_config) => {
-                    assert!(matches!(
-                        judge_config.output_type,
-                        LLMJudgeOutputType::Float
-                    ));
-                    assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Max));
-                    assert!(judge_config.include.reference_output);
-                    assert_eq!(
-                        judge_config.description.as_deref(),
-                        Some("llm judge description float")
-                    );
-                }
-                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
-            }
+            let EvaluatorConfig::LLMJudge(judge_config) = config
+                .evaluators
+                .get("llm_judge_float")
+                .expect("llm_judge_float should exist")
+            else {
+                panic!("Expected LLMJudge evaluator config")
+            };
+            assert!(matches!(
+                judge_config.output_type,
+                LLMJudgeOutputType::Float
+            ));
+            assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Max));
+            assert!(judge_config.include.reference_output);
+            assert_eq!(
+                judge_config.description.as_deref(),
+                Some("llm judge description float")
+            );
 
             // Verify additional function config was created
             assert_eq!(additional_functions.len(), 1);
@@ -1578,15 +1696,20 @@ mod tests {
             assert!(metric_configs.contains_key(&metric_config_name));
 
             // Verify all properties of the metric config
-            let metric_config = metric_configs.get(&metric_config_name).unwrap();
+            let metric_config = metric_configs
+                .get(&metric_config_name)
+                .expect("metric config should exist for LLM judge float");
             assert_eq!(metric_config.r#type, MetricConfigType::Float);
             assert_eq!(metric_config.optimize, MetricConfigOptimize::Max);
             assert_eq!(metric_config.level, MetricConfigLevel::Inference);
 
             // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
-            let llm_judge_evaluation = match config.evaluators.get("llm_judge_float").unwrap() {
-                EvaluatorConfig::LLMJudge(config) => config,
-                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator"),
+            let EvaluatorConfig::LLMJudge(llm_judge_evaluation) = config
+                .evaluators
+                .get("llm_judge_float")
+                .expect("llm_judge_float should exist")
+            else {
+                panic!("Expected LLMJudge evaluator")
             };
             assert_eq!(
                 MetricConfigType::from(llm_judge_evaluation.output_type),
@@ -1861,20 +1984,23 @@ mod tests {
             let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_ok());
 
-            let (config, _additional_functions, _metric_configs) = result.unwrap();
+            let (config, _additional_functions, _metric_configs) =
+                result.expect("LLM judge with reference_output should load successfully");
 
             // Verify LLM judge evaluator config with reference_output = true
-            match config.evaluators.get("llm_judge_with_ref").unwrap() {
-                EvaluatorConfig::LLMJudge(judge_config) => {
-                    assert!(matches!(
-                        judge_config.output_type,
-                        LLMJudgeOutputType::Boolean
-                    ));
-                    assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
-                    assert!(judge_config.include.reference_output);
-                }
-                EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
-            }
+            let EvaluatorConfig::LLMJudge(judge_config) = config
+                .evaluators
+                .get("llm_judge_with_ref")
+                .expect("llm_judge_with_ref should exist")
+            else {
+                panic!("Expected LLMJudge evaluator config")
+            };
+            assert!(matches!(
+                judge_config.output_type,
+                LLMJudgeOutputType::Boolean
+            ));
+            assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
+            assert!(judge_config.include.reference_output);
         }
 
         // Test case 8: Single LLM Judge variant with no 'active' field specified (defaults to active)
@@ -1936,24 +2062,26 @@ mod tests {
             let result = uninitialized_config.load(&functions, evaluation_name);
             assert!(result.is_ok());
 
-            let (_config, additional_functions, _metric_configs) = result.unwrap();
+            let (_config, additional_functions, _metric_configs) =
+                result.expect("LLM judge with default active variant should load successfully");
             let function_config_name =
                 get_llm_judge_function_name(evaluation_name, "llm_judge_default_active");
-            let function_config = additional_functions.get(&function_config_name).unwrap();
-            match function_config.as_ref() {
-                FunctionConfig::Json(json_config) => {
-                    assert_eq!(json_config.variants.len(), 1);
-                    let variant = json_config.variants.get("default_active_variant").unwrap();
-                    // Check that the weight is Some(1.0) which indicates it defaulted to active
-                    match &variant.inner {
-                        VariantConfig::ChatCompletion(cc_config) => {
-                            assert_eq!(cc_config.weight(), Some(1.0));
-                        }
-                        _ => panic!("Expected ChatCompletion variant config"),
-                    }
-                }
-                FunctionConfig::Chat(_) => panic!("Expected Json function config"),
-            }
+            let function_config = additional_functions
+                .get(&function_config_name)
+                .expect("function config should exist for llm_judge_default_active");
+            let FunctionConfig::Json(json_config) = function_config.as_ref() else {
+                panic!("Expected Json function config")
+            };
+            assert_eq!(json_config.variants.len(), 1);
+            let variant = json_config
+                .variants
+                .get("default_active_variant")
+                .expect("default_active_variant should exist");
+            // Check that the weight is Some(1.0) which indicates it defaulted to active
+            let VariantConfig::ChatCompletion(cc_config) = &variant.inner else {
+                panic!("Expected ChatCompletion variant config")
+            };
+            assert_eq!(cc_config.weight(), Some(1.0));
         }
 
         // Test case 9: Single LLM Judge variant explicitly set to inactive (active = false)
@@ -2056,7 +2184,8 @@ mod tests {
         );
 
         // Deserialize the TOML
-        let uninitialized: UninitializedEvaluationConfig = toml::from_str(&toml).unwrap();
+        let uninitialized: UninitializedEvaluationConfig =
+            toml::from_str(&toml).expect("TOML with deprecated static type should parse");
 
         // Verify it loads correctly despite using deprecated "static" type
         let result = uninitialized.load(&functions, "test_backward_compat");
@@ -2065,7 +2194,8 @@ mod tests {
             "Expected successful load with 'static' type"
         );
 
-        let (config, additional_functions, metric_configs) = result.unwrap();
+        let (config, additional_functions, metric_configs) =
+            result.expect("backward compatible static type should load successfully");
 
         // Verify the config was loaded correctly
         assert_eq!(config.function_name, function_name);
@@ -2073,10 +2203,13 @@ mod tests {
         assert!(config.evaluators.contains_key("test_evaluator"));
 
         // Verify exact match evaluator was loaded
-        match config.evaluators.get("test_evaluator").unwrap() {
-            EvaluatorConfig::ExactMatch(_) => {} // Expected
-            EvaluatorConfig::LLMJudge(_) => panic!("Expected ExactMatch evaluator"),
-        }
+        let EvaluatorConfig::ExactMatch(_) = config
+            .evaluators
+            .get("test_evaluator")
+            .expect("test_evaluator should exist")
+        else {
+            panic!("Expected ExactMatch evaluator")
+        };
 
         // Verify no additional functions (exact match doesn't need them)
         assert_eq!(additional_functions.len(), 0);
@@ -2096,6 +2229,6 @@ mod tests {
             },
             "required": ["result"]
         });
-        JSONSchema::from_value(schema_value).unwrap()
+        JSONSchema::from_value(schema_value).expect("test schema should be valid")
     }
 }
