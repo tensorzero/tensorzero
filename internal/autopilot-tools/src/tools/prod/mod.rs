@@ -10,6 +10,7 @@ mod delete_datapoints;
 mod feedback;
 mod get_config;
 mod get_datapoints;
+mod get_feedback_by_target_id;
 mod get_feedback_by_variant;
 mod get_inferences;
 mod get_latest_feedback_by_metric;
@@ -33,6 +34,7 @@ pub use delete_datapoints::{DeleteDatapointsTool, DeleteDatapointsToolParams};
 pub use feedback::{FeedbackTool, FeedbackToolParams};
 pub use get_config::{GetConfigTool, GetConfigToolParams};
 pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
+pub use get_feedback_by_target_id::{GetFeedbackByTargetIdTool, GetFeedbackByTargetIdToolParams};
 pub use get_feedback_by_variant::{GetFeedbackByVariantTool, GetFeedbackByVariantToolParams};
 pub use get_inferences::{GetInferencesTool, GetInferencesToolParams};
 pub use get_latest_feedback_by_metric::{

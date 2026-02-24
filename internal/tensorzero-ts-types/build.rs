@@ -29,6 +29,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("GET_CONFIG_TOOL_PARAMS", "GetConfigToolParams"),
     ("GET_DATAPOINTS_TOOL_PARAMS", "GetDatapointsToolParams"),
     (
+        "GET_FEEDBACK_BY_TARGET_ID_TOOL_PARAMS",
+        "GetFeedbackByTargetIdToolParams",
+    ),
+    (
         "GET_FEEDBACK_BY_VARIANT_TOOL_PARAMS",
         "GetFeedbackByVariantToolParams",
     ),
@@ -57,6 +61,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("CREATE_DATAPOINTS_RESPONSE", "CreateDatapointsResponse"),
     ("DELETE_DATAPOINTS_RESPONSE", "DeleteDatapointsResponse"),
     ("FEEDBACK_RESPONSE", "FeedbackResponse"),
+    (
+        "GET_FEEDBACK_BY_TARGET_ID_RESPONSE",
+        "GetFeedbackByTargetIdResponse",
+    ),
     ("GET_DATAPOINTS_RESPONSE", "GetDatapointsResponse"),
     ("GET_INFERENCES_RESPONSE", "GetInferencesResponse"),
     ("INFERENCE_RESPONSE", "InferenceResponse"),
