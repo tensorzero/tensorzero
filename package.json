@@ -13,7 +13,7 @@
     "clean:node": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +"
   },
   "devDependencies": {
-    "oxfmt": "^0.34.0",
+    "oxfmt": "^0.35.0",
     "typescript": "^5.9.2"
   },
   "packageManager": "pnpm@10.15.0",
