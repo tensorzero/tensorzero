@@ -8,8 +8,8 @@ function makeModelInference(
   return {
     id: "00000000-0000-7000-0000-000000000000",
     inference_id: "00000000-0000-7000-0000-000000000000",
-    raw_request: "",
-    raw_response: "",
+    raw_request: undefined,
+    raw_response: undefined,
     model_name: "test",
     model_provider_name: "test",
     response_time_ms: undefined,
