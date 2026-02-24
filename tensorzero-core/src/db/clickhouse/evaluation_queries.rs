@@ -222,7 +222,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         let function_name_clause = if function_name.is_some() {
             "AND function_name = {function_name:String}"
         } else {
-            ""
+            "AND NOT startsWith(function_name, 'tensorzero::')"
         };
 
         let sql_query = format!(

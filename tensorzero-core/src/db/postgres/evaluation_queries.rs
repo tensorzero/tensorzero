@@ -367,6 +367,8 @@ fn build_search_evaluation_runs_query(
     if let Some(fn_name) = function_name {
         qb.push(" AND function_name = ");
         qb.push_bind(fn_name.to_string());
+    } else {
+        qb.push(" AND NOT function_name LIKE 'tensorzero::%'");
     }
     qb.push(
         r"
@@ -382,6 +384,8 @@ fn build_search_evaluation_runs_query(
     if let Some(fn_name) = function_name {
         qb.push(" AND function_name = ");
         qb.push_bind(fn_name.to_string());
+    } else {
+        qb.push(" AND NOT function_name LIKE 'tensorzero::%'");
     }
     qb.push(
         r"
@@ -853,14 +857,14 @@ mod tests {
                     tags->>'tensorzero::evaluation_run_id' as evaluation_run_id,
                     variant_name
                 FROM tensorzero.chat_inferences
-                WHERE tags->>'tensorzero::evaluation_name' = $1
+                WHERE tags->>'tensorzero::evaluation_name' = $1 AND NOT function_name LIKE 'tensorzero::%'
                 AND tags ? 'tensorzero::evaluation_run_id'
                 UNION ALL
                 SELECT DISTINCT
                     tags->>'tensorzero::evaluation_run_id' as evaluation_run_id,
                     variant_name
                 FROM tensorzero.json_inferences
-                WHERE tags->>'tensorzero::evaluation_name' = $2
+                WHERE tags->>'tensorzero::evaluation_name' = $2 AND NOT function_name LIKE 'tensorzero::%'
                 AND tags ? 'tensorzero::evaluation_run_id'
             )
             SELECT DISTINCT evaluation_run_id::UUID as evaluation_run_id, variant_name
