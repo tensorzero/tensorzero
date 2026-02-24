@@ -413,6 +413,23 @@ impl GatewayHandle {
                 .build(),
         );
 
+        // Validate that all whitelisted tool names exist in available_tools
+        let unknown_whitelist_tools: Vec<&str> = tool_whitelist
+            .iter()
+            .filter(|name| !available_tools.contains(name.as_str()))
+            .map(|s| s.as_str())
+            .collect();
+        if !unknown_whitelist_tools.is_empty() {
+            return Err(ErrorDetails::AppState {
+                message: format!(
+                    "Unknown tool names in `autopilot.tool_whitelist`: {unknown_whitelist_tools:?}. \
+                     These tools do not exist and will never be auto-approved. \
+                     Check for typos in your configuration."
+                ),
+            }
+            .into());
+        }
+
         let autopilot_client = setup_autopilot_client(
             &postgres_connection_info,
             deployment_id.as_ref(),

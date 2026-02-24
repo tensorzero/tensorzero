@@ -1125,7 +1125,9 @@ impl AutopilotClient {
                             }
                         }
                         Some(Err(e)) => return Err(e),
-                        None => return Ok(()), // Stream ended
+                        None => return Err(AutopilotError::Sse(
+                            "Tool call stream ended unexpectedly".to_string(),
+                        )),
                     }
                 }
                 () = shutdown_token.cancelled() => return Ok(()),
