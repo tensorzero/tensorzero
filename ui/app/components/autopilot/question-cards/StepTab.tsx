@@ -7,13 +7,21 @@ type StepTabProps = {
   index: number;
   label: string;
   state: StepState;
+  disabled?: boolean;
   onClick: () => void;
 };
 
-export function StepTab({ index, label, state, onClick }: StepTabProps) {
+export function StepTab({
+  index,
+  label,
+  state,
+  disabled,
+  onClick,
+}: StepTabProps) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className={cn(
         "flex shrink-0 items-center gap-1.5 rounded-full py-1 pr-2.5 pl-1 text-xs font-medium transition-all",

@@ -107,6 +107,7 @@ export function PendingQuestionCard({
               index={idx}
               label={q.header}
               state={getStepTabState(idx)}
+              disabled={isLoading}
               onClick={() => state.setActiveStep(idx)}
             />
           ))}
@@ -135,6 +136,7 @@ export function PendingQuestionCard({
               <Button
                 variant="ghost"
                 size="xs"
+                disabled={isLoading}
                 onClick={() => state.setActiveStep((s) => s - 1)}
                 className="gap-0.5 pl-1 text-purple-700 hover:text-purple-800 dark:text-purple-300 dark:hover:text-purple-200"
               >
@@ -166,7 +168,7 @@ export function PendingQuestionCard({
             ) : (
               <Button
                 size="xs"
-                disabled={!state.isStepComplete(state.activeStep)}
+                disabled={!state.isStepComplete(state.activeStep) || isLoading}
                 onClick={() => state.setActiveStep((s) => s + 1)}
                 className="gap-0.5 bg-purple-600 pr-1 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
               >
