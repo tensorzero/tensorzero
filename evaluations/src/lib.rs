@@ -40,11 +40,11 @@ use tensorzero_core::endpoints::datasets::v1::{
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig, get_evaluator_metric_name};
 use tensorzero_core::function::FunctionConfigType;
 use tensorzero_core::inference::types::InputExt;
-use tensorzero_core::utils::gateway::setup_postgres;
+use tensorzero_core::utils::gateway::{setup_clickhouse, setup_postgres};
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
-    config::Config, db::clickhouse::ClickHouseConnectionInfo,
-    db::delegating_connection::DelegatingDatabaseQueries, endpoints::datasets::Datapoint,
+    config::Config, db::delegating_connection::DelegatingDatabaseQueries,
+    endpoints::datasets::Datapoint,
 };
 use tokio::{
     sync::{Semaphore, mpsc},
@@ -182,9 +182,12 @@ pub async fn run_evaluation(
 
     // TODO(#5754): Extract environment variable reading to a centralized location
     info!("Initializing evaluation environment");
-    let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
-        .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
-    debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
+    let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
+    if let Some(clickhouse_url) = clickhouse_url.as_ref() {
+        debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
+    } else {
+        debug!("ClickHouse URL not provided");
+    }
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
     if let Some(postgres_url) = postgres_url.as_ref() {
         debug!(postgres_url = %postgres_url, "Postgres URL resolved");
@@ -206,23 +209,22 @@ pub async fn run_evaluation(
     )
     .await?;
 
-    let clickhouse_client = ClickHouseConnectionInfo::new(
-        &clickhouse_url,
-        unwritten_config.gateway.observability.batch_writes.clone(),
-    )
-    .await?;
-    let config = Box::pin(unwritten_config.into_config(&clickhouse_client)).await?;
-    let config = Arc::new(config);
-    debug!("Configuration loaded successfully");
-
-    let postgres_connection = setup_postgres(&config, postgres_url.as_deref()).await?;
-    // TODO(#5691): Allow running evaluations with Postgres as the observability backend.
-    let primary_datastore = PrimaryDatastore::ClickHouse;
+    let clickhouse_client =
+        setup_clickhouse(&unwritten_config, clickhouse_url.clone(), false).await?;
+    let postgres_connection = setup_postgres(&unwritten_config, postgres_url.as_deref()).await?;
+    let primary_datastore = PrimaryDatastore::resolve(
+        &unwritten_config.gateway.observability,
+        &clickhouse_client,
+        &postgres_connection,
+    )?;
     let database = DelegatingDatabaseConnection::new(
         clickhouse_client.clone(),
         postgres_connection.clone(),
         primary_datastore,
     );
+    let config = Box::pin(unwritten_config.into_config(&database)).await?;
+    let config = Arc::new(config);
+    debug!("Configuration loaded successfully");
 
     // Look up evaluation config from the loaded config
     let evaluation_config = config
@@ -246,7 +248,7 @@ pub async fn run_evaluation(
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
             postgres_config: postgres_url.map(PostgresConfig::Url),
-            clickhouse_url: Some(clickhouse_url.clone()),
+            clickhouse_url: clickhouse_url.clone(),
             valkey_url,
             timeout: None,
             verify_credentials: true,
