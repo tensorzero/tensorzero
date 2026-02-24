@@ -24,15 +24,15 @@ pub const NANO_DOLLARS_PER_DOLLAR: u64 = 1_000_000_000;
 
 /// Convert a dollar amount (f64) to nano-dollars (u64).
 /// Negative values are clamped to 0. Values that would overflow `u64` are clamped to `u64::MAX`.
-pub fn cost_to_nano_cost(dollars: f64) -> u64 {
-    if dollars <= 0.0 {
+pub fn cost_to_nano_cost(cost: f64) -> u64 {
+    if cost <= 0.0 {
         return 0;
     }
-    let nano = (dollars * NANO_DOLLARS_PER_DOLLAR as f64).round();
-    if nano >= u64::MAX as f64 {
+    let nano_cost = (cost * NANO_DOLLARS_PER_DOLLAR as f64).ceil();
+    if nano_cost >= u64::MAX as f64 {
         return u64::MAX;
     }
-    nano as u64
+    nano_cost as u64
 }
 
 /// Convert nano-dollars (u64) back to dollars (f64).
