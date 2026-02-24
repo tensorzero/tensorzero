@@ -357,7 +357,7 @@ pub async fn create_event_handler(
             // since we want to fill it in ourselves.
             // This avoids the need to duplicate the entire type hierarchy
             return Err(Error::new(ErrorDetails::Serialization {
-                message: "'resolved_uuids' must be empty for an incoming event".to_string(),
+                message: "`resolved_uuids` must be empty for an incoming event".to_string(),
             }));
         }
         let resolved_uuids = resolve_uuids_in_message(&msg.content, &app_state).await;
