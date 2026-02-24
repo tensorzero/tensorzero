@@ -1,3 +1,4 @@
+import { Markdown } from "~/components/ui/markdown";
 import { Textarea } from "~/components/ui/textarea";
 import type { EventPayloadUserQuestion } from "~/types/tensorzero";
 
@@ -14,9 +15,9 @@ export function FreeResponseStep({
 }: FreeResponseStepProps) {
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-fg-primary text-sm font-medium">
+      <Markdown className="text-fg-primary text-sm font-medium">
         {question.question}
-      </span>
+      </Markdown>
       <Textarea
         value={text}
         onChange={(e) => onTextChange(e.target.value)}

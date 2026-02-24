@@ -24,15 +24,15 @@ export function StepTab({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-full py-1 pr-2.5 pl-1 text-xs font-medium transition-all",
+        "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full py-1 pr-2.5 pl-1 text-xs font-medium transition-all",
         state === "active" &&
           "bg-purple-200/70 text-purple-800 dark:bg-purple-800/50 dark:text-purple-200",
         state === "completed" &&
-          "cursor-pointer text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20",
+          "text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20",
         state === "skipped" &&
-          "text-fg-muted cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/20",
+          "text-fg-muted hover:bg-gray-100 dark:hover:bg-gray-800/20",
         state === "upcoming" &&
-          "text-fg-muted cursor-pointer hover:bg-purple-100/50 dark:hover:bg-purple-900/20",
+          "text-fg-muted hover:bg-purple-100/50 dark:hover:bg-purple-900/20",
       )}
       aria-label={`Go to question ${index + 1}: ${label}`}
       aria-current={state === "active" ? "step" : undefined}
