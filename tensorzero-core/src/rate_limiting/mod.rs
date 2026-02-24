@@ -42,9 +42,9 @@ pub fn nano_dollars_to_dollars(nano: u64) -> f64 {
 
 /// Convert a `Decimal` dollar amount to nano-dollars (u64).
 /// Returns 0 if the conversion fails or the value is negative.
-pub fn decimal_dollars_to_nano_dollars(dollars: Decimal) -> u64 {
-    let nano = dollars * Decimal::from(NANO_DOLLARS_PER_DOLLAR);
-    nano.to_u64().unwrap_or(0)
+pub fn cost_to_nano_cost(cost: Decimal) -> u64 {
+    let nano_cost = cost * Decimal::from(NANO_DOLLARS_PER_DOLLAR);
+    nano_cost.to_u64().unwrap_or(0)
 }
 
 /*
@@ -520,7 +520,7 @@ pub enum RateLimitResourceUsage {
         model_inferences: u64,
         tokens: u64,
         /// Cost in nano-dollars. `None` means cost is unknown.
-        cost: Option<u64>,
+        nano_cost: Option<u64>,
     },
     /// We were only able to estimate the usage (e.g. if an error occurred in an inference stream,
     /// and there might have been additional usage chunks that we missed; or the provider did not report token usage).
@@ -531,7 +531,7 @@ pub enum RateLimitResourceUsage {
         model_inferences: u64,
         tokens: u64,
         /// Cost in nano-dollars. `None` means cost is unknown.
-        cost: Option<u64>,
+        nano_cost: Option<u64>,
     },
 }
 
@@ -2258,13 +2258,13 @@ mod tests {
         let token_usage_exact = RateLimitResourceUsage::Exact {
             model_inferences: 1,
             tokens: 100, // Actual usage is 100 tokens
-            cost: None,
+            nano_cost: None,
         };
 
         let token_usage_underestimate = RateLimitResourceUsage::UnderEstimate {
             model_inferences: 1,
             tokens: 0, // This is what we use when usage is None
-            cost: None,
+            nano_cost: None,
         };
 
         // Verify that Exact usage allows refunds (when actual < estimate)
@@ -2501,28 +2501,24 @@ mod tests {
     }
 
     #[test]
-    fn test_decimal_dollars_to_nano_dollars_conversion() {
+    fn test_cost_to_nano_cost_conversion() {
         use rust_decimal::Decimal;
 
         let d = Decimal::new(150, 2); // 1.50
         assert_eq!(
-            decimal_dollars_to_nano_dollars(d),
+            cost_to_nano_cost(d),
             1_500_000_000,
             "$1.50 as Decimal should be 1.5 billion nano-dollars"
         );
 
         let d = Decimal::new(1, 3); // 0.001
         assert_eq!(
-            decimal_dollars_to_nano_dollars(d),
+            cost_to_nano_cost(d),
             1_000_000,
             "$0.001 as Decimal should be 1 million nano-dollars"
         );
 
         let d = Decimal::ZERO;
-        assert_eq!(
-            decimal_dollars_to_nano_dollars(d),
-            0,
-            "$0.00 should be 0 nano-dollars"
-        );
+        assert_eq!(cost_to_nano_cost(d), 0, "$0.00 should be 0 nano-dollars");
     }
 }

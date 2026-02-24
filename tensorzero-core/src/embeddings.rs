@@ -25,7 +25,7 @@ use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
     RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, RateLimitingConfig,
-    decimal_dollars_to_nano_dollars, get_estimated_tokens,
+    cost_to_nano_cost, get_estimated_tokens,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -421,18 +421,18 @@ pub struct EmbeddingProviderResponse {
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
     fn resource_usage(&self) -> RateLimitResourceUsage {
-        let cost = self.usage.cost.map(decimal_dollars_to_nano_dollars);
+        let nano_cost = self.usage.cost.map(cost_to_nano_cost);
         if let Some(tokens) = self.usage.total_tokens() {
             RateLimitResourceUsage::Exact {
                 model_inferences: 1,
                 tokens: tokens as u64,
-                cost,
+                nano_cost,
             }
         } else {
             RateLimitResourceUsage::UnderEstimate {
                 model_inferences: 1,
                 tokens: 0,
-                cost,
+                nano_cost,
             }
         }
     }

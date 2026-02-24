@@ -16,7 +16,7 @@ use tracing::Span;
 
 use super::{
     RateLimitResource, RateLimitResourceUsage, RateLimitedRequest, RateLimitingBackend,
-    RateLimitingConfig, ScopeInfo, TicketBorrow, TicketBorrows,
+    RateLimitingConfig, ScopeInfo, TicketBorrow, TicketBorrows, nano_dollars_to_dollars,
 };
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::rate_limiting::{ConsumeTicketsRequest, DisabledRateLimitQueries, RateLimitQueries};
@@ -139,7 +139,7 @@ impl RateLimitingManager {
     }
 
     /// Consume tickets for a rate-limited request.
-    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences, estimated_usage.cost_nano_dollars))]
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences, estimated_usage.cost_dollars))]
     pub async fn consume_tickets(
         self: &Arc<Self>,
         scope_info: &ScopeInfo,
@@ -175,7 +175,10 @@ impl RateLimitingManager {
             span.record("estimated_usage.model_inferences", model_inferences as i64);
         }
         if let Some(cost) = rate_limit_resource_requests.cost {
-            span.record("estimated_usage.cost_nano_dollars", cost as i64);
+            span.record(
+                "estimated_usage.cost_dollars",
+                nano_dollars_to_dollars(cost),
+            );
         }
 
         // Consume tickets directly from the database
@@ -191,7 +194,7 @@ impl RateLimitingManager {
     }
 
     /// Return tickets based on actual resource usage.
-    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, actual_usage.cost_nano_dollars, underestimate))]
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, actual_usage.cost_dollars, underestimate))]
     pub async fn return_tickets(
         &self,
         ticket_borrows: TicketBorrows,
@@ -215,24 +218,24 @@ impl RateLimitingManager {
             RateLimitResourceUsage::Exact {
                 tokens,
                 model_inferences,
-                cost,
+                nano_cost: cost,
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
                 if let Some(cost) = cost {
-                    span.record("actual_usage.cost_nano_dollars", cost as i64);
+                    span.record("actual_usage.cost_dollars", nano_dollars_to_dollars(cost));
                 }
                 span.record("underestimate", false);
             }
             RateLimitResourceUsage::UnderEstimate {
                 tokens,
                 model_inferences,
-                cost,
+                nano_cost: cost,
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
                 if let Some(cost) = cost {
-                    span.record("actual_usage.cost_nano_dollars", cost as i64);
+                    span.record("actual_usage.cost_dollars", nano_dollars_to_dollars(cost));
                 }
                 span.record("underestimate", true);
             }
@@ -263,14 +266,18 @@ impl RateLimitingManager {
                 },
                 RateLimitResource::Cost => {
                     let cost = match actual_usage {
-                        RateLimitResourceUsage::Exact { cost, .. }
-                        | RateLimitResourceUsage::UnderEstimate { cost, .. } => cost,
+                        RateLimitResourceUsage::Exact {
+                            nano_cost: cost, ..
+                        }
+                        | RateLimitResourceUsage::UnderEstimate {
+                            nano_cost: cost, ..
+                        } => cost,
                     };
                     match cost {
                         Some(c) => c,
                         None => {
                             // When actual cost is unknown, skip the refund entirely.
-                            // We already consumed default_cost tickets up front, and without
+                            // We already consumed `default_cost` tickets up front, and without
                             // knowing the real cost we can't make a meaningful adjustment.
                             tracing::warn!(
                                 "Cost rate limiting is active but actual cost is not available. \
@@ -596,7 +603,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 100,
             model_inferences: 1,
-            cost: None,
+            nano_cost: None,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(result.is_ok(), "Should succeed when actual equals estimate");
@@ -631,7 +638,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 50,
             model_inferences: 1,
-            cost: None,
+            nano_cost: None,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(
@@ -669,7 +676,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 150,
             model_inferences: 1,
-            cost: None,
+            nano_cost: None,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(
@@ -707,7 +714,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::UnderEstimate {
             tokens: 50,
             model_inferences: 1,
-            cost: None,
+            nano_cost: None,
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(result.is_ok(), "Should succeed with underestimate usage");
@@ -786,7 +793,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 100,
             model_inferences: 1,
-            cost: Some(500_000_000), // $0.50 actual cost
+            nano_cost: Some(500_000_000), // $0.50 actual cost
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(
@@ -826,7 +833,7 @@ mod tests {
         let actual_usage = RateLimitResourceUsage::Exact {
             tokens: 100,
             model_inferences: 1,
-            cost: None, // Unknown cost
+            nano_cost: None, // Unknown cost
         };
         let result = manager.return_tickets(borrows, actual_usage).await;
         assert!(
