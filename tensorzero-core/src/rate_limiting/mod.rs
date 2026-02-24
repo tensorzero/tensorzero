@@ -24,7 +24,7 @@ pub const NANO_DOLLARS_PER_DOLLAR: u64 = 1_000_000_000;
 
 /// Convert a dollar amount (f64) to nano-dollars (u64).
 /// Negative values are clamped to 0. Values that would overflow `u64` are clamped to `u64::MAX`.
-pub fn dollars_to_nano_dollars(dollars: f64) -> u64 {
+pub fn cost_to_nano_cost(dollars: f64) -> u64 {
     if dollars <= 0.0 {
         return 0;
     }
@@ -36,13 +36,13 @@ pub fn dollars_to_nano_dollars(dollars: f64) -> u64 {
 }
 
 /// Convert nano-dollars (u64) back to dollars (f64).
-pub fn nano_cost_to_cost(cost: u64) -> f64 {
-    cost as f64 / NANO_DOLLARS_PER_DOLLAR as f64
+pub fn nano_cost_to_cost(nano_cost: u64) -> f64 {
+    nano_cost as f64 / NANO_DOLLARS_PER_DOLLAR as f64
 }
 
 /// Convert a `Decimal` dollar amount to nano-dollars (u64).
 /// Returns 0 if the conversion fails or the value is negative.
-pub fn cost_to_nano_cost(cost: Decimal) -> u64 {
+pub fn decimal_cost_to_nano_cost(cost: Decimal) -> u64 {
     let nano_cost = cost * Decimal::from(NANO_DOLLARS_PER_DOLLAR);
     nano_cost.to_u64().unwrap_or(0)
 }
@@ -86,7 +86,7 @@ pub struct RateLimitingConfig {
     pub(crate) backend: RateLimitingBackend,
     /// Default cost in nano-dollars used for cost estimation when actual cost is unknown.
     /// Defaults to $1.00 = 1,000,000,000 nano-dollars.
-    pub(crate) default_cost_nano_dollars: u64,
+    pub(crate) default_nano_cost: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -97,8 +97,8 @@ pub struct UninitializedRateLimitingConfig {
     pub(crate) enabled: bool,
     #[serde(default)]
     pub(crate) backend: RateLimitingBackend,
-    #[serde(default = "default_cost_nano_dollars")]
-    pub(crate) default_cost_nano_dollars: u64,
+    #[serde(default = "default_nano_cost")]
+    pub(crate) default_nano_cost: u64,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -117,7 +117,7 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
             rules: config.rules,
             enabled: config.enabled,
             backend: config.backend,
-            default_cost_nano_dollars: config.default_cost_nano_dollars,
+            default_nano_cost: config.default_nano_cost,
         })
     }
 }
@@ -129,13 +129,13 @@ impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
             rules,
             enabled,
             backend,
-            default_cost_nano_dollars,
+            default_nano_cost,
         } = config;
         Self {
             rules: rules.clone(),
             enabled: *enabled,
             backend: *backend,
-            default_cost_nano_dollars: *default_cost_nano_dollars,
+            default_nano_cost: *default_nano_cost,
         }
     }
 }
@@ -144,7 +144,7 @@ fn default_enabled() -> bool {
     true
 }
 
-fn default_cost_nano_dollars() -> u64 {
+fn default_nano_cost() -> u64 {
     NANO_DOLLARS_PER_DOLLAR // $1.00
 }
 
@@ -154,7 +154,7 @@ impl Default for UninitializedRateLimitingConfig {
             rules: Vec::new(),
             enabled: true,
             backend: RateLimitingBackend::default(),
-            default_cost_nano_dollars: default_cost_nano_dollars(),
+            default_nano_cost: default_nano_cost(),
         }
     }
 }
@@ -165,7 +165,7 @@ impl Default for RateLimitingConfig {
             rules: Vec::new(),
             enabled: true,
             backend: RateLimitingBackend::default(),
-            default_cost_nano_dollars: default_cost_nano_dollars(),
+            default_nano_cost: default_nano_cost(),
         }
     }
 }
@@ -540,8 +540,8 @@ pub struct EstimatedRateLimitResourceUsage {
     pub model_inferences: Option<u64>,
     pub tokens: Option<u64>,
     /// Cost estimate in nano-dollars. Filled in by the rate limiting manager
-    /// using `default_cost_nano_dollars` when cost rate limiting is active.
-    pub cost: Option<u64>,
+    /// using `default_nano_cost` when cost rate limiting is active.
+    pub nano_cost: Option<u64>,
 }
 
 impl EstimatedRateLimitResourceUsage {
@@ -549,7 +549,7 @@ impl EstimatedRateLimitResourceUsage {
         match resource {
             RateLimitResource::ModelInference => self.model_inferences,
             RateLimitResource::Token => self.tokens,
-            RateLimitResource::Cost => self.cost,
+            RateLimitResource::Cost => self.nano_cost,
         }
     }
 }
@@ -1871,7 +1871,7 @@ mod tests {
         let usage = EstimatedRateLimitResourceUsage {
             model_inferences: Some(5),
             tokens: Some(50),
-            cost: None,
+            nano_cost: None,
         };
 
         let consume_request = token_active_limit
@@ -2368,7 +2368,7 @@ mod tests {
         let usage = EstimatedRateLimitResourceUsage {
             model_inferences: Some(1),
             tokens: Some(100),
-            cost: Some(500_000_000),
+            nano_cost: Some(500_000_000),
         };
         assert_eq!(
             usage.get_usage(RateLimitResource::Cost),
@@ -2379,7 +2379,7 @@ mod tests {
         let usage_no_cost = EstimatedRateLimitResourceUsage {
             model_inferences: Some(1),
             tokens: Some(100),
-            cost: None,
+            nano_cost: None,
         };
         assert_eq!(
             usage_no_cost.get_usage(RateLimitResource::Cost),
@@ -2472,53 +2472,53 @@ mod tests {
     #[test]
     fn test_nano_dollar_conversions() {
         assert_eq!(
-            dollars_to_nano_dollars(1.0),
+            cost_to_nano_cost(1.0),
             1_000_000_000,
             "$1.00 should be 1 billion nano-dollars"
         );
         assert_eq!(
-            dollars_to_nano_dollars(0.001),
+            cost_to_nano_cost(0.001),
             1_000_000,
             "$0.001 should be 1 million nano-dollars"
         );
+        assert_eq!(cost_to_nano_cost(0.0), 0, "$0.00 should be 0 nano-dollars");
         assert_eq!(
-            dollars_to_nano_dollars(0.0),
-            0,
-            "$0.00 should be 0 nano-dollars"
-        );
-        assert_eq!(
-            dollars_to_nano_dollars(-1.0),
+            cost_to_nano_cost(-1.0),
             0,
             "Negative values should clamp to 0"
         );
 
-        let nano = 1_500_000_000u64;
-        let dollars = nano_cost_to_cost(nano);
+        let nano_cost = 1_500_000_000u64;
+        let cost = nano_cost_to_cost(nano_cost);
         assert!(
-            (dollars - 1.5).abs() < f64::EPSILON,
+            (cost - 1.5).abs() < f64::EPSILON,
             "1.5 billion nano-dollars should be $1.50"
         );
     }
 
     #[test]
-    fn test_cost_to_nano_cost_conversion() {
+    fn test_decimal_cost_to_nano_cost_conversion() {
         use rust_decimal::Decimal;
 
         let d = Decimal::new(150, 2); // 1.50
         assert_eq!(
-            cost_to_nano_cost(d),
+            decimal_cost_to_nano_cost(d),
             1_500_000_000,
             "$1.50 as Decimal should be 1.5 billion nano-dollars"
         );
 
         let d = Decimal::new(1, 3); // 0.001
         assert_eq!(
-            cost_to_nano_cost(d),
+            decimal_cost_to_nano_cost(d),
             1_000_000,
             "$0.001 as Decimal should be 1 million nano-dollars"
         );
 
         let d = Decimal::ZERO;
-        assert_eq!(cost_to_nano_cost(d), 0, "$0.00 should be 0 nano-dollars");
+        assert_eq!(
+            decimal_cost_to_nano_cost(d),
+            0,
+            "$0.00 should be 0 nano-dollars"
+        );
     }
 }

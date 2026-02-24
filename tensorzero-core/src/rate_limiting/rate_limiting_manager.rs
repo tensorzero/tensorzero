@@ -174,8 +174,8 @@ impl RateLimitingManager {
         if let Some(model_inferences) = rate_limit_resource_requests.model_inferences {
             span.record("estimated_usage.model_inferences", model_inferences as i64);
         }
-        if let Some(cost) = rate_limit_resource_requests.cost {
-            span.record("estimated_usage.cost", nano_cost_to_cost(cost));
+        if let Some(nano_cost) = rate_limit_resource_requests.nano_cost {
+            span.record("estimated_usage.cost", nano_cost_to_cost(nano_cost));
         }
 
         // Consume tickets directly from the database
@@ -219,8 +219,8 @@ impl RateLimitingManager {
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
-                if let Some(cost) = cost {
-                    span.record("actual_usage.cost", nano_cost_to_cost(cost));
+                if let Some(nano_cost) = cost {
+                    span.record("actual_usage.cost", nano_cost_to_cost(nano_cost));
                 }
                 span.record("underestimate", false);
             }
@@ -231,8 +231,8 @@ impl RateLimitingManager {
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
-                if let Some(cost) = cost {
-                    span.record("actual_usage.cost", nano_cost_to_cost(cost));
+                if let Some(nano_cost) = cost {
+                    span.record("actual_usage.cost", nano_cost_to_cost(nano_cost));
                 }
                 span.record("underestimate", true);
             }
@@ -411,15 +411,15 @@ mod tests {
             resources: &[RateLimitResource],
             rate_limiting_config: &RateLimitingConfig,
         ) -> Result<EstimatedRateLimitResourceUsage, Error> {
-            let cost = if resources.contains(&RateLimitResource::Cost) {
-                Some(rate_limiting_config.default_cost_nano_dollars)
+            let nano_cost = if resources.contains(&RateLimitResource::Cost) {
+                Some(rate_limiting_config.default_nano_cost)
             } else {
                 None
             };
             Ok(EstimatedRateLimitResourceUsage {
                 tokens: Some(self.tokens),
                 model_inferences: Some(self.model_inferences),
-                cost,
+                nano_cost,
             })
         }
     }
@@ -737,7 +737,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            default_cost_nano_dollars: 1_000_000_000, // $1.00
+            default_nano_cost: 1_000_000_000, // $1.00
             ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
@@ -771,7 +771,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            default_cost_nano_dollars: 1_000_000_000,
+            default_nano_cost: 1_000_000_000,
             ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
@@ -810,7 +810,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            default_cost_nano_dollars: 1_000_000_000,
+            default_nano_cost: 1_000_000_000,
             ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));
@@ -850,7 +850,7 @@ mod tests {
         let config = Arc::new(RateLimitingConfig {
             rules: vec![rule],
             enabled: true,
-            default_cost_nano_dollars: 1_000_000_000,
+            default_nano_cost: 1_000_000_000,
             ..Default::default()
         });
         let manager = Arc::new(RateLimitingManager::new(config, Arc::new(mock)));

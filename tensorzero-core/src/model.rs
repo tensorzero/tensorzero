@@ -61,7 +61,7 @@ use crate::providers::hyperbolic::HyperbolicProvider;
 use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
-use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows, cost_to_nano_cost};
+use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows, decimal_cost_to_nano_cost};
 use crate::utils::mock::get_mock_provider_api_base;
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -920,7 +920,7 @@ fn wrap_provider_stream(
         otlp_config.apply_usage_to_model_provider_span(&span_clone, &aggregated_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            let nano_cost = aggregated_usage.cost.map(cost_to_nano_cost);
+            let nano_cost = aggregated_usage.cost.map(decimal_cost_to_nano_cost);
             let usage = match (aggregated_usage.total_tokens(), errored) {
                 (Some(tokens), false) => {
                     RateLimitResourceUsage::Exact {

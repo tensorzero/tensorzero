@@ -6,8 +6,7 @@ use crate::rate_limiting::{
     ApiKeyPublicIdConfigScope, ApiKeyPublicIdValueScope, NANO_DOLLARS_PER_DOLLAR, RateLimit,
     RateLimitInterval, RateLimitResource, RateLimitingBackend, RateLimitingConfigPriority,
     RateLimitingConfigRule, RateLimitingConfigScope, RateLimitingConfigScopes,
-    TagRateLimitingConfigScope, TagValueScope, UninitializedRateLimitingConfig,
-    dollars_to_nano_dollars,
+    TagRateLimitingConfigScope, TagValueScope, UninitializedRateLimitingConfig, cost_to_nano_cost,
 };
 
 /*
@@ -46,7 +45,7 @@ pub struct TomlUninitializedRateLimitingConfig {
     #[serde(default)]
     pub(crate) backend: RateLimitingBackend,
     /// Default cost in dollars for cost rate limiting estimation.
-    /// Converted to nano-dollars internally. Defaults to $1.00.
+    /// Converted to nano-dollars internally. Defaults to 1 (= $1.00).
     #[serde(default)]
     pub(crate) default_cost: Option<f64>,
 }
@@ -71,14 +70,14 @@ impl TryFrom<TomlUninitializedRateLimitingConfig> for UninitializedRateLimitingC
 
     fn try_from(toml_config: TomlUninitializedRateLimitingConfig) -> Result<Self, Self::Error> {
         // Validate and convert default_cost
-        let default_cost_nano_dollars = match toml_config.default_cost {
+        let default_nano_cost = match toml_config.default_cost {
             Some(cost) => {
                 if !cost.is_finite() || cost < 0.0 {
                     return Err(format!(
                         "`default_cost` must be a finite non-negative number, got {cost}"
                     ));
                 }
-                dollars_to_nano_dollars(cost)
+                cost_to_nano_cost(cost)
             }
             None => NANO_DOLLARS_PER_DOLLAR, // $1.00 default
         };
@@ -87,7 +86,7 @@ impl TryFrom<TomlUninitializedRateLimitingConfig> for UninitializedRateLimitingC
             rules: toml_config.rules.into_iter().map(Into::into).collect(),
             enabled: toml_config.enabled,
             backend: toml_config.backend,
-            default_cost_nano_dollars,
+            default_nano_cost,
         })
     }
 }
@@ -181,8 +180,8 @@ impl<'de> Deserialize<'de> for TomlRateLimitingConfigRule {
                                         "Cost rate limit value must be a finite non-negative number",
                                     ));
                                 }
-                                let nano = dollars_to_nano_dollars(amount);
-                                (nano, nano)
+                                let nano_cost = cost_to_nano_cost(amount);
+                                (nano_cost, nano_cost)
                             }
                             CostCapacityHelper::Bucket(bucket) => {
                                 if !bucket.capacity.is_finite()
@@ -195,8 +194,8 @@ impl<'de> Deserialize<'de> for TomlRateLimitingConfigRule {
                                     ));
                                 }
                                 (
-                                    dollars_to_nano_dollars(bucket.capacity),
-                                    dollars_to_nano_dollars(bucket.refill_rate),
+                                    cost_to_nano_cost(bucket.capacity),
+                                    cost_to_nano_cost(bucket.refill_rate),
                                 )
                             }
                         }
@@ -1586,7 +1585,7 @@ mod tests {
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
         let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         assert_eq!(
-            uninitialized_config.default_cost_nano_dollars, 500_000_000,
+            uninitialized_config.default_nano_cost, 500_000_000,
             "$0.50 should be 500 million nano-dollars"
         );
 
@@ -1600,7 +1599,7 @@ mod tests {
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
         let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         assert_eq!(
-            uninitialized_config.default_cost_nano_dollars, 1_000_000_000,
+            uninitialized_config.default_nano_cost, 1_000_000_000,
             "Default should be $1.00 = 1 billion nano-dollars"
         );
     }
