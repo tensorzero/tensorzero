@@ -51,7 +51,7 @@ TEST_CONFIG_FILE = os.path.join(
 # Config glob that also includes pg.gateway.toml (sets observability.backend = "postgres")
 TEST_CONFIG_FILE_POSTGRES = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-core/tests/e2e/config/{tensorzero,pg}.*.toml",
+    "../../../tensorzero-core/tests/e2e/config/{tensorzero,postgres}.*.toml",
 )
 
 GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")

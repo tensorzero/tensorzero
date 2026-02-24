@@ -13,7 +13,9 @@ pub fn get_e2e_config_path_for_datastore(primary: PrimaryDatastore) -> PathBuf {
     let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     match primary {
         PrimaryDatastore::ClickHouse => config_path.push("tests/e2e/config/tensorzero.*.toml"),
-        PrimaryDatastore::Postgres => config_path.push("tests/e2e/config/{tensorzero,pg}.*.toml"),
+        PrimaryDatastore::Postgres => {
+            config_path.push("tests/e2e/config/{tensorzero,postgres}.*.toml")
+        }
     }
     config_path
 }
