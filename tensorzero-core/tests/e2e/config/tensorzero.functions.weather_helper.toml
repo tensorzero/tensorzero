@@ -205,6 +205,11 @@ type = "chat_completion"
 model = "kimi-k2p5-fireworks"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 
+[functions.weather_helper.variants.fireworks-kimi]
+type = "chat_completion"
+model = "fireworks-kimi"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 1200
 
 [functions.weather_helper.variants.together-deepseek-r1]
 type = "chat_completion"

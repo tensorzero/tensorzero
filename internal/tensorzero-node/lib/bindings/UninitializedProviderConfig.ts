@@ -84,7 +84,7 @@ export type UninitializedProviderConfig =
       type: "fireworks";
       model_name: string;
       api_key_location: string | null;
-      parse_think_blocks: boolean;
+      parse_think_blocks?: boolean;
     }
   | {
       type: "mistral";

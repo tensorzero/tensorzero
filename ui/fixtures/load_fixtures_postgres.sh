@@ -504,42 +504,11 @@ SELECT tensorzero.refresh_model_latency_histogram_minute_incremental(
 SELECT tensorzero.refresh_model_latency_histogram_hour_incremental(
     full_refresh => TRUE
 );
+SELECT tensorzero.refresh_inference_by_function_statistics_incremental(
+    full_refresh => TRUE
+);
 EOF
 
 
 echo ""
 echo "All fixtures loaded successfully!"
-
-# Print row counts
-echo ""
-echo "Row counts:"
-psql -q "$POSTGRES_URL" <<EOF
-SELECT 'chat_inferences' as table_name, count(*) as count FROM tensorzero.chat_inferences
-UNION ALL
-SELECT 'chat_inference_data', count(*) FROM tensorzero.chat_inference_data
-UNION ALL
-SELECT 'json_inferences', count(*) FROM tensorzero.json_inferences
-UNION ALL
-SELECT 'json_inference_data', count(*) FROM tensorzero.json_inference_data
-UNION ALL
-SELECT 'model_inferences', count(*) FROM tensorzero.model_inferences
-UNION ALL
-SELECT 'model_inference_data', count(*) FROM tensorzero.model_inference_data
-UNION ALL
-SELECT 'boolean_metric_feedback', count(*) FROM tensorzero.boolean_metric_feedback
-UNION ALL
-SELECT 'float_metric_feedback', count(*) FROM tensorzero.float_metric_feedback
-UNION ALL
-SELECT 'comment_feedback', count(*) FROM tensorzero.comment_feedback
-UNION ALL
-SELECT 'demonstration_feedback', count(*) FROM tensorzero.demonstration_feedback
-UNION ALL
-SELECT 'chat_datapoints', count(*) FROM tensorzero.chat_datapoints
-UNION ALL
-SELECT 'json_datapoints', count(*) FROM tensorzero.json_datapoints
-UNION ALL
-SELECT 'workflow_evaluation_runs', count(*) FROM tensorzero.workflow_evaluation_runs
-UNION ALL
-SELECT 'workflow_evaluation_run_episodes', count(*) FROM tensorzero.workflow_evaluation_run_episodes
-ORDER BY table_name;
-EOF

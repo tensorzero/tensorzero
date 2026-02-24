@@ -54,12 +54,12 @@ for table in "${!all_tables[@]}"; do
     for file in "${files[@]}"; do
         if [ -f "$file" ]; then
             if [[ "$file" == *.parquet ]]; then
-                # For parquet files, use parquet-tools to count rows
-                if command -v uv &> /dev/null && uv run parquet-tools --help &> /dev/null; then
-                    file_count=$(uv run parquet-tools inspect "$file" | grep "num_rows:" | awk '{print $2}')
+                # For parquet files, use pyarrow to count rows
+                if command -v uv &> /dev/null; then
+                    file_count=$(uv run python -c "import pyarrow.parquet as pq; print(pq.read_metadata('$file').num_rows)")
                     echo "  - $file: $file_count rows (parquet)"
                 else
-                    echo "  - WARNING: parquet-tools not installed, cannot count rows in $file"
+                    echo "  - WARNING: uv not installed, cannot count rows in $file"
                     mismatch=1
                 fi
             else

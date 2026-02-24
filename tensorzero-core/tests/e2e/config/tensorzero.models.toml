@@ -29,13 +29,19 @@ extra_body = [
     { pointer = "/frequency_penalty", value = 1.42 },
 ]
 
+[models."fireworks-kimi"]
+routing = ["fireworks"]
+
+[models."fireworks-kimi".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/kimi-k2p5"
+
 [models."kimi-k2p5-fireworks"]
 routing = ["fireworks"]
 
 [models."kimi-k2p5-fireworks".providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/kimi-k2p5"
-parse_think_blocks = false
 
 [models."gpt-oss-20b-vllm"]
 routing = ["vllm"]

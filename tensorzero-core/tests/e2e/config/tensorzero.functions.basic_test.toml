@@ -828,6 +828,12 @@ model = "kimi-k2p5-fireworks"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
+[functions.basic_test.variants.fireworks-kimi]
+type = "chat_completion"
+model = "fireworks-kimi"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.flaky]
 type = "chat_completion"
 model = "flaky_basic_test"

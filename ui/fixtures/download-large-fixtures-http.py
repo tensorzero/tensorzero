@@ -1,7 +1,7 @@
 # /// script
 # dependencies = [
 #   "requests",
-#   "parquet-tools",
+#   "pyarrow",
 # ]
 # ///
 # HTTP-only version for local development without R2 credentials.
@@ -10,9 +10,9 @@
 import concurrent.futures
 import hashlib
 import os
-import subprocess
 import time
 
+import pyarrow.parquet as pq
 import requests
 from download_fixtures_consts import LARGE_FIXTURES as FIXTURES
 from download_fixtures_consts import LARGE_FIXTURES_DIR, PART_SIZE, R2_PUBLIC_BUCKET_URL
@@ -148,11 +148,9 @@ def main():
 
     for fixture in FIXTURES:
         print(f"Fixture {fixture}:", flush=True)
-        subprocess.run(
-            ["parquet-tools", "inspect", LARGE_FIXTURES_DIR / fixture],
-            check=True,
-            stderr=subprocess.STDOUT,
-        )
+        metadata = pq.read_metadata(LARGE_FIXTURES_DIR / fixture)
+        print(f"  num_rows: {metadata.num_rows}", flush=True)
+        print(f"  num_row_groups: {metadata.num_row_groups}", flush=True)
 
 
 if __name__ == "__main__":

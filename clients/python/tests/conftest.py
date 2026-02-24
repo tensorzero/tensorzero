@@ -48,6 +48,7 @@ TEST_CONFIG_FILE = os.path.join(
     "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
+GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
 CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
 POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests"
 
@@ -101,7 +102,7 @@ async def embedded_async_client():
 async def async_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         client_fut = AsyncTensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000",
+            gateway_url=GATEWAY_URL,
             verbose_errors=True,
         )
         assert inspect.isawaitable(client_fut)
@@ -121,7 +122,7 @@ async def async_client(request: FixtureRequest):
 def sync_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         with TensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000",
+            gateway_url=GATEWAY_URL,
             verbose_errors=True,
         ) as client:
             yield client
@@ -290,7 +291,7 @@ class OpenAIClientType(Enum):
 @pytest_asyncio.fixture(params=[OpenAIClientType.HttpGateway, OpenAIClientType.PatchedClient])
 async def async_openai_client(request: FixtureRequest):
     if request.param == OpenAIClientType.HttpGateway:
-        async with AsyncOpenAI(api_key="donotuse", base_url="http://localhost:3000/openai/v1") as client:
+        async with AsyncOpenAI(api_key="donotuse", base_url=f"{GATEWAY_URL}/openai/v1") as client:
             yield client
     else:
         async with AsyncOpenAI(api_key="donotuse") as client:

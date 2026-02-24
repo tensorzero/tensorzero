@@ -141,6 +141,13 @@ system_template = "../../../fixtures/config/functions/json_success/prompt/system
 json_mode = "off"
 max_tokens = 1500
 
+[functions.json_math.variants.fireworks-kimi]
+type = "chat_completion"
+model = "fireworks-kimi"
+system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "off"
+max_tokens = 800
+
 [functions.json_math.variants.google-ai-studio-gemini-3-flash]
 type = "chat_completion"
 model = "gemini-3-flash"

@@ -6,6 +6,9 @@ use sqlx::Row;
 use std::collections::{HashMap, HashSet};
 use tensorzero::{GetDatapointParams, GetDatasetMetadataParams, OrderDirection, Role};
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::clickhouse::query_builder::{
+    DatapointFilter, TagComparisonOperator, TagFilter,
+};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{DatasetMetadata, DatasetQueries, GetDatapointsParams};
 use tensorzero_core::db::postgres::test_helpers::get_postgres;
@@ -955,6 +958,39 @@ async fn test_get_datapoints_with_single_chat_datapoint(
     }
 }
 make_db_test!(test_get_datapoints_with_single_chat_datapoint);
+
+async fn test_get_datapoints_with_tag_filter_from_small_fixtures(conn: impl DatasetQueries) {
+    let filter = DatapointFilter::Tag(TagFilter {
+        key: "tensorzero::evaluation_run_id".to_string(),
+        value: "01963691-9d3c-7793-a8be-3937ebb849c1".to_string(),
+        comparison_operator: TagComparisonOperator::Equal,
+    });
+
+    let datapoints = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some("foo".to_string()),
+            function_name: Some("write_haiku".to_string()),
+            ids: None,
+            limit: 20,
+            offset: 0,
+            allow_stale: true,
+            filter: Some(filter),
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    let expected_id = Uuid::parse_str("0196374a-d03f-7420-9da5-1561cba71ddb").unwrap();
+
+    assert!(
+        datapoints
+            .iter()
+            .any(|datapoint| datapoint.id() == expected_id),
+        "TagFilter should match datapoint {expected_id} from `ui/fixtures/small-fixtures/chat_inference_datapoint_examples.jsonl`"
+    );
+}
+make_db_test!(test_get_datapoints_with_tag_filter_from_small_fixtures);
 
 async fn test_get_datapoints_with_single_json_datapoint(
     conn: impl DatasetQueries + TestDatabaseHelpers,
