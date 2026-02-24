@@ -43,7 +43,8 @@ export async function action({ params, request }: ActionFunctionArgs) {
   if (
     !body.responses ||
     typeof body.responses !== "object" ||
-    Array.isArray(body.responses)
+    Array.isArray(body.responses) ||
+    Object.keys(body.responses).length === 0
   ) {
     return new Response(
       "`responses` must be a non-empty object mapping question IDs to answers",
