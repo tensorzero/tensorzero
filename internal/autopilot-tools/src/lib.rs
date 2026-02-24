@@ -75,8 +75,7 @@ pub async fn collect_tool_names() -> Result<HashSet<String>, String> {
 /// This includes all production tools except destructive ones
 /// (`delete_datapoints` and `update_datapoints`).
 pub fn default_whitelisted_tool_names() -> HashSet<String> {
-    let mut names = HashSet::new();
-    for name in [
+    [
         "inference",
         "feedback",
         "create_datapoints",
@@ -94,10 +93,10 @@ pub fn default_whitelisted_tool_names() -> HashSet<String> {
         "get_inferences",
         "upload_dataset",
         "list_episodes",
-    ] {
-        names.insert(name.to_string());
-    }
-    names
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect()
 }
 
 /// Iterate over all tools with a visitor.
