@@ -130,6 +130,23 @@ curl -X POST http://localhost:3000/inference \
   }'
 ```
 
+## Other Features
+
+### Generate Embeddings
+
+You can generate embeddings from Google AI Studio using the [OpenAI-compatible provider](/integrations/model-providers/openai-compatible). For example:
+
+```toml title="tensorzero.toml" {5-7}
+[embedding_models.gemini-embedding-001]
+routing = ["google_ai_studio"]
+
+[embedding_models.gemini-embedding-001.providers.google_ai_studio]
+type = "openai"
+api_base = "https://generativelanguage.googleapis.com/v1beta/openai"
+api_key_location = "env::GOOGLE_AI_STUDIO_API_KEY"
+model_name = "gemini-embedding-001"
+```
+
 ## Thinking Parameters
 
 Gemini supports two thinking parameters:

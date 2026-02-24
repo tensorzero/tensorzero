@@ -55,7 +55,9 @@ pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesP
 pub use tensorzero_core::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
-pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
+pub use tensorzero_core::db::{
+    ClickHouseConnection, EpisodeByIdRow, ModelUsageTimePoint, TableBoundsWithCount, TimeWindow,
+};
 pub use tensorzero_core::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequest,
     CreateDatapointsFromInferenceRequestParams, CreateDatapointsRequest, CreateDatapointsResponse,
@@ -67,6 +69,9 @@ pub use tensorzero_core::endpoints::datasets::v1::types::{
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
+};
+pub use tensorzero_core::endpoints::episodes::internal::{
+    ListEpisodesParams, ListEpisodesRequest, ListEpisodesResponse,
 };
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
@@ -408,6 +413,28 @@ pub trait ClientExt {
         &self,
         request: ListInferencesRequest,
     ) -> Result<GetInferencesResponse, TensorZeroError>;
+
+    // ================================================================
+    // Episode operations
+    // ================================================================
+
+    /// Lists episodes with pagination and optional filter support.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The request parameters for listing episodes (limit, before, after, function_name, filters).
+    ///
+    /// # Returns
+    ///
+    /// A `ListEpisodesResponse` containing the episodes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn list_episodes(
+        &self,
+        request: ListEpisodesRequest,
+    ) -> Result<ListEpisodesResponse, TensorZeroError>;
 
     // ================================================================
     // Optimization operations
@@ -1057,6 +1084,52 @@ impl ClientExt for Client {
                     )
                     .await
                     .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn list_episodes(
+        &self,
+        request: ListEpisodesRequest,
+    ) -> Result<ListEpisodesResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("internal/episodes").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /internal/episodes endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                let ListEpisodesRequest {
+                    limit,
+                    before,
+                    after,
+                    function_name,
+                    filters,
+                } = request;
+                with_embedded_timeout(*timeout, async {
+                    let episodes = tensorzero_core::endpoints::episodes::internal::list_episodes(
+                        &gateway.handle.app_state.get_delegating_database(),
+                        &gateway.handle.app_state.config,
+                        limit,
+                        before,
+                        after,
+                        function_name,
+                        filters,
+                    )
+                    .await
+                    .map_err(err_to_http)?;
+                    Ok(ListEpisodesResponse { episodes })
                 })
                 .await
             }

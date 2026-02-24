@@ -126,6 +126,7 @@ impl From<OpenAIResponsesUsage> for Usage {
         Usage {
             input_tokens: usage.input_tokens,
             output_tokens: usage.output_tokens,
+            cost: None,
         }
     }
 }
@@ -1452,6 +1453,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 Usage {
                     input_tokens,
                     output_tokens,
+                    cost: None,
                 }
             });
             let raw_usage = usage_value.map(|usage| {
@@ -1549,6 +1551,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 Usage {
                     input_tokens,
                     output_tokens,
+                    cost: None,
                 }
             });
 
@@ -2508,6 +2511,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             }),
             "expected usage to include provider raw_usage entries"
         );
@@ -2603,6 +2607,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
+                cost: None,
             })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::Stop));
@@ -2704,6 +2709,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(100),
+                cost: None,
             }),
             "expected usage to include provider raw_usage entries"
         );

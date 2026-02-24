@@ -111,8 +111,7 @@ const TableCaption = React.forwardRef<
 ));
 TableCaption.displayName = "TableCaption";
 
-interface TableEmptyStateProps
-  extends React.TdHTMLAttributes<HTMLTableCellElement> {
+interface TableEmptyStateProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
   message?: string;
 }
 

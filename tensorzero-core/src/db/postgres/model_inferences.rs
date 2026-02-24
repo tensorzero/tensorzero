@@ -10,6 +10,8 @@ use sqlx::{PgPool, QueryBuilder, Row};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
+use rust_decimal::Decimal;
+
 use crate::config::snapshot::SnapshotHash;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::query_helpers::uuid_to_datetime;
@@ -198,6 +200,7 @@ fn build_get_model_inferences_query(inference_id: Uuid) -> QueryBuilder<sqlx::Po
             i.model_provider_name,
             i.ttft_ms,
             i.cached,
+            i.cost,
             i.finish_reason,
             i.snapshot_hash,
             i.created_at
@@ -225,7 +228,7 @@ pub(super) fn build_insert_model_inferences_query(
         INSERT INTO tensorzero.model_inferences (
             id, inference_id, input_tokens, output_tokens,
             response_time_ms, model_name, model_provider_name,
-            ttft_ms, cached, finish_reason, snapshot_hash, created_at
+            ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
         ) ",
     );
 
@@ -241,6 +244,7 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(row.cached)
             .push_bind(row.finish_reason)
             .push_bind(row.snapshot_hash.as_ref())
+            .push_bind(row.cost)
             .push_bind(created_at);
     });
 
@@ -684,6 +688,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
         let model_provider_name: String = row.try_get("model_provider_name")?;
         let ttft_ms: Option<i32> = row.try_get("ttft_ms")?;
         let cached: bool = row.try_get("cached")?;
+        let cost: Option<Decimal> = row.try_get("cost")?;
         let finish_reason: Option<FinishReason> = row.try_get("finish_reason")?;
         let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
         let created_at: DateTime<Utc> = row.try_get("created_at")?;
@@ -703,6 +708,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
             model_provider_name,
             ttft_ms: ttft_ms.map(|v| v as u32),
             cached,
+            cost,
             finish_reason,
             snapshot_hash,
             timestamp: Some(created_at.to_rfc3339()),
@@ -1165,6 +1171,7 @@ mod tests {
                 i.model_provider_name,
                 i.ttft_ms,
                 i.cached,
+                i.cost,
                 i.finish_reason,
                 i.snapshot_hash,
                 i.created_at
@@ -1192,6 +1199,7 @@ mod tests {
             model_provider_name: "test_provider".to_string(),
             ttft_ms: Some(50),
             cached: false,
+            cost: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
             timestamp: None,
@@ -1204,8 +1212,8 @@ mod tests {
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
-                ttft_ms, cached, finish_reason, snapshot_hash, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             ",
         );
 
@@ -1239,6 +1247,7 @@ mod tests {
                 model_provider_name: "provider1".to_string(),
                 ttft_ms: None,
                 cached: false,
+                cost: None,
                 finish_reason: None,
                 snapshot_hash: None,
                 timestamp: None,
@@ -1258,6 +1267,7 @@ mod tests {
                 model_provider_name: "provider2".to_string(),
                 ttft_ms: Some(25),
                 cached: true,
+                cost: None,
                 finish_reason: Some(FinishReason::ToolCall),
                 snapshot_hash: None,
                 timestamp: None,
@@ -1271,9 +1281,9 @@ mod tests {
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
-                ttft_ms, cached, finish_reason, snapshot_hash, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12),
-            ($13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+                ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13),
+            ($14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
             ",
         );
 

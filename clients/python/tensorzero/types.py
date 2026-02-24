@@ -57,6 +57,7 @@ class RawResponseEntry:
 class Usage:
     input_tokens: int
     output_tokens: int
+    cost: Optional[float] = None
 
 
 # For type checking purposes only

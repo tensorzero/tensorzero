@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+use rust_decimal::Decimal;
 use tensorzero_core::{
     config::{Config, ConfigFileGlob},
     db::{
@@ -218,6 +219,7 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
         model_provider_name: "test-provider".to_string(),
         ttft_ms: Some(200),
         cached: false,
+        cost: None,
         finish_reason: Some(FinishReason::Stop),
         snapshot_hash: None,
         timestamp: None, // Computed from UUID on insert
@@ -286,6 +288,7 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
             model_provider_name: "primary-provider".to_string(),
             ttft_ms: None,
             cached: false,
+            cost: None,
             finish_reason: None, // Failed, no finish reason
             snapshot_hash: None,
             timestamp: None,
@@ -305,6 +308,7 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
             model_provider_name: "fallback-provider".to_string(),
             ttft_ms: Some(150),
             cached: false,
+            cost: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
             timestamp: None,
@@ -368,6 +372,7 @@ async fn test_insert_model_inference_with_all_finish_reasons(conn: impl ModelInf
             model_provider_name: "test-provider".to_string(),
             ttft_ms: None,
             cached: false,
+            cost: None,
             finish_reason: Some(finish_reason),
             snapshot_hash: None,
             timestamp: None,
@@ -409,6 +414,7 @@ async fn test_insert_model_inference_with_null_finish_reason(conn: impl ModelInf
         model_provider_name: "test-provider".to_string(),
         ttft_ms: None,
         cached: false,
+        cost: None,
         finish_reason: None,
         snapshot_hash: None,
         timestamp: None,
@@ -449,6 +455,7 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
         model_provider_name: "test-provider".to_string(),
         ttft_ms: None,
         cached: true,
+        cost: None,
         finish_reason: None,
         snapshot_hash: None,
         timestamp: None,
@@ -483,6 +490,7 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
         model_provider_name: "test-provider".to_string(),
         ttft_ms: None,
         cached: false,
+        cost: None,
         finish_reason: None,
         snapshot_hash: None,
         timestamp: None,
@@ -507,3 +515,174 @@ async fn test_insert_empty_list_is_noop(conn: impl ModelInferenceQueries) {
     conn.insert_model_inferences(&[]).await.unwrap();
 }
 make_db_test!(test_insert_empty_list_is_noop);
+
+async fn test_insert_model_inference_cost_non_cached(conn: impl ModelInferenceQueries) {
+    let inference_id = Uuid::now_v7();
+    let model_inference = StoredModelInference {
+        id: Uuid::now_v7(),
+        inference_id,
+        raw_request: Some("{}".to_string()),
+        raw_response: Some("{}".to_string()),
+        system: None,
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
+        input_tokens: Some(500),
+        output_tokens: Some(100),
+        response_time_ms: Some(1000),
+        model_name: "test-model".to_string(),
+        model_provider_name: "test-provider".to_string(),
+        ttft_ms: None,
+        cached: false,
+        cost: Some(Decimal::new(18, 5)), // 0.00018
+        finish_reason: Some(FinishReason::Stop),
+        snapshot_hash: None,
+        timestamp: None,
+    };
+
+    conn.insert_model_inferences(std::slice::from_ref(&model_inference))
+        .await
+        .unwrap();
+
+    let read = conn
+        .get_model_inferences_by_inference_id(inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(read.len(), 1, "Should have exactly one model inference");
+    assert_eq!(
+        read[0].cost,
+        Some(Decimal::new(18, 5)),
+        "Cost should round-trip as Some(0.00018) for non-cached inference"
+    );
+    assert!(
+        !read[0].cached,
+        "cached should be false for non-cached inference"
+    );
+}
+make_db_test!(test_insert_model_inference_cost_non_cached);
+
+async fn test_insert_model_inference_cost_cached(conn: impl ModelInferenceQueries) {
+    let inference_id = Uuid::now_v7();
+    let model_inference = StoredModelInference {
+        id: Uuid::now_v7(),
+        inference_id,
+        raw_request: Some("{}".to_string()),
+        raw_response: Some("{}".to_string()),
+        system: None,
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
+        input_tokens: None,
+        output_tokens: None,
+        response_time_ms: Some(0),
+        model_name: "test-model".to_string(),
+        model_provider_name: "test-provider".to_string(),
+        ttft_ms: None,
+        cached: true,
+        cost: Some(Decimal::ZERO),
+        finish_reason: Some(FinishReason::Stop),
+        snapshot_hash: None,
+        timestamp: None,
+    };
+
+    conn.insert_model_inferences(std::slice::from_ref(&model_inference))
+        .await
+        .unwrap();
+
+    let read = conn
+        .get_model_inferences_by_inference_id(inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(read.len(), 1, "Should have exactly one model inference");
+    assert_eq!(
+        read[0].cost,
+        Some(Decimal::ZERO),
+        "Cost should round-trip as Some(0) for cached inference"
+    );
+    assert!(read[0].cached, "cached should be true for cached inference");
+}
+make_db_test!(test_insert_model_inference_cost_cached);
+
+async fn test_insert_model_inference_cost_null(conn: impl ModelInferenceQueries) {
+    let inference_id = Uuid::now_v7();
+    let model_inference = StoredModelInference {
+        id: Uuid::now_v7(),
+        inference_id,
+        raw_request: Some("{}".to_string()),
+        raw_response: Some("{}".to_string()),
+        system: None,
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
+        input_tokens: Some(200),
+        output_tokens: Some(50),
+        response_time_ms: Some(800),
+        model_name: "test-model".to_string(),
+        model_provider_name: "test-provider".to_string(),
+        ttft_ms: None,
+        cached: false,
+        cost: None,
+        finish_reason: Some(FinishReason::Stop),
+        snapshot_hash: None,
+        timestamp: None,
+    };
+
+    conn.insert_model_inferences(std::slice::from_ref(&model_inference))
+        .await
+        .unwrap();
+
+    let read = conn
+        .get_model_inferences_by_inference_id(inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(read.len(), 1, "Should have exactly one model inference");
+    assert_eq!(
+        read[0].cost, None,
+        "Cost should round-trip as None when no cost config is available"
+    );
+    assert!(!read[0].cached, "cached should be false");
+}
+make_db_test!(test_insert_model_inference_cost_null);
+
+async fn test_insert_model_inference_cost_high_precision(conn: impl ModelInferenceQueries) {
+    let inference_id = Uuid::now_v7();
+    let cost = Decimal::new(123_456_789, 9); // 0.123456789
+
+    let model_inference = StoredModelInference {
+        id: Uuid::now_v7(),
+        inference_id,
+        raw_request: Some("{}".to_string()),
+        raw_response: Some("{}".to_string()),
+        system: None,
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
+        input_tokens: Some(10000),
+        output_tokens: Some(5000),
+        response_time_ms: Some(5000),
+        model_name: "test-model".to_string(),
+        model_provider_name: "test-provider".to_string(),
+        ttft_ms: None,
+        cached: false,
+        cost: Some(cost),
+        finish_reason: Some(FinishReason::Stop),
+        snapshot_hash: None,
+        timestamp: None,
+    };
+
+    conn.insert_model_inferences(std::slice::from_ref(&model_inference))
+        .await
+        .unwrap();
+
+    let read = conn
+        .get_model_inferences_by_inference_id(inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(read.len(), 1, "Should have exactly one model inference");
+    assert_eq!(
+        read[0].cost,
+        Some(cost),
+        "Cost with 9 decimal places should round-trip exactly"
+    );
+}
+make_db_test!(test_insert_model_inference_cost_high_precision);

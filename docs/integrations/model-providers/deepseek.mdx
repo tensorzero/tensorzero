@@ -77,10 +77,6 @@ type = "chat_completion"
 model = "deepseek_chat"
 ```
 
-We have tested our integration with `deepseek-chat` (`DeepSeek-v3`) and `deepseek-reasoner` (`R1`).
-DeepSeek only supports JSON mode for `deepseek-chat` and neither model supports tool use yet.
-We include `thought` content blocks in the response and data model for reasoning models like `deepseek-reasoner`.
-
 ### Credentials
 
 You must set the `DEEPSEEK_API_KEY` environment variable before running the gateway.

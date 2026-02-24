@@ -48,6 +48,7 @@ TEST_CONFIG_FILE = os.path.join(
     "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
+GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
 CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
 POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests"
 
@@ -68,11 +69,9 @@ def embedded_sync_client():
 
 @pytest.fixture
 def embedded_sync_client_using_postgres():
-    original_enable_postgres_read_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ", None)
-    original_enable_postgres_write_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE", None)
+    original_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE", None)
 
-    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ"] = "1"
-    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE"] = "1"
+    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"] = "1"
 
     with TensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
@@ -81,13 +80,10 @@ def embedded_sync_client_using_postgres():
     ) as client:
         yield client
 
-    # Reset flags
-    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ", None)
-    if original_enable_postgres_read_flag:
-        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_READ"] = original_enable_postgres_read_flag
-    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE", None)
-    if original_enable_postgres_write_flag:
-        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_WRITE"] = original_enable_postgres_write_flag
+    # Reset flag
+    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE", None)
+    if original_flag:
+        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"] = original_flag
 
 
 @pytest_asyncio.fixture
@@ -106,7 +102,7 @@ async def embedded_async_client():
 async def async_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         client_fut = AsyncTensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000",
+            gateway_url=GATEWAY_URL,
             verbose_errors=True,
         )
         assert inspect.isawaitable(client_fut)
@@ -126,7 +122,7 @@ async def async_client(request: FixtureRequest):
 def sync_client(request: FixtureRequest):
     if request.param == ClientType.HttpGateway:
         with TensorZeroGateway.build_http(
-            gateway_url="http://localhost:3000",
+            gateway_url=GATEWAY_URL,
             verbose_errors=True,
         ) as client:
             yield client
@@ -295,7 +291,7 @@ class OpenAIClientType(Enum):
 @pytest_asyncio.fixture(params=[OpenAIClientType.HttpGateway, OpenAIClientType.PatchedClient])
 async def async_openai_client(request: FixtureRequest):
     if request.param == OpenAIClientType.HttpGateway:
-        async with AsyncOpenAI(api_key="donotuse", base_url="http://localhost:3000/openai/v1") as client:
+        async with AsyncOpenAI(api_key="donotuse", base_url=f"{GATEWAY_URL}/openai/v1") as client:
             yield client
     else:
         async with AsyncOpenAI(api_key="donotuse") as client:

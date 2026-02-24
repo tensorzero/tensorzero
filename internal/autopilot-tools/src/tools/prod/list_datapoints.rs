@@ -13,7 +13,9 @@ use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_datapoints tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListDatapointsToolParams {
     /// The name of the dataset to list datapoints from.
     pub dataset_name: String,
@@ -32,6 +34,16 @@ impl ToolMetadata for ListDatapointsTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GetDatapointsResponse;
     type LlmParams = ListDatapointsToolParams;
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::LIST_DATAPOINTS_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::GET_DATAPOINTS_RESPONSE
+    }
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("list_datapoints")

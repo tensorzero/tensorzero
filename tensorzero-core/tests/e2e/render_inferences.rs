@@ -56,6 +56,7 @@ pub async fn test_render_samples_skips_none_input() {
         inference_params: Some(Default::default()),
         processing_time_ms: None,
         ttft_ms: None,
+        snapshot_hash: None,
     })];
 
     let rendered_inferences = client
@@ -102,6 +103,7 @@ pub async fn test_render_samples_no_function() {
         inference_params: Some(Default::default()),
         processing_time_ms: None,
         ttft_ms: None,
+        snapshot_hash: None,
     })];
 
     let rendered_inferences = client
@@ -142,6 +144,7 @@ pub async fn test_render_samples_no_variant() {
         inference_params: Some(Default::default()),
         processing_time_ms: None,
         ttft_ms: None,
+        snapshot_hash: None,
     })];
 
     let error = client
@@ -196,6 +199,7 @@ pub async fn test_render_samples_missing_variable() {
         inference_params: Some(Default::default()),
         processing_time_ms: None,
         ttft_ms: None,
+        snapshot_hash: None,
     })];
 
     let rendered_inferences = client
@@ -242,6 +246,7 @@ pub async fn test_render_samples_normal() {
             inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         }),
         StoredInferenceDatabase::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
@@ -279,6 +284,7 @@ pub async fn test_render_samples_normal() {
             inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         }),
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "weather_helper".to_string(),
@@ -330,6 +336,7 @@ pub async fn test_render_samples_normal() {
             inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         }),
         StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "basic_test".to_string(),
@@ -379,6 +386,7 @@ pub async fn test_render_samples_normal() {
             inference_params: Some(Default::default()),
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         }),
     ];
 
@@ -577,6 +585,7 @@ pub async fn test_render_samples_template_no_schema() {
         inference_params: Some(Default::default()),
         processing_time_ms: None,
         ttft_ms: None,
+        snapshot_hash: None,
     })];
 
     let rendered_inferences = client

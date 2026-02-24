@@ -173,7 +173,7 @@ cutoff = 0.5
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 active = true
-system_instructions = "../../../../ui/fixtures/config/evaluations/haiku/topic_starts_with_f/system_instructions.txt"
+system_instructions = "../../../fixtures/config/evaluations/haiku/topic_starts_with_f/system_instructions.txt"
 json_mode = "strict"
 temperature = 0
 retries = { num_retries = 4, max_delay_s = 10 }

@@ -1,9 +1,14 @@
-import { useState, memo } from "react";
+import { useState, memo, useEffect, useMemo } from "react";
+import { useFetcher } from "react-router";
 import { FormLabel } from "~/components/ui/form";
 import { useConfig } from "~/context/config";
-import type { InferenceFilter, MetricConfig } from "~/types/tensorzero";
+import type {
+  InferenceFilter,
+  MetricConfig,
+  MetricsWithFeedbackResponse,
+} from "~/types/tensorzero";
 import { Button } from "~/components/ui/button";
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -40,12 +45,38 @@ const MAX_NESTING_DEPTH = 2;
 interface InferenceFilterBuilder {
   inferenceFilter?: InferenceFilter;
   setInferenceFilter: (filter?: InferenceFilter) => void;
+  functionName?: string | null;
 }
 
 export default function InferenceFilterBuilder({
   inferenceFilter,
   setInferenceFilter,
+  functionName,
 }: InferenceFilterBuilder) {
+  const metricsFetcher = useFetcher<MetricsWithFeedbackResponse>();
+
+  useEffect(() => {
+    if (functionName) {
+      metricsFetcher.load(
+        `/api/function/${encodeURIComponent(functionName)}/feedback_counts`,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [functionName]);
+
+  const validMetricNames = useMemo((): Set<string> | null => {
+    if (!functionName) return null; // null = show all metrics
+    if (!metricsFetcher.data) return new Set<string>(); // empty set while loading
+    return new Set<string>(
+      metricsFetcher.data.metrics.map((m) => m.metric_name),
+    );
+  }, [functionName, metricsFetcher.data]);
+
+  const isMetricsLoading =
+    functionName !== null &&
+    functionName !== undefined &&
+    metricsFetcher.state === "loading";
+
   const handleAddTag = () => {
     // Wrap in AND group
     setInferenceFilter({
@@ -95,11 +126,17 @@ export default function InferenceFilterBuilder({
             filter={inferenceFilter}
             onChange={setInferenceFilter}
             depth={0}
+            validMetricNames={validMetricNames}
+            isMetricsLoading={isMetricsLoading}
           />
         </div>
       ) : (
         <div className="flex gap-2">
-          <AddMetricPopover onSelect={handleAddMetric} />
+          <AddMetricPopover
+            onSelect={handleAddMetric}
+            validMetricNames={validMetricNames}
+            isLoading={isMetricsLoading}
+          />
           <AddButton label="Demonstration" onClick={handleAddDemonstration} />
           <AddButton label="Tag" onClick={handleAddTag} />
           <AddButton label="And" onClick={handleAddAnd} />
@@ -115,6 +152,8 @@ interface FilterNodeProps {
   filter: InferenceFilter;
   onChange: (newFilter?: InferenceFilter) => void;
   depth: number;
+  validMetricNames?: Set<string> | null;
+  isMetricsLoading?: boolean;
 }
 
 // FilterGroup: Renders AND/OR groups
@@ -122,6 +161,8 @@ const FilterGroup = memo(function FilterGroup({
   filter,
   onChange,
   depth,
+  validMetricNames,
+  isMetricsLoading,
 }: FilterNodeProps & { filter: InferenceFilter & { type: "and" | "or" } }) {
   const handleToggleOperator = () => {
     const newOperator = filter.type === "and" ? "or" : "and";
@@ -225,13 +266,19 @@ const FilterGroup = memo(function FilterGroup({
                 filter={child}
                 onChange={(newChild) => handleUpdateChild(index, newChild)}
                 depth={depth + 1}
+                validMetricNames={validMetricNames}
+                isMetricsLoading={isMetricsLoading}
               />
             ))}
           </div>
         )}
 
         <div className="flex items-center gap-2">
-          <AddMetricPopover onSelect={handleAddMetric} />
+          <AddMetricPopover
+            onSelect={handleAddMetric}
+            validMetricNames={validMetricNames}
+            isLoading={isMetricsLoading}
+          />
           <AddButton label="Tag" onClick={handleAddTag} />
           <AddButton label="Demonstration" onClick={handleAddDemonstration} />
           {depth < MAX_NESTING_DEPTH && (
@@ -289,12 +336,22 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
   filter,
   onChange,
   depth,
+  validMetricNames,
+  isMetricsLoading,
 }: FilterNodeProps) {
   const config = useConfig();
 
   // Handle AND/OR groups
   if (filter.type === "and" || filter.type === "or") {
-    return <FilterGroup filter={filter} onChange={onChange} depth={depth} />;
+    return (
+      <FilterGroup
+        filter={filter}
+        onChange={onChange}
+        depth={depth}
+        validMetricNames={validMetricNames}
+        isMetricsLoading={isMetricsLoading}
+      />
+    );
   }
 
   // Handle leaf filters
@@ -350,15 +407,34 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
 
 interface AddMetricPopoverProps {
   onSelect: (metricName: string, metricConfig: MetricConfig) => void;
+  validMetricNames?: Set<string> | null;
+  isLoading?: boolean;
 }
 
 const AddMetricPopover = memo(function AddMetricPopover({
   onSelect,
+  validMetricNames,
+  isLoading = false,
 }: AddMetricPopoverProps) {
   const config = useConfig();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const metrics = config.metrics;
+
+  // Filter metrics if validMetricNames is provided
+  const filteredMetrics = useMemo(() => {
+    const entries = Object.entries(metrics).filter(
+      (entry): entry is [string, MetricConfig] => entry[1] !== undefined,
+    );
+
+    if (validMetricNames === null || validMetricNames === undefined) {
+      // No function selected - show all metrics
+      return entries;
+    }
+
+    // Function selected - filter to only valid metrics
+    return entries.filter(([name]) => validMetricNames.has(name));
+  }, [metrics, validMetricNames]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -368,8 +444,13 @@ const AddMetricPopover = memo(function AddMetricPopover({
           variant="outline"
           size="sm"
           className="hover:bg-bg-primary border-border hover:border-border-accent"
+          disabled={isLoading}
         >
-          <Plus className="text-fg-tertiary h-4 w-4" />
+          {isLoading ? (
+            <Loader2 className="text-fg-tertiary h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="text-fg-tertiary h-4 w-4" />
+          )}
           Metric
         </Button>
       </PopoverTrigger>
@@ -382,28 +463,27 @@ const AddMetricPopover = memo(function AddMetricPopover({
             className="h-9"
           />
           <CommandList>
-            <CommandEmpty>No metrics found</CommandEmpty>
+            <CommandEmpty>
+              {validMetricNames !== null && validMetricNames !== undefined
+                ? "No metrics with feedback for this function"
+                : "No metrics found"}
+            </CommandEmpty>
             <CommandGroup>
-              {Object.entries(metrics)
-                .filter(
-                  (entry): entry is [string, MetricConfig] =>
-                    entry[1] !== undefined,
-                )
-                .map(([metricName, metricConfig]) => (
-                  <CommandItem
-                    key={metricName}
-                    value={metricName}
-                    onSelect={() => {
-                      onSelect(metricName, metricConfig);
-                      setInputValue("");
-                      setOpen(false);
-                    }}
-                    className="group flex w-full cursor-pointer items-center justify-between gap-2"
-                  >
-                    <span className="truncate font-mono">{metricName}</span>
-                    <FeedbackBadges metric={metricConfig} showLevel={false} />
-                  </CommandItem>
-                ))}
+              {filteredMetrics.map(([metricName, metricConfig]) => (
+                <CommandItem
+                  key={metricName}
+                  value={metricName}
+                  onSelect={() => {
+                    onSelect(metricName, metricConfig);
+                    setInputValue("");
+                    setOpen(false);
+                  }}
+                  className="group flex w-full cursor-pointer items-center justify-between gap-2"
+                >
+                  <span className="truncate font-mono">{metricName}</span>
+                  <FeedbackBadges metric={metricConfig} showLevel={false} />
+                </CommandItem>
+              ))}
             </CommandGroup>
           </CommandList>
         </Command>
