@@ -156,12 +156,12 @@ export function useQuestionCardState(
   const handleSkipStep = () => {
     const updated = new Map(answers);
     updated.set(activeStep, { status: StepStatus.Skipped });
+    setAnswers(updated);
 
     if (isLastStep) {
       const final = markUnansweredAsSkipped(updated);
       onSubmit(eventId, buildResponses(final));
     } else {
-      setAnswers(updated);
       setActiveStep((s) => s + 1);
     }
   };
