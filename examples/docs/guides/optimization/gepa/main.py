@@ -1,13 +1,11 @@
 import asyncio
 import os
-import random
 
 from ner import Row, compute_exact_match, compute_jaccard_similarity, load_dataset
 from tensorzero import (
     AsyncTensorZeroGateway,
-    GEPAConfig,
     JsonInferenceResponse,
-    ListInferencesRequest,
+    OptimizationJobStatus,
 )
 from tqdm.asyncio import tqdm
 
@@ -94,51 +92,44 @@ async def main():
     tasks = [process_datapoint(dp, t0, semaphore) for dp in datapoints]
     await tqdm.gather(*tasks, desc="Processing samples")
 
-    inferences_response = await t0.list_inferences(
-        request=ListInferencesRequest(
-            function_name=FUNCTION_NAME,
-            output_source="inference",  # could also be "demonstration"
-            limit=NUM_SAMPLES,
-        ),
+    job_handle = await t0.experimental_launch_optimization_workflow(
+        params={
+            "function_name": FUNCTION_NAME,
+            "template_variant_name": TEMPLATE_VARIANT_NAME,
+            "output_source": "inference",
+            "limit": NUM_SAMPLES,
+            "val_fraction": 0.5,
+            "optimizer_config": {
+                "type": "gepa",
+                "function_name": FUNCTION_NAME,
+                "evaluation_name": EVALUATION_NAME,
+                "analysis_model": ANALYSIS_MODEL,
+                "mutation_model": MUTATION_MODEL,
+                "initial_variants": INITIAL_VARIANTS,
+                "max_iterations": MAX_ITERATIONS,
+                "max_concurrency": MAX_CONCURRENCY,
+                "max_tokens": 16384,
+            },
+        },
     )
 
-    rendered_samples = await t0.experimental_render_samples(
-        stored_samples=inferences_response.inferences,
-        variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
-    )
+    print("GEPA optimization launched. Polling for results...")
+    while True:
+        job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
+        if job_info.status == OptimizationJobStatus.Completed:
+            break
+        if job_info.status == OptimizationJobStatus.Failed:
+            raise RuntimeError(f"GEPA optimization failed: {job_info}")
+        print(f"  Status: {job_info.status} — waiting 30s...")
+        await asyncio.sleep(30)
 
-    random.shuffle(rendered_samples)
-    split_idx = len(rendered_samples) // 2
-    train_samples = rendered_samples[:split_idx]
-    val_samples = rendered_samples[split_idx:]
-
-    optimization_config = GEPAConfig(
-        function_name=FUNCTION_NAME,
-        evaluation_name=EVALUATION_NAME,
-        analysis_model=ANALYSIS_MODEL,
-        mutation_model=MUTATION_MODEL,
-        initial_variants=INITIAL_VARIANTS,
-        max_iterations=MAX_ITERATIONS,
-        max_concurrency=MAX_CONCURRENCY,
-        max_tokens=16384,
-    )
-
-    job_handle = await t0.experimental_launch_optimization(
-        train_samples=train_samples,
-        val_samples=val_samples,
-        optimization_config=optimization_config,
-    )
-
-    job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
-
-    assert job_info.output is not None
     variant_configs = job_info.output["content"]
 
     for variant_name, variant_config in variant_configs.items():
         print(f"\n# Optimized variant: {variant_name}")
         for template_name, template in variant_config["templates"].items():
             print(f"## '{template_name}' template:")
-            print(template["path"]["__data"])
+            print(template["path"]["__data"].strip())
 
 
 if __name__ == "__main__":

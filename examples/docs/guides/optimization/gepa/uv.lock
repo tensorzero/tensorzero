@@ -646,22 +646,37 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-version = "2026.1.5"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../../../../../clients/python" }
 dependencies = [
     { name = "dacite" },
     { name = "httpx" },
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e2/dd/5629b41b7da4bd277741039a7dbc50f5b83994a443b2cb549cea734b47c7/tensorzero-2026.1.5.tar.gz", hash = "sha256:beb805c33fb4217d899e2b824bf24435b93be737ba2967bc488215ba4000f5e4", size = 1663426, upload-time = "2026-01-24T17:52:28.935Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/53/92/a0724aaff4b90d4994961308515c215c9869cbcdb7b8b94aa85c98b98a9b/tensorzero-2026.1.5-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:160c0f32c3119addfd5f64eb93efc51a920a3cd77398982b7d177676c7a0c9f7", size = 35630038, upload-time = "2026-01-24T17:52:20.683Z" },
-    { url = "https://files.pythonhosted.org/packages/51/78/b5edd0f1b382276d60f5a369d496b144939039511b4c80da238853ceea1d/tensorzero-2026.1.5-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2b0b6571ad51e3116100ae8d40fee8f6aa128ba851fefc2981c184bd0422bf0c", size = 37283165, upload-time = "2026-01-24T17:52:13.684Z" },
-    { url = "https://files.pythonhosted.org/packages/44/c0/82ee0421c45fabcba5124350a92f47c6ff7c6bd4365b25b63262bf88bb4f/tensorzero-2026.1.5-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f58322ea0f7c0460e18ba59bc8540fbfb9d4c13ef1a0f867a5f0bbf32478ccd2", size = 37769093, upload-time = "2026-01-24T17:52:17.609Z" },
-    { url = "https://files.pythonhosted.org/packages/0d/a4/51ecf57e0115c8863aa20adf3cfe9dc8d91657a09cd3e4313e1f2a669b6e/tensorzero-2026.1.5-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:a069ad5a20f7011682ccabb2dcd31e470635a57983d332016160b6652ffc9ff9", size = 37504618, upload-time = "2026-01-24T17:52:23.705Z" },
-    { url = "https://files.pythonhosted.org/packages/89/d7/0d740907e3e6252539c025ab3262cb061c8e4d8dd76239fe0e064be0b985/tensorzero-2026.1.5-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:09f655155ffd4618f3202c45e70a21584e14578f09372da8c76d7f3e1ab27925", size = 38217504, upload-time = "2026-01-24T17:52:26.706Z" },
-    { url = "https://files.pythonhosted.org/packages/fa/6c/f88d03195ad628e59ae62026d36563225f4ae304478ed3fc4c5cebbc59dc/tensorzero-2026.1.5-cp310-abi3-win_amd64.whl", hash = "sha256:56835dddb2b50379a8c4056552ed152a4d9e0b25eee7744697f1cb1443a203e8", size = 35166852, upload-time = "2026-01-24T17:52:30.864Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "dacite", specifier = ">=1.9.2" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "typing-extensions", specifier = ">=4.12.2" },
+    { name = "uuid-utils", specifier = ">=0.9.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "clickhouse-connect" },
+    { name = "maturin" },
+    { name = "mypy" },
+    { name = "openai" },
+    { name = "pandas" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-httpserver" },
+    { name = "pytest-rerunfailures" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+    { name = "requests" },
 ]
 
 [[package]]
@@ -684,7 +699,7 @@ dev = [
 requires-dist = [
     { name = "openai", specifier = ">=2.6.1" },
     { name = "pandas", specifier = ">=2.3.3" },
-    { name = "tensorzero", specifier = ">=2025.12.3" },
+    { name = "tensorzero", editable = "../../../../../clients/python" },
     { name = "tqdm", specifier = ">=4.66.0" },
 ]
 
