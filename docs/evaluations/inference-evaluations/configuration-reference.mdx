@@ -69,37 +69,161 @@ For example, periods are not allowed in basic strings, so you can define `includ
 - **Type:** string
 - **Required:** yes
 
-Defines the type of the evaluator.
+Defines the type of the evaluator. See [Evaluator Types](#evaluator-types) below.
 
-TensorZero currently supports the following variant types:
-
-| Type          | Description                                                                                                       |
-| :------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `llm_judge`   | Use a TensorZero function as a judge                                                                              |
-| `exact_match` | Evaluates whether the generated output exactly matches the reference output (skips the datapoint if unavailable). |
-
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
-# ...
-type = "llm_judge"
-# ...
-```
-
-<Accordion title='type: "exact_match"' defaultOpen="true">
-
-###### `cutoff`
+#### `cutoff`
 
 - **Type:** float
 - **Required:** no
 
-Sets a user defined threshold at which the test is passing.
-This can be useful for applications where the evaluations are run as an automated test.
-If the average value of this evaluator is below the cutoff, the evaluations binary will return a nonzero status code.
+The `exact_match` and `llm_judge` evaluator types support an optional `cutoff` field.
+It sets a threshold at which the test is considered passing, which is useful when evaluations are run as an automated test.
+If the average value of this evaluator is below the cutoff (when `optimize` is `max`) or above the cutoff (when `optimize` is `min`), the evaluations binary will return a nonzero status code.
+
+## Evaluator Types
+
+TensorZero supports the following evaluator types:
+
+| Type          | Description                                                                                                       |
+| :------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `exact_match` | Evaluates whether the generated output exactly matches the reference output (skips the datapoint if unavailable). |
+| `regex`       | Checks whether the generated text output matches (or doesn't match) a regex pattern.                              |
+| `tool_use`    | Checks whether the inference's tool calls match the expected behavior.                                            |
+| `llm_judge`   | Uses a TensorZero function as a judge to evaluate outputs.                                                        |
+
+<Accordion title='exact_match' defaultOpen="true">
+
+Evaluates whether the generated output exactly matches the reference output.
+If the datapoint has no reference output, this evaluator is skipped.
+
+- **Metric type:** Boolean
+- **Optimize:** Max
+- **Requires reference output:** yes
+
+```toml
+// tensorzero.toml
+[evaluations.email-guardrails.evaluators.check-exact]
+type = "exact_match"
+cutoff = 0.9
+```
 
 </Accordion>
 
-<Accordion title='type: "llm_judge"' defaultOpen="true">
+<Accordion title='regex' defaultOpen="true">
+
+Checks whether the inference's text output matches (or doesn't match) a regex pattern.
+This is useful for content filtering (e.g. profanity detection) and format validation (e.g. ensuring the model includes a specific phrase).
+
+For Chat responses, all text content blocks are concatenated.
+For JSON responses, the raw JSON string is used.
+
+- **Metric type:** Boolean
+- **Optimize:** Max
+- **Requires reference output:** no
+
+At least one of `must_match` or `must_not_match` must be specified.
+If both are specified, the result is the logical AND: `must_match` matches AND `must_not_match` does not match.
+
+###### `must_match`
+
+- **Type:** string (regex pattern)
+- **Required:** no (but at least one of `must_match` or `must_not_match` must be specified)
+
+A regex pattern that the inference output must match for the evaluation to pass.
+Use inline flags like `(?i)` for case-insensitive matching.
+
+###### `must_not_match`
+
+- **Type:** string (regex pattern)
+- **Required:** no (but at least one of `must_match` or `must_not_match` must be specified)
+
+A regex pattern that the inference output must _not_ match for the evaluation to pass.
+Use inline flags like `(?i)` for case-insensitive matching.
+
+```toml
+// tensorzero.toml
+
+# Ensure the model says "please" (case-insensitive)
+[evaluations.politeness.evaluators.says-please]
+type = "regex"
+must_match = "(?i)please"
+
+# Ensure the model doesn't use profanity
+[evaluations.content-filter.evaluators.no-profanity]
+type = "regex"
+must_not_match = "(?i)(profanity|badword)"
+
+# Both conditions: must say "please" and must not use profanity
+[evaluations.tone-check.evaluators.polite-and-clean]
+type = "regex"
+must_match = "(?i)please"
+must_not_match = "(?i)(profanity|badword)"
+```
+
+</Accordion>
+
+<Accordion title='tool_use' defaultOpen="true">
+
+Checks whether the inference's tool calls match the expected behavior.
+This evaluator only supports Chat inferences (tool calls do not exist in JSON inferences).
+
+- **Metric type:** Boolean
+- **Optimize:** Max
+- **Requires reference output:** no
+
+###### `behavior`
+
+- **Type:** string
+- **Required:** yes
+
+The matching rule to apply to the inference's tool calls.
+
+| Behavior  | Description                                                                   |
+| :-------- | ----------------------------------------------------------------------------- |
+| `none`    | The inference must not contain any tool calls.                                |
+| `any`     | The inference must contain at least one tool call (any tool).                 |
+| `none_of` | None of the listed `tools` may appear in the inference's tool calls.          |
+| `any_of`  | At least one of the listed `tools` must appear in the inference's tool calls. |
+| `all_of`  | All of the listed `tools` must appear in the inference's tool calls.          |
+
+###### `tools`
+
+- **Type:** list of strings
+- **Required:** Required for `none_of`, `any_of`, and `all_of` behaviors. Must not be specified for `none` and `any`.
+
+The tool names to match against.
+
+```toml
+// tensorzero.toml
+
+# Ensure the model doesn't call any tools
+[evaluations.no-tools.evaluators.no-tool-calls]
+type = "tool_use"
+behavior = "none"
+
+# Ensure the model calls a specific tool
+[evaluations.tool-check.evaluators.must-use-search]
+type = "tool_use"
+behavior = "any_of"
+tools = ["search", "web_search"]
+
+# Ensure the model calls all required tools
+[evaluations.tool-check.evaluators.must-use-all]
+type = "tool_use"
+behavior = "all_of"
+tools = ["search", "summarize"]
+```
+
+</Accordion>
+
+<Accordion title='llm_judge' defaultOpen="true">
+
+Uses a TensorZero function as a judge to evaluate outputs.
+This is the most flexible evaluator type, supporting both float and boolean output types with configurable optimization direction.
+
+- **Metric type:** Configurable (Float or Boolean)
+- **Optimize:** Configurable (Max or Min)
+- **Requires reference output:** optional (configurable)
 
 ###### `input_format`
 
@@ -178,25 +302,6 @@ Defines whether the metric produced by the LLM judge should be maximized or mini
 # ...
 type = "llm_judge"
 optimize = "max"
-# ...
-```
-
-###### `cutoff`
-
-- **Type:** float
-- **Required:** no
-
-Sets a user defined threshold at which the test is passing.
-This may be useful for applications where the evaluations are run as an automated test.
-If the average value of this evaluator is below the cutoff (when `optimize` is `max`) or above the cutoff (when `optimize` is `min`), the evaluations binary will return a nonzero status code.
-
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
-# ...
-type = "llm_judge"
-optimize = "max" # Example: Maximize score
-cutoff = 0.8 # Example: Consider passing if average score is >= 0.8
 # ...
 ```
 
