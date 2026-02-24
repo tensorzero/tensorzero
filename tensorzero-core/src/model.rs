@@ -26,6 +26,7 @@ use crate::config::with_skip_credential_validation;
 use crate::config::{
     Namespace, OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
+use crate::cost::{CostConfig, ResponseMode, compute_cost, load_cost_config};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
@@ -35,6 +36,7 @@ use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use tensorzero_types::UninitializedCostConfig;
 
 use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
@@ -138,6 +140,15 @@ impl UninitializedModelConfig {
                 } else {
                     load_future.await
                 };
+                let cost = provider
+                    .cost
+                    .map(load_cost_config)
+                    .transpose()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!("models.{model_name}.providers.{name}.cost: {e}"),
+                        })
+                    })?;
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
@@ -151,6 +162,7 @@ impl UninitializedModelConfig {
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
                         discard_unknown_chunks: provider.discard_unknown_chunks,
+                        cost,
                     },
                 ))
             }
@@ -177,6 +189,8 @@ pub struct StreamResponse {
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts during fallback.
     pub failed_raw_response: Vec<RawResponseEntry>,
+    /// Cost configuration from the successful provider, for computing cost after streaming completes.
+    pub cost_config: Option<CostConfig>,
 }
 
 impl StreamResponse {
@@ -225,6 +239,7 @@ impl StreamResponse {
             cached: true,
             model_inference_id,
             failed_raw_response: vec![],
+            cost_config: None,
         }
     }
 }
@@ -464,6 +479,7 @@ impl ModelConfig {
                 cached: false,
                 model_inference_id: model_provider_request.model_inference_id,
                 failed_raw_response: vec![],
+                cost_config: provider.cost.clone(),
             },
             messages: model_provider_request.request.messages.clone(),
         })
@@ -486,12 +502,7 @@ impl ModelConfig {
             {
                 let response = relay
                     .relay_non_streaming(model_name, request, clients)
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::Relay {
-                            message: e.to_string(),
-                        })
-                    })?;
+                    .await?;
                 return Ok(ModelInferenceResponse::new(
                     response,
                     "tensorzero::relay".into(),
@@ -535,6 +546,18 @@ impl ModelConfig {
 
                 match response {
                     Ok(mut response) => {
+                        // Compute cost from raw response using provider's cost config
+                        if !response.cached
+                            && let Some(cost_config) = &provider.cost
+                        {
+                            response.usage.cost = compute_cost(
+                                &response.raw_response,
+                                cost_config,
+                                ResponseMode::NonStreaming,
+                            )
+                            .ok();
+                        }
+
                         // Perform the cache write outside of the `non_streaming_total_timeout` timeout future,
                         // (in case we ever add a blocking cache write option)
                         if !response.cached && clients.cache_options.enabled.write() {
@@ -563,7 +586,7 @@ impl ModelConfig {
                         // Collect raw response entries from failed providers for fallback reporting
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                if let Some(entries) = error.extract_raw_response_entries() {
+                                if let Some(entries) = error.extract_raw_response() {
                                     response.failed_raw_response.extend(entries);
                                 }
                             }
@@ -619,14 +642,8 @@ impl ModelConfig {
             {
                 // Note - we do *not* call wrap_provider_stream,
                 // since we don't want caching or (model provider) OTEL attributes
-                let (stream, raw_request) = relay
-                    .relay_streaming(model_name, request, clients)
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::Relay {
-                            message: e.to_string(),
-                        })
-                    })?;
+                let (stream, raw_request) =
+                    relay.relay_streaming(model_name, request, clients).await?;
                 return Ok(StreamResponseAndMessages {
                     response: StreamResponse {
                         stream: stream.instrument(Span::current()),
@@ -636,6 +653,7 @@ impl ModelConfig {
                         cached: false,
                         model_inference_id: Uuid::now_v7(),
                         failed_raw_response: vec![],
+                        cost_config: None,
                     },
                     messages: request.messages.clone(),
                 });
@@ -700,7 +718,7 @@ impl ModelConfig {
                         // Collect raw response entries from failed providers for fallback reporting
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                if let Some(entries) = error.extract_raw_response_entries() {
+                                if let Some(entries) = error.extract_raw_response() {
                                     response.response.failed_raw_response.extend(entries);
                                 }
                             }
@@ -970,6 +988,9 @@ pub struct UninitializedModelProvider {
     /// By default, unknown chunks are forwarded as-is in the stream.
     #[serde(default)]
     pub discard_unknown_chunks: bool,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<UninitializedCostConfig>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -985,6 +1006,9 @@ pub struct ModelProvider {
     pub timeouts: TimeoutsConfig,
     /// See `UninitializedModelProvider.discard_unknown_chunks`.
     pub discard_unknown_chunks: bool,
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<CostConfig>,
 }
 
 impl ModelProvider {
@@ -1354,8 +1378,8 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
-        #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
-        parse_think_blocks: bool,
+        #[serde(default)]
+        parse_think_blocks: Option<bool>,
     },
     Mistral {
         model_name: String,
@@ -1384,8 +1408,8 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
-        #[serde(default = "crate::providers::together::default_parse_think_blocks")]
-        parse_think_blocks: bool,
+        #[serde(default)]
+        parse_think_blocks: Option<bool>,
     },
     VLLM {
         model_name: String,
@@ -1562,16 +1586,22 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
                 parse_think_blocks,
-            } => ProviderConfig::Fireworks(FireworksProvider::new(
-                model_name,
-                FireworksKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                parse_think_blocks,
-            )),
+            } => {
+                if !is_config_snapshot && parse_think_blocks.is_some() {
+                    crate::utils::deprecation_warning(
+                        "The `parse_think_blocks` option for `fireworks` providers is deprecated and will be removed in a future release. Think blocks are now always parsed.",
+                    );
+                }
+                ProviderConfig::Fireworks(FireworksProvider::new(
+                    model_name,
+                    FireworksKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                ))
+            }
             UninitializedProviderConfig::GCPVertexAnthropic {
                 model_id,
                 location,
@@ -1702,16 +1732,23 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_key_location,
                 parse_think_blocks,
-            } => ProviderConfig::Together(TogetherProvider::new(
-                model_name,
-                TogetherKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                parse_think_blocks,
-            )),
+            } => {
+                if !is_config_snapshot && parse_think_blocks.is_some() {
+                    // Deprecation: #6502 - 2026.5+
+                    crate::utils::deprecation_warning(
+                        "The `parse_think_blocks` option for `together` providers is deprecated and will be removed in a future release. Think blocks are now always parsed.",
+                    );
+                }
+                ProviderConfig::Together(TogetherProvider::new(
+                    model_name,
+                    TogetherKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                ))
+            }
             UninitializedProviderConfig::VLLM {
                 model_name,
                 api_base,
@@ -2740,7 +2777,6 @@ impl ShorthandModelConfig for ModelConfig {
                 FireworksKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                crate::providers::fireworks::default_parse_think_blocks(),
             )),
             "google_ai_studio_gemini" => {
                 ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider::new(
@@ -2812,7 +2848,6 @@ impl ShorthandModelConfig for ModelConfig {
                 TogetherKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                crate::providers::together::default_parse_think_blocks(),
             )),
             "xai" => ProviderConfig::XAI(XAIProvider::new(
                 model_name,
@@ -2840,6 +2875,7 @@ impl ShorthandModelConfig for ModelConfig {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -2954,6 +2990,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3025,6 +3062,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -3041,6 +3079,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3084,6 +3123,7 @@ mod tests {
             extra_headers: Default::default(),
             timeouts: Default::default(),
             discard_unknown_chunks: false,
+            cost: None,
         };
 
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
@@ -3257,6 +3297,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
                 (
@@ -3268,6 +3309,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
             ]),
@@ -3298,6 +3340,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -3345,6 +3388,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3385,6 +3429,7 @@ mod tests {
                     cached: _,
                     model_inference_id: _,
                     failed_raw_response: _,
+                    cost_config: _,
                 },
             messages: _input,
         } = model_config
@@ -3435,6 +3480,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3516,6 +3562,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
                 (
@@ -3527,6 +3574,7 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
                     },
                 ),
             ]),
@@ -3568,6 +3616,7 @@ mod tests {
                     cached: _,
                     model_inference_id: _,
                     failed_raw_response: _,
+                    cost_config: _,
                 },
             messages: _,
         } = model_config
@@ -3626,6 +3675,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3763,6 +3813,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3921,6 +3972,7 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
                 },
             )]),
             timeouts: Default::default(),

@@ -77,6 +77,10 @@ You can bind the gateway to IPv4 and/or IPv6 addresses.
 To bind to an IPv6 address, you can set this field to a value like `[::]:3000`.
 Depending on the operating system, this value binds only to IPv6 (e.g. Windows) or to both (e.g. Linux by default).
 
+You can also set the bind address using the `--bind-address` CLI flag or the `TENSORZERO_GATEWAY_BIND_ADDRESS` environment variable.
+Only one of these methods can be used at a time.
+See [Customize the bind address and port](/deployment/tensorzero-gateway#customize-the-bind-address-and-port) for more details.
+
 ```toml title="tensorzero.toml"
 [gateway]
 # ...
@@ -2121,6 +2125,29 @@ extra_body = [
 ]
 ```
 
+### `extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_headers` field allows you to set or overwrite the request headers that TensorZero sends to an embedding model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `name` (string): The name of the header to modify
+- One of the following:
+  - `value` (string): The value of the header
+  - `delete = true`: Deletes the header from the request, if present
+
+```toml title="tensorzero.toml"
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+type = "openai"
+extra_headers = [
+  { name = "X-Custom-Header", value = "custom-value" }
+]
+```
+
 ### `timeout_ms`
 
 - **Type:** integer
@@ -3262,6 +3289,7 @@ presence_penalty = 0.5
 
 Controls the reasoning effort level for reasoning models.
 
+For Anthropic, this enables adaptive thinking (`thinking.type: "adaptive"`) with the specified effort level via `output_config.effort`.
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingLevel`.
 
 <Warning>
@@ -3270,11 +3298,11 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
-<Tip>
+<Warning>
 
-Some providers (e.g. Anthropic) support `thinking_budget_tokens` instead.
+For Anthropic, `reasoning_effort` and `thinking_budget_tokens` are mutually exclusive. Use `reasoning_effort` for adaptive thinking or `thinking_budget_tokens` for manual thinking.
 
-</Tip>
+</Warning>
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3385,7 +3413,7 @@ temperature = 0.5
 
 Controls the thinking budget in tokens for reasoning models.
 
-For Anthropic, this value corresponds to `thinking.budget_tokens`.
+For Anthropic, this value corresponds to `thinking.budget_tokens` (manual thinking mode with `thinking.type: "enabled"`).
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingBudget`.
 
 <Warning>
@@ -3394,9 +3422,15 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
+<Warning>
+
+For Anthropic, `thinking_budget_tokens` and `reasoning_effort` are mutually exclusive. Use `thinking_budget_tokens` for manual thinking or `reasoning_effort` for adaptive thinking.
+
+</Warning>
+
 <Tip>
 
-Some providers (e.g. OpenAI) support `reasoning_effort` instead.
+Some providers (e.g. OpenAI) support `reasoning_effort` instead. For Anthropic, both `reasoning_effort` and `thinking_budget_tokens` are supported but cannot be used together.
 
 </Tip>
 

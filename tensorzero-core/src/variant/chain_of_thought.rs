@@ -63,7 +63,7 @@ impl UninitializedChainOfThoughtConfig {
 
 impl ChainOfThoughtConfig {
     /// Converts this initialized config back to its uninitialized form.
-    pub fn as_uninitialized(self) -> UninitializedChainOfThoughtConfig {
+    pub fn as_uninitialized(&self) -> UninitializedChainOfThoughtConfig {
         UninitializedChainOfThoughtConfig {
             inner: self.inner.as_uninitialized(),
         }

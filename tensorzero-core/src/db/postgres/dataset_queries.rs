@@ -471,12 +471,8 @@ fn build_order_by_clause_string(order_by: Option<&Vec<DatapointOrderBy>>) -> Str
     for order_spec in order_by_vec {
         let column = match order_spec.term {
             DatapointOrderByTerm::Timestamp => "updated_at",
-            DatapointOrderByTerm::SearchRelevance => {
-                // For Postgres, we don't have the same term frequency calculation as ClickHouse.
-                // Fall back to updated_at for now.
-                // TODO(#5691): Implement proper text search ranking in Postgres
-                "updated_at"
-            }
+            // TODO(#6441): Implement proper search relevance ordering for Postgres.
+            DatapointOrderByTerm::SearchRelevance => "id",
         };
         let direction = order_spec.direction.to_sql_direction();
         clauses.push(format!("{column} {direction}"));
@@ -955,20 +951,26 @@ fn add_filter_clause(
             value,
             comparison_operator,
         }) => {
-            // tags->>key comparison value
-            let op = match comparison_operator {
-                TagComparisonOperator::Equal => "=",
-                TagComparisonOperator::NotEqual => "<>",
-            };
-            qb.push("(tags ? ");
-            qb.push_bind(key.clone());
-            qb.push(" AND tags->>");
-            qb.push_bind(key.clone());
-            qb.push(" ");
-            qb.push(op);
-            qb.push(" ");
-            qb.push_bind(value.clone());
-            qb.push(")");
+            // Use JSONB containment for equality so GIN indexes on `tags` can be used.
+            // Keep `NotEqual` semantics as "key exists and value differs".
+            match comparison_operator {
+                TagComparisonOperator::Equal => {
+                    qb.push("tags @> jsonb_build_object(");
+                    qb.push_bind(key.clone());
+                    qb.push(", ");
+                    qb.push_bind(value.clone());
+                    qb.push(")");
+                }
+                TagComparisonOperator::NotEqual => {
+                    qb.push("(tags ? ");
+                    qb.push_bind(key.clone());
+                    qb.push(" AND NOT tags @> jsonb_build_object(");
+                    qb.push_bind(key.clone());
+                    qb.push(", ");
+                    qb.push_bind(value.clone());
+                    qb.push("))");
+                }
+            }
         }
         DatapointFilter::Time(TimeFilter {
             time,
@@ -1494,6 +1496,43 @@ mod tests {
             ) AS combined
             ORDER BY updated_at ASC, id DESC LIMIT $13 OFFSET $14
             ",
+        );
+    }
+
+    #[test]
+    fn test_add_filter_clause_tag_equal_uses_jsonb_containment() {
+        let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("WHERE ");
+        let filter = DatapointFilter::Tag(TagFilter {
+            key: "env".to_string(),
+            value: "prod".to_string(),
+            comparison_operator: TagComparisonOperator::Equal,
+        });
+        let result = add_filter_clause(&mut qb, &filter);
+        assert!(
+            result.is_ok(),
+            "Tag equality filter should build successfully"
+        );
+        let sql = qb.sql();
+        assert_query_equals(sql.as_str(), "WHERE tags @> jsonb_build_object($1, $2)");
+    }
+
+    #[test]
+    fn test_add_filter_clause_tag_not_equal_preserves_exists_semantics() {
+        let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("WHERE ");
+        let filter = DatapointFilter::Tag(TagFilter {
+            key: "env".to_string(),
+            value: "prod".to_string(),
+            comparison_operator: TagComparisonOperator::NotEqual,
+        });
+        let result = add_filter_clause(&mut qb, &filter);
+        assert!(
+            result.is_ok(),
+            "Tag inequality filter should build successfully"
+        );
+        let sql = qb.sql();
+        assert_query_equals(
+            sql.as_str(),
+            "WHERE (tags ? $1 AND NOT tags @> jsonb_build_object($2, $3))",
         );
     }
 

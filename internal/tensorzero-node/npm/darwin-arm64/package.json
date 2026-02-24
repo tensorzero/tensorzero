@@ -1,6 +1,10 @@
 {
   "name": "tensorzero-node-darwin-arm64",
   "version": "0.0.0",
+  "license": "MIT",
+  "files": [
+    "tensorzero-node.darwin-arm64.node"
+  ],
   "os": [
     "darwin"
   ],
@@ -8,10 +12,6 @@
     "arm64"
   ],
   "main": "tensorzero-node.darwin-arm64.node",
-  "files": [
-    "tensorzero-node.darwin-arm64.node"
-  ],
-  "license": "MIT",
   "engines": {
     "node": ">= 10"
   }

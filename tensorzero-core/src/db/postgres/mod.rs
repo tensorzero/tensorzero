@@ -25,7 +25,7 @@ pub mod feedback;
 mod howdy_queries;
 pub mod inference_queries;
 pub mod model_inferences;
-pub mod pgcron;
+pub mod postgres_setup;
 pub mod rate_limiting;
 mod resolve_uuid;
 pub mod workflow_evaluation_queries;
@@ -358,14 +358,35 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
 
     // Try to set up pg_cron extension and schedule partition management jobs.
     // This is idempotent and runs every time.
-    pgcron::setup_pgcron(&pool).await?;
+    postgres_setup::setup_pgcron(&pool).await?;
+
+    // Try to set up pg_trgm extension and create trigram indexes.
+    // This is idempotent and runs every time.
+    postgres_setup::setup_trigram_indexes(&pool).await?;
 
     // Verify pg_cron is available
     // TODO(#6176): Once we promote pgcron_setup.sql to a migration, we can remove this check.
-    if let Err(e) = pgcron::check_pgcron_configured_correctly(&pool).await {
+    let mut has_config_error = false;
+    if let Err(e) = postgres_setup::check_pgcron_configured_correctly(&pool).await {
         let msg = e.suppress_logging_of_error_message();
         tracing::warn!(
-            "pg_cron extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_cron soon. Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres",
+            "pg_cron extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_cron soon.",
+        );
+        has_config_error = true;
+    }
+
+    // Verify trigram indexes are available
+    if let Err(e) = postgres_setup::check_trigram_indexes_configured_correctly(&pool).await {
+        let msg = e.suppress_logging_of_error_message();
+        tracing::warn!(
+            "(Optional) pg_trgm extension is not configured correctly for your Postgres setup: {msg}. If observability is enabled, we require pg_trgm to support searching on inference data.",
+        );
+        has_config_error = true;
+    }
+
+    if has_config_error {
+        tracing::warn!(
+            "Please see our documentation to learn more about deploying Postgres: https://www.tensorzero.com/docs/deployment/postgres"
         );
     }
 

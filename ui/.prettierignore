@@ -1,6 +1,0 @@
-**/.mypy_cache/
-**/.venv
-**/playwright-report/
-**/.react-router/
-**/test-results/
-build/

@@ -12,6 +12,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::config::UninitializedToolConfig;
+use crate::config::path::ResolvedTomlPathData;
 use crate::error::{Error, ErrorDetails};
 use crate::jsonschema_util::JSONSchema;
 
@@ -52,6 +54,20 @@ pub struct StaticToolConfig {
     /// The key used to reference this tool in allowed_tools and function config
     pub key: String,
     pub strict: bool,
+}
+
+impl StaticToolConfig {
+    pub fn as_uninitialized(&self) -> UninitializedToolConfig {
+        UninitializedToolConfig {
+            description: self.description.clone(),
+            parameters: ResolvedTomlPathData::new_fake_path(
+                format!("checkpoint://tool/{}", self.key),
+                self.parameters.value.to_string(),
+            ),
+            name: Some(self.name.clone()),
+            strict: self.strict,
+        }
+    }
 }
 
 /// Contains the configuration information for a tool defined at runtime
