@@ -2,6 +2,13 @@ import { Markdown } from "~/components/ui/markdown";
 import { cn } from "~/utils/common";
 import type { EventPayloadUserQuestion } from "~/types/tensorzero";
 
+// Strip interactive elements inside buttons to avoid nested interactive HTML
+const nonInteractiveComponents: React.ComponentProps<
+  typeof Markdown
+>["components"] = {
+  a: ({ children }) => <span>{children}</span>,
+};
+
 type MultipleChoiceStepProps = {
   question: Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>;
   selectedValues: Set<string>;
@@ -56,6 +63,7 @@ export function MultipleChoiceStep({
                     ? "text-purple-600 dark:text-purple-400"
                     : "text-fg-muted",
                 )}
+                components={nonInteractiveComponents}
               >
                 {option.description}
               </Markdown>
