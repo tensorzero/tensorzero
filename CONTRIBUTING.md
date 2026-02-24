@@ -149,7 +149,6 @@ cargo test-unit
 >
 > If your changes don't affect every provider, you can run a subset of tests with `cargo test-e2e xyz`, which will only run tests with `xyz` in their name.
 
-
 #### Rust E2E Tests with Postgres
 
 1. Launch the test containers
@@ -168,9 +167,8 @@ cargo test-unit
 
 4. Run the E2E tests
    ```bash
-   cargo test-e2e
+   TENSORZERO_PRIMARY_DATASTORE=postgres cargo test-e2e
    ```
-
 
 #### Python
 

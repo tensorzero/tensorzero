@@ -18,8 +18,7 @@ use tracing::instrument;
 
 use crate::cache::CacheManager;
 use crate::config::{
-    BatchWritesConfig, Config, ConfigFileGlob, ObservabilityBackend, snapshot::SnapshotHash,
-    unwritten::UnwrittenConfig,
+    BatchWritesConfig, Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::UnwrittenConfig,
 };
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
@@ -223,30 +222,6 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
     )
 }
 
-/// Resolves the primary datastore from the `observability.backend` config and available connections.
-///
-/// Returns `None` when `backend = "auto"` and no backend is available.
-/// Returns `Some(PrimaryDatastore)` when a backend can be determined.
-fn resolve_primary_datastore(
-    backend: ObservabilityBackend,
-    clickhouse: &ClickHouseConnectionInfo,
-    postgres: &PostgresConnectionInfo,
-) -> Option<PrimaryDatastore> {
-    match backend {
-        ObservabilityBackend::Auto => {
-            if clickhouse.client_type() != ClickHouseClientType::Disabled {
-                Some(PrimaryDatastore::ClickHouse)
-            } else if !matches!(postgres, PostgresConnectionInfo::Disabled) {
-                Some(PrimaryDatastore::Postgres)
-            } else {
-                None
-            }
-        }
-        ObservabilityBackend::ClickHouse => Some(PrimaryDatastore::ClickHouse),
-        ObservabilityBackend::Postgres => Some(PrimaryDatastore::Postgres),
-    }
-}
-
 impl GatewayHandle {
     pub async fn new(
         config: UnwrittenConfig,
@@ -280,12 +255,12 @@ impl GatewayHandle {
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
-        let primary_datastore = resolve_primary_datastore(
-            config.gateway.observability.backend,
+
+        let primary_datastore = PrimaryDatastore::resolve(
+            &config.gateway.observability,
             &clickhouse_connection_info,
             &postgres_connection_info,
-        )
-        .unwrap_or(PrimaryDatastore::ClickHouse);
+        )?;
         let db = DelegatingDatabaseConnection::new(
             clickhouse_connection_info.clone(),
             postgres_connection_info.clone(),
@@ -373,74 +348,11 @@ impl GatewayHandle {
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
-        let resolved = resolve_primary_datastore(
-            config.gateway.observability.backend,
+        let primary_datastore = PrimaryDatastore::resolve(
+            &config.gateway.observability,
             &clickhouse_connection_info,
             &postgres_connection_info,
-        );
-
-        // Validate observability backend availability based on `enabled` setting.
-        let primary_datastore = match config.gateway.observability.enabled {
-            Some(true) => match resolved {
-                Some(ds) => {
-                    // Verify the resolved backend's connection is actually available
-                    match ds {
-                        PrimaryDatastore::Postgres => {
-                            if matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
-                            {
-                                return Err(ErrorDetails::AppState {
-                                    message:
-                                        "A Postgres connection is required when the primary datastore \
-                                              is Postgres and observability is enabled."
-                                            .to_string(),
-                                }
-                                .into());
-                            }
-                        }
-                        PrimaryDatastore::ClickHouse => {
-                            if clickhouse_connection_info.client_type()
-                                == ClickHouseClientType::Disabled
-                            {
-                                return Err(ErrorDetails::AppState {
-                                    message:
-                                        "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
-                                            .to_string(),
-                                }
-                                .into());
-                            }
-                        }
-                    }
-                    ds
-                }
-                None => {
-                    return Err(ErrorDetails::AppState {
-                        message: "Observability is enabled but no backend is available. \
-                             Set `TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL`, \
-                             or configure `gateway.observability.backend` explicitly."
-                            .to_string(),
-                    }
-                    .into());
-                }
-            },
-            None => {
-                // Opportunistic: use whatever is available, warn if nothing
-                match resolved {
-                    Some(ds) => ds,
-                    None => {
-                        tracing::warn!(
-                            "No observability backend available. \
-                             Observability writes will be disabled."
-                        );
-                        // Default to ClickHouse (disabled) for DelegatingDatabaseConnection
-                        PrimaryDatastore::ClickHouse
-                    }
-                }
-            }
-            Some(false) => {
-                // Observability disabled — use whatever is available for non-observability queries
-                resolved.unwrap_or(PrimaryDatastore::ClickHouse)
-            }
-        };
+        )?;
 
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),

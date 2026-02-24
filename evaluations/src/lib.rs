@@ -184,7 +184,7 @@ pub async fn run_evaluation(
     debug!("Configuration loaded successfully");
 
     let postgres_connection = setup_postgres(&config, postgres_url.as_deref()).await?;
-    // Evaluations currently require ClickHouse, so always use it as primary
+    // TODO(#5691): Allow running evaluations with Postgres as the observability backend.
     let primary_datastore = PrimaryDatastore::ClickHouse;
     let database = DelegatingDatabaseConnection::new(
         clickhouse_client.clone(),

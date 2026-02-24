@@ -4,6 +4,7 @@
 //! to either ClickHouse or Postgres based on the configured primary datastore.
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -11,12 +12,15 @@ use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::config::ObservabilityBackend;
+use crate::config::ObservabilityConfig;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, MetricConfigLevel};
 use crate::db::BatchWriterHandle;
 use crate::db::TimeWindow;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::datasets::{
     DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams,
@@ -54,7 +58,7 @@ use crate::db::{
     ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
 };
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 use crate::inference::types::{
@@ -69,11 +73,83 @@ use crate::tool::ToolCallConfigDatabaseInsert;
 pub enum PrimaryDatastore {
     ClickHouse,
     Postgres,
+    /// We should not write any observability data.
+    Disabled,
 }
 
 impl PrimaryDatastore {
+    /// Resolves the primary datastore from the observability config and available connections.
+    ///
+    /// Takes `observability.enabled` into account:
+    /// - `Some(true)`: a backend **must** be available or this returns an error.
+    /// - `None`: opportunistic — uses whatever is available, falls back to `Disabled`.
+    /// - `Some(false)`: uses whatever is available for non-observability queries, falls back to `Disabled`.
+    pub fn resolve(
+        observability_config: &ObservabilityConfig,
+        clickhouse: &ClickHouseConnectionInfo,
+        postgres: &PostgresConnectionInfo,
+    ) -> Result<Self, Error> {
+        let resolved = match observability_config.backend {
+            ObservabilityBackend::Auto => {
+                if clickhouse.client_type() != ClickHouseClientType::Disabled {
+                    Self::ClickHouse
+                } else if !matches!(postgres, PostgresConnectionInfo::Disabled) {
+                    Self::Postgres
+                } else {
+                    Self::Disabled
+                }
+            }
+            ObservabilityBackend::ClickHouse => Self::ClickHouse,
+            ObservabilityBackend::Postgres => Self::Postgres,
+        };
+
+        match observability_config.enabled {
+            Some(true) => match resolved {
+                Self::Postgres => {
+                    if matches!(postgres, PostgresConnectionInfo::Disabled) {
+                        return Err(ErrorDetails::AppState {
+                            message:
+                                "A Postgres connection is required when the primary datastore \
+                                 is Postgres and observability is enabled."
+                                    .to_string(),
+                        }
+                        .into());
+                    }
+                    Ok(Self::Postgres)
+                }
+                Self::ClickHouse => {
+                    if clickhouse.client_type() == ClickHouseClientType::Disabled {
+                        return Err(ErrorDetails::AppState {
+                            message: "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
+                                .to_string(),
+                        }
+                        .into());
+                    }
+                    Ok(Self::ClickHouse)
+                }
+                Self::Disabled => Err(ErrorDetails::AppState {
+                    message: "Observability is enabled but no backend is available. \
+                              Set `TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL`, \
+                              or configure `gateway.observability.backend` explicitly."
+                        .to_string(),
+                }
+                .into()),
+            },
+            None => {
+                if resolved == Self::Disabled {
+                    tracing::warn!(
+                        "No observability backend available. \
+                         Observability writes will be disabled."
+                    );
+                }
+                Ok(resolved)
+            }
+            Some(false) => Ok(resolved),
+        }
+    }
+
     /// Reads the primary datastore from `TENSORZERO_PRIMARY_DATASTORE` env var.
-    /// Returns `Postgres` if set to "postgres", otherwise `ClickHouse`.
+    /// Returns `Postgres` if set to "postgres", otherwise `ClickHouse`. Never disabled.
     #[cfg(any(test, feature = "e2e_tests"))]
     pub fn from_test_env() -> Self {
         match std::env::var("TENSORZERO_PRIMARY_DATASTORE").as_deref() {
@@ -138,6 +214,7 @@ impl DelegatingDatabaseQueries for DelegatingDatabaseConnection {
                     handles.push(h);
                 }
             }
+            PrimaryDatastore::Disabled => {}
         }
         handles
     }
@@ -156,14 +233,14 @@ impl DelegatingDatabaseConnection {
         }
     }
 
-    pub fn primary(&self) -> PrimaryDatastore {
-        self.primary
-    }
-
     fn get_database(&self) -> &(dyn DelegatingDatabaseQueries + Sync) {
+        static DISABLED: LazyLock<ClickHouseConnectionInfo> =
+            LazyLock::new(ClickHouseConnectionInfo::new_disabled);
+
         match self.primary {
             PrimaryDatastore::Postgres => &self.postgres,
             PrimaryDatastore::ClickHouse => &self.clickhouse,
+            PrimaryDatastore::Disabled => &*DISABLED,
         }
     }
 }
@@ -995,6 +1072,7 @@ mod test_helpers_impl {
             match self.primary {
                 PrimaryDatastore::Postgres => self.postgres.flush_pending_writes().await,
                 PrimaryDatastore::ClickHouse => self.clickhouse.flush_pending_writes().await,
+                PrimaryDatastore::Disabled => {}
             }
         }
 
@@ -1006,6 +1084,7 @@ mod test_helpers_impl {
                 PrimaryDatastore::ClickHouse => {
                     self.clickhouse.sleep_for_writes_to_be_visible().await;
                 }
+                PrimaryDatastore::Disabled => {}
             }
         }
     }

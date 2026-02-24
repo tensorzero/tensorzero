@@ -1,5 +1,4 @@
 use reqwest::Url;
-use tensorzero_core::db::delegating_connection::PrimaryDatastore;
 
 lazy_static::lazy_static! {
     static ref GATEWAY_URL: String = std::env::var("TENSORZERO_GATEWAY_URL")
