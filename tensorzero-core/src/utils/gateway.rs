@@ -26,13 +26,15 @@ use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::postgres::batching::PostgresBatchSender;
+use crate::db::rate_limiting::DisabledRateLimitQueries;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
 use crate::endpoints::openai_compatible::RouterExt;
 use crate::error::{Error, ErrorDetails};
+use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
-use crate::rate_limiting::RateLimitingManager;
+use crate::rate_limiting::{RateLimitingConfig, RateLimitingManager};
 use autopilot_client::AutopilotClient;
 
 #[cfg(test)]
@@ -73,20 +75,33 @@ impl Drop for GatewayHandle {
         let drop_wrapper = self.drop_wrapper.take();
         let mut drop_self = || {
             self.app_state.shutdown_token.cancel();
-            let handle = self
-                .app_state
-                .clickhouse_connection_info
-                .batcher_join_handle();
-            // Drop the cache manager early to release any ClickHouse references
-            // held by the ClickHouse cache backend. Otherwise the batch writer can
-            // stay alive and block shutdown.
-            let old_cache_manager =
-                std::mem::replace(&mut self.app_state.cache_manager, CacheManager::disabled());
-            drop(old_cache_manager);
-            // Drop our `ClickHouseConnectionInfo`, so that we stop holding on to the `Arc<BatchSender>`
-            // This allows the batch writer task to exit (once all of the remaining `ClickhouseConnectionInfo`s are dropped)
-            self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
-            if let Some(handle) = handle {
+            let disabled_placeholder = self.app_state.disabled_for_shutdown_placeholder();
+            let mut app_state = std::mem::replace(&mut self.app_state, disabled_placeholder);
+
+            // Grab batch writer handles so we can wait on them later.
+            let clickhouse_handle = app_state.clickhouse_connection_info.batcher_join_handle();
+            let pg_handle = app_state.postgres_connection_info.batcher_join_handle();
+
+            // Return unused rate limit tokens while Postgres is still active.
+            if !app_state.rate_limiting_manager.is_empty() {
+                tracing::info!("Returning unused rate limit tokens to database");
+                if let Err(e) = app_state.rate_limiting_manager.shutdown() {
+                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
+                }
+                tracing::info!("Rate limit token return complete");
+            }
+
+            // Move the deferred task tracker out before dropping app state so we can
+            // still close/wait on it below.
+            let deferred_tasks =
+                std::mem::replace(&mut app_state.deferred_tasks, TaskTracker::new());
+
+            // Drop all remaining state before waiting on batch writers. This releases
+            // all sender/reference holders (cache backends, rate-limit backends, and any
+            // future fields added to `AppStateData`) without requiring manual `drop(...)`
+            // calls for each one.
+            drop(app_state);
+            if let Some(clickhouse_handle) = clickhouse_handle {
                 tracing::info!("Waiting for ClickHouse batch writer to finish");
                 // This could block forever if:
                 // * We spawn a long-lived `tokio::task` that holds on to a `ClickhouseConnectionInfo`,
@@ -101,18 +116,12 @@ impl Drop for GatewayHandle {
                 // We err on the side of hanging the server on shutdown, rather than potentially exiting while
                 // we still have batched writes in-flight (or about to be written via an active `ClickhouseConnectionInfo`).
                 tokio::task::block_in_place(|| {
-                    if let Err(e) = Handle::current().block_on(handle) {
+                    if let Err(e) = Handle::current().block_on(clickhouse_handle) {
                         tracing::error!("Error in batch writer: {e}");
                     }
                 });
                 tracing::info!("ClickHouse batch writer finished");
             }
-            // Drain the Postgres batch writer (same pattern as ClickHouse above)
-            let pg_handle = self
-                .app_state
-                .postgres_connection_info
-                .batcher_join_handle();
-            self.app_state.postgres_connection_info = PostgresConnectionInfo::new_disabled();
             if let Some(pg_handle) = pg_handle {
                 tracing::info!("Waiting for Postgres batch writer to finish");
                 tokio::task::block_in_place(|| {
@@ -122,26 +131,18 @@ impl Drop for GatewayHandle {
                 });
                 tracing::info!("Postgres batch writer finished");
             }
-            // Return unused rate limit tokens to the database
-            if !self.app_state.rate_limiting_manager.is_empty() {
-                tracing::info!("Returning unused rate limit tokens to database");
-                if let Err(e) = self.app_state.rate_limiting_manager.shutdown() {
-                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
-                }
-                tracing::info!("Rate limit token return complete");
-            }
 
-            self.app_state.deferred_tasks.close();
+            deferred_tasks.close();
             // The 'wait' future will resolve immediately if the pool is empty.
             // Closing the pool doesn't block more futures from being added, so checking
             // if it's empty doesn't introduce any new race conditions (it's still possible
             // for some existing tokio task to spawn something in this pool after 'wait' resolves).
             // This check makes it easier to write tests (since we don't need to use a multi-threaded runtime),
             // as well as reducing the number of log messages in the common case.
-            if !self.app_state.deferred_tasks.is_empty() {
+            if !deferred_tasks.is_empty() {
                 tokio::task::block_in_place(|| {
                     tracing::info!("Waiting for deferred tasks to finish");
-                    Handle::current().block_on(self.app_state.deferred_tasks.wait());
+                    Handle::current().block_on(deferred_tasks.wait());
                     tracing::info!("Deferred tasks finished");
                 });
             }
@@ -330,6 +331,27 @@ impl GatewayHandle {
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
     ) -> Result<Self, Error> {
+        // Validate that when observability is enabled, the correct connection info is set up.
+        if config.gateway.observability.enabled == Some(true) {
+            if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+                if matches!(postgres_connection_info, PostgresConnectionInfo::Disabled) {
+                    return Err(ErrorDetails::AppState {
+                        message:
+                            "A Postgres connection is required when `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE` \
+                                  is enabled and observability is enabled."
+                                .to_string(),
+                    }
+                    .into());
+                }
+            } else if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
+                return Err(ErrorDetails::AppState {
+                    message: "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
+                        .to_string(),
+                }
+                .into());
+            }
+        }
+
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
             &valkey_connection_info,
@@ -365,11 +387,11 @@ impl GatewayHandle {
                     cancel_token.clone(),
                 )
                 .await?;
-            for (namespace, namespace_config) in &experimentation.namespaces {
+            for namespace_config in experimentation.namespaces.values() {
                 namespace_config
                     .setup(
                         db.clone(),
-                        &format!("{function_name} (namespace: {namespace})"),
+                        function_name,
                         &postgres_connection_info,
                         cancel_token.clone(),
                     )
@@ -423,6 +445,32 @@ impl GatewayHandle {
 }
 
 impl AppStateData {
+    /// Returns a new AppStateData with all connections disabled. This is only used in
+    /// `GatewayHandle::drop` so we can wait for batch writer handles without worrying
+    /// about anything else in AppStateData holding a database connection.
+    fn disabled_for_shutdown_placeholder(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            http_client: self.http_client.clone(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::new_disabled(),
+            valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
+            cache_manager: CacheManager::disabled(),
+            deferred_tasks: TaskTracker::new(),
+            auth_cache: None,
+            config_snapshot_cache: None,
+            autopilot_client: None,
+            deployment_id: None,
+            rate_limiting_manager: Arc::new(RateLimitingManager::new(
+                Arc::new(RateLimitingConfig::default()),
+                Arc::new(DisabledRateLimitQueries),
+            )),
+            shutdown_token: CancellationToken::new(),
+            _private: (),
+        }
+    }
+
     pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
         DelegatingDatabaseConnection::new(
             self.clickhouse_connection_info.clone(),
@@ -490,20 +538,21 @@ pub async fn setup_clickhouse(
     clickhouse_url: Option<String>,
     embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
+    // TODO(#5691): we should stop checking an explicit observability.enabled config when setting up
+    // ClickHouse.
     let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
-        // Observability disabled by config
         (Some(false), _) => {
+            // Observability disabled by config
             tracing::info!(
                 "Disabling observability: `gateway.observability.enabled` is set to false in config."
             );
             ClickHouseConnectionInfo::new_disabled()
         }
-        // Observability enabled but no ClickHouse URL
         (Some(true), None) => {
-            return Err(ErrorDetails::AppState {
-                message: "Missing environment variable TENSORZERO_CLICKHOUSE_URL".to_string(),
-            }
-            .into());
+            // Observability enabled but no ClickHouse URL
+            // This is allowed if Postgres is the primary datastore; we validate after both ClickHouse
+            // and Postgres are initialized.
+            ClickHouseConnectionInfo::new_disabled()
         }
         // Observability enabled and ClickHouse URL provided
         (Some(true), Some(clickhouse_url)) => {
@@ -581,6 +630,7 @@ pub async fn setup_postgres(
     config: &Config,
     postgres_url: Option<&str>,
 ) -> Result<PostgresConnectionInfo, Error> {
+    // TODO(#5691): we should stop checking an explicit postgres.enabled config.
     let postgres_connection_info = match (config.postgres.enabled, postgres_url) {
         // Postgres disabled by config
         (Some(false), _) => {
@@ -899,6 +949,7 @@ mod tests {
     };
     #[tokio::test]
     async fn test_setup_clickhouse() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Disabled observability
         let gateway_config = GatewayConfig {
@@ -936,7 +987,7 @@ mod tests {
             ClickHouseClientType::Disabled
         );
         assert!(!logs_contain(
-            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+            "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"
         ));
 
         // Default observability and no ClickHouse URL
@@ -964,7 +1015,7 @@ mod tests {
             ClickHouseClientType::Disabled
         );
         assert!(!logs_contain(
-            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+            "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"
         ));
         assert!(logs_contain(
             "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."
@@ -973,7 +1024,8 @@ mod tests {
         // We do not test the case where a ClickHouse URL is provided but observability is default,
         // as this would require a working ClickHouse and we don't have one in unit tests.
 
-        // Observability enabled but ClickHouse URL is missing
+        // Observability enabled but ClickHouse URL is missing returns disabled
+        // (validation happens in `new_with_database_and_http_client`)
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
@@ -1003,12 +1055,13 @@ mod tests {
         };
         let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let err = setup_clickhouse(&unwritten_config, None, false)
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
             .await
-            .unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL")
+            .unwrap();
+        assert_eq!(
+            clickhouse_connection_info.client_type(),
+            ClickHouseClientType::Disabled,
+            "ClickHouse should be disabled when observability is enabled but no URL is provided"
         );
 
         // Bad URL
@@ -1047,6 +1100,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_unhealthy_clickhouse() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Sensible URL that doesn't point to ClickHouse
         let gateway_config = GatewayConfig {
@@ -1181,6 +1235,140 @@ mod tests {
         setup_postgres(config, Some("bad_url"))
             .await
             .expect_err("Postgres setup should fail given a bad URL");
+    }
+
+    #[tokio::test]
+    async fn test_observability_enabled_requires_clickhouse_when_not_postgres_primary() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
+
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: Some(true),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let result = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+        )
+        .await;
+        let err = result
+            .err()
+            .expect("Gateway should fail when observability is enabled but ClickHouse is missing");
+        assert!(
+            err.to_string()
+                .contains("Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"),
+            "error should mention the missing ClickHouse URL: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_observability_enabled_requires_postgres_when_postgres_primary() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
+
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: Some(true),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let result = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+        )
+        .await;
+        let err = result
+            .err()
+            .expect("Gateway should fail when Postgres is primary but disabled");
+        assert!(
+            err.to_string()
+                .contains("ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"),
+            "error should mention the feature flag: {err}"
+        );
+
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
+    }
+
+    #[tokio::test]
+    async fn test_observability_disabled_does_not_require_datastore() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
+
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: Some(false),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let _gateway = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+        )
+        .await
+        .expect("Gateway should start when observability is disabled");
+    }
+
+    #[tokio::test]
+    async fn test_observability_default_does_not_require_datastore() {
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
+
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: None,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let _gateway = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+        )
+        .await
+        .expect("Gateway should start when observability is default (not explicitly enabled)");
+
+        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
     }
 
     #[tokio::test]

@@ -1,0 +1,14 @@
+[gateway]
+observability.enabled = true
+
+[postgres]
+enabled = true
+connection_pool_size = 50
+
+[functions.load_test_chat]
+type = "chat"
+
+[functions.load_test_chat.variants.default]
+type = "chat_completion"
+model = "dummy::good"
+max_tokens = 128

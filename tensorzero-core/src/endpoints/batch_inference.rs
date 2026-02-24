@@ -143,6 +143,14 @@ pub async fn start_batch_inference(
         }));
     }
 
+    if !config.gateway.observability.writes_enabled() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Batch inference requires observability to be enabled \
+                      (`gateway.observability.enabled` must not be `false`)."
+                .to_string(),
+        }));
+    }
+
     let database = DelegatingDatabaseConnection::new(
         clickhouse_connection_info.clone(),
         postgres_connection_info.clone(),
@@ -507,6 +515,14 @@ pub async fn poll_batch_inference_handler(
     if config.gateway.relay.is_some() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: "poll_batch_inference is not supported in relay mode".to_string(),
+        }));
+    }
+
+    if !config.gateway.observability.writes_enabled() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Batch inference requires observability to be enabled \
+                      (`gateway.observability.enabled` must not be `false`)."
+                .to_string(),
         }));
     }
 
@@ -1187,6 +1203,7 @@ fn convert_row_to_inference_response(
     let usage = Usage {
         input_tokens: row.input_tokens,
         output_tokens: row.output_tokens,
+        cost: None,
     };
 
     match function {
@@ -1235,5 +1252,54 @@ fn convert_row_to_inference_response(
                 finish_reason: row.finish_reason,
             }))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    use crate::config::gateway::GatewayConfig;
+    use crate::config::{Config, ObservabilityConfig};
+    use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::error::ErrorDetails;
+    use crate::utils::gateway::{GatewayHandle, GatewayHandleTestOptions};
+
+    #[tokio::test]
+    async fn test_start_batch_inference_rejects_when_observability_disabled() {
+        let config = Config {
+            gateway: GatewayConfig {
+                observability: ObservabilityConfig {
+                    enabled: Some(false),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut mock_client = MockClickHouseClient::new();
+        mock_client.expect_batcher_join_handle().returning(|| None);
+        let gateway_handle = GatewayHandle::new_unit_test_data(
+            Arc::new(config),
+            GatewayHandleTestOptions {
+                clickhouse_client: Arc::new(mock_client),
+                postgres_healthy: false,
+            },
+        );
+        let app_state = gateway_handle.app_state.clone();
+        let params = StartBatchInferenceParams::default();
+        let error = start_batch_inference(app_state, params, None)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidRequest {
+                message: "Batch inference requires observability to be enabled \
+                          (`gateway.observability.enabled` must not be `false`)."
+                    .to_string(),
+            },
+            "Batch inference should be rejected when observability is disabled"
+        );
     }
 }

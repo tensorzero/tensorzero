@@ -19,7 +19,10 @@ pub use tensorzero::{
     ListDatasetsResponse, PostgresConfig, TensorZeroError, UpdateDatapointRequest,
     UpdateDatapointsResponse, WriteConfigRequest, WriteConfigResponse,
 };
-use tensorzero::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
+use tensorzero::{
+    GetInferencesRequest, GetInferencesResponse, ListEpisodesRequest, ListEpisodesResponse,
+    ListInferencesRequest,
+};
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
@@ -158,6 +161,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     /// Returns temporary S3 credentials for uploading data.
     async fn s3_initiate_upload(
         &self,
+        session_id: Uuid,
         request: S3UploadRequest,
     ) -> Result<S3UploadResponse, TensorZeroClientError>;
 
@@ -237,6 +241,12 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 
+    /// Delete an entire dataset.
+    async fn delete_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
     // ========== Inference Query Operations ==========
 
     /// List inferences with filtering and pagination.
@@ -250,6 +260,14 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         request: GetInferencesRequest,
     ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+    // ========== Episode Operations ==========
+
+    /// List episodes with pagination and optional filtering.
+    async fn list_episodes(
+        &self,
+        request: ListEpisodesRequest,
+    ) -> Result<ListEpisodesResponse, TensorZeroClientError>;
 
     // ========== Optimization Operations ==========
 

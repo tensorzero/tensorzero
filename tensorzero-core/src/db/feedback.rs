@@ -77,11 +77,21 @@ pub struct StaticEvaluationHumanFeedbackInsert {
 #[cfg_attr(test, automock)]
 pub trait FeedbackQueries {
     /// Retrieves cumulative feedback statistics for a given metric and function, optionally filtered by variant names.
+    ///
+    /// When `namespace` is `Some`, filters feedback to only include data from inferences
+    /// tagged with the specified namespace (via `InferenceTag`). When `None`, uses the
+    /// pre-aggregated `FeedbackByVariantStatistics` table for efficiency.
+    ///
+    /// When `max_samples_per_variant` is `Some`, limits the number of most recent samples
+    /// per variant used for computing statistics. This is primarily used with namespace
+    /// filtering to cap the data considered. When `None`, all matching data is included.
     async fn get_feedback_by_variant(
         &self,
         metric_name: &str,
         function_name: &str,
         variant_names: Option<&Vec<String>>,
+        namespace: Option<&str>,
+        max_samples_per_variant: Option<u64>,
     ) -> Result<Vec<FeedbackByVariant>, Error>;
 
     /// Retrieves a time series of feedback statistics for a given metric and function,

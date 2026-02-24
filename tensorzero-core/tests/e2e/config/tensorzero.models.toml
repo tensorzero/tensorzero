@@ -5,6 +5,10 @@ routing = ["openai"]
 [models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 0.15, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 0.60, required = true },
+]
 
 [models."responses-gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
@@ -25,13 +29,19 @@ extra_body = [
     { pointer = "/frequency_penalty", value = 1.42 },
 ]
 
+[models."fireworks-kimi"]
+routing = ["fireworks"]
+
+[models."fireworks-kimi".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/kimi-k2p5"
+
 [models."kimi-k2p5-fireworks"]
 routing = ["fireworks"]
 
 [models."kimi-k2p5-fireworks".providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/kimi-k2p5"
-parse_think_blocks = false
 
 [models."gpt-oss-20b-vllm"]
 routing = ["vllm"]
@@ -548,6 +558,14 @@ routing = ["together"]
 type = "together"
 model_name = "deepseek-ai/DeepSeek-R1"
 
+[models."together-kimi"]
+routing = ["together"]
+
+[models."together-kimi".providers.together]
+type = "together"
+model_name = "moonshotai/Kimi-K2.5"
+extra_body = [{ pointer = "/reasoning/enabled", value = true }]
+
 ## OpenRouter
 
 [models.gpt_4_o_mini_openrouter]
@@ -693,6 +711,10 @@ routing = ["good"]
 [models.test.providers.good]
 type = "dummy"
 model_name = "good"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 3.0 },
+    { pointer = "/usage/completion_tokens", cost_per_million = 15.0 },
+]
 
 [models.error]
 routing = ["error"]
@@ -718,6 +740,10 @@ routing = ["json"]
 [models.json.providers.json]
 type = "dummy"
 model_name = "json"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 3.0 },
+    { pointer = "/usage/completion_tokens", cost_per_million = 15.0 },
+]
 
 [models.json_goodbye]
 routing = ["dummy"]
@@ -732,6 +758,10 @@ routing = ["tool"]
 [models.tool.providers.tool]
 type = "dummy"
 model_name = "tool"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 3.0 },
+    { pointer = "/usage/completion_tokens", cost_per_million = 15.0 },
+]
 
 [models.bad_tool]
 routing = ["bad_tool"]
@@ -746,6 +776,10 @@ routing = ["best_of_n_evaluator"]
 [models.best_of_n_evaluator.providers.best_of_n_evaluator]
 type = "dummy"
 model_name = "best_of_n_0"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 3.0 },
+    { pointer = "/usage/completion_tokens", cost_per_million = 15.0 },
+]
 
 [models.test_key]
 routing = ["dummy"]
@@ -768,6 +802,10 @@ routing = ["dummy"]
 [models.err_in_stream.providers.dummy]
 type = "dummy"
 model_name = "err_in_stream"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 3.0 },
+    { pointer = "/usage/completion_tokens", cost_per_million = 15.0 },
+]
 
 [models.err_in_stream_with_raw_response]
 routing = ["dummy"]
@@ -789,6 +827,10 @@ routing = ["dummy"]
 [models.alternate.providers.dummy]
 type = "dummy"
 model_name = "alternate"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 3.0 },
+    { pointer = "/usage/completion_tokens", cost_per_million = 15.0 },
+]
 
 [models.json_beatles_1]
 routing = ["dummy"]
@@ -866,6 +908,14 @@ extra_body = [
     { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
 ]
 
+# Anthropic Claude Sonnet 4.6
+[models."claude-sonnet-4-6"]
+routing = ["anthropic"]
+
+[models."claude-sonnet-4-6".providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-6"
+
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
@@ -921,6 +971,9 @@ routing = ["dummy"]
 [embedding_models.dummy-embedding-model.providers.dummy]
 type = "dummy"
 model_name = "test-embeddings"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 3.0 },
+]
 
 [embedding_models.gemini_embedding_001_openrouter]
 routing = ["openrouter"]

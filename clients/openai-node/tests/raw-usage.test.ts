@@ -8,13 +8,14 @@ import { describe, it, expect, beforeAll } from "vitest";
 import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources";
 import { v7 as uuidv7 } from "uuid";
+import { GATEWAY_URL } from "./helpers";
 
 let client: OpenAI;
 
 beforeAll(() => {
   client = new OpenAI({
     apiKey: "donotuse",
-    baseURL: "http://127.0.0.1:3000/openai/v1",
+    baseURL: `${GATEWAY_URL}/openai/v1`,
   });
 });
 
@@ -25,7 +26,7 @@ describe("Raw Usage", () => {
     expect(entry.data.total_tokens).toBeDefined();
     expect(entry.data.prompt_tokens_details?.cached_tokens).toBeDefined();
     expect(
-      entry.data.completion_tokens_details?.reasoning_tokens
+      entry.data.completion_tokens_details?.reasoning_tokens,
     ).toBeDefined();
   };
 

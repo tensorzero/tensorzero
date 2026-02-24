@@ -1,44 +1,24 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { useResolveUuid } from "~/hooks/useResolveUuid";
-import type { ResolvedObject } from "~/types/tensorzero";
-import { cn } from "~/utils/common";
-import { toDatapointUrl, toEpisodeUrl, toInferenceUrl } from "~/utils/urls";
 import { CircleDot, CircleHelp } from "lucide-react";
-import { Inferences, Episodes, Dataset } from "~/components/icons/Icons";
+import { Dataset, Episodes, Inferences } from "~/components/icons/Icons";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { useResolveUuid } from "~/hooks/useResolveUuid";
+import type { ResolvedObject } from "~/types/tensorzero";
+import { cn } from "~/utils/common";
+import { toResolvedObjectUrl } from "~/utils/urls";
+import { UuidHoverCard } from "./UuidHoverCard";
 
 const ICON_SIZE = 12;
 const ICON_CLASS = "mr-1 inline align-middle -translate-y-px";
 
-function getUrlForResolvedObject(
-  uuid: string,
-  obj: ResolvedObject,
-): string | null {
-  switch (obj.type) {
-    case "inference":
-      return toInferenceUrl(uuid);
-    case "episode":
-      return toEpisodeUrl(uuid);
-    case "chat_datapoint":
-    case "json_datapoint":
-      return toDatapointUrl(obj.dataset_name, uuid);
-    case "model_inference":
-    case "boolean_feedback":
-    case "float_feedback":
-    case "comment_feedback":
-    case "demonstration_feedback":
-      return null;
-    default: {
-      const _exhaustiveCheck: never = obj;
-      return _exhaustiveCheck;
-    }
-  }
+interface UuidLinkProps {
+  uuid: string;
 }
 
 function getEntityLabel(type: ResolvedObject["type"]): string {
@@ -103,11 +83,11 @@ function IconWithTooltip({
   );
 }
 
-export function UuidLink({ uuid }: { uuid: string }) {
+export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
-  const url = obj ? getUrlForResolvedObject(uuid, obj) : null;
+  const url = obj ? toResolvedObjectUrl(uuid, obj) : null;
 
   return (
     <code
@@ -116,18 +96,18 @@ export function UuidLink({ uuid }: { uuid: string }) {
         url ? "bg-orange-50 text-orange-500" : "bg-muted",
       )}
     >
-      {url ? (
-        <Link
-          to={url}
-          className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
-        >
-          {obj && (
+      {url && obj ? (
+        <UuidHoverCard uuid={uuid} obj={obj}>
+          <Link
+            to={url}
+            className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
+          >
             <IconWithTooltip label={getEntityLabel(obj.type)}>
               <EntityIcon type={obj.type} />
             </IconWithTooltip>
-          )}
-          {uuid}
-        </Link>
+            {uuid}
+          </Link>
+        </UuidHoverCard>
       ) : (
         <>
           {obj ? (
