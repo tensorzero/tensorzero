@@ -310,8 +310,10 @@ async fn run() -> Result<(), ExitCode> {
     // Start tool whitelist approver if configured
     if let Some(client) = gateway_handle.app_state.autopilot_client.clone() {
         let token = gateway_handle.app_state.shutdown_token.clone();
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move { client.run_tool_whitelist_approver(token).await });
+        gateway_handle
+            .app_state
+            .deferred_tasks
+            .spawn(async move { client.run_tool_whitelist_approver(token).await });
     }
 
     // Create a new observability_enabled_pretty string for the log message below
