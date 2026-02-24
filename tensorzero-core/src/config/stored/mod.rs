@@ -173,6 +173,7 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ObservabilityBackend;
     use crate::embeddings::UninitializedEmbeddingModelConfig;
 
     /// Old snapshot with deprecated `gateway.observability.disable_automatic_migrations`
@@ -323,7 +324,7 @@ mod tests {
     }
 
     /// Forward-compatibility: `StoredObservabilityConfig` should accept unknown fields
-    /// (e.g. a future `backend` field added by a newer gateway version).
+    /// (e.g. fields added by a newer gateway version).
     #[test]
     fn test_stored_observability_config_ignores_unknown_fields() {
         let toml_str = r#"
@@ -337,6 +338,7 @@ mod tests {
             toml::from_str(toml_str).expect("should ignore unknown fields");
         assert_eq!(stored.enabled, Some(true));
         assert!(stored.async_writes);
+        assert_eq!(stored.backend, ObservabilityBackend::Postgres);
     }
 
     /// Forward-compatibility: `StoredCacheConfig` should accept unknown fields

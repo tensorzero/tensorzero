@@ -1,9 +1,9 @@
-# Test configuration for testing ClickHouse requirement
-# This config explicitly enables observability with ClickHouse backend
+# Test configuration for testing Postgres requirement
+# This config explicitly enables observability with Postgres backend
 
 [gateway.observability]
 enabled = true
-backend = "clickhouse"
+backend = "postgres"
 
 # Minimal function definition for a valid config
 [functions.test_function]

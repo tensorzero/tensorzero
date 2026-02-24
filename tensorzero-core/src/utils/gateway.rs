@@ -18,7 +18,8 @@ use tracing::instrument;
 
 use crate::cache::CacheManager;
 use crate::config::{
-    BatchWritesConfig, Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::UnwrittenConfig,
+    BatchWritesConfig, Config, ConfigFileGlob, ObservabilityBackend, snapshot::SnapshotHash,
+    unwritten::UnwrittenConfig,
 };
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
@@ -31,7 +32,6 @@ use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
 use crate::endpoints::openai_compatible::RouterExt;
 use crate::error::{Error, ErrorDetails};
-use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, RateLimitingManager};
@@ -223,6 +223,30 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
     )
 }
 
+/// Resolves the primary datastore from the `observability.backend` config and available connections.
+///
+/// Returns `None` when `backend = "auto"` and no backend is available.
+/// Returns `Some(PrimaryDatastore)` when a backend can be determined.
+fn resolve_primary_datastore(
+    backend: ObservabilityBackend,
+    clickhouse: &ClickHouseConnectionInfo,
+    postgres: &PostgresConnectionInfo,
+) -> Option<PrimaryDatastore> {
+    match backend {
+        ObservabilityBackend::Auto => {
+            if clickhouse.client_type() != ClickHouseClientType::Disabled {
+                Some(PrimaryDatastore::ClickHouse)
+            } else if !matches!(postgres, PostgresConnectionInfo::Disabled) {
+                Some(PrimaryDatastore::Postgres)
+            } else {
+                None
+            }
+        }
+        ObservabilityBackend::ClickHouse => Some(PrimaryDatastore::ClickHouse),
+        ObservabilityBackend::Postgres => Some(PrimaryDatastore::Postgres),
+    }
+}
+
 impl GatewayHandle {
     pub async fn new(
         config: UnwrittenConfig,
@@ -256,12 +280,12 @@ impl GatewayHandle {
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
-        // Temporary: derive from feature flag until M2-Step2 replaces with config-based resolution
-        let primary_datastore = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-            PrimaryDatastore::Postgres
-        } else {
-            PrimaryDatastore::ClickHouse
-        };
+        let primary_datastore = resolve_primary_datastore(
+            config.gateway.observability.backend,
+            &clickhouse_connection_info,
+            &postgres_connection_info,
+        )
+        .unwrap_or(PrimaryDatastore::ClickHouse);
         let db = DelegatingDatabaseConnection::new(
             clickhouse_connection_info.clone(),
             postgres_connection_info.clone(),
@@ -349,38 +373,74 @@ impl GatewayHandle {
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
-        // Temporary: derive from feature flag until M2-Step2 replaces with config-based resolution
-        let primary_datastore = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-            PrimaryDatastore::Postgres
-        } else {
-            PrimaryDatastore::ClickHouse
-        };
+        let resolved = resolve_primary_datastore(
+            config.gateway.observability.backend,
+            &clickhouse_connection_info,
+            &postgres_connection_info,
+        );
 
-        // Validate that when observability is enabled, the correct connection info is set up.
-        if config.gateway.observability.enabled == Some(true) {
-            match primary_datastore {
-                PrimaryDatastore::Postgres => {
-                    if matches!(postgres_connection_info, PostgresConnectionInfo::Disabled) {
-                        return Err(ErrorDetails::AppState {
-                            message:
-                                "A Postgres connection is required when the primary datastore \
-                                      is Postgres and observability is enabled."
-                                    .to_string(),
+        // Validate observability backend availability based on `enabled` setting.
+        let primary_datastore = match config.gateway.observability.enabled {
+            Some(true) => match resolved {
+                Some(ds) => {
+                    // Verify the resolved backend's connection is actually available
+                    match ds {
+                        PrimaryDatastore::Postgres => {
+                            if matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
+                            {
+                                return Err(ErrorDetails::AppState {
+                                    message:
+                                        "A Postgres connection is required when the primary datastore \
+                                              is Postgres and observability is enabled."
+                                            .to_string(),
+                                }
+                                .into());
+                            }
                         }
-                        .into());
+                        PrimaryDatastore::ClickHouse => {
+                            if clickhouse_connection_info.client_type()
+                                == ClickHouseClientType::Disabled
+                            {
+                                return Err(ErrorDetails::AppState {
+                                    message:
+                                        "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
+                                            .to_string(),
+                                }
+                                .into());
+                            }
+                        }
                     }
+                    ds
                 }
-                PrimaryDatastore::ClickHouse => {
-                    if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
-                        return Err(ErrorDetails::AppState {
-                            message: "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
-                                .to_string(),
-                        }
-                        .into());
+                None => {
+                    return Err(ErrorDetails::AppState {
+                        message: "Observability is enabled but no backend is available. \
+                             Set `TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL`, \
+                             or configure `gateway.observability.backend` explicitly."
+                            .to_string(),
+                    }
+                    .into());
+                }
+            },
+            None => {
+                // Opportunistic: use whatever is available, warn if nothing
+                match resolved {
+                    Some(ds) => ds,
+                    None => {
+                        tracing::warn!(
+                            "No observability backend available. \
+                             Observability writes will be disabled."
+                        );
+                        // Default to ClickHouse (disabled) for DelegatingDatabaseConnection
+                        PrimaryDatastore::ClickHouse
                     }
                 }
             }
-        }
+            Some(false) => {
+                // Observability disabled — use whatever is available for non-observability queries
+                resolved.unwrap_or(PrimaryDatastore::ClickHouse)
+            }
+        };
 
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
@@ -1009,17 +1069,17 @@ pub struct GatewayHandleTestOptions {
 mod tests {
     use super::*;
     use crate::config::{
-        ObservabilityConfig, PostgresConfig, gateway::GatewayConfig, snapshot::ConfigSnapshot,
-        unwritten::UnwrittenConfig,
+        ObservabilityBackend, ObservabilityConfig, PostgresConfig, gateway::GatewayConfig,
+        snapshot::ConfigSnapshot, unwritten::UnwrittenConfig,
     };
     #[tokio::test]
     async fn test_setup_clickhouse() {
-        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Disabled observability
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(false),
+                backend: ObservabilityBackend::Auto,
                 async_writes: false,
                 batch_writes: Default::default(),
                 ..Default::default()
@@ -1059,6 +1119,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: None,
+                backend: ObservabilityBackend::Auto,
                 async_writes: false,
                 batch_writes: Default::default(),
                 ..Default::default()
@@ -1094,6 +1155,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
+                backend: ObservabilityBackend::Auto,
                 async_writes: false,
                 batch_writes: Default::default(),
                 ..Default::default()
@@ -1133,6 +1195,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
+                backend: ObservabilityBackend::Auto,
                 async_writes: false,
                 batch_writes: Default::default(),
                 ..Default::default()
@@ -1165,12 +1228,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_unhealthy_clickhouse() {
-        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Sensible URL that doesn't point to ClickHouse
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
+                backend: ObservabilityBackend::Auto,
                 async_writes: false,
                 batch_writes: Default::default(),
                 ..Default::default()
@@ -1304,12 +1367,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_observability_enabled_requires_clickhouse_when_not_postgres_primary() {
-        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
-
         let config = Arc::new(Config {
             gateway: GatewayConfig {
                 observability: ObservabilityConfig {
                     enabled: Some(true),
+                    backend: ObservabilityBackend::ClickHouse,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -1341,12 +1403,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_observability_enabled_requires_postgres_when_postgres_primary() {
-        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
-
         let config = Arc::new(Config {
             gateway: GatewayConfig {
                 observability: ObservabilityConfig {
                     enabled: Some(true),
+                    backend: ObservabilityBackend::Postgres,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -1370,18 +1431,13 @@ mod tests {
             .err()
             .expect("Gateway should fail when Postgres is primary but disabled");
         assert!(
-            err.to_string().contains("Postgres")
-                && err.to_string().contains("primary datastore"),
+            err.to_string().contains("Postgres") && err.to_string().contains("primary datastore"),
             "error should mention that Postgres is the primary datastore: {err}"
         );
-
-        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
     }
 
     #[tokio::test]
     async fn test_observability_disabled_does_not_require_datastore() {
-        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
-
         let config = Arc::new(Config {
             gateway: GatewayConfig {
                 observability: ObservabilityConfig {
@@ -1410,8 +1466,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_observability_default_does_not_require_datastore() {
-        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
-
         let config = Arc::new(Config {
             gateway: GatewayConfig {
                 observability: ObservabilityConfig {
@@ -1436,8 +1490,6 @@ mod tests {
         )
         .await
         .expect("Gateway should start when observability is default (not explicitly enabled)");
-
-        ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
     }
 
     #[tokio::test]

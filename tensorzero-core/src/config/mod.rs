@@ -393,6 +393,20 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
     format!("{e:?}").contains("BadScheme")
 }
 
+/// Selects the primary datastore used for observability writes (inferences, feedback).
+///
+/// - `Auto` (default): prefers ClickHouse if available, falls back to Postgres.
+/// - `ClickHouse`: explicitly use ClickHouse.
+/// - `Postgres`: explicitly use Postgres.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ObservabilityBackend {
+    #[default]
+    Auto,
+    ClickHouse,
+    Postgres,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservabilityConfig {
@@ -402,6 +416,9 @@ pub struct ObservabilityConfig {
     /// - `None` (default): observability is opportunistic — enabled if a backend is available, otherwise warns and continues.
     /// - `Some(false)`: observability is disabled — no data is written regardless of backend availability.
     pub enabled: Option<bool>,
+    /// Selects the observability backend (and primary datastore).
+    #[serde(default)]
+    pub backend: ObservabilityBackend,
     #[serde(default)]
     pub async_writes: bool,
     #[serde(default)]
