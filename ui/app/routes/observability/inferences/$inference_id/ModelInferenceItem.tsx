@@ -19,8 +19,10 @@ import {
   Output,
   Calendar,
   Cached,
+  Cost,
 } from "~/components/icons/Icons";
 import Chip from "~/components/ui/Chip";
+import { formatCost } from "~/utils/cost";
 import { formatDateWithSeconds } from "~/utils/date";
 import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import {
@@ -67,6 +69,13 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
                   label={`${inference.output_tokens === undefined ? "null" : inference.output_tokens} tok`}
                   tooltip="Output Tokens"
                 />
+                {inference.cost !== undefined && (
+                  <Chip
+                    icon={<Cost className="text-fg-tertiary" />}
+                    label={formatCost(inference.cost)}
+                    tooltip="Cost"
+                  />
+                )}
                 {inference.response_time_ms !== null && (
                   <Chip
                     icon={<Timer className="text-fg-tertiary" />}

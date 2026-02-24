@@ -612,7 +612,7 @@ pub async fn setup_clickhouse(
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
-            disable_automatic_migrations: config.gateway.observability.disable_automatic_migrations,
+            disable_automatic_migrations: config.clickhouse.disable_automatic_migrations,
         })
         .await?;
     }
@@ -985,7 +985,7 @@ mod tests {
                 enabled: Some(false),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -1024,7 +1024,7 @@ mod tests {
                 enabled: None,
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             fetch_and_encode_input_files_before_inference: false,
             unstable_error_json: false,
@@ -1059,7 +1059,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -1098,7 +1098,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -1136,7 +1136,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,

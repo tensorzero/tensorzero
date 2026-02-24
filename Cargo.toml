@@ -3,6 +3,7 @@ members = [
     "tensorzero-core",
     "tensorzero-core/tests/mock-provider-api",
     "tensorzero-core/tests/load/rate-limit-load-test",
+    "tensorzero-core/tests/load/postgres-inference-load-test",
     "tensorzero-core/tests/load/feedback",
     "gateway",
     "internal/tensorzero-node",
@@ -105,6 +106,7 @@ sqlx = { version = "0.9.0-alpha.1", features = [
     "migrate",
     "chrono",
     "uuid",
+    "rust_decimal",
     "sqlx-toml",
 ] }
 rlt = "0.5.0"

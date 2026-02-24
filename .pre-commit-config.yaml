@@ -51,56 +51,50 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: "prettier: ui"
-        name: "prettier: ui"
+      - id: "oxfmt: ui"
+        name: "oxfmt: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run format'
         language: node
         language_version: "24.13.0"
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         additional_dependencies:
-          - prettier
-          - prettier-plugin-tailwindcss
-          - "@prettier/plugin-xml"
+          - oxfmt
         exclude: '.*\.ipynb$'
         pass_filenames: false
 
-      - id: "prettier: openai-node"
-        name: "prettier: openai-node"
+      - id: "oxfmt: openai-node"
+        name: "oxfmt: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run format'
         language: node
         language_version: "24.13.0"
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         additional_dependencies:
-          - prettier
-          - prettier-plugin-tailwindcss
-          - "@prettier/plugin-xml"
+          - oxfmt
         exclude: '.*\.ipynb$'
         pass_filenames: false
 
-      - id: "prettier: tensorzero-node"
-        name: "prettier: tensorzero-node"
+      - id: "oxfmt: tensorzero-node"
+        name: "oxfmt: tensorzero-node"
         entry: bash -c 'pnpm --filter=tensorzero-node run format'
         language: node
         language_version: "24.13.0"
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         additional_dependencies:
-          - prettier
-          - prettier-plugin-tailwindcss
-          - "@prettier/plugin-xml"
+          - oxfmt
         exclude: '.*\.ipynb$'
         pass_filenames: false
 
-      - id: "prettier: root"
-        name: "prettier: root"
+      - id: "oxfmt: root"
+        name: "oxfmt: root"
         entry: bash -c 'pnpm run format'
         language: node
         language_version: "24.13.0"
         types_or: [json, markdown, yaml]
         additional_dependencies:
-          - prettier
+          - oxfmt
         pass_filenames: false
 
       - id: "eslint: ui"

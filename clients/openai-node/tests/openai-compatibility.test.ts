@@ -61,7 +61,7 @@ describe("OpenAI Compatibility", () => {
     expect(result.episode_id).toBe(episodeId);
 
     expect(result.choices[0].message.content).toBe(
-      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",
     );
 
     const usage = result.usage;
@@ -104,7 +104,7 @@ describe("OpenAI Compatibility", () => {
     expect(result.episode_id).toBe(episodeId);
 
     expect(result.choices[0].message.content).toBe(
-      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",
     );
 
     const usage = result.usage;
@@ -145,7 +145,7 @@ describe("OpenAI Compatibility", () => {
         temperature: 0.4,
         response_schema: responseSchema,
         episode_id: episodeId,
-      })
+      }),
     ).rejects.toThrow();
   });
 
@@ -229,7 +229,7 @@ describe("OpenAI Compatibility", () => {
       previousEpisodeId = chunk.episode_id;
 
       expect(chunk.model).toBe(
-        "tensorzero::function_name::basic_test::variant_name::test"
+        "tensorzero::function_name::basic_test::variant_name::test",
       );
 
       if (i + 1 < chunks.length) {
@@ -270,7 +270,7 @@ describe("OpenAI Compatibility", () => {
         model: "tensorzero::function_name::does_not_exist",
         // @ts-expect-error - custom TensorZero property
         "tensorzero::episode_id": episodeId,
-      })
+      }),
     ).rejects.toThrow(/Unknown function: does_not_exist/);
   });
 
@@ -299,7 +299,7 @@ describe("OpenAI Compatibility", () => {
         model: "tensorzero::function_name::",
         // @ts-expect-error - custom TensorZero property
         "tensorzero::episode_id": episodeId,
-      })
+      }),
     ).rejects.toThrow(/function_name.*cannot be empty/);
   });
 
@@ -328,7 +328,7 @@ describe("OpenAI Compatibility", () => {
         model: "chatgpt",
         // @ts-expect-error - custom TensorZero property
         "tensorzero::episode_id": episodeId,
-      })
+      }),
     ).rejects.toThrow(/`model` field must start with/);
   });
 
@@ -353,7 +353,7 @@ describe("OpenAI Compatibility", () => {
       // @ts-expect-error - missing model
       client.chat.completions.create({
         messages,
-      })
+      }),
     ).rejects.toThrow(/missing field `model`/);
   });
 
@@ -383,7 +383,7 @@ describe("OpenAI Compatibility", () => {
         model: "tensorzero::function_name::basic_test",
         stream: true,
         "tensorzero::episode_id": episodeId,
-      })
+      }),
     ).rejects.toThrow(/JSON Schema validation failed/);
   });
 
@@ -417,7 +417,7 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.model).toBe(
-      "tensorzero::function_name::weather_helper::variant_name::variant"
+      "tensorzero::function_name::weather_helper::variant_name::variant",
     );
     expect(result.choices[0].message.content).toBeNull();
     expect(result.choices[0].message.tool_calls).not.toBeNull();
@@ -428,10 +428,10 @@ describe("OpenAI Compatibility", () => {
     const toolCall = toolCalls[0];
     expect(toolCall.type).toBe("function");
     expect(
-      (toolCall as ChatCompletionMessageFunctionToolCall).function.name
+      (toolCall as ChatCompletionMessageFunctionToolCall).function.name,
     ).toBe("get_temperature");
     expect(
-      (toolCall as ChatCompletionMessageFunctionToolCall).function.arguments
+      (toolCall as ChatCompletionMessageFunctionToolCall).function.arguments,
     ).toBe('{"location":"Brooklyn","units":"celsius"}');
 
     const usage = result.usage;
@@ -471,7 +471,7 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.model).toBe(
-      "tensorzero::function_name::weather_helper::variant_name::bad_tool"
+      "tensorzero::function_name::weather_helper::variant_name::bad_tool",
     );
     expect(result.choices[0].message.content).toBeNull();
     expect(result.choices[0].message.tool_calls).not.toBeNull();
@@ -482,10 +482,10 @@ describe("OpenAI Compatibility", () => {
     const toolCall = toolCalls[0];
     expect(toolCall.type).toBe("function");
     expect(
-      (toolCall as ChatCompletionMessageFunctionToolCall).function.name
+      (toolCall as ChatCompletionMessageFunctionToolCall).function.name,
     ).toBe("get_temperature");
     expect(
-      (toolCall as ChatCompletionMessageFunctionToolCall).function.arguments
+      (toolCall as ChatCompletionMessageFunctionToolCall).function.arguments,
     ).toBe('{"location":"Brooklyn","units":"Celsius"}');
 
     const usage = result.usage;
@@ -554,7 +554,7 @@ describe("OpenAI Compatibility", () => {
       previousEpisodeId = chunk.episode_id;
 
       expect(chunk.model).toBe(
-        "tensorzero::function_name::weather_helper::variant_name::variant"
+        "tensorzero::function_name::weather_helper::variant_name::variant",
       );
 
       if (i + 1 < chunks.length) {
@@ -660,7 +660,7 @@ describe("OpenAI Compatibility", () => {
       previousEpisodeId = chunk.episode_id;
 
       expect(chunk.model).toBe(
-        "tensorzero::function_name::json_success::variant_name::test-diff-schema"
+        "tensorzero::function_name::json_success::variant_name::test-diff-schema",
       );
 
       if (i + 1 < chunks.length) {
@@ -708,7 +708,7 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.model).toBe(
-      "tensorzero::function_name::json_success::variant_name::test"
+      "tensorzero::function_name::json_success::variant_name::test",
     );
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
@@ -754,7 +754,7 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.model).toBe(
-      "tensorzero::function_name::json_success::variant_name::test"
+      "tensorzero::function_name::json_success::variant_name::test",
     );
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
@@ -797,9 +797,9 @@ describe("OpenAI Compatibility", () => {
         model: "tensorzero::function_name::json_success",
         // @ts-expect-error - custom TensorZero property
         "tensorzero::episode_id": episodeId,
-      })
+      }),
     ).rejects.toThrow(
-      /System message must contain only text or template content blocks/
+      /System message must contain only text or template content blocks/,
     );
   });
 
@@ -829,10 +829,10 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.model).toBe(
-      "tensorzero::function_name::json_fail::variant_name::test"
+      "tensorzero::function_name::json_fail::variant_name::test",
     );
     expect(result.choices[0].message.content).toBe(
-      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",
     );
     expect(result.choices[0].message.tool_calls).toBeUndefined();
     expect(result.usage?.prompt_tokens).toBe(10);
@@ -867,7 +867,7 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.choices[0].message.content).toBe(
-      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",
     );
 
     const usage = result.usage;
@@ -890,7 +890,7 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(cachedResult.choices[0].message.content).toBe(
-      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+      "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",
     );
 
     const cachedUsage = cachedResult.usage;
@@ -1071,7 +1071,7 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.model).toBe(
-      "tensorzero::function_name::basic_test::variant_name::openai"
+      "tensorzero::function_name::basic_test::variant_name::openai",
     );
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
@@ -1081,12 +1081,12 @@ describe("OpenAI Compatibility", () => {
     const toolCall = result.choices[0].message.tool_calls![0];
     expect(toolCall.type).toBe("function");
     expect(
-      (toolCall as ChatCompletionMessageFunctionToolCall).function.name
+      (toolCall as ChatCompletionMessageFunctionToolCall).function.name,
     ).toBe("get_temperature");
     expect(
       JSON.parse(
-        (toolCall as ChatCompletionMessageFunctionToolCall).function.arguments
-      )
+        (toolCall as ChatCompletionMessageFunctionToolCall).function.arguments,
+      ),
     ).toEqual({
       location: "Tokyo",
       units: "celsius",
@@ -1152,7 +1152,7 @@ describe("OpenAI Compatibility", () => {
     });
 
     expect(result.model).toBe(
-      "tensorzero::function_name::dynamic_json::variant_name::openai"
+      "tensorzero::function_name::dynamic_json::variant_name::openai",
     );
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
@@ -1199,7 +1199,7 @@ describe("OpenAI Compatibility", () => {
     // Read image and convert to base64
     const imagePath = path.join(
       __dirname,
-      "../../../tensorzero-core/tests/e2e/providers/ferris.png"
+      "../../../tensorzero-core/tests/e2e/providers/ferris.png",
     );
     const ferrisPng = fs.readFileSync(imagePath).toString("base64");
 
@@ -1236,7 +1236,7 @@ describe("OpenAI Compatibility", () => {
     // Read PDF file and convert to base64
     const pdfPath = path.join(
       __dirname,
-      "../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf"
+      "../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf",
     );
     const deepseekPaperPdf = fs.readFileSync(pdfPath).toString("base64");
 
@@ -1313,7 +1313,7 @@ it("should reject string input for function with input schema", async () => {
       model: "tensorzero::function_name::json_success",
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
-    })
+    }),
   ).rejects.toThrow(/400 JSON Schema validation failed/);
 });
 
@@ -1441,7 +1441,7 @@ it("should handle multi-turn parallel tool calls using TensorZero gateway direct
         "tensorzero::episode_id": episodeId,
         "tensorzero::variant_name": "openai",
       }),
-    }
+    },
   );
 
   if (!firstResponse.ok) {
@@ -1488,7 +1488,7 @@ it("should handle multi-turn parallel tool calls using TensorZero gateway direct
         "tensorzero::episode_id": episodeId,
         "tensorzero::variant_name": "openai",
       }),
-    }
+    },
   );
 
   if (!secondResponse.ok) {
@@ -1514,7 +1514,7 @@ it("should handle chat function null response", async () => {
   });
 
   expect(result.model).toBe(
-    "tensorzero::function_name::null_chat::variant_name::variant"
+    "tensorzero::function_name::null_chat::variant_name::variant",
   );
   expect(result.choices[0].message.content).toBeNull();
 });
@@ -1531,7 +1531,7 @@ it("should handle json function null response", async () => {
   });
 
   expect(result.model).toBe(
-    "tensorzero::function_name::null_json::variant_name::variant"
+    "tensorzero::function_name::null_json::variant_name::variant",
   );
   expect(result.choices[0].message.content).toBeNull();
 });
@@ -1617,7 +1617,7 @@ it("should handle multiple text blocks in message", async () => {
   });
 
   expect(result.model).toBe(
-    "tensorzero::model_name::dummy::multiple-text-blocks"
+    "tensorzero::model_name::dummy::multiple-text-blocks",
   );
   expect(result.choices[0].message.content).toContain("Megumin");
 });
@@ -1653,7 +1653,7 @@ it("should handle OpenAI custom tool with text format", async () => {
   });
 
   expect(result.model).toBe(
-    "tensorzero::model_name::openai::responses::gpt-5-codex"
+    "tensorzero::model_name::openai::responses::gpt-5-codex",
   );
   // @ts-expect-error - custom TensorZero property
   expect(result.episode_id).toBe(episodeId);
@@ -1661,14 +1661,14 @@ it("should handle OpenAI custom tool with text format", async () => {
   // Check that we got tool calls in the response
   expect(result.choices[0].message.tool_calls).not.toBeNull();
   expect(result.choices[0].message.tool_calls!.length).toBeGreaterThanOrEqual(
-    1
+    1,
   );
 
   // Find the code_generator tool call
   const codeGeneratorCalls = result.choices[0].message.tool_calls!.filter(
     (tc) =>
       (tc as ChatCompletionMessageFunctionToolCall).function.name ===
-      "code_generator"
+      "code_generator",
   );
   expect(codeGeneratorCalls.length).toBe(1);
 
@@ -1732,7 +1732,7 @@ NUMBER: /\\d+(\\.\\d+)?/
   });
 
   expect(result.model).toBe(
-    "tensorzero::model_name::openai::responses::gpt-5-codex"
+    "tensorzero::model_name::openai::responses::gpt-5-codex",
   );
   // @ts-expect-error - custom TensorZero property
   expect(result.episode_id).toBe(episodeId);
@@ -1740,14 +1740,14 @@ NUMBER: /\\d+(\\.\\d+)?/
   // Check that we got tool calls in the response
   expect(result.choices[0].message.tool_calls).not.toBeNull();
   expect(result.choices[0].message.tool_calls!.length).toBeGreaterThanOrEqual(
-    1
+    1,
   );
 
   // Find the calculator tool call
   const calculatorCalls = result.choices[0].message.tool_calls!.filter(
     (tc) =>
       (tc as ChatCompletionMessageFunctionToolCall).function.name ===
-      "calculator"
+      "calculator",
   );
   expect(calculatorCalls.length).toBe(1);
 

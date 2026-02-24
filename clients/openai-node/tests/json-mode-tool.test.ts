@@ -76,7 +76,7 @@ describe("JSON Mode Tool", () => {
     expect(
       message.tool_calls === null ||
         message.tool_calls === undefined ||
-        message.tool_calls.length === 0
+        message.tool_calls.length === 0,
     ).toBe(true);
 
     // Verify the text is valid JSON

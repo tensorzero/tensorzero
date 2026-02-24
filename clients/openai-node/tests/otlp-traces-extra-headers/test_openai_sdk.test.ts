@@ -49,7 +49,7 @@ describe("OTLP Traces Extra Headers", () => {
         headers: {
           "tensorzero-otlp-traces-extra-header-x-dummy-tensorzero": testValue,
         },
-      }
+      },
     );
 
     const inferenceId = result.id;

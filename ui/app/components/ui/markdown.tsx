@@ -77,8 +77,10 @@ function extractCodeBlockInfo(children: React.ReactNode): {
  * Read-only code block with copy button and word wrap toggle.
  * Reusable component for displaying code snippets consistently.
  */
-export interface ReadOnlyCodeBlockProps
-  extends Pick<CodeEditorProps, "className" | "maxHeight"> {
+export interface ReadOnlyCodeBlockProps extends Pick<
+  CodeEditorProps,
+  "className" | "maxHeight"
+> {
   code: string;
   language?: Language;
 }

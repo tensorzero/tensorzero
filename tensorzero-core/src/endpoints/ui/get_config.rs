@@ -83,6 +83,7 @@ impl UiConfig {
             tools,
             evaluations,
             gateway: _,
+            clickhouse: _,
             postgres: _,
             rate_limiting: _,
             object_storage: _,

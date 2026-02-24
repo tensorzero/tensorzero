@@ -658,6 +658,8 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
         || model_id.starts_with("claude-opus-4-5@")
     {
         Ok(64_000)
+    } else if model_id.starts_with("claude-opus-4-6@") {
+        Ok(128_000)
     } else if model_id.starts_with("claude-opus-4@") || model_id.starts_with("claude-opus-4-1@") {
         Ok(32_000)
     } else {
@@ -1342,6 +1344,20 @@ mod tests {
         assert_eq!(body.unwrap().max_tokens, 64_000);
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-opus-4-6@20260101".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;
+        assert_eq!(
+            body.unwrap().max_tokens,
+            128_000,
+            "expected claude-opus-4-6@* model ids to default to 128k max tokens"
+        );
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
+        assert_eq!(
+            body.unwrap().max_tokens,
+            100,
+            "expected explicit max_tokens to override claude-opus-4-6@* defaults"
+        );
 
         let model = "claude-sonnet-4".to_string(); // fake model
         let body = GCPVertexAnthropicRequestBody::new(&model, &request, &[]).await;

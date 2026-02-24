@@ -202,6 +202,7 @@ const parsedModelInferenceRowSchema = z.object({
   input_messages: z.array(displayModelInferenceInputMessageSchema),
   output: z.array(modelInferenceOutputContentBlockSchema),
   cached: z.boolean(),
+  cost: z.number().optional(),
 });
 
 export type ParsedModelInferenceRow = z.infer<

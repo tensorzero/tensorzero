@@ -74,7 +74,7 @@ function isModelSelected(
 function isFocusWithinPopover(relatedTarget: Element | null): boolean {
   return Boolean(
     relatedTarget?.closest(RADIX_POPPER_SELECTOR) ||
-      relatedTarget?.closest(RADIX_SELECT_SELECTOR),
+    relatedTarget?.closest(RADIX_SELECT_SELECTOR),
   );
 }
 
