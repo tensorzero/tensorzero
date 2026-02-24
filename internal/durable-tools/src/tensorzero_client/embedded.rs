@@ -77,6 +77,7 @@ impl TensorZeroClient for EmbeddedClient {
             self.app_state.cache_manager.clone(),
             self.app_state.deferred_tasks.clone(),
             self.app_state.rate_limiting_manager.clone(),
+            self.app_state.primary_datastore,
             internal_params,
             None, // No API key in embedded mode
         ))

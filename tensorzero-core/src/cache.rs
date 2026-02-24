@@ -7,11 +7,11 @@ use crate::config::OtlpConfig;
 use crate::config::gateway::ModelInferenceCacheConfig;
 use crate::db::cache::CacheQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::delegating_connection::PrimaryDatastore;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::db::valkey::cache::ValkeyCacheClient;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
-use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -47,8 +47,9 @@ impl CacheManager {
         valkey_connection_info: &ValkeyConnectionInfo,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         cache_config: &ModelInferenceCacheConfig,
+        primary_datastore: PrimaryDatastore,
     ) -> Self {
-        if !ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+        if primary_datastore == PrimaryDatastore::ClickHouse {
             return Self::new(Arc::new(clickhouse_connection_info.clone()));
         }
         match valkey_connection_info {

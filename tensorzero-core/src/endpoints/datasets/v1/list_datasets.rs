@@ -3,7 +3,6 @@ use axum::extract::{Query, State};
 use tracing::instrument;
 
 use crate::db::datasets::{DatasetQueries, GetDatasetMetadataParams};
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -17,10 +16,7 @@ pub async fn list_datasets_handler(
     State(app_state): AppState,
     Query(params): Query<ListDatasetsRequest>,
 ) -> Result<Json<ListDatasetsResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response = list_datasets(&database, params).await?;
     Ok(Json(response))
 }

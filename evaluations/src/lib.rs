@@ -13,7 +13,7 @@ pub use stats::{
     EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate, EvaluatorStats,
     PerEvaluatorStats,
 };
-use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::delegating_connection::{DelegatingDatabaseConnection, PrimaryDatastore};
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::postgres::batching::PostgresBatchSender;
 pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
@@ -184,8 +184,13 @@ pub async fn run_evaluation(
     debug!("Configuration loaded successfully");
 
     let postgres_connection = setup_postgres(&config, postgres_url.as_deref()).await?;
-    let database =
-        DelegatingDatabaseConnection::new(clickhouse_client.clone(), postgres_connection.clone());
+    // Evaluations currently require ClickHouse, so always use it as primary
+    let primary_datastore = PrimaryDatastore::ClickHouse;
+    let database = DelegatingDatabaseConnection::new(
+        clickhouse_client.clone(),
+        postgres_connection.clone(),
+        primary_datastore,
+    );
 
     // Look up evaluation config from the loaded config
     let evaluation_config = config
@@ -361,9 +366,12 @@ pub async fn run_evaluation_with_app_state(
         Some(pool) => PostgresConnectionInfo::new_with_pool(pool.clone()),
         None => PostgresConnectionInfo::new_disabled(),
     };
-    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(
-        DelegatingDatabaseConnection::new(clickhouse_client, postgres_client),
-    );
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+        Arc::new(DelegatingDatabaseConnection::new(
+            clickhouse_client,
+            postgres_client,
+            app_state.primary_datastore,
+        ));
 
     // Create AppStateInferenceExecutor to call handlers directly without HTTP overhead
     let inference_executor = Arc::new(AppStateInferenceExecutor::new(app_state));

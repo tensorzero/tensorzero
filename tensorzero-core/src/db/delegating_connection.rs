@@ -1,12 +1,13 @@
 //! Delegating database connection that wraps both ClickHouse and Postgres.
 //!
 //! This module provides a database implementation that delegates operations
-//! to both ClickHouse (primary) and Postgres (secondary) databases based on
-//! feature flags.
+//! to either ClickHouse or Postgres based on the configured primary datastore.
 
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -54,7 +55,6 @@ use crate::db::{
 };
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::Error;
-use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 use crate::inference::types::{
@@ -63,16 +63,24 @@ use crate::inference::types::{
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::tool::ToolCallConfigDatabaseInsert;
 
+/// Which database backend is the primary datastore for observability data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PrimaryDatastore {
+    ClickHouse,
+    Postgres,
+}
+
 /// A delegating database implementation that wraps both ClickHouse and Postgres.
 ///
 /// Both ClickHouse and Postgres connections wrap an Arc<> under the hood, so this is safe and cheap to clone.
 ///
-/// When `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE` is set, all reads and writes are
-/// delegated to Postgres. Otherwise, all operations go to ClickHouse.
+/// Routes all reads and writes to the configured `primary` datastore.
 #[derive(Clone)]
 pub struct DelegatingDatabaseConnection {
     pub clickhouse: ClickHouseConnectionInfo,
     pub postgres: PostgresConnectionInfo,
+    primary: PrimaryDatastore,
 }
 /// A trait that allows us to express "The returned database supports all these queries"
 /// via &(dyn DelegatingDatabaseQueries).
@@ -107,30 +115,43 @@ impl DelegatingDatabaseQueries for PostgresConnectionInfo {
 impl DelegatingDatabaseQueries for DelegatingDatabaseConnection {
     fn batcher_join_handles(&self) -> Vec<BatchWriterHandle> {
         let mut handles = Vec::new();
-        if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-            if let Some(h) = self.postgres.batcher_join_handle() {
-                handles.push(h);
+        match self.primary {
+            PrimaryDatastore::Postgres => {
+                if let Some(h) = self.postgres.batcher_join_handle() {
+                    handles.push(h);
+                }
             }
-        } else if let Some(h) = self.clickhouse.batcher_join_handle() {
-            handles.push(h);
+            PrimaryDatastore::ClickHouse => {
+                if let Some(h) = self.clickhouse.batcher_join_handle() {
+                    handles.push(h);
+                }
+            }
         }
         handles
     }
 }
 
 impl DelegatingDatabaseConnection {
-    pub fn new(clickhouse: ClickHouseConnectionInfo, postgres: PostgresConnectionInfo) -> Self {
+    pub fn new(
+        clickhouse: ClickHouseConnectionInfo,
+        postgres: PostgresConnectionInfo,
+        primary: PrimaryDatastore,
+    ) -> Self {
         Self {
             clickhouse,
             postgres,
+            primary,
         }
     }
 
+    pub fn primary(&self) -> PrimaryDatastore {
+        self.primary
+    }
+
     fn get_database(&self) -> &(dyn DelegatingDatabaseQueries + Sync) {
-        if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-            &self.postgres
-        } else {
-            &self.clickhouse
+        match self.primary {
+            PrimaryDatastore::Postgres => &self.postgres,
+            PrimaryDatastore::ClickHouse => &self.clickhouse,
         }
     }
 }
@@ -941,7 +962,7 @@ impl DICLQueries for DelegatingDatabaseConnection {
 
 #[cfg(any(test, feature = "e2e_tests"))]
 mod test_helpers_impl {
-    use super::DelegatingDatabaseConnection;
+    use super::{DelegatingDatabaseConnection, PrimaryDatastore};
     use crate::db::clickhouse::test_helpers::get_clickhouse;
     use crate::db::postgres::test_helpers::get_postgres;
     use crate::db::test_helpers::TestDatabaseHelpers;
@@ -952,25 +973,33 @@ mod test_helpers_impl {
         pub async fn new_for_e2e_test() -> Self {
             let clickhouse = get_clickhouse().await;
             let postgres = get_postgres().await;
-            Self::new(clickhouse, postgres)
+            // Temporary: derive from feature flag until M2-Step3 removes it
+            let primary = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+                PrimaryDatastore::Postgres
+            } else {
+                PrimaryDatastore::ClickHouse
+            };
+            Self::new(clickhouse, postgres, primary)
         }
     }
 
     #[async_trait]
     impl TestDatabaseHelpers for DelegatingDatabaseConnection {
         async fn flush_pending_writes(&self) {
-            if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-                self.postgres.flush_pending_writes().await;
-            } else {
-                self.clickhouse.flush_pending_writes().await;
+            match self.primary {
+                PrimaryDatastore::Postgres => self.postgres.flush_pending_writes().await,
+                PrimaryDatastore::ClickHouse => self.clickhouse.flush_pending_writes().await,
             }
         }
 
         async fn sleep_for_writes_to_be_visible(&self) {
-            if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-                self.postgres.sleep_for_writes_to_be_visible().await;
-            } else {
-                self.clickhouse.sleep_for_writes_to_be_visible().await;
+            match self.primary {
+                PrimaryDatastore::Postgres => {
+                    self.postgres.sleep_for_writes_to_be_visible().await;
+                }
+                PrimaryDatastore::ClickHouse => {
+                    self.clickhouse.sleep_for_writes_to_be_visible().await;
+                }
             }
         }
     }

@@ -17,7 +17,6 @@ use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CommentTargetType,
     DemonstrationFeedbackInsert, FeedbackQueries, FloatMetricFeedbackInsert,
@@ -130,13 +129,7 @@ pub async fn feedback_handler(
   )
 )]
 pub async fn feedback(
-    AppStateData {
-        config,
-        clickhouse_connection_info,
-        postgres_connection_info,
-        deferred_tasks,
-        ..
-    }: AppStateData,
+    app_state: AppStateData,
     mut params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<FeedbackResponse, Error> {
@@ -168,12 +161,15 @@ pub async fn feedback(
     }
 
     let database: Arc<dyn FeedbackDatabaseQueries + Send + Sync> =
-        Arc::new(DelegatingDatabaseConnection::new(
-            clickhouse_connection_info.clone(),
-            postgres_connection_info.clone(),
-        ));
+        Arc::new(app_state.get_delegating_database());
 
-    feedback_inner(&config, database, &deferred_tasks, params).await
+    feedback_inner(
+        &app_state.config,
+        database,
+        &app_state.deferred_tasks,
+        params,
+    )
+    .await
 }
 
 /// Business logic for feedback, separated from the handler to allow testing with mock databases.

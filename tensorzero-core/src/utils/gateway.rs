@@ -23,7 +23,7 @@ use crate::config::{
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::delegating_connection::{DelegatingDatabaseConnection, PrimaryDatastore};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::postgres::batching::PostgresBatchSender;
 use crate::db::rate_limiting::DisabledRateLimitQueries;
@@ -187,6 +187,9 @@ pub struct AppStateData {
     /// Token pool manager for rate limiting pre-borrowing
     pub rate_limiting_manager: Arc<RateLimitingManager>,
     pub shutdown_token: CancellationToken,
+    /// Which database backend is the primary datastore for observability data.
+    /// Derived from config (`observability.backend`) at startup.
+    pub primary_datastore: PrimaryDatastore,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -253,9 +256,16 @@ impl GatewayHandle {
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
+        // Temporary: derive from feature flag until M2-Step2 replaces with config-based resolution
+        let primary_datastore = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+            PrimaryDatastore::Postgres
+        } else {
+            PrimaryDatastore::ClickHouse
+        };
         let db = DelegatingDatabaseConnection::new(
             clickhouse_connection_info.clone(),
             postgres_connection_info.clone(),
+            primary_datastore,
         );
         let config = Arc::new(Box::pin(config.into_config(&db)).await?);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
@@ -300,6 +310,7 @@ impl GatewayHandle {
             &ValkeyConnectionInfo::Disabled,
             &clickhouse_connection_info,
             &config.gateway.cache,
+            PrimaryDatastore::ClickHouse,
         );
         Self {
             app_state: AppStateData {
@@ -317,6 +328,8 @@ impl GatewayHandle {
                 deployment_id: None,
                 rate_limiting_manager,
                 shutdown_token: cancel_token,
+                // Unit tests default to ClickHouse
+                primary_datastore: PrimaryDatastore::ClickHouse,
                 _private: (),
             },
             drop_wrapper: None,
@@ -336,24 +349,36 @@ impl GatewayHandle {
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
+        // Temporary: derive from feature flag until M2-Step2 replaces with config-based resolution
+        let primary_datastore = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+            PrimaryDatastore::Postgres
+        } else {
+            PrimaryDatastore::ClickHouse
+        };
+
         // Validate that when observability is enabled, the correct connection info is set up.
         if config.gateway.observability.enabled == Some(true) {
-            if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-                if matches!(postgres_connection_info, PostgresConnectionInfo::Disabled) {
-                    return Err(ErrorDetails::AppState {
-                        message:
-                            "A Postgres connection is required when `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE` \
-                                  is enabled and observability is enabled."
-                                .to_string(),
+            match primary_datastore {
+                PrimaryDatastore::Postgres => {
+                    if matches!(postgres_connection_info, PostgresConnectionInfo::Disabled) {
+                        return Err(ErrorDetails::AppState {
+                            message:
+                                "A Postgres connection is required when the primary datastore \
+                                      is Postgres and observability is enabled."
+                                    .to_string(),
+                        }
+                        .into());
                     }
-                    .into());
                 }
-            } else if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
-                return Err(ErrorDetails::AppState {
-                    message: "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
-                        .to_string(),
+                PrimaryDatastore::ClickHouse => {
+                    if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
+                        return Err(ErrorDetails::AppState {
+                            message: "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
+                                .to_string(),
+                        }
+                        .into());
+                    }
                 }
-                .into());
             }
         }
 
@@ -368,18 +393,23 @@ impl GatewayHandle {
             &config,
             clickhouse_connection_info.clone(),
             postgres_connection_info.clone(),
+            primary_datastore,
             cancel_token.clone(),
         );
 
         // Fetch the deployment ID
-        let deployment_id =
-            crate::howdy::get_deployment_id(&clickhouse_connection_info, &postgres_connection_info)
-                .await
-                .ok();
+        let deployment_id = crate::howdy::get_deployment_id(
+            &clickhouse_connection_info,
+            &postgres_connection_info,
+            primary_datastore,
+        )
+        .await
+        .ok();
 
         let db = Arc::new(DelegatingDatabaseConnection::new(
             clickhouse_connection_info.clone(),
             postgres_connection_info.clone(),
+            primary_datastore,
         ));
         for (function_name, function_config) in &config.functions {
             let experimentation = function_config.experimentation_with_namespaces();
@@ -442,6 +472,7 @@ impl GatewayHandle {
             &valkey_cache_connection_info,
             &clickhouse_connection_info,
             &config.gateway.cache,
+            primary_datastore,
         );
         Ok(Self {
             app_state: AppStateData {
@@ -459,6 +490,7 @@ impl GatewayHandle {
                 deployment_id,
                 rate_limiting_manager,
                 shutdown_token: cancel_token,
+                primary_datastore,
                 _private: (),
             },
             drop_wrapper,
@@ -490,6 +522,7 @@ impl AppStateData {
                 Arc::new(DisabledRateLimitQueries),
             )),
             shutdown_token: CancellationToken::new(),
+            primary_datastore: self.primary_datastore,
             _private: (),
         }
     }
@@ -498,6 +531,7 @@ impl AppStateData {
         DelegatingDatabaseConnection::new(
             self.clickhouse_connection_info.clone(),
             self.postgres_connection_info.clone(),
+            self.primary_datastore,
         )
     }
 
@@ -514,6 +548,7 @@ impl AppStateData {
         valkey_cache_connection_info: ValkeyConnectionInfo,
         deferred_tasks: TaskTracker,
         shutdown_token: CancellationToken,
+        primary_datastore: PrimaryDatastore,
     ) -> Result<Self, Error> {
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
@@ -524,6 +559,7 @@ impl AppStateData {
             &valkey_cache_connection_info,
             &clickhouse_connection_info,
             &config.gateway.cache,
+            primary_datastore,
         );
         Ok(Self {
             config,
@@ -540,6 +576,7 @@ impl AppStateData {
             deployment_id: None,
             rate_limiting_manager,
             shutdown_token,
+            primary_datastore,
             _private: (),
         })
     }
@@ -1333,9 +1370,9 @@ mod tests {
             .err()
             .expect("Gateway should fail when Postgres is primary but disabled");
         assert!(
-            err.to_string()
-                .contains("ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"),
-            "error should mention the feature flag: {err}"
+            err.to_string().contains("Postgres")
+                && err.to_string().contains("primary datastore"),
+            "error should mention that Postgres is the primary datastore: {err}"
         );
 
         ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);

@@ -6,7 +6,6 @@ use tracing::instrument;
 
 use crate::config::Config;
 use crate::db::datasets::DatasetQueries;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
@@ -27,10 +26,7 @@ pub async fn create_from_inferences_handler(
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<CreateDatapointsFromInferenceRequest>,
 ) -> Result<Json<CreateDatapointsResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response =
         create_from_inferences(&app_state.config, &database, dataset_name, request).await?;
 

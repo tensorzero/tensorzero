@@ -1170,6 +1170,7 @@ impl Client {
                         gateway.handle.app_state.cache_manager.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
                         gateway.handle.app_state.rate_limiting_manager.clone(),
+                        gateway.handle.app_state.primary_datastore,
                         params.try_into().map_err(err_to_http)?,
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
@@ -1338,8 +1339,8 @@ mod tests {
         .expect_err("Should fail without Postgres when it is the primary datastore and observability is enabled");
         let err_msg = err.to_string();
         assert!(
-            err_msg.contains("ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"),
-            "error should mention the feature flag: {err_msg}"
+            err_msg.contains("Postgres") && err_msg.contains("primary datastore"),
+            "error should mention Postgres as primary datastore: {err_msg}"
         );
     }
 

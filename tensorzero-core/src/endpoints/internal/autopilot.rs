@@ -444,6 +444,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
             CancellationToken::new(),
+            crate::db::delegating_connection::PrimaryDatastore::ClickHouse,
         )
         .unwrap()
     }

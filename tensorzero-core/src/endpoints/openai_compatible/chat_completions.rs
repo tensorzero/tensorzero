@@ -32,6 +32,7 @@ pub async fn chat_completions_handler(
         cache_manager,
         deferred_tasks,
         rate_limiting_manager,
+        primary_datastore,
         ..
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
@@ -128,6 +129,7 @@ pub async fn chat_completions_handler(
         cache_manager,
         deferred_tasks,
         rate_limiting_manager,
+        primary_datastore,
         params,
         api_key_ext,
     ))
