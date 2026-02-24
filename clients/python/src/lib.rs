@@ -65,9 +65,9 @@ use tensorzero_core::{
 use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
     ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, Input, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
-    PostgresConfig, RenderedSample, StoredInference, TensorZeroError, Tool,
-    WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    InferenceStream, Input, LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
+    ListInferencesParams, OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference,
+    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1633,6 +1633,25 @@ impl TensorZeroGateway {
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
+    /// Launch an optimization workflow.
+    ///
+    /// This is a convenience method that handles fetching inferences, rendering samples,
+    /// and launching the optimization job server-side.
+    ///
+    /// :param params: A dictionary with the workflow parameters (function_name, template_variant_name,
+    ///     output_source, optimizer_config, and optionally limit, val_fraction, etc.).
+    /// :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
+    #[pyo3(signature = (*, params))]
+    fn experimental_launch_optimization_workflow(
+        this: PyRef<'_, Self>,
+        params: Bound<'_, PyAny>,
+    ) -> PyResult<OptimizationJobHandle> {
+        let client = this.as_super().client.clone();
+        let params: LaunchOptimizationWorkflowParams = deserialize_from_pyobj(this.py(), &params)?;
+        let fut = client.experimental_launch_optimization_workflow(params);
+        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+    }
+
     /// Poll an optimization job.
     ///
     /// :param job_handle: The job handle returned by `experimental_launch_optimization`.
@@ -2803,6 +2822,32 @@ impl AsyncTensorZeroGateway {
                         inner: optimizer_config,
                     },
                 })
+                .await;
+            match res {
+                Ok(job_handle) => Ok(job_handle),
+                Err(e) => Python::attach(|py| Err(convert_error(py, e))),
+            }
+        })
+    }
+
+    /// Launch an optimization workflow.
+    ///
+    /// This is a convenience method that handles fetching inferences, rendering samples,
+    /// and launching the optimization job server-side.
+    ///
+    /// :param params: A dictionary with the workflow parameters (function_name, template_variant_name,
+    ///     output_source, optimizer_config, and optionally limit, val_fraction, etc.).
+    /// :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
+    #[pyo3(signature = (*, params))]
+    fn experimental_launch_optimization_workflow<'a>(
+        this: PyRef<'a, Self>,
+        params: Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let params: LaunchOptimizationWorkflowParams = deserialize_from_pyobj(this.py(), &params)?;
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .experimental_launch_optimization_workflow(params)
                 .await;
             match res {
                 Ok(job_handle) => Ok(job_handle),

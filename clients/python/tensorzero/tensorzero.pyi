@@ -876,6 +876,23 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    def experimental_launch_optimization_workflow(
+        self,
+        *,
+        params: Dict[str, Any],
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization workflow.
+
+        This is a convenience method that handles fetching inferences, rendering samples,
+        and launching the optimization job server-side.
+
+        :param params: A dictionary with the workflow parameters (function_name, template_variant_name,
+            output_source, optimizer_config, and optionally limit, val_fraction, etc.).
+        :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
+        """
+        ...
+
     def experimental_poll_optimization(
         self,
         *,
@@ -1358,6 +1375,23 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param val_samples: A list of RenderedSample objects that will be used for validation.
         :param optimization_config: The optimization config.
         :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    async def experimental_launch_optimization_workflow(
+        self,
+        *,
+        params: Dict[str, Any],
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization workflow.
+
+        This is a convenience method that handles fetching inferences, rendering samples,
+        and launching the optimization job server-side.
+
+        :param params: A dictionary with the workflow parameters (function_name, template_variant_name,
+            output_source, optimizer_config, and optionally limit, val_fraction, etc.).
+        :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
         """
         ...
 
