@@ -1,12 +1,11 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use uuid::Uuid;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
 use crate::utils::retries::RetryConfig;
-use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 
 // Default functions
 fn default_batch_size() -> usize {
@@ -254,6 +253,28 @@ impl UninitializedGEPAConfig {
     }
 }
 
+impl GEPAConfig {
+    /// Convert back to UninitializedGEPAConfig for serialization (e.g., durable task params)
+    pub fn as_uninitialized(&self) -> UninitializedGEPAConfig {
+        UninitializedGEPAConfig {
+            function_name: self.function_name.clone(),
+            evaluation_name: self.evaluation_name.clone(),
+            initial_variants: self.initial_variants.clone(),
+            variant_prefix: self.variant_prefix.clone(),
+            batch_size: self.batch_size,
+            max_iterations: self.max_iterations,
+            max_concurrency: self.max_concurrency,
+            analysis_model: self.analysis_model.clone(),
+            mutation_model: self.mutation_model.clone(),
+            seed: self.seed,
+            timeout: self.timeout,
+            include_inference_for_mutation: self.include_inference_for_mutation,
+            retries: self.retries,
+            max_tokens: self.max_tokens,
+        }
+    }
+}
+
 impl UninitializedGEPAConfig {
     pub fn load(self) -> GEPAConfig {
         GEPAConfig {
@@ -277,46 +298,19 @@ impl UninitializedGEPAConfig {
 
 /// Job handle for GEPA optimization
 ///
-/// Contains the final Pareto frontier of optimized variants or an error message.
-/// GEPA optimization is synchronous, so polling immediately returns the completed
-/// results or failure status.
+/// Contains the task ID of the durable GEPA optimization task.
+/// Poll the task via SpawnClient to get the result.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct GEPAJobHandle {
-    /// Result of the GEPA optimization - either a map of variant names to their
-    /// configurations (the Pareto frontier) or an error message
-    pub result: Result<HashMap<String, UninitializedChatCompletionConfig>, String>,
+    pub task_id: Uuid,
 }
 
 impl std::fmt::Display for GEPAJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.result {
-            Ok(variants) => {
-                let json = serde_json::to_string_pretty(variants).map_err(|_| std::fmt::Error)?;
-                write!(f, "Success: {json}")
-            }
-            Err(msg) => write!(f, "Failed: {msg}"),
-        }
-    }
-}
-
-// Manual PartialEq implementation since UninitializedChatCompletionConfig doesn't derive PartialEq
-// We compare based on success/failure status and variant names (not the full configs)
-impl PartialEq for GEPAJobHandle {
-    fn eq(&self, other: &Self) -> bool {
-        match (&self.result, &other.result) {
-            (Ok(self_variants), Ok(other_variants)) => {
-                // Compare by checking if both have the same set of variant names
-                if self_variants.len() != other_variants.len() {
-                    return false;
-                }
-                self_variants.keys().all(|k| other_variants.contains_key(k))
-            }
-            (Err(self_msg), Err(other_msg)) => self_msg == other_msg,
-            _ => false,
-        }
+        write!(f, "GEPAJobHandle(task_id={})", self.task_id)
     }
 }
 

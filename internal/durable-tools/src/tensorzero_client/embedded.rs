@@ -486,6 +486,7 @@ impl TensorZeroClient for EmbeddedClient {
             self.app_state.config.clone(),
             &db,
             params,
+            self.app_state.spawn_client.as_deref(),
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
@@ -500,6 +501,7 @@ impl TensorZeroClient for EmbeddedClient {
             job_handle,
             &self.app_state.config.models.default_credentials,
             &self.app_state.config.provider_types,
+            self.app_state.spawn_client.as_deref(),
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))

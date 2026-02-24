@@ -642,6 +642,7 @@ impl TensorZeroClient for Client {
                     gateway.handle.app_state.config.clone(),
                     &db,
                     params,
+                    gateway.handle.app_state.spawn_client.as_deref(),
                 )
                 .await
                 .map_err(|e| {
@@ -680,6 +681,7 @@ impl TensorZeroClient for Client {
                 job_handle,
                 &gateway.handle.app_state.config.models.default_credentials,
                 &gateway.handle.app_state.config.provider_types,
+                gateway.handle.app_state.spawn_client.as_deref(),
             )
             .await
             .map_err(|e| {

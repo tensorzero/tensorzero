@@ -40,6 +40,8 @@ use tensorzero_core::{
     utils::mock::get_mock_provider_api_base,
 };
 
+use durable_tools_spawn::SpawnClient;
+
 use crate::{JobHandle, Optimizer};
 
 fn get_sft_config(provider_types: &ProviderTypesConfig) -> Option<&TogetherProviderSFTConfig> {
@@ -138,6 +140,7 @@ impl Optimizer for TogetherSFTConfig {
         credentials: &InferenceCredentials,
         _db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
+        _spawn_client: Option<&SpawnClient>,
     ) -> Result<Self::Handle, Error> {
         // Get optional provider-level configuration
         let sft_config = get_sft_config(&config.provider_types);
@@ -286,6 +289,7 @@ impl JobHandle for TogetherSFTJobHandle {
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
         _provider_types: &ProviderTypesConfig,
+        _spawn_client: Option<&SpawnClient>,
     ) -> Result<OptimizationJobInfo, Error> {
         // Get credentials from provider defaults
         let together_credentials = TogetherKind

@@ -27,6 +27,8 @@ use tensorzero_core::{
     variant::dicl::UninitializedDiclConfig,
 };
 
+use durable_tools_spawn::SpawnClient;
+
 use crate::{JobHandle, Optimizer};
 
 impl Optimizer for DiclOptimizationConfig {
@@ -40,6 +42,7 @@ impl Optimizer for DiclOptimizationConfig {
         credentials: &InferenceCredentials,
         db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
+        _spawn_client: Option<&SpawnClient>,
     ) -> Result<Self::Handle, Error> {
         // Warn if using deprecated default model
         if self.model.as_ref() == DEPRECATED_DEFAULT_MODEL {
@@ -175,6 +178,7 @@ impl JobHandle for DiclOptimizationJobHandle {
         credentials: &InferenceCredentials,
         _default_credentials: &ProviderTypeDefaultCredentials,
         _provider_types: &ProviderTypesConfig,
+        _spawn_client: Option<&SpawnClient>,
     ) -> Result<OptimizationJobInfo, Error> {
         // DICL optimization is synchronous, so it's always complete once launched
         let _ = (client, credentials);

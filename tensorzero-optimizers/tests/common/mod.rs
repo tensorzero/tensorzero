@@ -119,6 +119,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             &credentials,
             &db,
             config.clone(),
+            None,
         )
         .await
         .unwrap();
@@ -130,6 +131,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 &credentials,
                 &ProviderTypeDefaultCredentials::default(),
                 &config.provider_types,
+                None,
             )
             .await
             .unwrap();
