@@ -79,67 +79,8 @@ Please return the entities in the following JSON format:
 
 <Step title="Collect your optimization data">
 
-<Tabs>
-
-<Tab title="TensorZero Dataset">
-
-After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) for the `extract_entities` function you configured.
-You can create datapoints from historical inferences or external/synthetic datasets.
-
-```python
-from tensorzero import ListDatapointsRequest
-
-datapoints = t0.list_datapoints(
-    dataset_name="extract_entities_dataset",
-    request=ListDatapointsRequest(
-        function_name="extract_entities",
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=datapoints.datapoints,
-    variants={"extract_entities": "baseline"},
-)
-```
-
-</Tab>
-
-<Tab title="Historical Inferences">
-
 After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
 TensorZero automatically collects structured data about those inferences, which can later be used as training examples for GEPA.
-
-```python
-from tensorzero import ListInferencesRequest
-
-inferences_response = t0.list_inferences(
-    request=ListInferencesRequest(
-        function_name="extract_entities",
-        output_source="inference",
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=inferences_response.inferences,
-    variants={"extract_entities": "baseline"},
-)
-```
-
-</Tab>
-
-</Tabs>
-
-GEPA requires two data splits: training (for template mutation) and validation (for Pareto frontier estimation).
-Let's split samples you queries above using numpy:
-
-```python
-import random
-
-random.shuffle(rendered_samples)
-split_idx = len(rendered_samples) // 2
-train_samples = rendered_samples[:split_idx]
-val_samples = rendered_samples[split_idx:]
-```
 
 </Step>
 
@@ -235,9 +176,9 @@ GEPA supports evaluations with any number of evaluators and any evaluator type (
 
 </Step>
 
-<Step title="Configure GEPA">
+<Step title="Launch GEPA">
 
-Configure GEPA by specifying the name of your function and evaluation.
+Configure and launch GEPA by specifying the name of your function and evaluation.
 You are also free to choose the models used to analyze inferences and generate new templates.
 
 The `analysis_model` reflects on individual inferences, reports on whether they are optimal, need improvement, or are erroneous, and provides suggestions for prompt template improvement.
@@ -245,17 +186,39 @@ The `mutation_model` generates new templates based on the collected analysis rep
 We recommend using strong models for these tasks.
 
 ```python
-from tensorzero import GEPAConfig
+import asyncio
 
-optimization_config = GEPAConfig(
-    function_name="extract_entities",
-    evaluation_name="extract_entities_eval",
-    analysis_model="openai::gpt-5.2",
-    mutation_model="openai::gpt-5.2",
-    initial_variants=["baseline"],
-    max_iterations=10,
-    max_tokens=16384,
+from tensorzero import AsyncTensorZeroGateway, OptimizationJobStatus
+
+t0 = await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000")
+
+job_handle = await t0.experimental_launch_optimization_workflow(
+    params={
+        "function_name": "extract_entities",
+        "template_variant_name": "baseline",
+        "output_source": "inference",
+        "val_fraction": 0.5,
+        "optimizer_config": {
+            "type": "gepa",
+            "function_name": "extract_entities",
+            "evaluation_name": "extract_entities_eval",
+            "analysis_model": "openai::gpt-5.2",
+            "mutation_model": "openai::gpt-5.2",
+            "initial_variants": ["baseline"],
+            "max_iterations": 10,
+            "max_tokens": 16384,
+        },
+    },
 )
+
+# GEPA runs as a durable task — poll until complete
+while True:
+    job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
+    if job_info.status == OptimizationJobStatus.Completed:
+        break
+    if job_info.status == OptimizationJobStatus.Failed:
+        raise RuntimeError(f"GEPA optimization failed: {job_info}")
+    await asyncio.sleep(30)
 ```
 
 <Tip>
@@ -264,24 +227,6 @@ GEPA optimization can take a while to run, so keep `max_iterations` relatively s
 You can manually iterate further by setting `initial_variants` with the result of a previous GEPA run.
 
 </Tip>
-
-</Step>
-
-<Step title="Launch GEPA">
-
-You can now launch your GEPA optimization job using the TensorZero Gateway:
-
-```python
-job_handle = t0.experimental_launch_optimization(
-    train_samples=train_samples,
-    val_samples=val_samples,
-    optimization_config=optimization_config,
-)
-
-job_info = t0.experimental_poll_optimization(
-    job_handle=job_handle
-)
-```
 
 </Step>
 
@@ -395,7 +340,7 @@ You can roll out your new variants with confidence using [adaptive A/B testing](
 
 ## `GEPAConfig`
 
-Configure GEPA optimization by creating a `GEPAConfig` object with the following parameters:
+Configure GEPA optimization by passing the following parameters in the `optimizer_config` field (with `"type": "gepa"`):
 
 {/* Required Parameters */}
 
