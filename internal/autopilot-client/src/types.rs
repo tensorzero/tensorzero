@@ -53,6 +53,7 @@ pub struct EventPayloadMessageMetadata {
     // We hide this from the UI, and populate in in the gateway
     // before proxying it to the autopilot server
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[serde(default)]
     pub resolved_uuids: Vec<ResolveUuidResponse>,
 }
 
