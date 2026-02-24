@@ -26,4 +26,10 @@ export type AutopilotSideInfo = {
    * Settings for optimization workflows run on the gateway by autopilot.
    */
   optimization: OptimizationWorkflowSideInfo;
+  /**
+   * When true, the wrapper skips the `publish_result` step.
+   * Used for tasks spawned directly (e.g. from `/experimental_optimization_workflow`)
+   * rather than from an autopilot session.
+   */
+  skip_publish: boolean;
 };
