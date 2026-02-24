@@ -43,6 +43,7 @@ pub async fn reject_missing_tool(
         tool_call_event_id,
         config_snapshot_hash: tool_call.side_info.config_snapshot_hash.clone(),
         optimization: tool_call.side_info.optimization.clone(),
+        skip_publish: tool_call.side_info.skip_publish,
     };
 
     let episode_id = Uuid::now_v7();
