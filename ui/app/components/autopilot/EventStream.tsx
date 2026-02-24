@@ -286,10 +286,6 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
     case "visualization":
     case "unknown":
       return {};
-    default: {
-      const _exhaustiveCheck: never = payload;
-      return _exhaustiveCheck;
-    }
   }
 }
 
