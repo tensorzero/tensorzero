@@ -45,7 +45,10 @@ export async function action({ params, request }: ActionFunctionArgs) {
     typeof body.responses !== "object" ||
     Array.isArray(body.responses)
   ) {
-    return new Response("`responses` is required", { status: 400 });
+    return new Response(
+      "`responses` must be a non-empty object mapping question IDs to answers",
+      { status: 400 },
+    );
   }
 
   const client = getAutopilotClient();
