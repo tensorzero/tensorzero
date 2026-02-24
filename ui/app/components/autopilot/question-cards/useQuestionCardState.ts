@@ -138,16 +138,19 @@ export function useQuestionCardState(
   };
 
   const markUnansweredAsSkipped = (base: StepAnswers): StepAnswers => {
-    const final = new Map(base);
+    const result = new Map(base);
     payload.questions.forEach((_, idx) => {
-      if (
-        !isStepAnswered(idx) &&
-        getStep(final, idx).status !== StepStatus.Skipped
-      ) {
-        final.set(idx, { status: StepStatus.Skipped });
+      const step = getStep(base, idx);
+      const answered =
+        (step.status === StepStatus.AnsweredMultipleChoice &&
+          step.selected.size > 0) ||
+        (step.status === StepStatus.AnsweredFreeResponse &&
+          step.text.trim().length > 0);
+      if (!answered && step.status !== StepStatus.Skipped) {
+        result.set(idx, { status: StepStatus.Skipped });
       }
     });
-    return final;
+    return result;
   };
 
   const handleSkipStep = () => {
