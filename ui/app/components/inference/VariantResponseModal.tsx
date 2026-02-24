@@ -19,6 +19,7 @@ import type {
 } from "~/types/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
+import { formatCost } from "~/utils/cost";
 import { Link } from "react-router";
 import { toInferenceUrl } from "~/utils/urls";
 import type { Datapoint, InferenceResponse } from "~/types/tensorzero";
@@ -97,6 +98,11 @@ function ResponseColumn({
                   <p className="text-xs">
                     Output tokens: {response.usage.output_tokens}
                   </p>
+                  {response.usage.cost != null && (
+                    <p className="text-xs">
+                      Cost: {formatCost(response.usage.cost)}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
