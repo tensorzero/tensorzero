@@ -25,9 +25,7 @@ export const canUseDOM = !!(
  * indicating the browser should handle it natively (e.g. open in new tab).
  */
 export function isModifiedEvent(e: React.MouseEvent): boolean {
-  return Boolean(
-    e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0,
-  );
+  return Boolean(e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0);
 }
 
 export function cn(...inputs: ClassValue[]) {
