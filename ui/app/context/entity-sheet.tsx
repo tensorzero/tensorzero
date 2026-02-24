@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation } from "react-router";
-import { canUseDOM } from "~/utils/common";
+import { canUseDOM, isModifiedEvent } from "~/utils/common";
 
 const SHEET_PARAM = "sheet";
 const SHEET_ID_PARAM = "sheetId";
@@ -25,20 +25,12 @@ function parseSheetStateFromUrl(): EntitySheetState {
   return null;
 }
 
-/**
- * Returns true if the mouse event has modifier keys or is a non-primary click,
- * indicating the browser should handle it natively (e.g. open in new tab).
- */
-function isModifiedEvent(e: React.MouseEvent): boolean {
-  return Boolean(e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0);
-}
-
 interface EntitySheetContextValue {
   sheetState: EntitySheetState;
   openInferenceSheet: (id: string) => void;
   closeSheet: () => void;
-  /** Click handler that intercepts inference links to open the sheet. */
-  handleInferenceLinkClick: (
+  /** Click handler that intercepts entity links to open the sheet. */
+  handleUuidLinkClick: (
     e: React.MouseEvent,
     entityType: string,
     id: string,
@@ -100,12 +92,16 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
     setSheetState(null);
   }, []);
 
-  const handleInferenceLinkClick = useCallback(
+  const handleUuidLinkClick = useCallback(
     (e: React.MouseEvent, entityType: string, id: string) => {
       if (isModifiedEvent(e)) return;
-      if (entityType === "inference") {
-        e.preventDefault();
-        openInferenceSheet(id);
+      switch (entityType) {
+        case "inference": {
+          e.preventDefault();
+          openInferenceSheet(id);
+          break;
+        }
+        // Other entity types fall through to default link navigation
       }
     },
     [openInferenceSheet],
@@ -117,7 +113,7 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
         sheetState,
         openInferenceSheet,
         closeSheet,
-        handleInferenceLinkClick,
+        handleUuidLinkClick,
       }}
     >
       {children}

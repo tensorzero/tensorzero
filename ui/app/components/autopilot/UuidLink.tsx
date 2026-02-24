@@ -86,7 +86,7 @@ function IconWithTooltip({
 
 export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
-  const { handleInferenceLinkClick } = useEntitySheet();
+  const { handleUuidLinkClick } = useEntitySheet();
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
   const url = obj ? toResolvedObjectUrl(uuid, obj) : null;
@@ -102,7 +102,7 @@ export function UuidLink({ uuid }: UuidLinkProps) {
         <UuidHoverCard uuid={uuid} obj={obj}>
           <Link
             to={url}
-            onClick={(e) => handleInferenceLinkClick(e, obj.type, uuid)}
+            onClick={(e) => handleUuidLinkClick(e, obj.type, uuid)}
             className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
           >
             <IconWithTooltip label={getEntityLabel(obj.type)}>

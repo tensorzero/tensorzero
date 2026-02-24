@@ -213,14 +213,14 @@ interface TypeHeaderLinkProps {
 
 export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
-  const { handleInferenceLinkClick } = useEntitySheet();
+  const { handleUuidLinkClick } = useEntitySheet();
 
   if (!url) return null;
 
   return (
     <Link
       to={url}
-      onClick={(e) => handleInferenceLinkClick(e, obj.type, uuid)}
+      onClick={(e) => handleUuidLinkClick(e, obj.type, uuid)}
       className="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
     >
       {children}
