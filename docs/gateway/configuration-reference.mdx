@@ -48,6 +48,7 @@ Enable authentication for the TensorZero Gateway.
 When enabled, all gateway endpoints except `/status` and `/health` will require a valid API key.
 
 You must set up Postgres to use authentication features.
+The gateway will fail to start if authentication is enabled but `TENSORZERO_POSTGRES_URL` is not set.
 API keys can be created and managed through the TensorZero UI or CLI.
 
 ```toml title="tensorzero.toml"
@@ -4882,18 +4883,6 @@ You can connect to Postgres by setting the `TENSORZERO_POSTGRES_URL` environment
 
 Defines the maximum number of connections in the Postgres connection pool.
 
-### `enabled`
-
-- **Type:** boolean
-- **Required:** no (default: `null`)
-
-Enable Postgres connectivity.
-If `true`, the gateway will throw an error on startup if it fails to connect to Postgres (requires `TENSORZERO_POSTGRES_URL` environment variable).
-If `false`, the gateway will not use Postgres even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
-If omitted, the gateway will connect to Postgres if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable Postgres with a warning.
-
-If you have features that require Postgres (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
-
 ## `[rate_limiting]`
 
 The `[rate_limiting]` section allows you to configure granular rate limits for your TensorZero Gateway.
@@ -4921,7 +4910,8 @@ default_cost = 0.50
 - **Required:** no (default: `true`)
 
 Enable or disable rate limiting enforcement.
-When set to `false`, rate limiting rules will not be enforced even if they are defined.
+When `true` and there are rate limiting rules, we validate that a valid rate limiting backend (Postgres or Valkey) is available, and fail gateway startup otherwise.
+When `false`, rate limiting rules will not be enforced even if they are defined.
 
 ```toml
 [rate_limiting]

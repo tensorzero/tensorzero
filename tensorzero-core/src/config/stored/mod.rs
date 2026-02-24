@@ -414,4 +414,43 @@ mod tests {
         assert!(uninit.gateway.observability.async_writes);
         assert!(uninit.gateway.debug);
     }
+
+    /// Old snapshots with deprecated `postgres.enabled` should still parse correctly.
+    #[test]
+    #[expect(deprecated)]
+    fn test_stored_config_with_deprecated_postgres_enabled() {
+        let toml_str = r"
+            [postgres]
+            enabled = true
+            connection_pool_size = 10
+        ";
+
+        let stored: StoredConfig =
+            toml::from_str(toml_str).expect("should parse deprecated postgres.enabled");
+        assert_eq!(stored.postgres.enabled, Some(true));
+        assert_eq!(stored.postgres.connection_pool_size, 10);
+
+        let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
+        assert_eq!(
+            uninit.postgres.enabled,
+            Some(true),
+            "deprecated field should be preserved during conversion"
+        );
+    }
+
+    /// Serialized config should NOT include deprecated `postgres.enabled`.
+    #[test]
+    #[expect(deprecated)]
+    fn test_serialized_config_omits_deprecated_postgres_enabled() {
+        let config = PostgresConfig {
+            enabled: Some(true),
+            connection_pool_size: 10,
+            ..Default::default()
+        };
+        let serialized = toml::to_string(&config).expect("should serialize");
+        assert!(
+            !serialized.contains("enabled"),
+            "serialized PostgresConfig should not include deprecated enabled field: {serialized}"
+        );
+    }
 }
