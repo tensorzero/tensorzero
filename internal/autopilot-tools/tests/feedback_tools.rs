@@ -10,12 +10,20 @@ use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
 use serde_json::json;
 use sqlx::PgPool;
-use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+use sqlx::types::chrono::Utc;
+use tensorzero_core::db::feedback::{
+    BooleanMetricFeedbackRow, CommentFeedbackRow, CommentTargetType, FeedbackRow,
+    FloatMetricFeedbackRow,
+};
+use tensorzero_core::endpoints::feedback::internal::{
+    GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+};
 use uuid::Uuid;
 
 use autopilot_tools::tools::{
-    FeedbackTool, FeedbackToolParams, GetFeedbackByVariantTool, GetFeedbackByVariantToolParams,
-    GetLatestFeedbackByMetricTool, GetLatestFeedbackByMetricToolParams,
+    FeedbackTool, FeedbackToolParams, GetFeedbackByTargetIdTool, GetFeedbackByTargetIdToolParams,
+    GetFeedbackByVariantTool, GetFeedbackByVariantToolParams, GetLatestFeedbackByMetricTool,
+    GetLatestFeedbackByMetricToolParams,
 };
 use common::{
     MockTensorZeroClient, create_mock_feedback_by_variant, create_mock_feedback_response,
@@ -527,6 +535,195 @@ async fn test_get_feedback_by_variant_tool_error(pool: PgPool) {
         });
 
     let tool = GetFeedbackByVariantTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await;
+
+    assert!(result.is_err(), "Should return error when client fails");
+}
+
+// ========== GetFeedbackByTargetIdTool Tests ==========
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_get_feedback_by_target_id_tool_inference_level(pool: PgPool) {
+    let inference_id = Uuid::now_v7();
+    let session_id = Uuid::now_v7();
+    let tool_call_event_id = Uuid::now_v7();
+
+    let mock_response = GetFeedbackByTargetIdResponse {
+        feedback: vec![
+            FeedbackRow::Boolean(BooleanMetricFeedbackRow {
+                id: Uuid::now_v7(),
+                target_id: inference_id,
+                metric_name: "accuracy".to_string(),
+                value: true,
+                tags: HashMap::new(),
+                timestamp: Utc::now(),
+            }),
+            FeedbackRow::Float(FloatMetricFeedbackRow {
+                id: Uuid::now_v7(),
+                target_id: inference_id,
+                metric_name: "score".to_string(),
+                value: 0.95,
+                tags: HashMap::new(),
+                timestamp: Utc::now(),
+            }),
+        ],
+    };
+
+    let llm_params = GetFeedbackByTargetIdToolParams {
+        target_id: inference_id,
+        limit: Some(10),
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id,
+        session_id,
+        config_snapshot_hash: "1234567".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_get_feedback_by_target_id()
+        .withf(move |id, before, after, limit| {
+            *id == inference_id && before.is_none() && after.is_none() && *limit == Some(10)
+        })
+        .return_once(move |_, _, _, _| Ok(mock_response));
+
+    let tool = GetFeedbackByTargetIdTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("GetFeedbackByTargetIdTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+    let feedback = result["feedback"]
+        .as_array()
+        .expect("Should have feedback array");
+    assert_eq!(feedback.len(), 2, "Should have 2 feedback entries");
+    assert_eq!(
+        feedback[0]["metric_name"], "accuracy",
+        "First entry should be accuracy metric"
+    );
+    assert_eq!(
+        feedback[1]["metric_name"], "score",
+        "Second entry should be score metric"
+    );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_get_feedback_by_target_id_tool_episode_level(pool: PgPool) {
+    let episode_id = Uuid::now_v7();
+    let session_id = Uuid::now_v7();
+    let tool_call_event_id = Uuid::now_v7();
+
+    let mock_response = GetFeedbackByTargetIdResponse {
+        feedback: vec![
+            FeedbackRow::Boolean(BooleanMetricFeedbackRow {
+                id: Uuid::now_v7(),
+                target_id: episode_id,
+                metric_name: "task_success".to_string(),
+                value: false,
+                tags: HashMap::new(),
+                timestamp: Utc::now(),
+            }),
+            FeedbackRow::Comment(CommentFeedbackRow {
+                id: Uuid::now_v7(),
+                target_id: episode_id,
+                target_type: CommentTargetType::Episode,
+                value: "Episode feedback comment".to_string(),
+                tags: HashMap::new(),
+                timestamp: Utc::now(),
+            }),
+        ],
+    };
+
+    let llm_params = GetFeedbackByTargetIdToolParams {
+        target_id: episode_id,
+        limit: None,
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id,
+        session_id,
+        config_snapshot_hash: "1234567".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_get_feedback_by_target_id()
+        .withf(move |id, before, after, limit| {
+            *id == episode_id && before.is_none() && after.is_none() && limit.is_none()
+        })
+        .return_once(move |_, _, _, _| Ok(mock_response));
+
+    let tool = GetFeedbackByTargetIdTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let ctx = SimpleToolContext::new(&pool, &t0_client);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect("GetFeedbackByTargetIdTool execution should succeed");
+
+    assert!(result.is_object(), "Result should be a JSON object");
+    let feedback = result["feedback"]
+        .as_array()
+        .expect("Should have feedback array");
+    assert_eq!(feedback.len(), 2, "Should have 2 feedback entries");
+    assert_eq!(
+        feedback[0]["metric_name"], "task_success",
+        "First entry should be task_success metric"
+    );
+    assert_eq!(
+        feedback[1]["value"], "Episode feedback comment",
+        "Second entry should be the comment"
+    );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_get_feedback_by_target_id_tool_error(pool: PgPool) {
+    let llm_params = GetFeedbackByTargetIdToolParams {
+        target_id: Uuid::now_v7(),
+        limit: None,
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "1234567".to_string(),
+        optimization: OptimizationWorkflowSideInfo::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_get_feedback_by_target_id()
+        .returning(|_, _, _, _| Err(TensorZeroClientError::AutopilotUnavailable));
+
+    let tool = GetFeedbackByTargetIdTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let ctx = SimpleToolContext::new(&pool, &t0_client);
 
