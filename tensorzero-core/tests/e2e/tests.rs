@@ -13,6 +13,7 @@ mod clickhouse;
 #[macro_use]
 mod common;
 mod config;
+mod cost;
 mod db;
 mod dicl;
 mod dynamic_variants;
@@ -47,4 +48,5 @@ mod retries;
 mod streaming_errors;
 mod template;
 mod timeouts;
+mod utils;
 mod workflow_evaluations;

@@ -86,22 +86,27 @@ impl DummyProvider {
             "input_tokens_zero" => Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(output_tokens),
+                cost: None,
             },
             "output_tokens_zero" => Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(0),
+                cost: None,
             },
             "input_tokens_output_tokens_zero" => Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
+                cost: None,
             },
             "input_five_output_six" => Usage {
                 input_tokens: Some(5),
                 output_tokens: Some(6),
+                cost: None,
             },
             _ => Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(output_tokens),
+                cost: None,
             },
         }
     }
@@ -153,7 +158,10 @@ impl DummyProvider {
                     data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
                 }]),
                 finish_reason: Some(FinishReason::Stop),
-                raw_response: String::new(),
+                raw_response: format!(
+                    r#"{{"usage":{{"prompt_tokens":10,"completion_tokens":{total_tokens},"total_tokens":{}}}}}"#,
+                    10 + total_tokens
+                ),
                 provider_latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
             })))
             .throttle(std::time::Duration::from_millis(10));
@@ -209,7 +217,12 @@ pub static DUMMY_INFER_RESPONSE_RAW: &str = r#"{
       "logprobs": null,
       "finish_reason": null
     }
-  ]
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 10,
+    "total_tokens": 20
+  }
 }"#;
 
 pub static ALTERNATE_INFER_RESPONSE_CONTENT: &str =
@@ -220,9 +233,21 @@ lazy_static! {
     // This is the same as DUMMY_TOOL_RESPONSE, but with the units capitalized
     // Since that field is an enum, this should fail validation
     pub static ref DUMMY_BAD_TOOL_RESPONSE: Value = json!({"location": "Brooklyn", "units": "Celsius"});
+    /// Raw provider response for the "tool" model.
+    /// Contains the tool output alongside a `usage` block so cost JSON pointers can resolve.
+    pub static ref DUMMY_TOOL_RAW_RESPONSE: String = {
+        let mut v = DUMMY_TOOL_RESPONSE.clone();
+        v["usage"] = json!({"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20});
+        serde_json::to_string(&v).unwrap()
+    };
     static ref FLAKY_COUNTERS: Mutex<HashMap<String, u16>> = Mutex::new(HashMap::new());
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
+
+/// Raw provider response for the "json" model.
+/// Contains the JSON output alongside a `usage` block so cost JSON pointers can resolve.
+pub static DUMMY_JSON_RAW_RESPONSE: &str =
+    r#"{"answer":"Hello","usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}"#;
 pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
 pub static DUMMY_JSON_RESPONSE_RAW_DIFF_SCHEMA: &str = r#"{"response":"Hello"}"#;
 pub static DUMMY_JSON_COT_RESPONSE_RAW: &str =
@@ -637,10 +662,9 @@ impl InferenceProvider for DummyProvider {
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = match self.model_name.as_str() {
-            #[expect(clippy::unwrap_used)]
-            "tool" => serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
+            "tool" => DUMMY_TOOL_RAW_RESPONSE.clone(),
             "good_tool" => r#"{"sentiment":"positive","confidence":0.95}"#.to_string(),
-            "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
+            "json" => DUMMY_JSON_RAW_RESPONSE.to_string(),
             "json_goodbye" => DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string(),
             "json_cot" => DUMMY_JSON_COT_RESPONSE_RAW.to_string(),
             #[expect(clippy::unwrap_used)]
@@ -882,9 +906,19 @@ impl InferenceProvider for DummyProvider {
             }
         };
 
+        let usage = self.get_model_usage(content_chunk_len as u32);
+        // Include a raw_response with usage data in the final chunk so cost pointers can resolve
+        let final_raw_response = serde_json::json!({
+            "usage": {
+                "prompt_tokens": usage.input_tokens.unwrap_or(0),
+                "completion_tokens": usage.output_tokens.unwrap_or(0),
+                "total_tokens": usage.input_tokens.unwrap_or(0) + usage.output_tokens.unwrap_or(0),
+            }
+        })
+        .to_string();
         let base_stream = stream.chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
             content: vec![],
-            usage: Some(self.get_model_usage(content_chunk_len as u32)),
+            usage: Some(usage),
             raw_usage: Some(vec![RawUsageEntry {
                 model_inference_id,
                 provider_type: "dummy".to_string(),
@@ -892,7 +926,7 @@ impl InferenceProvider for DummyProvider {
                 data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
             }]),
             finish_reason,
-            raw_response: String::new(),
+            raw_response: final_raw_response,
             provider_latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
         })));
 
@@ -1009,10 +1043,11 @@ impl EmbeddingProvider for DummyProvider {
         let created = current_timestamp();
         let embeddings = vec![Embedding::Float(vec![0.0; 1536]); request.input.num_inputs()];
         let raw_request = DUMMY_RAW_REQUEST.to_string();
-        let raw_response = DUMMY_RAW_REQUEST.to_string();
+        let raw_response = r#"{"usage": {"prompt_tokens": 10, "total_tokens": 10}}"#.to_string();
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(0),
+            cost: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),

@@ -17,6 +17,7 @@ export const getMetricName = (feedback: FeedbackRow) => {
 export const inferenceUsageSchema = z.object({
   input_tokens: z.number().nullish(),
   output_tokens: z.number().nullish(),
+  cost: z.number().nullish(),
 });
 
 export type InferenceUsage = z.infer<typeof inferenceUsageSchema>;
@@ -24,14 +25,18 @@ export type InferenceUsage = z.infer<typeof inferenceUsageSchema>;
 export function getTotalInferenceUsage(
   model_inferences: ParsedModelInferenceRow[],
 ): InferenceUsage {
+  const allCostsPresent =
+    model_inferences.length > 0 &&
+    model_inferences.every((m) => m.cost != null);
   return model_inferences.reduce(
     (acc, curr) => {
       return {
         input_tokens: acc.input_tokens + (curr.input_tokens ?? 0),
         output_tokens: acc.output_tokens + (curr.output_tokens ?? 0),
+        cost: allCostsPresent ? (acc.cost ?? 0) + (curr.cost ?? 0) : null,
       };
     },
-    { input_tokens: 0, output_tokens: 0 },
+    { input_tokens: 0, output_tokens: 0, cost: allCostsPresent ? 0 : null },
   );
 }
 

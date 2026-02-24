@@ -8,8 +8,6 @@ test("should show the evaluation result page", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-// This test depends on model inference cache hits (within ClickHouse)
-// If it starts failing, you may need to regenerate the model inference cache
 test("push the new run button, launch an evaluation", async ({ page }) => {
   test.setTimeout(600_000);
   await page.goto("/evaluations");
@@ -27,10 +25,6 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.getByPlaceholder("Select variant").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
-  // IMPORTANT - we need to set concurrency to 1 in order to prevent a race condition
-  // when regenerating fixtures, as we intentionally have multiple datapoints with
-  // identical inputs. See https://www.notion.so/tensorzerodotcom/Evaluations-cache-non-determinism-23a7520bbad3801f80fceaa7e859ce06
-  await page.getByTestId("concurrency-limit").fill("1");
   await page.getByRole("button", { name: "Launch" }).click();
 
   await expect(
@@ -53,8 +47,6 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-// This test depends on model inference cache hits (within ClickHouse)
-// If it starts failing, you may need to regenerate the model inference cache
 test("push the new run button, launch an image evaluation", async ({
   page,
 }) => {
@@ -102,8 +94,6 @@ test("push the new run button, launch an image evaluation", async ({
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-// This test depends on model inference cache hits (within ClickHouse)
-// If it starts failing, you may need to regenerate the model inference cache
 test("run evaluation with dataset with no output", async ({ page }) => {
   test.setTimeout(600_000);
   await page.goto("/evaluations");

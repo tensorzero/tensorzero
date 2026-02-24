@@ -310,9 +310,17 @@ impl FeedbackQueries for MockClickHouseConnectionInfo {
         metric_name: &str,
         function_name: &str,
         variant_names: Option<&Vec<String>>,
+        namespace: Option<&str>,
+        max_samples_per_variant: Option<u64>,
     ) -> Result<Vec<FeedbackByVariant>, Error> {
         self.feedback_queries
-            .get_feedback_by_variant(metric_name, function_name, variant_names)
+            .get_feedback_by_variant(
+                metric_name,
+                function_name,
+                variant_names,
+                namespace,
+                max_samples_per_variant,
+            )
             .await
     }
 

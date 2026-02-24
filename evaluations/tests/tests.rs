@@ -757,8 +757,8 @@ async fn run_exact_match_evaluation_chat() {
             "haiku_with_outputs"
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            "datapoint_ids[29]"
+            clickhouse_inference["tags"]["tensorzero::dataset_name"], dataset_name,
+            "dataset_name tag should be derived from the datapoints"
         );
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
@@ -1722,6 +1722,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         usage: Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            cost: None,
         },
         raw_usage: None,
         variant_name: "test_variant".to_string(),
@@ -1908,6 +1909,7 @@ async fn test_run_llm_judge_evaluator_json() {
         usage: Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            cost: None,
         },
         raw_usage: None,
         variant_name: "test_variant".to_string(),

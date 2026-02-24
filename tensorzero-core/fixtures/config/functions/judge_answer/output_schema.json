@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "score": {
+      "type": "number",
+      "description": "A score between 0 and 1 evaluating the answer"
+    }
+  },
+  "required": ["score"],
+  "additionalProperties": false
+}

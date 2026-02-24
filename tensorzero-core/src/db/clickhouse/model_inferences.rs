@@ -35,6 +35,7 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
                 model_provider_name,
                 ttft_ms,
                 cached,
+                cost,
                 finish_reason,
                 snapshot_hash,
                 formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp
@@ -294,6 +295,7 @@ mod tests {
                     model_provider_name,
                     ttft_ms,
                     cached,
+                    cost,
                     finish_reason,
                     snapshot_hash,
                     formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp

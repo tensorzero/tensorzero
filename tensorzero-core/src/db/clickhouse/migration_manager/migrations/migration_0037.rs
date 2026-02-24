@@ -122,7 +122,7 @@ impl Migration for Migration0037<'_> {
                 countState() as count
             FROM ModelInference
             {view_where_clause}
-            GROUP BY (model_name, model_provider_name, minute)
+            GROUP BY model_name, model_provider_name, minute
             "
         );
         self.clickhouse

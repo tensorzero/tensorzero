@@ -4,7 +4,11 @@ permissions:
   contents: read
 
 on:
-  - workflow_call
+  workflow_call:
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
+
 jobs:
   deploy-minikube:
     runs-on: ubuntu-latest
@@ -15,18 +19,20 @@ jobs:
       - name: Start minikube
         uses: medyagh/setup-minikube@e3c7f79eb1e997eabccc536a6cf318a2b0fe19d9
 
-      - name: Download gateway container
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          pattern: build-{gateway,ui}-container
-          merge-multiple: true
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-      - name: Load gateway and ui containers
+      - name: Pull and load gateway and ui containers
         run: |
-          docker load < gateway-container.tar
-          docker load < ui-container.tar
-          minikube image load gateway-container.tar
-          minikube image load ui-container.tar
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
+          docker save tensorzero/gateway:sha-${{ github.sha }} | minikube image load -
+          docker save tensorzero/ui:sha-${{ github.sha }} | minikube image load -
 
       - name: Create helm overrides file
         run: |

@@ -94,8 +94,8 @@ async fn test_raw_response_error_mid_stream_inference() {
         "Should have received at least one error chunk in the stream"
     );
     assert_eq!(
-        good_chunks, 17,
-        "Stream should continue after error and produce 17 total chunks"
+        good_chunks, 18,
+        "Stream should continue after error and produce 18 total chunks"
     );
 }
 

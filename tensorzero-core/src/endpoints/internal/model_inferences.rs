@@ -3,6 +3,7 @@
 use axum::extract::{Path, State};
 use axum::{Json, debug_handler};
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
@@ -82,6 +83,11 @@ pub struct ModelInference {
 
     /// Whether the inference was cached.
     pub cached: bool,
+
+    /// Cost of the inference.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | undefined"))]
+    pub cost: Option<Decimal>,
 }
 
 /// HTTP handler for getting model inferences by inference ID
@@ -149,6 +155,7 @@ async fn get_model_inferences(
                 input_messages: row.input_messages,
                 output: row.output,
                 cached: row.cached,
+                cost: row.cost,
             })
         })
         .collect()

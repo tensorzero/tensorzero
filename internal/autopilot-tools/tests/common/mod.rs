@@ -13,11 +13,12 @@ use tensorzero::{
     CreateDatapointsResponse, DatasetMetadata, DeleteDatapointsResponse, FeedbackParams,
     FeedbackResponse, GetConfigResponse, GetDatapointsResponse, GetInferencesRequest,
     GetInferencesResponse, InferenceResponse, ListDatapointsRequest, ListDatasetsRequest,
-    ListDatasetsResponse, ListInferencesRequest, Role, StoredChatInference, StoredInference,
-    UpdateDatapointRequest, UpdateDatapointsResponse, Usage, WriteConfigRequest,
-    WriteConfigResponse,
+    ListDatasetsResponse, ListEpisodesRequest, ListEpisodesResponse, ListInferencesRequest, Role,
+    StoredChatInference, StoredInference, UpdateDatapointRequest, UpdateDatapointsResponse, Usage,
+    WriteConfigRequest, WriteConfigResponse,
 };
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::EpisodeByIdRow;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
 use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
@@ -63,6 +64,12 @@ mock! {
             &self,
             params: durable_tools::ListSessionsParams,
         ) -> Result<durable_tools::ListSessionsResponse, TensorZeroClientError>;
+
+        async fn s3_initiate_upload(
+            &self,
+            session_id: Uuid,
+            request: durable_tools::S3UploadRequest,
+        ) -> Result<durable_tools::S3UploadResponse, TensorZeroClientError>;
 
         async fn action(
             &self,
@@ -121,6 +128,11 @@ mock! {
             ids: Vec<Uuid>,
         ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 
+        async fn delete_dataset(
+            &self,
+            dataset_name: String,
+        ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
         async fn list_inferences(
             &self,
             request: ListInferencesRequest,
@@ -130,6 +142,11 @@ mock! {
             &self,
             request: GetInferencesRequest,
         ) -> Result<GetInferencesResponse, TensorZeroClientError>;
+
+        async fn list_episodes(
+            &self,
+            request: ListEpisodesRequest,
+        ) -> Result<ListEpisodesResponse, TensorZeroClientError>;
 
         async fn launch_optimization_workflow(
             &self,
@@ -177,6 +194,7 @@ pub fn create_mock_chat_response(text: &str) -> InferenceResponse {
         usage: Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            cost: None,
         },
         raw_usage: None,
         original_response: None,
@@ -288,6 +306,7 @@ pub fn create_mock_stored_chat_inference(
         inference_params: Some(Default::default()),
         processing_time_ms: Some(100),
         ttft_ms: Some(50),
+        snapshot_hash: None,
     })
 }
 
@@ -321,4 +340,9 @@ pub fn create_mock_dataset_metadata(
         datapoint_count,
         last_updated: last_updated.to_string(),
     }
+}
+
+/// Create a mock ListEpisodesResponse with the given episodes.
+pub fn create_mock_list_episodes_response(episodes: Vec<EpisodeByIdRow>) -> ListEpisodesResponse {
+    ListEpisodesResponse { episodes }
 }
