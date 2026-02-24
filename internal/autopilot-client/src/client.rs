@@ -12,6 +12,7 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest_sse_stream::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use sqlx::PgPool;
+use tokio_util::time::FutureExt as _;
 use url::Url;
 use uuid::Uuid;
 
@@ -1109,30 +1110,28 @@ impl AutopilotClient {
             .await?;
         tokio::pin!(stream);
 
-        loop {
-            tokio::select! {
-                item = stream.next() => {
-                    match item {
-                        Some(Ok(update)) => {
-                            if let GatewayEventPayload::ToolCall(tc) = &update.event.payload
-                                && self.tool_whitelist.contains(&tc.name)
-                            {
-                                self.approve_whitelisted_tool_call(
-                                    update.event.session_id,
-                                    update.event.id,
-                                )
-                                .await;
-                            }
-                        }
-                        Some(Err(e)) => return Err(e),
-                        None => return Err(AutopilotError::Sse(
-                            "Tool call stream ended unexpectedly".to_string(),
-                        )),
+        while let Some(item) = stream.next().with_cancellation_token(shutdown_token).await {
+            match item {
+                Some(Ok(update)) => {
+                    if let GatewayEventPayload::ToolCall(tc) = &update.event.payload
+                        && self.tool_whitelist.contains(&tc.name)
+                    {
+                        self.approve_whitelisted_tool_call(
+                            update.event.session_id,
+                            update.event.id,
+                        )
+                        .await;
                     }
                 }
-                () = shutdown_token.cancelled() => return Ok(()),
+                Some(Err(e)) => return Err(e),
+                None => {
+                    return Err(AutopilotError::Sse(
+                        "Tool call stream ended unexpectedly".to_string(),
+                    ));
+                }
             }
         }
+        Ok(())
     }
 
     /// Approves a single whitelisted tool call by creating a ToolCallAuthorization event.
