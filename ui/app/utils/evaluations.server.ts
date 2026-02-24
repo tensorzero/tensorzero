@@ -282,6 +282,10 @@ export async function runEvaluation(
     })
     .catch((error) => {
       if (error instanceof DOMException && error.name === "AbortError") {
+        if (!startResolved) {
+          rejectStart(error);
+          startResolved = true;
+        }
         return;
       }
       if (!startResolved) {
