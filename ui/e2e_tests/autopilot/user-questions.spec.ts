@@ -450,12 +450,10 @@ test.describe("User questions", () => {
 
     const sessionId = await createAndInterruptSession(page);
 
-    // Intercept POST to events route (answer submissions) to count them
+    // Intercept answer-questions requests to count them
     let answerRequestCount = 0;
-    await page.route("**/events", async (route) => {
-      if (route.request().method() === "POST") {
-        answerRequestCount++;
-      }
+    await page.route("**/events/answer-questions", async (route) => {
+      answerRequestCount++;
       await route.continue();
     });
 
