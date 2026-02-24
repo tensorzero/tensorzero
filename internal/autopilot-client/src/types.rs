@@ -12,7 +12,7 @@ pub use tensorzero_types::{
     Base64File, File, ObjectStoragePointer, RawText, Role, Template, Text, Thought,
     ToolCallWrapper, Unknown, UrlFile,
 };
-use tensorzero_types::{InputMessage, InputMessageContent};
+use tensorzero_types::{InputMessage, InputMessageContent, ResolveUuidResponse};
 use uuid::Uuid;
 
 // =============================================================================
@@ -40,26 +40,20 @@ pub enum EventPayloadMessageContent {
 pub struct EventPayloadMessage {
     pub role: Role,
     pub content: Vec<EventPayloadMessageContent>,
+    #[serde(default)]
+    pub metadata: EventPayloadMessageMetadata,
 }
 
-impl TryFrom<InputMessage> for EventPayloadMessage {
-    type Error = &'static str;
-
-    fn try_from(msg: InputMessage) -> Result<Self, Self::Error> {
-        let content = msg
-            .content
-            .into_iter()
-            .map(|c| match c {
-                InputMessageContent::Text(text) => Ok(EventPayloadMessageContent::Text(text)),
-                _ => Err("EventPayloadMessage only supports Text content blocks"),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(EventPayloadMessage {
-            role: msg.role,
-            content,
-        })
-    }
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadMessageMetadata {
+    /// Attempted lookups for anything that matched a UUID regex
+    /// in the parent `EventPayloadMessage`
+    // We hide this from the UI, and populate in in the gateway
+    // before proxying it to the autopilot server
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub resolved_uuids: Vec<ResolveUuidResponse>,
 }
 
 impl From<EventPayloadMessage> for InputMessage {

@@ -14,6 +14,7 @@ function makeEvent(id: string): GatewayEvent {
       type: "message",
       role: "assistant",
       content: [{ type: "text", text: `event-${id}` }],
+      metadata: {},
     },
   };
 }

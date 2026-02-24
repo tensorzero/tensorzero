@@ -18,6 +18,8 @@ serde_path_to_error.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
 thiserror.workspace = true
 tracing.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
 ts-rs = { workspace = true, optional = true }
 url = { workspace = true, features = ["serde"] }
 
