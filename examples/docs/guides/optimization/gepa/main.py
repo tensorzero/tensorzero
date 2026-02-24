@@ -72,10 +72,8 @@ async def process_datapoint(datapoint: Row, t0: AsyncTensorZeroGateway, semaphor
 
 
 async def main():
-    t0 = await AsyncTensorZeroGateway.build_embedded(  # type: ignore[misc]
-        config_file="config/tensorzero.toml",
-        clickhouse_url=os.environ.get("TENSORZERO_CLICKHOUSE_URL"),
-    )
+    gateway_url = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
+    t0 = await AsyncTensorZeroGateway.build_http(gateway_url=gateway_url)
 
     # Load datapoints
     dataset = load_dataset()
