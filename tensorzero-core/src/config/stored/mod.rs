@@ -134,14 +134,14 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
             embedding_models,
         } = stored;
 
-        let gateway_config: UninitializedGatewayConfig = gateway.into();
-
         // Migrate deprecated `gateway.observability.disable_automatic_migrations`
         // to `clickhouse.disable_automatic_migrations`.
         let clickhouse = ClickHouseConfig {
             disable_automatic_migrations: clickhouse.disable_automatic_migrations
-                || gateway_config.observability.disable_automatic_migrations,
+                || gateway.observability.disable_automatic_migrations,
         };
+
+        let gateway_config: UninitializedGatewayConfig = gateway.into();
 
         Ok(Self {
             gateway: gateway_config,

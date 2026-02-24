@@ -13,6 +13,8 @@ pub struct StoredObservabilityConfig {
     pub async_writes: bool,
     #[serde(default)]
     pub batch_writes: BatchWritesConfig,
+
+    /// Deprecated since 2026.2
     #[serde(default)]
     pub disable_automatic_migrations: bool,
 }
@@ -23,6 +25,7 @@ impl From<ObservabilityConfig> for StoredObservabilityConfig {
             enabled,
             async_writes,
             batch_writes,
+            #[expect(deprecated)]
             disable_automatic_migrations,
         } = config;
         Self {
@@ -46,6 +49,7 @@ impl From<StoredObservabilityConfig> for ObservabilityConfig {
             enabled,
             async_writes,
             batch_writes,
+            #[expect(deprecated)]
             disable_automatic_migrations,
         }
     }

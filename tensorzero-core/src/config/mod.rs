@@ -395,7 +395,10 @@ pub struct ObservabilityConfig {
     pub async_writes: bool,
     #[serde(default)]
     pub batch_writes: BatchWritesConfig,
-    /// Deprecated: use `[clickhouse] disable_automatic_migrations` instead.
+    #[deprecated(
+        since = "2026.2.1",
+        note = "Use `clickhouse.disable_automatic_migrations` instead"
+    )]
     #[serde(default)]
     pub disable_automatic_migrations: bool,
 }
@@ -1774,6 +1777,7 @@ impl UninitializedConfig {
         self.resolve_clickhouse_config_deprecation()
     }
 
+    #[expect(deprecated)]
     fn resolve_clickhouse_config_deprecation(&mut self) -> Result<(), Error> {
         let old = self.gateway.observability.disable_automatic_migrations;
         let new = self.clickhouse.disable_automatic_migrations;
