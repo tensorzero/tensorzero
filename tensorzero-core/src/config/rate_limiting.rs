@@ -1637,6 +1637,56 @@ mod tests {
     }
 
     #[test]
+    fn test_cost_integer_toml_values() {
+        // TOML distinguishes integers (10) from floats (10.0).
+        // Verify that integer literals work for cost fields, which deserialize as f64.
+        let toml_str = r"
+            default_cost = 1
+            [[rules]]
+            cost_per_day = 10
+            always = true
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        assert_eq!(
+            uninitialized_config.default_nano_cost, 1_000_000_000,
+            "default_cost = 1 (integer) should parse as $1.00"
+        );
+
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+        let limit = &config.rules()[0].limits[0];
+        assert_eq!(
+            limit.capacity, 10_000_000_000,
+            "cost_per_day = 10 (integer) should parse as $10.00"
+        );
+    }
+
+    #[test]
+    fn test_cost_integer_toml_bucket_values() {
+        // Verify that integer literals work in bucket format for cost fields.
+        let toml_str = r"
+            [[rules]]
+            cost_per_hour = { capacity = 5, refill_rate = 2 }
+            priority = 1
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+
+        let limit = &config.rules()[0].limits[0];
+        assert_eq!(
+            limit.capacity, 5_000_000_000,
+            "capacity = 5 (integer) should parse as $5.00"
+        );
+        assert_eq!(
+            limit.refill_rate, 2_000_000_000,
+            "refill_rate = 2 (integer) should parse as $2.00"
+        );
+    }
+
+    #[test]
     fn test_small_cost_value() {
         let toml_str = r"
             [[rules]]
