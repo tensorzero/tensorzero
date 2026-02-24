@@ -215,11 +215,11 @@ impl RateLimitingManager {
             RateLimitResourceUsage::Exact {
                 tokens,
                 model_inferences,
-                nano_cost: cost,
+                nano_cost,
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
-                if let Some(nano_cost) = cost {
+                if let Some(nano_cost) = nano_cost {
                     span.record("actual_usage.cost", nano_cost_to_cost(nano_cost));
                 }
                 span.record("underestimate", false);
@@ -227,11 +227,11 @@ impl RateLimitingManager {
             RateLimitResourceUsage::UnderEstimate {
                 tokens,
                 model_inferences,
-                nano_cost: cost,
+                nano_cost,
             } => {
                 span.record("actual_usage.tokens", tokens as i64);
                 span.record("actual_usage.model_inferences", model_inferences as i64);
-                if let Some(nano_cost) = cost {
+                if let Some(nano_cost) = nano_cost {
                     span.record("actual_usage.cost", nano_cost_to_cost(nano_cost));
                 }
                 span.record("underestimate", true);
@@ -262,15 +262,11 @@ impl RateLimitingManager {
                     | RateLimitResourceUsage::UnderEstimate { tokens, .. } => tokens,
                 },
                 RateLimitResource::Cost => {
-                    let cost = match actual_usage {
-                        RateLimitResourceUsage::Exact {
-                            nano_cost: cost, ..
-                        }
-                        | RateLimitResourceUsage::UnderEstimate {
-                            nano_cost: cost, ..
-                        } => cost,
+                    let nano_cost = match actual_usage {
+                        RateLimitResourceUsage::Exact { nano_cost, .. }
+                        | RateLimitResourceUsage::UnderEstimate { nano_cost, .. } => nano_cost,
                     };
-                    match cost {
+                    match nano_cost {
                         Some(c) => c,
                         None => {
                             // When actual cost is unknown, skip the refund entirely.
