@@ -109,7 +109,6 @@ export * from "./EventPayload";
 export * from "./EventPayloadError";
 export * from "./EventPayloadMessage";
 export * from "./EventPayloadMessageContent";
-export * from "./EventPayloadMessageMetadata";
 export * from "./EventPayloadStatusUpdate";
 export * from "./EventPayloadToolCall";
 export * from "./EventPayloadToolCallAuthorization";

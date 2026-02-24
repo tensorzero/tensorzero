@@ -41,18 +41,18 @@ pub struct EventPayloadMessage {
     pub role: Role,
     pub content: Vec<EventPayloadMessageContent>,
     #[serde(default)]
+    // EventPayloadMessageMetadata currently has no fields exposed to Typescript,
+    // so we need to override the type to satisfy eslint
+    #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, never>"))]
     pub metadata: EventPayloadMessageMetadata,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadMessageMetadata {
     /// Attempted lookups for anything that matched a UUID regex
     /// in the parent `EventPayloadMessage`
     // We hide this from the UI, and populate in in the gateway
     // before proxying it to the autopilot server
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     #[serde(default)]
     pub resolved_uuids: Vec<ResolveUuidResponse>,
 }
