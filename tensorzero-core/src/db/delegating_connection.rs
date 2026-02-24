@@ -148,11 +148,11 @@ impl PrimaryDatastore {
         }
     }
 
-    /// Reads the primary datastore from `TENSORZERO_PRIMARY_DATASTORE` env var.
+    /// Reads the primary datastore from `TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND` env var.
     /// Returns `Postgres` if set to "postgres", otherwise `ClickHouse`. Never disabled.
     #[cfg(any(test, feature = "e2e_tests"))]
     pub fn from_test_env() -> Self {
-        match std::env::var("TENSORZERO_PRIMARY_DATASTORE").as_deref() {
+        match std::env::var("TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND").as_deref() {
             Ok("postgres") => PrimaryDatastore::Postgres,
             _ => PrimaryDatastore::ClickHouse,
         }

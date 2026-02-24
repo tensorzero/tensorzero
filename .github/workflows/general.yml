@@ -931,7 +931,7 @@ jobs:
       - name: Set Postgres as primary datastore
         if: matrix.database == 'postgres'
         run: |
-          echo "TENSORZERO_PRIMARY_DATASTORE=postgres" >> $GITHUB_ENV
+          echo "TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres" >> $GITHUB_ENV
 
       - name: Launch dependency services
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait

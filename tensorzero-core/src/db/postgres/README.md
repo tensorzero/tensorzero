@@ -49,7 +49,7 @@ TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e
 
 # 6. Run Postgres E2E tests
 TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests \
-  TENSORZERO_PRIMARY_DATASTORE=postgres cargo test-e2e postgres::inference_count_queries
+  TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres cargo test-e2e postgres::inference_count_queries
 ```
 
 ### Without New Migrations (Full Docker Compose)
@@ -66,7 +66,7 @@ docker compose -f tensorzero-core/tests/e2e/docker-compose.yml ps  # Check healt
 # 3. Run tests
 TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests \
 TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests \
-  TENSORZERO_PRIMARY_DATASTORE=postgres cargo test-e2e
+  TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres cargo test-e2e
 ```
 
 ### With New Migrations (Slow Alternative)

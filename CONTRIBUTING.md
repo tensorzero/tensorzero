@@ -167,7 +167,7 @@ cargo test-unit
 
 4. Run the E2E tests
    ```bash
-   TENSORZERO_PRIMARY_DATASTORE=postgres cargo test-e2e
+   TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres cargo test-e2e
    ```
 
 #### Python

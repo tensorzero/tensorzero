@@ -23,7 +23,7 @@ pub fn get_e2e_config_path_for_datastore(primary: PrimaryDatastore) -> PathBuf {
 }
 
 /// Returns the glob path for the E2E test configuration files,
-/// automatically selecting the primary datastore from `TENSORZERO_PRIMARY_DATASTORE` env var.
+/// automatically selecting the primary datastore from `TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND` env var.
 pub fn get_e2e_config_path() -> PathBuf {
     get_e2e_config_path_for_datastore(PrimaryDatastore::from_test_env())
 }
