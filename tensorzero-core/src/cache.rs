@@ -4,9 +4,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::config::OtlpConfig;
-use crate::config::gateway::ModelInferenceCacheConfig;
+use crate::config::gateway::{InferenceCacheBackend, ModelInferenceCacheConfig};
 use crate::db::cache::CacheQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::delegating_connection::PrimaryDatastore;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::db::valkey::cache::ValkeyCacheClient;
@@ -38,35 +39,67 @@ impl CacheManager {
         Self { client }
     }
 
-    /// Select the appropriate cache backend.
+    /// Select the appropriate cache backend based on config and available connections.
     ///
-    /// When Postgres is the primary datastore, uses Valkey if available,
-    /// otherwise falls back to ClickHouse. When ClickHouse is the primary
-    /// datastore, uses ClickHouse directly.
+    /// Respects `cache_config.enabled`:
+    /// - `Some(false)` → disabled (no-op)
+    /// - `None` or `Some(true)` → resolve backend from `cache_config.backend`
+    ///
+    /// Backend resolution (`cache_config.backend`):
+    /// - `Auto` + ClickHouse primary → ClickHouse
+    /// - `Auto` + Postgres primary → Valkey (disabled if unavailable)
+    /// - `ClickHouse` → ClickHouse
+    /// - `Valkey` → Valkey (disabled if unavailable)
+    ///
+    /// Note: startup validation (fail if `enabled=true` but no backend) is done
+    /// in `gateway.rs` before this method is called.
     pub fn new_from_connections(
         valkey_connection_info: &ValkeyConnectionInfo,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         cache_config: &ModelInferenceCacheConfig,
         primary_datastore: PrimaryDatastore,
     ) -> Self {
-        if primary_datastore == PrimaryDatastore::ClickHouse {
-            return Self::new(Arc::new(clickhouse_connection_info.clone()));
+        if cache_config.enabled == Some(false) {
+            return Self::disabled();
         }
-        match valkey_connection_info {
-            ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
-                ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
-            )),
-            ValkeyConnectionInfo::Disabled => {
-                tracing::warn!(
-                    "Postgres is the primary datastore, but `TENSORZERO_VALKEY_URL` is not set; falling back to ClickHouse for cache writes if configured."
-                );
+
+        match cache_config.backend {
+            InferenceCacheBackend::Auto => {
+                if primary_datastore == PrimaryDatastore::ClickHouse {
+                    return Self::new(Arc::new(clickhouse_connection_info.clone()));
+                }
+                // Postgres primary, prefer Valkey; disabled otherwise.
+                match valkey_connection_info {
+                    ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
+                        ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+                    )),
+                    ValkeyConnectionInfo::Disabled => Self::disabled(),
+                }
+            }
+            InferenceCacheBackend::ClickHouse => {
+                if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
+                    tracing::warn!(
+                        "`cache.backend` is set to `clickhouse` but ClickHouse is not available; caching is disabled."
+                    );
+                    return Self::disabled();
+                }
                 Self::new(Arc::new(clickhouse_connection_info.clone()))
             }
+            InferenceCacheBackend::Valkey => match valkey_connection_info {
+                ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
+                    ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+                )),
+                ValkeyConnectionInfo::Disabled => {
+                    tracing::warn!(
+                        "`cache.backend` is set to `valkey` but Valkey is not available; caching is disabled."
+                    );
+                    Self::disabled()
+                }
+            },
         }
     }
 
     /// Create a disabled cache manager (no-op: lookups return `None`, writes succeed immediately).
-    /// TODO(shuyangli): It's not test-only because tensorzero-optimizers/src/dicl.rs uses it; validate if this is appropriate.
     pub fn disabled() -> Self {
         Self::new(Arc::new(DisabledCacheQueries))
     }
