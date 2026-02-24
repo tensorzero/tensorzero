@@ -1,0 +1,20 @@
+[gateway]
+observability.enabled = true
+
+[gateway.observability.batch_writes]
+enabled = true
+flush_interval_ms = 250
+max_rows = 1000
+max_rows_postgres = 1000
+
+[postgres]
+enabled = true
+connection_pool_size = 50
+
+[functions.load_test_chat]
+type = "chat"
+
+[functions.load_test_chat.variants.default]
+type = "chat_completion"
+model = "dummy::good"
+max_tokens = 128

@@ -1,21 +1,21 @@
 {
   "name": "tensorzero-node-linux-x64-musl",
   "version": "0.0.0",
+  "license": "MIT",
+  "files": [
+    "tensorzero-node.linux-x64-musl.node"
+  ],
   "os": [
     "linux"
   ],
   "cpu": [
     "x64"
   ],
-  "main": "tensorzero-node.linux-x64-musl.node",
-  "files": [
-    "tensorzero-node.linux-x64-musl.node"
-  ],
-  "license": "MIT",
-  "engines": {
-    "node": ">= 10"
-  },
   "libc": [
     "musl"
-  ]
+  ],
+  "main": "tensorzero-node.linux-x64-musl.node",
+  "engines": {
+    "node": ">= 10"
+  }
 }

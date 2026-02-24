@@ -27,7 +27,7 @@ describe("Raw Response", () => {
     expect(typeof entry.provider_type).toBe("string");
     expect(entry.api_type).toBeDefined();
     expect(["chat_completions", "responses", "embeddings"]).toContain(
-      entry.api_type
+      entry.api_type,
     );
     expect(entry.data).toBeDefined();
     expect(typeof entry.data).toBe("string");

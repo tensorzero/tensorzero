@@ -14,7 +14,9 @@ use tokio::time::error::Elapsed;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::config::{PathWithContents, TimeoutsConfig};
+use crate::config::{
+    PathWithContents, TimeoutsConfig, UninitializedVariantConfig, UninitializedVariantInfo,
+};
 use crate::cost::CostConfig;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
@@ -68,6 +70,13 @@ pub struct VariantInfo {
 impl VariantInfo {
     pub fn set_weight(&mut self, weight: Option<f64>) {
         self.inner.set_weight(weight);
+    }
+
+    pub fn as_uninitialized(&self) -> UninitializedVariantInfo {
+        UninitializedVariantInfo {
+            inner: self.inner.as_uninitialized(),
+            timeouts: Some(self.timeouts.clone()),
+        }
     }
 }
 
@@ -281,6 +290,24 @@ impl VariantConfig {
             VariantConfig::Dicl(params) => params.set_weight(weight),
             VariantConfig::MixtureOfN(params) => params.set_weight(weight),
             VariantConfig::ChainOfThought(params) => params.inner.set_weight(weight),
+        }
+    }
+
+    pub fn as_uninitialized(&self) -> UninitializedVariantConfig {
+        match self {
+            VariantConfig::ChatCompletion(c) => {
+                UninitializedVariantConfig::ChatCompletion(c.as_uninitialized())
+            }
+            VariantConfig::BestOfNSampling(c) => {
+                UninitializedVariantConfig::BestOfNSampling(c.as_uninitialized())
+            }
+            VariantConfig::Dicl(c) => UninitializedVariantConfig::Dicl(c.as_uninitialized()),
+            VariantConfig::MixtureOfN(c) => {
+                UninitializedVariantConfig::MixtureOfN(c.as_uninitialized())
+            }
+            VariantConfig::ChainOfThought(c) => {
+                UninitializedVariantConfig::ChainOfThought(c.as_uninitialized())
+            }
         }
     }
 

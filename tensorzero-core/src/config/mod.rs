@@ -110,6 +110,7 @@ pub async fn with_skip_credential_validation<T>(f: impl Future<Output = T>) -> T
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(Default))]
 pub struct Config {
     pub gateway: GatewayConfig,
+    pub clickhouse: ClickHouseConfig,
     pub models: Arc<ModelTable>, // model name => model config
     pub embedding_models: Arc<EmbeddingModelTable>, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
@@ -384,11 +385,28 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservabilityConfig {
+    /// Controls whether the gateway writes observability data (inferences, feedback).
+    ///
+    /// - `Some(true)`: observability is required — startup fails if the backend is unavailable.
+    /// - `None` (default): observability is opportunistic — enabled if a backend is available, otherwise warns and continues.
+    /// - `Some(false)`: observability is disabled — no data is written regardless of backend availability.
     pub enabled: Option<bool>,
     #[serde(default)]
     pub async_writes: bool,
     #[serde(default)]
     pub batch_writes: BatchWritesConfig,
+    #[deprecated(
+        since = "2026.2.1",
+        note = "Use `clickhouse.disable_automatic_migrations` instead"
+    )]
+    #[serde(default)]
+    pub disable_automatic_migrations: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClickHouseConfig {
+    /// When `true`, the gateway will not run ClickHouse schema migrations on startup.
     #[serde(default)]
     pub disable_automatic_migrations: bool,
 }
@@ -814,6 +832,7 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
 /// those runtime values that need to be overlaid.
 pub struct RuntimeOverlay {
     pub gateway: UninitializedGatewayConfig,
+    pub clickhouse: ClickHouseConfig,
     pub postgres: PostgresConfig,
     pub rate_limiting: UninitializedRateLimitingConfig,
     pub object_store_info: Option<ObjectStoreInfo>,
@@ -865,6 +884,7 @@ impl RuntimeOverlay {
                 metrics: metrics.clone(),
                 cache: cache.clone(),
             },
+            clickhouse: config.clickhouse.clone(),
             postgres: config.postgres.clone(),
             rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
             object_store_info: config.object_store_info.clone(),
@@ -884,6 +904,7 @@ struct ProcessedConfigInput {
     evaluations: HashMap<String, UninitializedEvaluationConfig>,
     provider_types: ProviderTypesConfig,
     optimizers: HashMap<String, UninitializedOptimizerInfo>,
+    clickhouse: ClickHouseConfig,
     postgres: PostgresConfig,
     rate_limiting: UninitializedRateLimitingConfig,
 
@@ -929,6 +950,7 @@ async fn process_config_input(
             // Destructure the config now that we've added built-in functions
             let UninitializedConfig {
                 gateway,
+                clickhouse,
                 postgres,
                 rate_limiting,
                 object_storage,
@@ -982,6 +1004,7 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
+                clickhouse,
                 postgres,
                 rate_limiting,
                 snapshot,
@@ -999,6 +1022,7 @@ async fn process_config_input(
             // Destructure overlay to ensure all fields are handled (compile error if field added/removed)
             let RuntimeOverlay {
                 gateway: overlay_gateway,
+                clickhouse: overlay_clickhouse,
                 postgres: overlay_postgres,
                 rate_limiting: overlay_rate_limiting,
                 object_store_info: overlay_object_store_info,
@@ -1007,6 +1031,7 @@ async fn process_config_input(
             // Destructure uninit_config to overlay specific fields
             let UninitializedConfig {
                 gateway: _,        // replaced by overlay
+                clickhouse: _,     // replaced by overlay
                 postgres: _,       // replaced by overlay
                 rate_limiting: _,  // replaced by overlay
                 object_storage: _, // replaced by overlay (via object_store_info)
@@ -1031,6 +1056,7 @@ async fn process_config_input(
             // Reconstruct with overlaid values for snapshot hash computation
             let overlaid_config = UninitializedConfig {
                 gateway: overlay_gateway.clone(),
+                clickhouse: overlay_clickhouse.clone(),
                 postgres: overlay_postgres.clone(),
                 rate_limiting: overlay_rate_limiting.clone(),
                 object_storage: overlay_object_store_info
@@ -1077,6 +1103,7 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
+                clickhouse: overlay_clickhouse,
                 postgres: overlay_postgres,
                 rate_limiting: overlay_rate_limiting,
                 // unused
@@ -1263,6 +1290,7 @@ impl Config {
             evaluations: uninitialized_evaluations,
             provider_types,
             optimizers: uninitialized_optimizers,
+            clickhouse,
             postgres,
             rate_limiting,
             snapshot,
@@ -1335,6 +1363,7 @@ impl Config {
 
         let mut config = Config {
             gateway: gateway_config,
+            clickhouse,
             models: Arc::new(models),
             embedding_models: Arc::new(embedding_models),
             functions,
@@ -1696,6 +1725,8 @@ pub struct UninitializedConfig {
     #[serde(default)]
     pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
+    pub clickhouse: ClickHouseConfig,
+    #[serde(default)]
     pub postgres: PostgresConfig,
     #[serde(default)]
     pub rate_limiting: UninitializedRateLimitingConfig,
@@ -1736,6 +1767,34 @@ struct UninitializedGlobbedConfig {
 }
 
 impl UninitializedConfig {
+    /// Validate deprecated config fields, emitting warnings for deprecated locations
+    /// and erroring if both old and new locations are set.
+    ///
+    /// This does NOT migrate values from old fields to new ones. Value migration
+    /// is handled by `From<Stored*Config>` impls (for stored snapshots) and by
+    /// the consumer (for TOML configs).
+    pub(crate) fn resolve_deprecations(&mut self) -> Result<(), Error> {
+        self.resolve_clickhouse_config_deprecation()
+    }
+
+    #[expect(deprecated)]
+    fn resolve_clickhouse_config_deprecation(&mut self) -> Result<(), Error> {
+        let old = self.gateway.observability.disable_automatic_migrations;
+        let new = self.clickhouse.disable_automatic_migrations;
+
+        if old && new {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "`disable_automatic_migrations` is set in both `[clickhouse]` and `[gateway.observability]`. Remove it from `[gateway.observability]`.".to_string(),
+            }));
+        }
+        if old {
+            deprecation_warning(
+                "`gateway.observability.disable_automatic_migrations` is deprecated. Use `clickhouse.disable_automatic_migrations` instead.",
+            );
+        }
+        Ok(())
+    }
+
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
     fn read_toml_config(
         glob: &ConfigFileGlob,
@@ -1752,6 +1811,8 @@ impl UninitializedConfig {
 struct TomlUninitializedConfig {
     #[serde(default)]
     gateway: UninitializedGatewayConfig,
+    #[serde(default)]
+    clickhouse: ClickHouseConfig,
     #[serde(default)]
     postgres: PostgresConfig,
     #[serde(default)]
@@ -1785,6 +1846,7 @@ impl TryFrom<TomlUninitializedConfig> for UninitializedConfig {
             .map_err(|e: String| Error::new(ErrorDetails::Config { message: e }))?;
         Ok(Self {
             gateway: toml_config.gateway,
+            clickhouse: toml_config.clickhouse,
             postgres: toml_config.postgres,
             rate_limiting,
             object_storage: toml_config.object_storage,
@@ -1815,7 +1877,9 @@ impl TryFrom<toml::Table> for UninitializedConfig {
                     message: format!("{}: {}", path, e.into_inner().message()),
                 })
             })?;
-        toml_config.try_into()
+        let mut config: UninitializedConfig = toml_config.try_into()?;
+        config.resolve_deprecations()?;
+        Ok(config)
     }
 }
 
@@ -1839,6 +1903,18 @@ struct UninitializedSchema {
 #[serde(transparent)]
 pub struct UninitializedSchemas {
     inner: HashMap<String, UninitializedSchema>,
+}
+
+impl UninitializedSchemas {
+    /// Constructs `UninitializedSchemas` from a map of schema names to path data.
+    pub fn from_paths(paths: HashMap<String, ResolvedTomlPathData>) -> Self {
+        Self {
+            inner: paths
+                .into_iter()
+                .map(|(k, path)| (k, UninitializedSchema { path }))
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

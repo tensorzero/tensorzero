@@ -1123,6 +1123,8 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
         || model_name == "claude-opus-4-1"
     {
         Ok(32_000)
+    } else if model_name.starts_with("claude-opus-4-6") {
+        Ok(128_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
             message: format!(
@@ -2430,6 +2432,26 @@ mod tests {
         let model = "claude-sonnet-4-5-20250929".to_string();
         let body = AnthropicRequestBody::new(&model, &request, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-opus-4-6".to_string();
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
+        assert_eq!(
+            body.unwrap().max_tokens,
+            128_000,
+            "expected unversioned claude-opus-4-6 to default to 128k max tokens"
+        );
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-opus-4-6-20260601".to_string();
+        let body = AnthropicRequestBody::new(&model, &request, &[]).await;
+        assert_eq!(
+            body.unwrap().max_tokens,
+            128_000,
+            "expected versioned claude-opus-4-6 model ids to default to 128k max tokens"
+        );
         let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, &[]).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 

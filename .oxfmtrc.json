@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "arrowParens": "always",
+  "ignorePatterns": [
+    "**/dist/",
+    "**/build/",
+    "**/target/",
+    "**/*.generated.*",
+    "**/index.d.ts",
+    "**/node_modules/",
+    "ui/",
+    "clients/openai-node/",
+    "internal/tensorzero-node/",
+    "examples/production-deployment-k8s-helm/templates/",
+    "examples/production-deployment-k8s-helm/values.schema.json",
+    "pnpm-lock.yaml",
+    "**/.sqlx/",
+    "**/.mypy_cache/",
+    "**/.venv/",
+    "**/playwright-report/",
+    "**/.react-router/",
+    "**/test-results/"
+  ]
+}
