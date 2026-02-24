@@ -314,7 +314,7 @@ pub trait EvaluationQueries {
     async fn search_evaluation_runs(
         &self,
         evaluation_name: &str,
-        function_name: &str,
+        function_name: Option<&str>,
         query: &str,
         limit: u32,
         offset: u32,

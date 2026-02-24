@@ -39,13 +39,19 @@ pub async fn search_evaluation_runs_handler(
 async fn search_evaluation_runs_internal(
     clickhouse: &impl EvaluationQueries,
     evaluation_name: String,
-    function_name: String,
+    function_name: Option<String>,
     query: String,
     limit: u32,
     offset: u32,
 ) -> Result<SearchEvaluationRunsResponse, Error> {
     let db_results = clickhouse
-        .search_evaluation_runs(&evaluation_name, &function_name, &query, limit, offset)
+        .search_evaluation_runs(
+            &evaluation_name,
+            function_name.as_deref(),
+            &query,
+            limit,
+            offset,
+        )
         .await?;
 
     // Convert database results to API response format
@@ -75,7 +81,11 @@ mod tests {
             .expect_search_evaluation_runs()
             .withf(|eval_name, fn_name, query, limit, offset| {
                 assert_eq!(eval_name, "test_eval");
-                assert_eq!(fn_name, "test_function");
+                assert_eq!(
+                    fn_name,
+                    &Some("test_function"),
+                    "function_name should match"
+                );
                 assert_eq!(query, "test-query");
                 assert_eq!(*limit, 100);
                 assert_eq!(*offset, 0);
@@ -94,7 +104,7 @@ mod tests {
         let result = search_evaluation_runs_internal(
             &mock_clickhouse,
             "test_eval".to_string(),
-            "test_function".to_string(),
+            Some("test_function".to_string()),
             "test-query".to_string(),
             100,
             0,
@@ -118,7 +128,7 @@ mod tests {
         let result = search_evaluation_runs_internal(
             &mock_clickhouse,
             "test_eval".to_string(),
-            "test_function".to_string(),
+            Some("test_function".to_string()),
             "no-results".to_string(),
             100,
             0,
@@ -155,7 +165,7 @@ mod tests {
         let result = search_evaluation_runs_internal(
             &mock_clickhouse,
             "test_eval".to_string(),
-            "test_function".to_string(),
+            Some("test_function".to_string()),
             "variant".to_string(),
             100,
             0,
@@ -195,7 +205,7 @@ mod tests {
         let result = search_evaluation_runs_internal(
             &mock_clickhouse,
             "test_eval".to_string(),
-            "test_function".to_string(),
+            Some("test_function".to_string()),
             "query".to_string(),
             50,
             100,
@@ -223,7 +233,7 @@ mod tests {
         let result = search_evaluation_runs_internal(
             &mock_clickhouse,
             "test_eval".to_string(),
-            "test_function".to_string(),
+            Some("test_function".to_string()),
             "query".to_string(),
             100,
             0,
@@ -231,5 +241,46 @@ mod tests {
         .await;
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_search_evaluation_runs_no_function_name() {
+        let mut mock_clickhouse = MockEvaluationQueries::new();
+        let run_id = Uuid::now_v7();
+
+        mock_clickhouse
+            .expect_search_evaluation_runs()
+            .withf(|eval_name, fn_name, query, limit, offset| {
+                assert_eq!(eval_name, "test_eval");
+                assert_eq!(fn_name, &None, "function_name should be None");
+                assert_eq!(query, "test-query");
+                assert_eq!(*limit, 100);
+                assert_eq!(*offset, 0);
+                true
+            })
+            .times(1)
+            .returning(move |_, _, _, _, _| {
+                Box::pin(async move {
+                    Ok(vec![EvaluationRunSearchResult {
+                        evaluation_run_id: run_id,
+                        variant_name: "variant_1".to_string(),
+                    }])
+                })
+            });
+
+        let result = search_evaluation_runs_internal(
+            &mock_clickhouse,
+            "test_eval".to_string(),
+            None,
+            "test-query".to_string(),
+            100,
+            0,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.results.len(), 1, "Should return 1 result");
+        assert_eq!(result.results[0].evaluation_run_id, run_id);
+        assert_eq!(result.results[0].variant_name, "variant_1");
     }
 }
