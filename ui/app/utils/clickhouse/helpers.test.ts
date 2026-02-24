@@ -12,13 +12,14 @@ function makeModelInference(
     raw_response: "",
     model_name: "test",
     model_provider_name: "test",
-    response_time_ms: null,
-    ttft_ms: null,
+    response_time_ms: undefined,
+    ttft_ms: undefined,
     timestamp: "2024-01-01T00:00:00Z",
-    system: null,
+    system: undefined,
     input_messages: [],
     output: [],
     cached: false,
+    cost: undefined,
     ...overrides,
   };
 }
