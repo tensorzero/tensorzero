@@ -24,7 +24,10 @@ use tensorzero_core::{
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo},
+    optimization::{
+        OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerConfig,
+        UninitializedOptimizerInfo,
+    },
     stored_inference::RenderedSample,
     utils::gateway::{AppState, AppStateData, StructuredJson},
 };
@@ -158,6 +161,14 @@ pub async fn launch_optimization(
         val_samples: val_examples,
         optimization_config: optimizer_config,
     } = params;
+    if matches!(
+        optimizer_config.inner,
+        UninitializedOptimizerConfig::GEPA(_)
+    ) {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "GEPA must be launched via the HTTP gateway's `/experimental_optimization_workflow` endpoint, not the embedded client".to_string(),
+        }));
+    }
     let optimizer = optimizer_config.load();
     optimizer
         .launch(
