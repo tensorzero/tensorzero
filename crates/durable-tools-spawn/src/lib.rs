@@ -31,10 +31,12 @@
 mod client;
 mod error;
 mod params;
+mod types;
 
 pub use client::{SpawnClient, SpawnClientBuilder};
 pub use error::{SpawnError, SpawnResult};
 pub use params::TaskToolParams;
+pub use types::{TaskPollResult, TaskStatus};
 
 // Re-export durable types needed for spawning
 pub use durable::{SpawnOptions, SpawnResult as DurableSpawnResult};

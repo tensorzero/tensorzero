@@ -358,6 +358,12 @@ pub struct AutopilotSideInfo {
 
     /// Settings for optimization workflows run on the gateway by autopilot.
     pub optimization: OptimizationWorkflowSideInfo,
+
+    /// When true, the wrapper skips the `publish_result` step.
+    /// Used for tasks spawned directly (e.g. from `/experimental_optimization_workflow`)
+    /// rather than from an autopilot session.
+    #[serde(default)]
+    pub skip_publish: bool,
 }
 
 /// Side info for optimization workflow tool (hidden from LLM).

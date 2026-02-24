@@ -1,6 +1,7 @@
 //! Error types for spawning operations.
 
 use thiserror::Error;
+use uuid::Uuid;
 
 /// Error type for spawn operations.
 #[derive(Debug, Error)]
@@ -20,6 +21,14 @@ pub enum SpawnError {
     /// Durable framework error.
     #[error("Durable error: {0}")]
     Durable(#[from] durable::DurableError),
+
+    /// Task was not found.
+    #[error("Task not found: {0}")]
+    TaskNotFound(Uuid),
+
+    /// Database returned an unrecognized task state.
+    #[error("Invalid task state: {0}")]
+    InvalidState(String),
 }
 
 /// Result type alias for spawn operations.
