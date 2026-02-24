@@ -43,11 +43,10 @@ export async function action({ params, request }: ActionFunctionArgs) {
   if (
     !body.responses ||
     typeof body.responses !== "object" ||
-    Array.isArray(body.responses) ||
-    Object.keys(body.responses).length === 0
+    Array.isArray(body.responses)
   ) {
     return new Response(
-      "`responses` must be a non-empty object mapping question IDs to answers",
+      "`responses` must be an object mapping question IDs to answers",
       { status: 400 },
     );
   }
