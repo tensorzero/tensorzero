@@ -23,11 +23,10 @@ use crate::types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
     EventPayloadToolCallAuthorization, GatewayEventPayload, GatewayListConfigWritesResponse,
-    GatewayListEventsResponse, GatewayStreamUpdate, GatewayWorkspacePendingToolCallsResponse,
-    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
-    StreamEventsParams, StreamWorkspaceToolCallsParams, ToolCallAuthorizationStatus,
-    ToolCallDecisionSource, WorkspacePendingToolCallsResponse,
+    GatewayListEventsResponse, GatewayStreamUpdate, ListConfigWritesParams,
+    ListConfigWritesResponse, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    ListSessionsResponse, S3UploadRequest, S3UploadResponse, StreamEventsParams,
+    ToolCallAuthorizationStatus, ToolCallDecisionSource,
 };
 
 /// Default base URL for the Autopilot API.
@@ -883,61 +882,15 @@ impl AutopilotClient {
     // Workspace Endpoints
     // -------------------------------------------------------------------------
 
-    /// Lists pending tool calls across all sessions in a workspace.
-    ///
-    /// Unknown tool calls (those not in `available_tools`) are filtered from
-    /// results and automatically rejected via a durable task.
-    /// `ToolCallAuthorization::NotAvailable` events are also filtered from results.
-    ///
-    /// Returns `GatewayWorkspacePendingToolCallsResponse` which uses `GatewayEvent` - a narrower type
-    /// that excludes `NotAvailable` authorization status. The `last_event_id` can be used
-    /// as the starting point for `stream_workspace_tool_calls` to avoid TOCTOU bugs.
-    pub async fn pending_tool_calls(
-        &self,
-    ) -> Result<GatewayWorkspacePendingToolCallsResponse, AutopilotError> {
-        let url = self.base_url.join("/v1/workspace/tool_calls/pending")?;
-        let response = self
-            .http_client
-            .get(url)
-            .headers(self.auth_headers())
-            .send()
-            .await?;
-        let response = self.check_response(response).await?;
-        let body: WorkspacePendingToolCallsResponse = response.json().await?;
-        self.cache_tool_call_events(&body.pending_tool_calls);
-
-        // Filter pending tool calls and reject unknown ones
-        let mut filtered_pending_tool_calls = Vec::new();
-        for event in body.pending_tool_calls {
-            if let EventPayload::ToolCall(tool_call) = &event.payload
-                && self.is_unknown_tool(tool_call)
-            {
-                reject_missing_tool(&self.spawn_client, tool_call).await?;
-            }
-            if Self::should_filter_event(&event, &self.available_tools) {
-                continue;
-            }
-            let gateway_event = event.try_into().map_err(|e| {
-                AutopilotError::Internal(format!("Event conversion failed after filtering: {e}"))
-            })?;
-            filtered_pending_tool_calls.push(gateway_event);
-        }
-
-        Ok(GatewayWorkspacePendingToolCallsResponse {
-            pending_tool_calls: filtered_pending_tool_calls,
-            last_event_id: body.last_event_id,
-        })
-    }
-
     /// Streams tool call events across all sessions in a workspace using Server-Sent Events.
+    ///
+    /// The server sends all pending tool calls at the start of the stream, followed by
+    /// new tool calls as they arrive.
     ///
     /// Returns a stream of tool call events. The stream will remain open until:
     /// - The client drops the stream
     /// - The server closes the connection
     /// - An error occurs
-    ///
-    /// Use `params.last_event_id` to resume from a specific event (typically the `last_event_id`
-    /// returned by `pending_tool_calls` to avoid TOCTOU bugs).
     ///
     /// # Errors
     ///
@@ -948,16 +901,11 @@ impl AutopilotClient {
     /// `NotAvailable` authorization status.
     pub async fn stream_workspace_tool_calls(
         &self,
-        params: StreamWorkspaceToolCallsParams,
     ) -> Result<
         impl Stream<Item = Result<GatewayStreamUpdate, AutopilotError>> + use<>,
         AutopilotError,
     > {
-        let mut url = self.base_url.join("/v1/workspace/tool_calls/stream")?;
-        if let Some(last_event_id) = params.last_event_id {
-            url.query_pairs_mut()
-                .append_pair("last_event_id", &last_event_id.to_string());
-        }
+        let url = self.base_url.join("/v1/workspace/tool_calls/stream")?;
 
         // Wait for connection to be established or fail.
         let event_source = self
@@ -1086,28 +1034,12 @@ impl AutopilotClient {
         tracing::info!("Tool whitelist approver shut down");
     }
 
-    /// Inner approval loop: processes pending tool calls, then streams new ones.
+    /// Inner approval loop: streams tool calls (server sends pending calls at start of stream).
     async fn run_approval_loop(
         &self,
         shutdown_token: &tokio_util::sync::CancellationToken,
     ) -> Result<(), AutopilotError> {
-        // 1. Process any existing pending tool calls
-        let pending = self.pending_tool_calls().await?;
-        for event in &pending.pending_tool_calls {
-            if let GatewayEventPayload::ToolCall(tc) = &event.payload
-                && self.tool_whitelist.contains(&tc.name)
-            {
-                self.approve_whitelisted_tool_call(event.session_id, event.id)
-                    .await;
-            }
-        }
-
-        // 2. Stream new tool calls
-        let stream = self
-            .stream_workspace_tool_calls(StreamWorkspaceToolCallsParams {
-                last_event_id: pending.last_event_id,
-            })
-            .await?;
+        let stream = self.stream_workspace_tool_calls().await?;
         tokio::pin!(stream);
 
         while let Some(item) = stream.next().with_cancellation_token(shutdown_token).await {
