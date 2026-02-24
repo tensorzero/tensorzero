@@ -1,3 +1,4 @@
+import { Markdown } from "~/components/ui/markdown";
 import { cn } from "~/utils/common";
 import type { EventPayloadUserQuestion } from "~/types/tensorzero";
 
@@ -15,9 +16,9 @@ export function MultipleChoiceStep({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
-        <span className="text-fg-primary text-sm font-medium">
+        <Markdown className="text-fg-primary text-sm font-medium">
           {question.question}
-        </span>
+        </Markdown>
         <span className="text-fg-muted text-xs">
           {question.multi_select ? "Select all that apply" : "Select one"}
         </span>
@@ -48,7 +49,7 @@ export function MultipleChoiceStep({
               >
                 {option.label}
               </span>
-              <span
+              <Markdown
                 className={cn(
                   "text-xs leading-snug",
                   isSelected
@@ -57,7 +58,7 @@ export function MultipleChoiceStep({
                 )}
               >
                 {option.description}
-              </span>
+              </Markdown>
             </button>
           );
         })}
