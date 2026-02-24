@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation } from "react-router";
+import { canUseDOM } from "~/utils/common";
 
 const SHEET_PARAM = "sheet";
 const SHEET_ID_PARAM = "sheetId";
@@ -14,6 +15,7 @@ const SHEET_ID_PARAM = "sheetId";
 type EntitySheetState = { type: "inference"; id: string } | null;
 
 function parseSheetStateFromUrl(): EntitySheetState {
+  if (!canUseDOM) return null;
   const params = new URLSearchParams(window.location.search);
   const type = params.get(SHEET_PARAM);
   const id = params.get(SHEET_ID_PARAM);
@@ -23,10 +25,24 @@ function parseSheetStateFromUrl(): EntitySheetState {
   return null;
 }
 
+/**
+ * Returns true if the mouse event has modifier keys or is a non-primary click,
+ * indicating the browser should handle it natively (e.g. open in new tab).
+ */
+function isModifiedEvent(e: React.MouseEvent): boolean {
+  return Boolean(e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0);
+}
+
 interface EntitySheetContextValue {
   sheetState: EntitySheetState;
   openInferenceSheet: (id: string) => void;
   closeSheet: () => void;
+  /** Click handler that intercepts inference links to open the sheet. */
+  handleInferenceLinkClick: (
+    e: React.MouseEvent,
+    entityType: string,
+    id: string,
+  ) => void;
 }
 
 const EntitySheetContext = createContext<EntitySheetContextValue | null>(null);
@@ -84,9 +100,25 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
     setSheetState(null);
   }, []);
 
+  const handleInferenceLinkClick = useCallback(
+    (e: React.MouseEvent, entityType: string, id: string) => {
+      if (isModifiedEvent(e)) return;
+      if (entityType === "inference") {
+        e.preventDefault();
+        openInferenceSheet(id);
+      }
+    },
+    [openInferenceSheet],
+  );
+
   return (
     <EntitySheetContext.Provider
-      value={{ sheetState, openInferenceSheet, closeSheet }}
+      value={{
+        sheetState,
+        openInferenceSheet,
+        closeSheet,
+        handleInferenceLinkClick,
+      }}
     >
       {children}
     </EntitySheetContext.Provider>
