@@ -397,7 +397,6 @@ export * from "./ToolChoice";
 export * from "./ToolConfig";
 export * from "./ToolOutcome";
 export * from "./ToolResult";
-export * from "./ToolUseBehavior";
 export * from "./ToolUseConfig";
 export * from "./TopKEvaluationVisualization";
 export * from "./TrackAndStopConfig";

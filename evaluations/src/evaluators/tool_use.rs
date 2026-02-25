@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use anyhow::{Result, bail};
 use serde_json::Value;
 use tensorzero_core::client::InferenceResponse;
-use tensorzero_core::evaluations::{ToolUseBehavior, ToolUseConfig};
+use tensorzero_core::evaluations::ToolUseConfig;
 use tensorzero_core::inference::types::ContentBlockChatOutput;
 use tracing::{debug, instrument};
 
@@ -27,31 +27,21 @@ pub(super) fn run_tool_use_evaluator(
         })
         .collect();
 
-    debug!(called_tools = ?called_tools, behavior = ?config.behavior, "Evaluating tool use");
+    debug!(called_tools = ?called_tools, behavior = %config, "Evaluating tool use");
 
-    let result =
-        match &config.behavior {
-            ToolUseBehavior::None => called_tools.is_empty(),
-            ToolUseBehavior::Any => !called_tools.is_empty(),
-            ToolUseBehavior::NoneOf => {
-                let tools = config.tools.as_ref().ok_or_else(|| {
-                    anyhow::anyhow!("`tools` must be present for `none_of` behavior")
-                })?;
-                tools.iter().all(|t| !called_tools.contains(t.as_str()))
-            }
-            ToolUseBehavior::AnyOf => {
-                let tools = config.tools.as_ref().ok_or_else(|| {
-                    anyhow::anyhow!("`tools` must be present for `any_of` behavior")
-                })?;
-                tools.iter().any(|t| called_tools.contains(t.as_str()))
-            }
-            ToolUseBehavior::AllOf => {
-                let tools = config.tools.as_ref().ok_or_else(|| {
-                    anyhow::anyhow!("`tools` must be present for `all_of` behavior")
-                })?;
-                tools.iter().all(|t| called_tools.contains(t.as_str()))
-            }
-        };
+    let result = match config {
+        ToolUseConfig::None { .. } => called_tools.is_empty(),
+        ToolUseConfig::Any { .. } => !called_tools.is_empty(),
+        ToolUseConfig::NoneOf { tools, .. } => {
+            tools.iter().all(|t| !called_tools.contains(t.as_str()))
+        }
+        ToolUseConfig::AnyOf { tools, .. } => {
+            tools.iter().any(|t| called_tools.contains(t.as_str()))
+        }
+        ToolUseConfig::AllOf { tools, .. } => {
+            tools.iter().all(|t| called_tools.contains(t.as_str()))
+        }
+    };
 
     debug!(result = %result, "Tool use evaluation completed");
     Ok(Some(Value::Bool(result)))
@@ -67,19 +57,20 @@ mod tests {
     use tensorzero_core::tool::InferenceResponseToolCall;
     use uuid::Uuid;
 
+    /// Always includes a leading text block to exercise mixed-content filtering.
     fn make_chat_response(tool_names: &[&str]) -> InferenceResponse {
-        let content = tool_names
-            .iter()
-            .map(|name| {
-                ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
-                    id: Uuid::now_v7().to_string(),
-                    raw_name: name.to_string(),
-                    raw_arguments: "{}".to_string(),
-                    name: Some(name.to_string()),
-                    arguments: Some(serde_json::json!({})),
-                })
+        let mut content: Vec<ContentBlockChatOutput> = vec![ContentBlockChatOutput::Text(Text {
+            text: "Here is my response.".to_string(),
+        })];
+        content.extend(tool_names.iter().map(|name| {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
+                id: Uuid::now_v7().to_string(),
+                raw_name: name.to_string(),
+                raw_arguments: "{}".to_string(),
+                name: Some(name.to_string()),
+                arguments: Some(serde_json::json!({})),
             })
-            .collect();
+        }));
         InferenceResponse::Chat(ChatInferenceResponse {
             inference_id: Uuid::now_v7(),
             episode_id: Uuid::now_v7(),
@@ -95,10 +86,6 @@ mod tests {
             raw_response: None,
             finish_reason: None,
         })
-    }
-
-    fn make_empty_chat_response() -> InferenceResponse {
-        make_chat_response(&[])
     }
 
     fn make_json_response() -> InferenceResponse {
@@ -126,12 +113,8 @@ mod tests {
 
     #[test]
     fn test_behavior_none_no_tools() {
-        let response = make_empty_chat_response();
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::None,
-            tools: None,
-            cutoff: None,
-        };
+        let response = make_chat_response(&[]);
+        let config = ToolUseConfig::None { cutoff: None };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for chat response with no tools");
         assert_eq!(
@@ -144,11 +127,7 @@ mod tests {
     #[test]
     fn test_behavior_none_with_tools() {
         let response = make_chat_response(&["search"]);
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::None,
-            tools: None,
-            cutoff: None,
-        };
+        let config = ToolUseConfig::None { cutoff: None };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for chat response with tools");
         assert_eq!(
@@ -161,11 +140,7 @@ mod tests {
     #[test]
     fn test_behavior_any_with_tools() {
         let response = make_chat_response(&["search"]);
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::Any,
-            tools: None,
-            cutoff: None,
-        };
+        let config = ToolUseConfig::Any { cutoff: None };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for chat response with tools");
         assert_eq!(
@@ -177,12 +152,8 @@ mod tests {
 
     #[test]
     fn test_behavior_any_no_tools() {
-        let response = make_empty_chat_response();
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::Any,
-            tools: None,
-            cutoff: None,
-        };
+        let response = make_chat_response(&[]);
+        let config = ToolUseConfig::Any { cutoff: None };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for chat response with no tools");
         assert_eq!(
@@ -195,9 +166,8 @@ mod tests {
     #[test]
     fn test_behavior_none_of_no_match() {
         let response = make_chat_response(&["search", "weather"]);
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::NoneOf,
-            tools: Some(vec!["calculator".to_string(), "email".to_string()]),
+        let config = ToolUseConfig::NoneOf {
+            tools: vec!["calculator".to_string(), "email".to_string()],
             cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
@@ -212,9 +182,8 @@ mod tests {
     #[test]
     fn test_behavior_none_of_with_match() {
         let response = make_chat_response(&["search", "calculator"]);
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::NoneOf,
-            tools: Some(vec!["calculator".to_string(), "email".to_string()]),
+        let config = ToolUseConfig::NoneOf {
+            tools: vec!["calculator".to_string(), "email".to_string()],
             cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
@@ -229,9 +198,8 @@ mod tests {
     #[test]
     fn test_behavior_any_of_with_match() {
         let response = make_chat_response(&["search", "calculator"]);
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::AnyOf,
-            tools: Some(vec!["calculator".to_string(), "email".to_string()]),
+        let config = ToolUseConfig::AnyOf {
+            tools: vec!["calculator".to_string(), "email".to_string()],
             cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
@@ -246,9 +214,8 @@ mod tests {
     #[test]
     fn test_behavior_any_of_no_match() {
         let response = make_chat_response(&["search", "weather"]);
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::AnyOf,
-            tools: Some(vec!["calculator".to_string(), "email".to_string()]),
+        let config = ToolUseConfig::AnyOf {
+            tools: vec!["calculator".to_string(), "email".to_string()],
             cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
@@ -263,9 +230,8 @@ mod tests {
     #[test]
     fn test_behavior_all_of_all_present() {
         let response = make_chat_response(&["search", "calculator", "email"]);
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::AllOf,
-            tools: Some(vec!["calculator".to_string(), "search".to_string()]),
+        let config = ToolUseConfig::AllOf {
+            tools: vec!["calculator".to_string(), "search".to_string()],
             cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
@@ -280,9 +246,8 @@ mod tests {
     #[test]
     fn test_behavior_all_of_partial() {
         let response = make_chat_response(&["search"]);
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::AllOf,
-            tools: Some(vec!["calculator".to_string(), "search".to_string()]),
+        let config = ToolUseConfig::AllOf {
+            tools: vec!["calculator".to_string(), "search".to_string()],
             cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
@@ -297,11 +262,7 @@ mod tests {
     #[test]
     fn test_json_inference_error() {
         let response = make_json_response();
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::Any,
-            tools: None,
-            cutoff: None,
-        };
+        let config = ToolUseConfig::Any { cutoff: None };
         let result = run_tool_use_evaluator(&response, &config);
         assert!(result.is_err(), "should error for JSON inferences");
     }
@@ -309,9 +270,8 @@ mod tests {
     #[test]
     fn test_duplicate_tool_calls() {
         let response = make_chat_response(&["search", "search", "search"]);
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::AllOf,
-            tools: Some(vec!["search".to_string()]),
+        let config = ToolUseConfig::AllOf {
+            tools: vec!["search".to_string()],
             cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
@@ -320,49 +280,6 @@ mod tests {
             result,
             Some(Value::Bool(true)),
             "should deduplicate tool calls via HashSet"
-        );
-    }
-
-    #[test]
-    fn test_text_and_tool_mixed_content() {
-        // Response with both text and tool call content blocks
-        let response = InferenceResponse::Chat(ChatInferenceResponse {
-            inference_id: Uuid::now_v7(),
-            episode_id: Uuid::now_v7(),
-            variant_name: "test".to_string(),
-            content: vec![
-                ContentBlockChatOutput::Text(Text {
-                    text: "Let me search for that.".to_string(),
-                }),
-                ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
-                    id: "call_1".to_string(),
-                    raw_name: "search".to_string(),
-                    raw_arguments: r#"{"query": "test"}"#.to_string(),
-                    name: Some("search".to_string()),
-                    arguments: Some(serde_json::json!({"query": "test"})),
-                }),
-            ],
-            usage: Usage {
-                input_tokens: Some(10),
-                output_tokens: Some(10),
-                cost: None,
-            },
-            raw_usage: None,
-            original_response: None,
-            raw_response: None,
-            finish_reason: None,
-        });
-        let config = ToolUseConfig {
-            behavior: ToolUseBehavior::AnyOf,
-            tools: Some(vec!["search".to_string()]),
-            cutoff: None,
-        };
-        let result = run_tool_use_evaluator(&response, &config)
-            .expect("evaluator should succeed for any_of with mixed content blocks");
-        assert_eq!(
-            result,
-            Some(Value::Bool(true)),
-            "should find tool calls even when mixed with text content"
         );
     }
 }

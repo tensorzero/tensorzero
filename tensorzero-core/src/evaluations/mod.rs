@@ -112,7 +112,7 @@ impl EvaluatorConfig {
         match self {
             EvaluatorConfig::ExactMatch(config) => config.cutoff,
             EvaluatorConfig::LLMJudge(config) => config.cutoff,
-            EvaluatorConfig::ToolUse(config) => config.cutoff,
+            EvaluatorConfig::ToolUse(config) => config.cutoff(),
         }
     }
 
@@ -145,51 +145,65 @@ pub struct ExactMatchConfig {
     pub cutoff: Option<f32>,
 }
 
+/// Evaluator that checks whether an inference's tool calls match the expected behavior.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(rename_all = "snake_case")]
-pub enum ToolUseBehavior {
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(tag = "behavior")] // NOTE: custom tag for human-readable config
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum ToolUseConfig {
     /// The inference must not contain any tool calls.
-    None,
+    None {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cutoff: Option<f32>,
+    },
     /// None of the listed tools may appear in the inference's tool calls.
-    NoneOf,
+    NoneOf {
+        tools: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cutoff: Option<f32>,
+    },
     /// The inference must contain at least one tool call (any tool).
-    Any,
+    Any {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cutoff: Option<f32>,
+    },
     /// At least one of the listed tools must appear in the inference's tool calls.
-    AnyOf,
+    AnyOf {
+        tools: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cutoff: Option<f32>,
+    },
     /// All of the listed tools must appear in the inference's tool calls.
-    AllOf,
+    AllOf {
+        tools: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cutoff: Option<f32>,
+    },
 }
 
-impl std::fmt::Display for ToolUseBehavior {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ToolUseConfig {
+    pub fn cutoff(&self) -> Option<f32> {
         match self {
-            ToolUseBehavior::None => write!(f, "none"),
-            ToolUseBehavior::NoneOf => write!(f, "none_of"),
-            ToolUseBehavior::Any => write!(f, "any"),
-            ToolUseBehavior::AnyOf => write!(f, "any_of"),
-            ToolUseBehavior::AllOf => write!(f, "all_of"),
+            ToolUseConfig::None { cutoff, .. }
+            | ToolUseConfig::NoneOf { cutoff, .. }
+            | ToolUseConfig::Any { cutoff, .. }
+            | ToolUseConfig::AnyOf { cutoff, .. }
+            | ToolUseConfig::AllOf { cutoff, .. } => *cutoff,
         }
     }
 }
 
-/// Evaluator that checks whether an inference's tool calls match the expected behavior.
-///
-/// `tools` is required for `none_of`, `any_of`, and `all_of` behaviors,
-/// and must not be specified for `none` and `any`.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[serde(deny_unknown_fields)]
-pub struct ToolUseConfig {
-    /// The matching rule to apply to the inference's tool calls.
-    pub behavior: ToolUseBehavior,
-    /// Tool names to match against. Required for `none_of`, `any_of`, and `all_of` behaviors.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cutoff: Option<f32>,
+impl std::fmt::Display for ToolUseConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToolUseConfig::None { .. } => write!(f, "none"),
+            ToolUseConfig::NoneOf { .. } => write!(f, "none_of"),
+            ToolUseConfig::Any { .. } => write!(f, "any"),
+            ToolUseConfig::AnyOf { .. } => write!(f, "any_of"),
+            ToolUseConfig::AllOf { .. } => write!(f, "all_of"),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -638,42 +652,19 @@ impl UninitializedEvaluatorConfig {
                 ))
             }
             UninitializedEvaluatorConfig::ToolUse(config) => {
-                match &config.behavior {
-                    ToolUseBehavior::None | ToolUseBehavior::Any => {
-                        if config.tools.is_some() {
+                match &config {
+                    ToolUseConfig::None { .. } | ToolUseConfig::Any { .. } => {}
+                    ToolUseConfig::NoneOf { tools, .. }
+                    | ToolUseConfig::AnyOf { tools, .. }
+                    | ToolUseConfig::AllOf { tools, .. } => {
+                        if tools.is_empty() {
                             return Err(ErrorDetails::Config {
                                 message: format!(
                                     "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
-                                     `tools` should not be specified when behavior is `{}`",
-                                    config.behavior,
+                                     `tools` must be a non-empty list when behavior is `{config}`",
                                 ),
                             }
                             .into());
-                        }
-                    }
-                    ToolUseBehavior::NoneOf | ToolUseBehavior::AnyOf | ToolUseBehavior::AllOf => {
-                        match &config.tools {
-                            None => {
-                                return Err(ErrorDetails::Config {
-                                    message: format!(
-                                        "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
-                                         `tools` must be a non-empty list when behavior is `{}`",
-                                        config.behavior,
-                                    ),
-                                }
-                                .into());
-                            }
-                            Some(tools) if tools.is_empty() => {
-                                return Err(ErrorDetails::Config {
-                                    message: format!(
-                                        "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
-                                         `tools` must be a non-empty list when behavior is `{}`",
-                                        config.behavior,
-                                    ),
-                                }
-                                .into());
-                            }
-                            Some(_) => {}
                         }
                     }
                 }
