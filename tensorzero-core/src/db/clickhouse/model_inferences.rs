@@ -166,14 +166,26 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
         let query = format!(
             r"
             SELECT
-                formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_start,
+                period_start,
                 model_name,
-                sumMerge(total_input_tokens) as input_tokens,
-                sumMerge(total_output_tokens) as output_tokens,
-                countMerge(count) as count,
-                sumMerge(total_cost) as cost
-            FROM ModelProviderStatistics
-            WHERE {time_filter}
+                SUM(provider_input_tokens) as input_tokens,
+                SUM(provider_output_tokens) as output_tokens,
+                SUM(provider_count) as count,
+                SUM(provider_cost) as cost,
+                SUM(CASE WHEN provider_cost IS NOT NULL THEN provider_count ELSE 0 END) as count_with_cost
+            FROM (
+                SELECT
+                    formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_start,
+                    model_name,
+                    model_provider_name,
+                    sumMerge(total_input_tokens) as provider_input_tokens,
+                    sumMerge(total_output_tokens) as provider_output_tokens,
+                    countMerge(count) as provider_count,
+                    sumMerge(total_cost) as provider_cost
+                FROM ModelProviderStatistics
+                WHERE {time_filter}
+                GROUP BY period_start, model_name, model_provider_name
+            ) sub
             GROUP BY period_start, model_name
             ORDER BY period_start DESC, model_name
             FORMAT JSONEachRow

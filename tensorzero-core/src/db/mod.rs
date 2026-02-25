@@ -126,6 +126,8 @@ pub struct ModelUsageTimePoint {
     #[serde(default, with = "rust_decimal::serde::float_option")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub cost: Option<Decimal>,
+    #[serde(default, deserialize_with = "deserialize_option_u64")]
+    pub count_with_cost: Option<u64>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -310,6 +312,7 @@ mod tests {
             output_tokens: Some(500),
             count: Some(10),
             cost: Decimal::from_f64(0.00123),
+            count_with_cost: Some(10),
         };
 
         let json = serde_json::to_string(&point).unwrap();
@@ -325,6 +328,7 @@ mod tests {
         );
         assert_eq!(deserialized.model_name, "openai::gpt-4o");
         assert_eq!(deserialized.input_tokens, Some(1000));
+        assert_eq!(deserialized.count_with_cost, Some(10));
     }
 
     #[test]
@@ -338,6 +342,7 @@ mod tests {
             output_tokens: Some(1000),
             count: Some(5),
             cost: None,
+            count_with_cost: Some(0),
         };
 
         let json = serde_json::to_string(&point).unwrap();
@@ -362,6 +367,10 @@ mod tests {
         assert_eq!(
             deserialized.cost, None,
             "Missing cost field should default to None"
+        );
+        assert_eq!(
+            deserialized.count_with_cost, None,
+            "Missing count_with_cost field should default to None"
         );
     }
 }

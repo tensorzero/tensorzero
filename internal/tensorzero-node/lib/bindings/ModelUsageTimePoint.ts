@@ -7,4 +7,5 @@ export type ModelUsageTimePoint = {
   output_tokens: bigint | null;
   count: bigint | null;
   cost: number | null;
+  count_with_cost: bigint | null;
 };

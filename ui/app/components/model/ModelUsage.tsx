@@ -171,7 +171,7 @@ export function ModelUsage({
                 {},
               );
 
-              // Compute cost coverage percentage
+              // Compute cost coverage percentage using backend-provided count_with_cost
               let costCoveragePercent: number | null = null;
               if (selectedMetric === "cost") {
                 const filtered = modelUsageData.filter(
@@ -180,11 +180,8 @@ export function ModelUsage({
                 let totalCount = 0;
                 let countWithCost = 0;
                 for (const row of filtered) {
-                  const c = Number(row.count);
-                  totalCount += c;
-                  if (row.cost != null) {
-                    countWithCost += c;
-                  }
+                  totalCount += Number(row.count);
+                  countWithCost += Number(row.count_with_cost ?? 0);
                 }
                 if (totalCount > 0) {
                   costCoveragePercent = Math.round(
@@ -228,7 +225,7 @@ export function ModelUsage({
                         tickLine={false}
                         tickMargin={10}
                         axisLine={true}
-                        width={selectedMetric === "cost" ? 90 : undefined}
+                        width={selectedMetric === "cost" ? 90 : 60}
                         tickFormatter={(value) =>
                           selectedMetric === "cost"
                             ? formatCost(value)

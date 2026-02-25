@@ -336,7 +336,8 @@ fn build_model_usage_timeseries_query(
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
-            SUM(total_cost)::NUMERIC as cost
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('",
@@ -368,7 +369,8 @@ async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimeP
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
-            SUM(total_cost)::NUMERIC as cost
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         GROUP BY model_name
         ORDER BY model_name
@@ -661,6 +663,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for ModelUsageTimePoint {
         let output_tokens: Option<i64> = row.try_get("output_tokens")?;
         let count: Option<i64> = row.try_get("count")?;
         let cost: Option<Decimal> = row.try_get("cost")?;
+        let count_with_cost: Option<i64> = row.try_get("count_with_cost")?;
 
         Ok(ModelUsageTimePoint {
             period_start,
@@ -669,6 +672,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for ModelUsageTimePoint {
             output_tokens: output_tokens.map(|v| v as u64),
             count: count.map(|v| v as u64),
             cost,
+            count_with_cost: count_with_cost.map(|v| v as u64),
         })
     }
 }
@@ -745,7 +749,8 @@ mod tests {
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
-            SUM(total_cost)::NUMERIC as cost
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('hour', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -766,7 +771,8 @@ mod tests {
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
-            SUM(total_cost)::NUMERIC as cost
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('day', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -787,7 +793,8 @@ mod tests {
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
-            SUM(total_cost)::NUMERIC as cost
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('minute', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -808,7 +815,8 @@ mod tests {
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
-            SUM(total_cost)::NUMERIC as cost
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('week', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -829,7 +837,8 @@ mod tests {
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
-            SUM(total_cost)::NUMERIC as cost
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('month', minute)), '1970-01-01'::TIMESTAMPTZ)
