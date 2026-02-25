@@ -88,14 +88,12 @@ type = "llm_judge"
 
 <Accordion title='type: "exact_match"' defaultOpen="true">
 
-###### `cutoff`
+###### `cutoff` (deprecated)
 
 - **Type:** float
 - **Required:** no
 
-Sets a user defined threshold at which the test is passing.
-This can be useful for applications where the evaluations are run as an automated test.
-If the average value of this evaluator is below the cutoff, the evaluations binary will return a nonzero status code.
+Use CLI [`--cutoffs`](/evaluations/inference-evaluations/cli-reference) for evaluation pass/fail thresholds.
 
 </Accordion>
 
@@ -181,24 +179,12 @@ optimize = "max"
 # ...
 ```
 
-###### `cutoff`
+###### `cutoff` (deprecated)
 
 - **Type:** float
 - **Required:** no
 
-Sets a user defined threshold at which the test is passing.
-This may be useful for applications where the evaluations are run as an automated test.
-If the average value of this evaluator is below the cutoff (when `optimize` is `max`) or above the cutoff (when `optimize` is `min`), the evaluations binary will return a nonzero status code.
-
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
-# ...
-type = "llm_judge"
-optimize = "max" # Example: Maximize score
-cutoff = 0.8 # Example: Consider passing if average score is >= 0.8
-# ...
-```
+Use CLI [`--cutoffs`](/evaluations/inference-evaluations/cli-referenc) for evaluation pass/fail thresholds.
 
 ###### `description`
 

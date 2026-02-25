@@ -84,6 +84,22 @@ Each evaluator's precision threshold should be a positive number.
 
 If adaptive stopping is enabled for all evaluators, then the evaluation will stop once all evaluators have met their targets or all datapoints have been evaluated.
 
+#### `--cutoffs EVALUATOR=CUTOFF[,...]`
+
+- **Example:** `--cutoffs exact_match=0.95,llm_judge=0.8`
+- **Required:** no (default: none)
+
+Sets a per-evaluator threshold at which the test is passing.
+
+This can be useful for applications where the evaluations are run as an automated test.
+If the average value of this evaluator does not meet the cutoff, the evaluations binary will return a nonzero status code.
+
+- For evaluators with `optimize = "max"`, runs fail when `mean < cutoff`.
+- For evaluators with `optimize = "min"`, runs fail when `mean > cutoff`.
+
+The `cutoff` field in evaluator config is deprecated. Prefer using this CLI `--cutoffs` flag instead.
+If both evaluator-config `cutoff` and CLI `--cutoffs` are provided for the same evaluator, the CLI value is used.
+
 #### `--config-file PATH`
 
 - **Example:** `--config-file /path/to/tensorzero.toml`
@@ -188,12 +204,12 @@ The variant name should be present in your TensorZero configuration file.
 
 The evaluations process exits with a status code of `0` if the evaluation was successful, and a status code of `1` if the evaluation failed.
 
-If you configure a `cutoff` for any of your evaluators, the evaluation will fail if the average score for any evaluator is below its cutoff.
+If you pass `--cutoffs`, the evaluation will fail if any evaluator violates its cutoff threshold.
 
 <Tip>
 
 The exit status code is helpful for integrating TensorZero Evaluations into your CI/CD pipeline.
 
-You can define sanity checks for your variants with `cutoff` to detect performance regressions early before shipping to production.
+You can define sanity checks for your variants with `--cutoffs` to detect performance regressions early before shipping to production.
 
 </Tip>
