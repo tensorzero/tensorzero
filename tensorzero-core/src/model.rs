@@ -26,7 +26,9 @@ use crate::config::with_skip_credential_validation;
 use crate::config::{
     Namespace, OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
-use crate::cost::{CostConfig, ResponseMode, compute_cost, load_cost_config};
+use crate::cost::{
+    CostConfig, ResponseMode, compute_cost, load_batch_cost_config, load_cost_config,
+};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
@@ -36,7 +38,7 @@ use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
-use tensorzero_types::UninitializedCostConfig;
+use tensorzero_types::{UninitializedBatchCostConfig, UninitializedCostConfig};
 
 use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
@@ -149,6 +151,17 @@ impl UninitializedModelConfig {
                             message: format!("models.{model_name}.providers.{name}.cost: {e}"),
                         })
                     })?;
+                let batch_cost = provider
+                    .batch_cost
+                    .map(load_batch_cost_config)
+                    .transpose()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "models.{model_name}.providers.{name}.batch_cost: {e}"
+                            ),
+                        })
+                    })?;
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
@@ -163,6 +176,7 @@ impl UninitializedModelConfig {
                         timeouts: provider.timeouts,
                         discard_unknown_chunks: provider.discard_unknown_chunks,
                         cost,
+                        batch_cost,
                     },
                 ))
             }
@@ -994,6 +1008,9 @@ pub struct UninitializedModelProvider {
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub cost: Option<UninitializedCostConfig>,
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub batch_cost: Option<UninitializedBatchCostConfig>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -1012,9 +1029,18 @@ pub struct ModelProvider {
     #[serde(skip)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub cost: Option<CostConfig>,
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub batch_cost: Option<CostConfig>,
 }
 
 impl ModelProvider {
+    /// Returns the effective cost config for batch inferences.
+    /// Uses `batch_cost` if configured, otherwise falls back to `cost`.
+    pub fn effective_batch_cost_config(&self) -> Option<&CostConfig> {
+        self.batch_cost.as_ref().or(self.cost.as_ref())
+    }
+
     fn validate(&self, global_outbound_http_timeout: &chrono::Duration) -> Result<(), Error> {
         self.timeouts.validate(global_outbound_http_timeout)?;
         Ok(())
@@ -2879,6 +2905,7 @@ impl ShorthandModelConfig for ModelConfig {
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
                     cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -2994,6 +3021,7 @@ mod tests {
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
                     cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3083,6 +3111,7 @@ mod tests {
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
                     cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3127,6 +3156,7 @@ mod tests {
             timeouts: Default::default(),
             discard_unknown_chunks: false,
             cost: None,
+            batch_cost: None,
         };
 
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
@@ -3301,6 +3331,7 @@ mod tests {
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
                         cost: None,
+                        batch_cost: None,
                     },
                 ),
                 (
@@ -3313,6 +3344,7 @@ mod tests {
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
                         cost: None,
+                        batch_cost: None,
                     },
                 ),
             ]),
@@ -3392,6 +3424,7 @@ mod tests {
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
                     cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3484,6 +3517,7 @@ mod tests {
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
                     cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3566,6 +3600,7 @@ mod tests {
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
                         cost: None,
+                        batch_cost: None,
                     },
                 ),
                 (
@@ -3578,6 +3613,7 @@ mod tests {
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
                         cost: None,
+                        batch_cost: None,
                     },
                 ),
             ]),
@@ -3679,6 +3715,7 @@ mod tests {
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
                     cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3817,6 +3854,7 @@ mod tests {
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
                     cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -3976,6 +4014,7 @@ mod tests {
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
                     cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -4296,5 +4335,115 @@ mod tests {
         );
 
         // Note: OpenAI support depends on api_type, tested separately in openai module
+    }
+
+    #[test]
+    fn test_effective_batch_cost_config_returns_batch_cost_when_present() {
+        use crate::cost::{CostConfig, CostConfigEntry, CostRate, NormalizedCostPointerConfig};
+        use rust_decimal::Decimal;
+
+        let cost_config: CostConfig = vec![CostConfigEntry {
+            pointer: NormalizedCostPointerConfig::Unified {
+                pointer: "/usage/input_tokens".to_string(),
+            },
+            rate: CostRate {
+                cost_per_unit: Decimal::from(3) / Decimal::from(1_000_000),
+            },
+            required: false,
+        }];
+
+        let batch_cost_config: CostConfig = vec![CostConfigEntry {
+            pointer: NormalizedCostPointerConfig::Unified {
+                pointer: "/usage/input_tokens".to_string(),
+            },
+            rate: CostRate {
+                cost_per_unit: Decimal::from(1) / Decimal::from(1_000_000),
+            },
+            required: false,
+        }];
+
+        let provider = ModelProvider {
+            name: "test".into(),
+            config: ProviderConfig::Dummy(DummyProvider {
+                model_name: "test".into(),
+                ..Default::default()
+            }),
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            timeouts: Default::default(),
+            discard_unknown_chunks: false,
+            cost: Some(cost_config),
+            batch_cost: Some(batch_cost_config),
+        };
+
+        let effective = provider
+            .effective_batch_cost_config()
+            .expect("should return batch_cost when present");
+        assert_eq!(
+            effective[0].rate.cost_per_unit,
+            Decimal::from(1) / Decimal::from(1_000_000),
+            "should return batch_cost rate, not regular cost rate"
+        );
+    }
+
+    #[test]
+    fn test_effective_batch_cost_config_falls_back_to_cost() {
+        use crate::cost::{CostConfig, CostConfigEntry, CostRate, NormalizedCostPointerConfig};
+        use rust_decimal::Decimal;
+
+        let cost_config: CostConfig = vec![CostConfigEntry {
+            pointer: NormalizedCostPointerConfig::Unified {
+                pointer: "/usage/input_tokens".to_string(),
+            },
+            rate: CostRate {
+                cost_per_unit: Decimal::from(3) / Decimal::from(1_000_000),
+            },
+            required: false,
+        }];
+
+        let provider = ModelProvider {
+            name: "test".into(),
+            config: ProviderConfig::Dummy(DummyProvider {
+                model_name: "test".into(),
+                ..Default::default()
+            }),
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            timeouts: Default::default(),
+            discard_unknown_chunks: false,
+            cost: Some(cost_config),
+            batch_cost: None,
+        };
+
+        let effective = provider
+            .effective_batch_cost_config()
+            .expect("should fall back to cost when batch_cost is None");
+        assert_eq!(
+            effective[0].rate.cost_per_unit,
+            Decimal::from(3) / Decimal::from(1_000_000),
+            "should return regular cost rate as fallback"
+        );
+    }
+
+    #[test]
+    fn test_effective_batch_cost_config_returns_none_when_both_absent() {
+        let provider = ModelProvider {
+            name: "test".into(),
+            config: ProviderConfig::Dummy(DummyProvider {
+                model_name: "test".into(),
+                ..Default::default()
+            }),
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            timeouts: Default::default(),
+            discard_unknown_chunks: false,
+            cost: None,
+            batch_cost: None,
+        };
+
+        assert!(
+            provider.effective_batch_cost_config().is_none(),
+            "should return None when both cost and batch_cost are absent"
+        );
     }
 }

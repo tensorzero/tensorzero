@@ -22,6 +22,10 @@ use super::inference::{
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
+use crate::cost::{
+    CostConfig, ResponseMode, compute_cost, load_batch_cost_config, load_cost_config,
+};
+use crate::db::ConfigQueries;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::InferenceQueries;
@@ -835,7 +839,7 @@ pub async fn write_batch_request_row(
 /// Note: only call this function if the batch was Pending prior to being polled.
 /// We don't need to poll if the batch is failed or completed because the status will not change.
 pub async fn write_poll_batch_inference(
-    database: &(impl BatchInferenceQueries + InferenceQueries + ModelInferenceQueries + Sync),
+    database: &(impl BatchInferenceQueries + ConfigQueries + InferenceQueries + ModelInferenceQueries),
     batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
     provider_type: Arc<str>,
@@ -927,6 +931,59 @@ async fn write_batch_request_status_update(
     Ok(())
 }
 
+/// Resolve the batch cost config on a best-effort basis.
+///
+/// Prefers the config snapshot that was recorded when the batch was created so that
+/// pricing stays deterministic even if the live config has been reloaded since then.
+/// Falls back to the current live config when the snapshot is unavailable.
+/// Returns `None` (no cost) rather than propagating errors so that cost resolution
+/// never blocks the batch write.
+async fn resolve_batch_cost_config(
+    database: &impl ConfigQueries,
+    batch_request: &BatchRequestRow<'_>,
+    config: &Config,
+) -> Option<CostConfig> {
+    // Try the snapshot first
+    if let Some(snapshot_hash) = &batch_request.snapshot_hash
+        && let Ok(snapshot) = database.get_config_snapshot(snapshot_hash.clone()).await
+    {
+        let result = snapshot
+            .config
+            .models
+            .get(batch_request.model_name.as_ref())
+            .and_then(|model| {
+                model
+                    .providers
+                    .get(batch_request.model_provider_name.as_ref())
+            })
+            .and_then(|provider| {
+                provider
+                    .batch_cost
+                    .clone()
+                    .and_then(|bc| load_batch_cost_config(bc).ok())
+                    .or_else(|| provider.cost.clone().and_then(|c| load_cost_config(c).ok()))
+            });
+        if result.is_some() {
+            return result;
+        }
+    }
+
+    // Fall back to the current live config (best-effort)
+    config
+        .models
+        .get(
+            batch_request.model_name.as_ref(),
+            config.gateway.relay.as_ref(),
+        )
+        .await
+        .ok()
+        .flatten()
+        .as_ref()
+        .and_then(|m| m.providers.get(batch_request.model_provider_name.as_ref()))
+        .and_then(|provider| provider.effective_batch_cost_config())
+        .cloned()
+}
+
 /// This function writes ChatInferences / JsonInferences and ModelInferences to the database
 /// and updates the BatchRequest table with a new row.
 ///
@@ -939,7 +996,7 @@ async fn write_batch_request_status_update(
 /// To avoid these, the types that are calling for clones must be changed to Cows and then the code in the non-batch inference
 /// handler must be adjusted to deal with it and also the lifetimes associated there.
 pub async fn write_completed_batch_inference<'a>(
-    database: &(impl BatchInferenceQueries + InferenceQueries + ModelInferenceQueries + Sync),
+    database: &(impl BatchInferenceQueries + ConfigQueries + InferenceQueries + ModelInferenceQueries),
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
     provider_type: Arc<str>,
@@ -956,6 +1013,11 @@ pub async fn write_completed_batch_inference<'a>(
         .function_name
         .clone();
     let function = config.get_function(function_name)?;
+    // Resolve batch cost config on a best-effort basis.
+    // Prefer the config snapshot used when the batch was created to ensure deterministic
+    // pricing even if the config has been reloaded since the batch started.
+    // Fall back to the current live config if the snapshot is unavailable.
+    let batch_cost_config = resolve_batch_cost_config(database, batch_request, config).await;
     let mut inferences: Vec<InferenceResponse> = Vec::new();
     let mut inference_rows_to_write: Vec<InferenceDatabaseInsert> = Vec::new();
     let mut model_inference_rows_to_write: Vec<StoredModelInference> = Vec::new();
@@ -982,7 +1044,7 @@ pub async fn write_completed_batch_inference<'a>(
             id: _,
             output,
             raw_response,
-            usage,
+            mut usage,
             finish_reason,
         } = match response.elements.remove(&inference_id) {
             Some(inference_response) => inference_response,
@@ -993,6 +1055,9 @@ pub async fn write_completed_batch_inference<'a>(
                 continue;
             }
         };
+        if let Some(ref cost_config) = batch_cost_config {
+            usage.cost = compute_cost(&raw_response, cost_config, ResponseMode::NonStreaming).ok();
+        }
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             output: output.clone(),
@@ -1203,7 +1268,7 @@ fn convert_row_to_inference_response(
     let usage = Usage {
         input_tokens: row.input_tokens,
         output_tokens: row.output_tokens,
-        cost: None,
+        cost: row.cost,
     };
 
     match function {

@@ -71,11 +71,11 @@ impl BestOfNSamplingConfig {
 
     /// Converts this initialized config back to its uninitialized form.
     #[expect(deprecated)]
-    pub fn as_uninitialized(self) -> UninitializedBestOfNSamplingConfig {
+    pub fn as_uninitialized(&self) -> UninitializedBestOfNSamplingConfig {
         UninitializedBestOfNSamplingConfig {
             weight: self.weight,
             timeout_s: None,
-            candidates: self.candidates,
+            candidates: self.candidates.clone(),
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: self.evaluator.inner.as_uninitialized(),
             },
@@ -1435,6 +1435,7 @@ mod tests {
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
                             cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1559,6 +1560,7 @@ mod tests {
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
                             cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1637,6 +1639,7 @@ mod tests {
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
                             cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1735,6 +1738,7 @@ mod tests {
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
                         cost: None,
+                        batch_cost: None,
                     },
                 )]),
                 timeouts: Default::default(),

@@ -291,13 +291,30 @@ async fn run() -> Result<(), ExitCode> {
         .await
         .log_err_pretty("Failed to collect autopilot tool names")?;
 
+    // Resolve tool whitelist from config
+    let tool_whitelist: std::collections::HashSet<String> =
+        match &unwritten_config.autopilot.tool_whitelist {
+            Some(list) => list.iter().cloned().collect(),
+            None => autopilot_tools::default_whitelisted_tool_names(),
+        };
+
     // Initialize GatewayHandle
-    let gateway_handle = gateway::GatewayHandle::new(unwritten_config, available_tools)
-        .await
-        .log_err_pretty("Failed to initialize AppState")?;
+    let gateway_handle =
+        gateway::GatewayHandle::new(unwritten_config, available_tools, tool_whitelist)
+            .await
+            .log_err_pretty("Failed to initialize AppState")?;
 
     // Start autopilot worker if configured
     let autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle).await?;
+
+    // Start tool whitelist approver if configured
+    if let Some(client) = gateway_handle.app_state.autopilot_client.clone() {
+        let token = gateway_handle.app_state.shutdown_token.clone();
+        gateway_handle
+            .app_state
+            .deferred_tasks
+            .spawn(async move { client.run_tool_whitelist_approver(token).await });
+    }
 
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
@@ -423,6 +440,18 @@ async fn run() -> Result<(), ExitCode> {
         tracing::info!("├ Autopilot Worker: enabled");
     } else {
         tracing::info!("├ Autopilot Worker: disabled");
+    }
+
+    // Print whether Autopilot Tool Whitelist Approver is enabled
+    if let Some(client) = gateway_handle.app_state.autopilot_client.as_ref() {
+        let count = client.tool_whitelist.len();
+        if count > 0 {
+            tracing::info!("├ Autopilot Tool Whitelist Approver: enabled ({count} tools)");
+        } else {
+            tracing::info!("├ Autopilot Tool Whitelist Approver: disabled (empty whitelist)");
+        }
+    } else {
+        tracing::info!("├ Autopilot Tool Whitelist Approver: disabled");
     }
 
     // Print whether OpenTelemetry is enabled

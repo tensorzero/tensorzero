@@ -155,7 +155,8 @@ impl BatchInferenceQueries for ClickHouseConnectionInfo {
                         ci.output as output,
                         toUInt32(SUM(mi.input_tokens)) as input_tokens,
                         toUInt32(SUM(mi.output_tokens)) as output_tokens,
-                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
+                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason,
+                        sumOrNull(mi.cost) as cost
                     FROM ChatInference ci
                     LEFT JOIN ModelInference mi ON ci.id = mi.inference_id
                     WHERE ci.id IN (SELECT inference_id FROM batch_inferences)
@@ -188,7 +189,8 @@ impl BatchInferenceQueries for ClickHouseConnectionInfo {
                         ci.output as output,
                         toUInt32(SUM(mi.input_tokens)) as input_tokens,
                         toUInt32(SUM(mi.output_tokens)) as output_tokens,
-                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
+                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason,
+                        sumOrNull(mi.cost) as cost
                     FROM ChatInference ci
                     LEFT JOIN ModelInference mi ON ci.id = mi.inference_id
                     JOIN inf_lookup ON ci.episode_id = inf_lookup.episode_id
@@ -253,7 +255,8 @@ impl BatchInferenceQueries for ClickHouseConnectionInfo {
                         ji.output as output,
                         toUInt32(SUM(mi.input_tokens)) as input_tokens,
                         toUInt32(SUM(mi.output_tokens)) as output_tokens,
-                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
+                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason,
+                        sumOrNull(mi.cost) as cost
                     FROM JsonInference ji
                     LEFT JOIN ModelInference mi ON ji.id = mi.inference_id
                     WHERE ji.id IN (SELECT inference_id FROM batch_inferences)
@@ -286,7 +289,8 @@ impl BatchInferenceQueries for ClickHouseConnectionInfo {
                         ji.output as output,
                         toUInt32(SUM(mi.input_tokens)) as input_tokens,
                         toUInt32(SUM(mi.output_tokens)) as output_tokens,
-                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
+                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason,
+                        sumOrNull(mi.cost) as cost
                     FROM JsonInference ji
                     LEFT JOIN ModelInference mi ON ji.id = mi.inference_id
                     JOIN inf_lookup ON ji.episode_id = inf_lookup.episode_id
@@ -591,7 +595,7 @@ mod tests {
             .returning(move |_, _| {
                 Ok(ClickHouseResponse {
                     response: format!(
-                        r#"{{"inference_id":"{inference_id}","episode_id":"{episode_id}","variant_name":"test_variant","output":"[]","input_tokens":100,"output_tokens":50,"finish_reason":"stop"}}"#
+                        r#"{{"inference_id":"{inference_id}","episode_id":"{episode_id}","variant_name":"test_variant","output":"[]","input_tokens":100,"output_tokens":50,"finish_reason":"stop","cost":0.0015}}"#
                     ),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
@@ -647,7 +651,7 @@ mod tests {
             .returning(move |_, _| {
                 Ok(ClickHouseResponse {
                     response: format!(
-                        r#"{{"inference_id":"{inference_id}","episode_id":"{episode_id}","variant_name":"chat_var","output":"[]","input_tokens":200,"output_tokens":100,"finish_reason":null}}"#
+                        r#"{{"inference_id":"{inference_id}","episode_id":"{episode_id}","variant_name":"chat_var","output":"[]","input_tokens":200,"output_tokens":100,"finish_reason":null,"cost":null}}"#
                     ),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
@@ -707,7 +711,7 @@ mod tests {
             .returning(move |_, _| {
                 Ok(ClickHouseResponse {
                     response: format!(
-                        r#"{{"inference_id":"{inference_id}","episode_id":"{episode_id}","variant_name":"json_variant","output":"{{}}","input_tokens":150,"output_tokens":75,"finish_reason":"stop"}}"#
+                        r#"{{"inference_id":"{inference_id}","episode_id":"{episode_id}","variant_name":"json_variant","output":"{{}}","input_tokens":150,"output_tokens":75,"finish_reason":"stop","cost":null}}"#
                     ),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
@@ -751,7 +755,7 @@ mod tests {
             .returning(move |_, _| {
                 Ok(ClickHouseResponse {
                     response: format!(
-                        r#"{{"inference_id":"{inference_id}","episode_id":"{episode_id}","variant_name":"v1","output":"{{}}","input_tokens":null,"output_tokens":null,"finish_reason":null}}"#
+                        r#"{{"inference_id":"{inference_id}","episode_id":"{episode_id}","variant_name":"v1","output":"{{}}","input_tokens":null,"output_tokens":null,"finish_reason":null,"cost":null}}"#
                     ),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,

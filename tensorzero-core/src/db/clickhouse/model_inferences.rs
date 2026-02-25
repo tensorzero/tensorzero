@@ -170,7 +170,8 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
                 model_name,
                 sumMerge(total_input_tokens) as input_tokens,
                 sumMerge(total_output_tokens) as output_tokens,
-                countMerge(count) as count
+                countMerge(count) as count,
+                sumMerge(total_cost) as cost
             FROM ModelProviderStatistics
             WHERE {time_filter}
             GROUP BY period_start, model_name

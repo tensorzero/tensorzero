@@ -44,7 +44,7 @@ pub fn nano_cost_to_cost(nano_cost: u64) -> f64 {
 /// Returns 0 if the conversion fails or the value is negative.
 pub fn decimal_cost_to_nano_cost(cost: Decimal) -> u64 {
     let nano_cost = cost * Decimal::from(NANO_DOLLARS_PER_DOLLAR);
-    nano_cost.to_u64().unwrap_or(0)
+    nano_cost.ceil().to_u64().unwrap_or(0)
 }
 
 /*

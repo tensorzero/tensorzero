@@ -224,6 +224,7 @@ impl GatewayHandle {
     pub async fn new(
         config: UnwrittenConfig,
         available_tools: HashSet<String>,
+        tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
@@ -236,6 +237,7 @@ impl GatewayHandle {
             valkey_url,
             valkey_cache_url,
             available_tools,
+            tool_whitelist,
         ))
         .await
     }
@@ -247,6 +249,7 @@ impl GatewayHandle {
         valkey_url: Option<String>,
         valkey_cache_url: Option<String>,
         available_tools: HashSet<String>,
+        tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
@@ -268,6 +271,7 @@ impl GatewayHandle {
             http_client,
             None,
             available_tools,
+            tool_whitelist,
         )
         .await
     }
@@ -330,6 +334,7 @@ impl GatewayHandle {
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
+        tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
         // Validate that when observability is enabled, the correct connection info is set up.
         if config.gateway.observability.enabled == Some(true) {
@@ -408,10 +413,28 @@ impl GatewayHandle {
                 .build(),
         );
 
+        // Validate that all whitelisted tool names exist in available_tools
+        let unknown_whitelist_tools: Vec<&str> = tool_whitelist
+            .iter()
+            .filter(|name| !available_tools.contains(name.as_str()))
+            .map(|s| s.as_str())
+            .collect();
+        if !unknown_whitelist_tools.is_empty() {
+            return Err(ErrorDetails::AppState {
+                message: format!(
+                    "Unknown tool names in `autopilot.tool_whitelist`: {unknown_whitelist_tools:?}. \
+                     These tools do not exist and will never be auto-approved. \
+                     Check for typos in your configuration."
+                ),
+            }
+            .into());
+        }
+
         let autopilot_client = setup_autopilot_client(
             &postgres_connection_info,
             deployment_id.as_ref(),
             available_tools,
+            tool_whitelist,
         )
         .await?;
 
@@ -589,7 +612,7 @@ pub async fn setup_clickhouse(
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
-            disable_automatic_migrations: config.gateway.observability.disable_automatic_migrations,
+            disable_automatic_migrations: config.clickhouse.disable_automatic_migrations,
         })
         .await?;
     }
@@ -734,6 +757,7 @@ async fn setup_autopilot_client(
     postgres_connection_info: &PostgresConnectionInfo,
     deployment_id: Option<&String>,
     available_tools: HashSet<String>,
+    tool_whitelist: HashSet<String>,
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
@@ -759,7 +783,10 @@ async fn setup_autopilot_client(
                 .api_key(api_key)
                 .spawn_pool(pool.clone())
                 .spawn_queue_name(queue_name)
-                .available_tools(available_tools);
+                .available_tools(available_tools)
+                .tool_whitelist(tool_whitelist)
+                .deployment_id(deployment_id.cloned().unwrap_or_default())
+                .tensorzero_version(crate::endpoints::status::TENSORZERO_VERSION.to_string());
 
             // Allow custom base URL for testing
             if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
@@ -899,6 +926,7 @@ pub async fn start_openai_compatible_gateway(
         valkey_url,
         None, // Embedded gateways use the same Valkey instance for rate limiting and caching
         HashSet::new(), // available_tools
+        HashSet::new(), // tool_whitelist
     ))
     .await?;
 
@@ -957,7 +985,7 @@ mod tests {
                 enabled: Some(false),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -996,7 +1024,7 @@ mod tests {
                 enabled: None,
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             fetch_and_encode_input_files_before_inference: false,
             unstable_error_json: false,
@@ -1031,7 +1059,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -1070,7 +1098,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -1108,7 +1136,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -1261,6 +1289,7 @@ mod tests {
             http_client,
             None,
             HashSet::new(),
+            HashSet::new(),
         )
         .await;
         let err = result
@@ -1296,6 +1325,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
+            HashSet::new(),
             HashSet::new(),
         )
         .await;
@@ -1335,6 +1365,7 @@ mod tests {
             http_client,
             None,
             HashSet::new(),
+            HashSet::new(),
         )
         .await
         .expect("Gateway should start when observability is disabled");
@@ -1363,6 +1394,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
+            HashSet::new(),
             HashSet::new(),
         )
         .await
@@ -1395,6 +1427,7 @@ mod tests {
             http_client,
             None,
             HashSet::new(), // available_tools
+            HashSet::new(), // tool_whitelist
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");
