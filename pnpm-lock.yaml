@@ -144,9 +144,9 @@ importers:
       eslint:
         specifier: ^9.37.0
         version: 9.37.0(jiti@2.6.1)
-      prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
+      oxfmt:
+        specifier: ^0.35.0
+        version: 0.35.0
       typescript-eslint:
         specifier: ^8.46.0
         version: 8.46.0(eslint@9.37.0(jiti@2.6.1))(typescript@5.9.2)
