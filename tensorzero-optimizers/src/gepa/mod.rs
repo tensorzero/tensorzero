@@ -6,8 +6,9 @@ use rand::{SeedableRng, rngs::StdRng, seq::IteratorRandom};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use uuid::Uuid;
 
+use evaluations::{ClientInferenceExecutor, EvaluationsInferenceExecutor};
 use tensorzero_core::{
-    client::{Client, ClientBuilder, ClientBuilderMode},
+    client::{ClientBuilder, ClientBuilderMode},
     config::{Config, UninitializedVariantConfig, provider_types::ProviderTypesConfig},
     db::{
         clickhouse::ClickHouseConnectionInfo, delegating_connection::DelegatingDatabaseQueries,
@@ -204,12 +205,12 @@ impl JobHandle for GEPAJobHandle {
     }
 }
 
-/// Build a gateway `Client` from an HTTP client and config, suitable for GEPA inference calls.
+/// Build an inference executor from an HTTP client and config, suitable for GEPA inference calls.
 pub async fn build_inference_executor(
     http_client: &TensorzeroHttpClient,
     config: &Arc<Config>,
     timeout_secs: u64,
-) -> Result<Client, Error> {
+) -> Result<Arc<dyn EvaluationsInferenceExecutor>, Error> {
     let gateway_clickhouse = match std::env::var("TENSORZERO_CLICKHOUSE_URL") {
         Ok(url) => {
             ClickHouseConnectionInfo::new(&url, config.gateway.observability.batch_writes.clone())
@@ -217,7 +218,7 @@ pub async fn build_inference_executor(
         }
         Err(_) => ClickHouseConnectionInfo::new_disabled(),
     };
-    ClientBuilder::new(ClientBuilderMode::FromComponents {
+    let client = ClientBuilder::new(ClientBuilderMode::FromComponents {
         config: config.clone(),
         clickhouse_connection_info: gateway_clickhouse,
         postgres_connection_info: PostgresConnectionInfo::Disabled,
@@ -232,15 +233,18 @@ pub async fn build_inference_executor(
         Error::new(ErrorDetails::InternalError {
             message: format!("Failed to build gateway client for GEPA optimization: {e}"),
         })
-    })
+    })?;
+    Ok(Arc::new(ClientInferenceExecutor::new(client)))
 }
 
 /// Convenience function that runs the full GEPA optimization pipeline.
 ///
 /// Calls `run_gepa_setup`, then `run_gepa_iteration` in a loop, then `run_gepa_cleanup`.
 /// Used by tests and the GepaTool for durable execution.
+#[expect(clippy::too_many_arguments)]
 pub async fn run_gepa(
-    gateway_client: &Client,
+    variant_executor: Arc<dyn EvaluationsInferenceExecutor>,
+    judge_executor: Arc<dyn EvaluationsInferenceExecutor>,
     gepa_config: &GEPAConfig,
     train_examples: Vec<RenderedSample>,
     val_examples: Vec<RenderedSample>,
@@ -249,7 +253,7 @@ pub async fn run_gepa(
     http_client: &TensorzeroHttpClient,
 ) -> Result<GepaToolOutput, Error> {
     let setup_result = run_gepa_setup(
-        gateway_client,
+        variant_executor.clone(),
         gepa_config,
         train_examples,
         val_examples,
@@ -271,7 +275,8 @@ pub async fn run_gepa(
 
     for iteration in 0..(max_iterations as usize) {
         let iteration_result = run_gepa_iteration(
-            gateway_client,
+            variant_executor.clone(),
+            judge_executor.clone(),
             GepaIterationParams {
                 checkpoint,
                 train_examples: train_examples.clone(),
@@ -306,7 +311,7 @@ pub async fn run_gepa(
 /// GEPA setup step: validate config, create validation dataset, evaluate initial variants,
 /// and build the initial Pareto frontier.
 pub async fn run_gepa_setup(
-    gateway_client: &Client,
+    variant_executor: Arc<dyn EvaluationsInferenceExecutor>,
     gepa_config: &GEPAConfig,
     train_examples: Vec<RenderedSample>,
     val_examples: Vec<RenderedSample>,
@@ -374,7 +379,7 @@ pub async fn run_gepa_setup(
     let evaluation_futures: Vec<_> = original_variants
         .iter()
         .map(|(variant_name, variant_config)| {
-            let gateway_client = gateway_client.clone();
+            let variant_executor = variant_executor.clone();
             let db = Arc::clone(db);
             let functions = config.functions.clone();
             let evaluation_config_param = Arc::clone(&function_context.evaluation_config);
@@ -385,7 +390,7 @@ pub async fn run_gepa_setup(
 
             async move {
                 match evaluate_variant(EvaluateVariantParams {
-                    gateway_client,
+                    inference_executor: variant_executor,
                     db,
                     functions,
                     evaluation_config: evaluation_config_param,
@@ -483,7 +488,8 @@ pub async fn run_gepa_setup(
 
 /// Run a single GEPA iteration: sample → analyze → mutate → evaluate → update frontier.
 pub async fn run_gepa_iteration(
-    gateway_client: &Client,
+    variant_executor: Arc<dyn EvaluationsInferenceExecutor>,
+    judge_executor: Arc<dyn EvaluationsInferenceExecutor>,
     params: GepaIterationParams,
     db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
     config: &Arc<Config>,
@@ -573,7 +579,7 @@ pub async fn run_gepa_iteration(
     );
 
     let parent_evaluation_results = match evaluate_variant(EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
+        inference_executor: variant_executor.clone(),
         db: Arc::clone(db),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -614,7 +620,7 @@ pub async fn run_gepa_iteration(
     );
 
     let parent_analyses = match analyze_inferences(
-        gateway_client,
+        judge_executor.as_ref(),
         parent_evaluation_results.evaluation_infos(),
         &function_context,
         &parent.config,
@@ -645,7 +651,7 @@ pub async fn run_gepa_iteration(
     );
 
     let child = match mutate_variant(
-        gateway_client,
+        judge_executor.as_ref(),
         &parent_analyses,
         &function_context,
         &parent,
@@ -682,7 +688,7 @@ pub async fn run_gepa_iteration(
     );
 
     let child_evaluation_results = match evaluate_variant(EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
+        inference_executor: variant_executor.clone(),
         db: Arc::clone(db),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -736,7 +742,7 @@ pub async fn run_gepa_iteration(
         );
 
         match evaluate_variant(EvaluateVariantParams {
-            gateway_client: gateway_client.clone(),
+            inference_executor: variant_executor.clone(),
             db: Arc::clone(db),
             functions: config.functions.clone(),
             evaluation_config: Arc::clone(&function_context.evaluation_config),

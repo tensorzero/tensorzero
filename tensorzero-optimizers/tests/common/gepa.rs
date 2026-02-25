@@ -69,11 +69,12 @@ pub async fn test_gepa_optimization_chat() {
 
     // Run GEPA optimization directly
     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
-    let gateway_client = build_inference_executor(&client, &config, gepa_config.timeout)
+    let executor = build_inference_executor(&client, &config, gepa_config.timeout)
         .await
         .unwrap();
     let result = run_gepa(
-        &gateway_client,
+        executor.clone(),
+        executor,
         &gepa_config,
         train_examples,
         val_examples,
@@ -168,11 +169,12 @@ pub async fn test_gepa_optimization_json() {
 
     // Run GEPA optimization directly
     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
-    let gateway_client = build_inference_executor(&client, &config, gepa_config.timeout)
+    let executor = build_inference_executor(&client, &config, gepa_config.timeout)
         .await
         .unwrap();
     let result = run_gepa(
-        &gateway_client,
+        executor.clone(),
+        executor,
         &gepa_config,
         train_examples,
         val_examples,

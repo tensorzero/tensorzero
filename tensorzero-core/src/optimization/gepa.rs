@@ -254,7 +254,7 @@ impl UninitializedGEPAConfig {
 }
 
 impl GEPAConfig {
-    /// Convert back to UninitializedGEPAConfig for serialization (e.g., durable task params)
+    /// Convert back to `UninitializedGEPAConfig` for serialization (e.g., durable task params)
     pub fn as_uninitialized(&self) -> UninitializedGEPAConfig {
         UninitializedGEPAConfig {
             function_name: self.function_name.clone(),
@@ -299,7 +299,7 @@ impl UninitializedGEPAConfig {
 /// Job handle for GEPA optimization
 ///
 /// Contains the task ID of the durable GEPA optimization task.
-/// Poll the task via SpawnClient to get the result.
+/// Poll the task via `SpawnClient` to get the result.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

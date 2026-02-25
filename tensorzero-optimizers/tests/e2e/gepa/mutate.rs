@@ -55,7 +55,7 @@ async fn test_mutate_variant_chat() {
 
     // Evaluate parent
     let evaluation_params = EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
+        inference_executor: gateway_client.clone(),
         db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -72,7 +72,7 @@ async fn test_mutate_variant_chat() {
 
     // Analyze parent results
     let analyses = analyze_inferences(
-        &gateway_client,
+        gateway_client.as_ref(),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -103,7 +103,7 @@ async fn test_mutate_variant_chat() {
 
     // Mutate variant
     let mutate_result = mutate_variant(
-        &gateway_client,
+        gateway_client.as_ref(),
         &analyses,
         &function_context,
         &parent,
@@ -190,7 +190,7 @@ async fn test_mutate_variant_json() {
 
     // Evaluate parent
     let evaluation_params = EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
+        inference_executor: gateway_client.clone(),
         db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -207,7 +207,7 @@ async fn test_mutate_variant_json() {
 
     // Analyze parent results
     let analyses = analyze_inferences(
-        &gateway_client,
+        gateway_client.as_ref(),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -224,7 +224,7 @@ async fn test_mutate_variant_json() {
 
     // Mutate variant
     let mutate_result = mutate_variant(
-        &gateway_client,
+        gateway_client.as_ref(),
         &analyses,
         &function_context,
         &parent,
@@ -299,7 +299,7 @@ async fn test_mutate_variant_preserves_variables() {
 
     // Evaluate and analyze
     let evaluation_params = EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
+        inference_executor: gateway_client.clone(),
         db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -315,7 +315,7 @@ async fn test_mutate_variant_preserves_variables() {
         .expect("Failed to evaluate parent");
 
     let analyses = analyze_inferences(
-        &gateway_client,
+        gateway_client.as_ref(),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -331,7 +331,7 @@ async fn test_mutate_variant_preserves_variables() {
     };
 
     let child = mutate_variant(
-        &gateway_client,
+        gateway_client.as_ref(),
         &analyses,
         &function_context,
         &parent,
@@ -396,7 +396,7 @@ async fn test_mutate_variant_preserves_schema_references() {
 
     // Evaluate and analyze
     let evaluation_params = EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
+        inference_executor: gateway_client.clone(),
         db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -412,7 +412,7 @@ async fn test_mutate_variant_preserves_schema_references() {
         .expect("Failed to evaluate parent");
 
     let analyses = analyze_inferences(
-        &gateway_client,
+        gateway_client.as_ref(),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -428,7 +428,7 @@ async fn test_mutate_variant_preserves_schema_references() {
     };
 
     let child = mutate_variant(
-        &gateway_client,
+        gateway_client.as_ref(),
         &analyses,
         &function_context,
         &parent,
@@ -511,7 +511,7 @@ async fn test_mutate_variant_naming() {
 
     // Evaluate and analyze
     let evaluation_params = EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
+        inference_executor: gateway_client.clone(),
         db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -527,7 +527,7 @@ async fn test_mutate_variant_naming() {
         .expect("Failed to evaluate parent");
 
     let analyses = analyze_inferences(
-        &gateway_client,
+        gateway_client.as_ref(),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -543,7 +543,7 @@ async fn test_mutate_variant_naming() {
     };
 
     let child = mutate_variant(
-        &gateway_client,
+        gateway_client.as_ref(),
         &analyses,
         &function_context,
         &parent,

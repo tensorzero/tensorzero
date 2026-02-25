@@ -104,7 +104,7 @@ async fn test_pareto_frontier_update_with_initial_variants() {
 
     for (variant_name, variant_config) in &initial_variants {
         let evaluation_params = EvaluateVariantParams {
-            gateway_client: gateway_client.clone(),
+            inference_executor: gateway_client.clone(),
             db: Arc::new(clickhouse.clone()),
             functions: config.functions.clone(),
             evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -222,7 +222,7 @@ async fn test_pareto_frontier_sample_by_frequency() {
 
     for (variant_name, variant_config) in &initial_variants {
         let evaluation_params = EvaluateVariantParams {
-            gateway_client: gateway_client.clone(),
+            inference_executor: gateway_client.clone(),
             db: Arc::new(clickhouse.clone()),
             functions: config.functions.clone(),
             evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -337,7 +337,7 @@ async fn test_pareto_frontier_maintains_valid_state() {
 
     for (variant_name, variant_config) in &initial_variants {
         let evaluation_params = EvaluateVariantParams {
-            gateway_client: gateway_client.clone(),
+            inference_executor: gateway_client.clone(),
             db: Arc::new(clickhouse.clone()),
             functions: config.functions.clone(),
             evaluation_config: Arc::clone(&function_context.evaluation_config),

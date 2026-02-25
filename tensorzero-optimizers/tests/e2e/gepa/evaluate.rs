@@ -54,7 +54,7 @@ async fn test_evaluate_variant_chat() {
 
     // Evaluate variant
     let evaluation_params = EvaluateVariantParams {
-        gateway_client,
+        inference_executor: gateway_client,
         db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -126,7 +126,7 @@ async fn test_evaluate_variant_json() {
 
     // Evaluate variant
     let evaluation_params = EvaluateVariantParams {
-        gateway_client,
+        inference_executor: gateway_client,
         db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -199,7 +199,7 @@ async fn test_evaluate_variant_per_datapoint_scores() {
 
     // Evaluate variant
     let evaluation_params = EvaluateVariantParams {
-        gateway_client,
+        inference_executor: gateway_client,
         db: Arc::new(clickhouse.clone()),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),

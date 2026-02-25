@@ -87,6 +87,9 @@ pub struct ParetoFrontier {
     /// Private to enforce validation through update methods.
     optimize_directions: BTreeMap<EvaluatorName, MetricConfigOptimize>,
 
+    /// Original RNG seed for checkpoint reproducibility (None = random)
+    seed: Option<u64>,
+
     /// RNG for deterministic frequency sampling (seeded in constructor)
     rng: RefCell<StdRng>,
 }
@@ -121,6 +124,7 @@ impl ParetoFrontier {
             objective_vector_cache: HashMap::new(),
             datapoint_ids,
             optimize_directions,
+            seed: rng_seed,
             rng: RefCell::new(rng),
         }
     }
@@ -151,7 +155,7 @@ impl ParetoFrontier {
             variant_frequencies: self.variant_frequencies.clone(),
             datapoint_ids: self.datapoint_ids.clone(),
             optimize_directions: self.optimize_directions.clone(),
-            seed: None,
+            seed: self.seed,
         }
     }
 
@@ -188,6 +192,7 @@ impl ParetoFrontier {
             objective_vector_cache,
             datapoint_ids: checkpoint.datapoint_ids,
             optimize_directions: checkpoint.optimize_directions,
+            seed: checkpoint.seed,
             rng: RefCell::new(rng),
         }
     }

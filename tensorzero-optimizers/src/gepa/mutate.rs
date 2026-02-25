@@ -16,10 +16,9 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::{Map, Value, from_value, json, to_value};
 
+use evaluations::EvaluationsInferenceExecutor;
 use tensorzero_core::{
-    client::{
-        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
-    },
+    client::{ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent},
     config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
     endpoints::inference::InferenceResponse,
     error::{Error, ErrorDetails},
@@ -153,7 +152,7 @@ fn build_mutate_input(
 ///
 /// Returns error if mutation fails (LLM call fails, invalid response format, etc.).
 pub async fn mutate_variant(
-    gateway_client: &Client,
+    inference_executor: &dyn EvaluationsInferenceExecutor,
     analyses: &[Analysis],
     function_context: &FunctionContext,
     parent: &GEPAVariant,
@@ -197,7 +196,7 @@ pub async fn mutate_variant(
     };
 
     // Call the inference API
-    let inference_output = gateway_client.inference(params).await.map_err(|e| {
+    let inference_output = inference_executor.inference(params).await.map_err(|e| {
         Error::new(ErrorDetails::Inference {
             message: format!("Failed to call mutate function: {e}"),
         })

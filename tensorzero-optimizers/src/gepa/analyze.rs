@@ -10,10 +10,9 @@ use serde::Serialize;
 use serde_json::{Map, Value, json, to_value};
 use tokio::sync::Semaphore;
 
+use evaluations::EvaluationsInferenceExecutor;
 use tensorzero_core::{
-    client::{
-        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
-    },
+    client::{ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent},
     config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
     endpoints::{
         datasets::{ChatInferenceDatapoint, Datapoint},
@@ -284,7 +283,7 @@ pub fn build_analyze_input(
 /// Returns error if semaphore acquisition, input building, API call, or response parsing fails.
 async fn analyze_inference(
     semaphore: Arc<Semaphore>,
-    gateway_client: &Client,
+    inference_executor: &dyn EvaluationsInferenceExecutor,
     function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
@@ -326,7 +325,7 @@ async fn analyze_inference(
     };
 
     // Call the inference API
-    let inference_output = gateway_client.inference(params).await.map_err(|e| {
+    let inference_output = inference_executor.inference(params).await.map_err(|e| {
         Error::new(ErrorDetails::Inference {
             message: format!("Failed to call analyze function: {e}"),
         })
@@ -418,7 +417,7 @@ async fn analyze_inference(
 ///
 /// Returns error only if all analyses fail.
 pub async fn analyze_inferences(
-    gateway_client: &Client,
+    inference_executor: &dyn EvaluationsInferenceExecutor,
     evaluation_infos: &[EvaluationInfo],
     function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
@@ -451,7 +450,7 @@ pub async fn analyze_inferences(
 
             analyze_inference(
                 semaphore,
-                gateway_client,
+                inference_executor,
                 function_context,
                 variant_config,
                 gepa_config,

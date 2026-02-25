@@ -5,7 +5,6 @@ use uuid::Uuid;
 
 use tensorzero_core::{
     cache::CacheEnabledMode,
-    client::Client,
     config::{Config, UninitializedVariantConfig, UninitializedVariantInfo},
     db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::datasets::v1::{
@@ -21,9 +20,9 @@ use tensorzero_core::{
 };
 
 use evaluations::{
-    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationFunctionConfig,
-    EvaluationFunctionConfigTable, EvaluationStats, EvaluationVariant, EvaluatorStats,
-    OutputFormat, stats::EvaluationInfo,
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationStats,
+    EvaluationVariant, EvaluationsInferenceExecutor, EvaluatorStats, OutputFormat,
+    stats::EvaluationInfo,
 };
 
 // Type aliases for score map signatures used for pareto filtering
@@ -141,7 +140,7 @@ impl EvaluationResults {
 
 /// Parameters for evaluating a single variant
 pub struct EvaluateVariantParams {
-    pub gateway_client: Client,
+    pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
     pub db: Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
     pub functions: HashMap<String, Arc<FunctionConfig>>,
     pub evaluation_config: Arc<EvaluationConfig>,
@@ -181,12 +180,9 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         .collect();
     let function_configs = Arc::new(function_configs);
 
-    // Wrap the gateway client in ClientInferenceExecutor for use with evaluations
-    let inference_executor = Arc::new(ClientInferenceExecutor::new(params.gateway_client));
-
     // Create EvaluationCoreArgs
     let core_args = EvaluationCoreArgs {
-        inference_executor,
+        inference_executor: params.inference_executor,
         db: params.db,
         evaluation_config: params.evaluation_config.clone(),
         function_configs,
