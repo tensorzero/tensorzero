@@ -905,7 +905,9 @@ impl AutopilotClient {
         impl Stream<Item = Result<GatewayStreamUpdate, AutopilotError>> + use<>,
         AutopilotError,
     > {
-        let url = self.base_url.join("/v1/workspace/tool_calls/stream")?;
+        let mut url = self.base_url.join("/v1/workspace/tool_calls/stream")?;
+        url.query_pairs_mut()
+            .append_pair("deployment_id", &self.deployment_id);
 
         // Wait for connection to be established or fail.
         let event_source = self
