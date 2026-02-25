@@ -460,6 +460,47 @@ routing = ["openai", "azure"]
 # ...
 ```
 
+### `batch_cost`
+
+- **Type:** array of objects
+- **Required:** no
+
+Configures how to extract cost information from batch inference provider responses.
+This is used for cost tracking of [batch inferences](/gateway/batch-inference).
+
+Many providers offer discounted pricing for batch inferences compared to real-time inferences.
+Use `batch_cost` to configure the batch-specific rates.
+If `batch_cost` is not configured, the gateway falls back to the regular `cost` configuration.
+
+Since batch inference responses are always non-streaming, `batch_cost` only supports a single `pointer` (not the `pointer_nonstreaming`/`pointer_streaming` split available in `cost`).
+
+Each entry has the following fields:
+
+- `pointer` (string) — a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) into the provider's batch response.
+- Rate (exactly one of the following):
+  - `cost_per_million` (number) — cost in dollars per million units of the extracted value.
+  - `cost_per_unit` (number) — cost in dollars per unit of the extracted value.
+- `required` (boolean, default: `false`) — if `true` and the field is missing from the response, the cost for the entire request is reported as `null`. If `false`, missing fields contribute $0 to the total.
+
+The total cost is computed as the sum of `extracted_value * rate` across all entries.
+
+```toml title="tensorzero.toml"
+[models.gpt-4o.providers.openai]
+type = "openai"
+model_name = "gpt-4o"
+# Real-time inference pricing
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 2.50, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 10.00, required = true },
+  { pointer = "/usage/prompt_tokens_details/cached_tokens", cost_per_million = -1.25 },
+]
+# Batch inference pricing (50% discount)
+batch_cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 1.25, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 5.00, required = true },
+]
+```
+
 ### `cost`
 
 - **Type:** array of objects
