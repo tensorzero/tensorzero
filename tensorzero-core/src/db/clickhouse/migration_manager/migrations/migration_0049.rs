@@ -1,7 +1,7 @@
-use super::{check_column_exists, check_table_exists};
+use super::check_table_exists;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
 pub struct Migration0049<'a> {
@@ -13,6 +13,20 @@ const MIGRATION_ID: &str = "0049";
 #[async_trait]
 impl Migration for Migration0049<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
+        let tables_to_check = [
+            "TagInference",
+            "FloatMetricFeedback",
+            "BooleanMetricFeedback",
+        ];
+
+        for table_name in tables_to_check {
+            if !check_table_exists(self.clickhouse, table_name, MIGRATION_ID).await? {
+                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                    id: MIGRATION_ID.to_string(),
+                    message: format!("{table_name} table does not exist"),
+                }));
+            }
+        }
         Ok(())
     }
 
@@ -20,42 +34,11 @@ impl Migration for Migration0049<'_> {
         if !check_table_exists(self.clickhouse, "InferenceEvaluationRuns", MIGRATION_ID).await? {
             return Ok(true);
         }
-
-        Ok(!check_column_exists(
-            self.clickhouse,
-            "InferenceEvaluationRuns",
-            "run_id_uint",
-            MIGRATION_ID,
-        )
-        .await?)
+        Ok(false)
     }
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let table_exists =
-            check_table_exists(self.clickhouse, "InferenceEvaluationRuns", MIGRATION_ID).await?;
-        let has_run_id_uint = if table_exists {
-            check_column_exists(
-                self.clickhouse,
-                "InferenceEvaluationRuns",
-                "run_id_uint",
-                MIGRATION_ID,
-            )
-            .await?
-        } else {
-            false
-        };
-
-        // Backward-compatibility for early development iterations where this table
-        // was introduced with `run_id UUID` instead of `run_id_uint UInt128`.
-        if table_exists && !has_run_id_uint {
-            self.clickhouse
-                .run_query_synchronous_no_params(format!(
-                    "DROP TABLE IF EXISTS InferenceEvaluationRuns{on_cluster_name} SYNC"
-                ))
-                .await?;
-        }
-
         self.clickhouse
             .run_query_synchronous_no_params(format!(
                 r"

@@ -104,7 +104,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         .bind(run.run_id)
         .bind(run.evaluation_name.as_str())
         .bind(run.function_name.as_str())
-        .bind(function_type_to_str(run.function_type))
+        .bind(run.function_type.as_str())
         .bind(run.dataset_name.as_str())
         .bind(variant_names_json)
         .bind(metrics_json)
@@ -307,13 +307,6 @@ impl EvaluationQueries for PostgresConnectionInfo {
             }
             None => Ok(None),
         }
-    }
-}
-
-fn function_type_to_str(function_type: FunctionConfigType) -> &'static str {
-    match function_type {
-        FunctionConfigType::Chat => "chat",
-        FunctionConfigType::Json => "json",
     }
 }
 

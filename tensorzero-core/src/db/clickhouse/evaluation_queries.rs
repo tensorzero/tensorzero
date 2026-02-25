@@ -131,7 +131,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
     ) -> Result<(), Error> {
         let query = r"
             INSERT INTO InferenceEvaluationRuns (
-                run_id,
+                run_id_uint,
                 evaluation_name,
                 function_name,
                 function_type,
@@ -143,7 +143,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 created_at,
                 updated_at
             ) VALUES (
-                {run_id:UUID},
+                toUInt128({run_id:UUID}),
                 {evaluation_name:String},
                 {function_name:String},
                 {function_type:String},
@@ -165,7 +165,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
 
         let run_id_str = run.run_id.to_string();
         let variant_names = to_array_literal(&run.variant_names);
-        let function_type = function_type_to_str(run.function_type);
+        let function_type = run.function_type.as_str();
         let source = run.source.to_string();
         let snapshot_hash = run.snapshot_hash.as_ref().map(hex::encode);
 
@@ -680,13 +680,6 @@ fn to_array_literal(values: &[String]) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!("[{escaped}]")
-}
-
-fn function_type_to_str(function_type: FunctionConfigType) -> &'static str {
-    match function_type {
-        FunctionConfigType::Chat => "chat",
-        FunctionConfigType::Json => "json",
-    }
 }
 
 #[cfg(test)]
