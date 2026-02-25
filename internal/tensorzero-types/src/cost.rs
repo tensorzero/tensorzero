@@ -3,10 +3,13 @@ use serde::{Deserialize, Serialize};
 
 pub type UninitializedCostConfig = Vec<UninitializedCostConfigEntry>;
 
+pub type UninitializedUnifiedCostConfig =
+    Vec<UninitializedCostConfigEntry<UnifiedCostPointerConfig>>;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct UninitializedCostConfigEntry {
+pub struct UninitializedCostConfigEntry<P = CostPointerConfig> {
     #[serde(flatten)]
-    pub pointer: CostPointerConfig,
+    pub pointer: P,
     #[serde(flatten)]
     pub rate: UninitializedCostRate,
     #[serde(default)]
@@ -31,13 +34,7 @@ pub struct CostPointerConfig {
     pub pointer_streaming: Option<String>,
 }
 
-pub type UninitializedBatchCostConfig = Vec<UninitializedBatchCostConfigEntry>;
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct UninitializedBatchCostConfigEntry {
+pub struct UnifiedCostPointerConfig {
     pub pointer: String,
-    #[serde(flatten)]
-    pub rate: UninitializedCostRate,
-    #[serde(default)]
-    pub required: bool,
 }

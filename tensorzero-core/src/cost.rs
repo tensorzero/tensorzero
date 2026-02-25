@@ -4,8 +4,8 @@ use serde_json::Value;
 
 use crate::error::{Error, ErrorDetails};
 use tensorzero_types::{
-    CostPointerConfig, UninitializedBatchCostConfig, UninitializedBatchCostConfigEntry,
-    UninitializedCostConfig, UninitializedCostConfigEntry, UninitializedCostRate,
+    CostPointerConfig, UninitializedCostConfig, UninitializedCostConfigEntry,
+    UninitializedCostRate, UninitializedUnifiedCostConfig,
 };
 
 /// Decimal type alias for cost values.
@@ -214,28 +214,15 @@ pub fn load_cost_config(config: UninitializedCostConfig) -> Result<CostConfig, E
     config.into_iter().map(load_cost_config_entry).collect()
 }
 
-/// Load a cost config for embedding models, which do not support streaming.
-/// Rejects split pointers (`pointer_nonstreaming`/`pointer_streaming`) since they are meaningless for embeddings.
-pub fn load_embedding_cost_config(config: UninitializedCostConfig) -> Result<CostConfig, Error> {
+/// Load a cost config that only allows unified (non-split) pointers.
+///
+/// Used for embedding models (which don't support streaming) and batch cost configs.
+pub fn load_unified_cost_config(
+    config: UninitializedUnifiedCostConfig,
+) -> Result<CostConfig, Error> {
     config
         .into_iter()
-        .map(|entry| {
-            if entry.pointer.pointer_nonstreaming.is_some()
-                || entry.pointer.pointer_streaming.is_some()
-            {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "embedding cost entries do not support split pointers (`pointer_nonstreaming`/`pointer_streaming`); use `pointer` instead".to_string(),
-                }));
-            }
-            load_cost_config_entry(entry)
-        })
-        .collect()
-}
-
-pub fn load_batch_cost_config(config: UninitializedBatchCostConfig) -> Result<CostConfig, Error> {
-    config
-        .into_iter()
-        .map(load_batch_cost_config_entry)
+        .map(load_unified_cost_config_entry)
         .collect()
 }
 
@@ -287,14 +274,14 @@ fn load_cost_config_entry(entry: UninitializedCostConfigEntry) -> Result<CostCon
     })
 }
 
-fn load_batch_cost_config_entry(
-    entry: UninitializedBatchCostConfigEntry,
+fn load_unified_cost_config_entry(
+    entry: UninitializedCostConfigEntry<tensorzero_types::UnifiedCostPointerConfig>,
 ) -> Result<CostConfigEntry, Error> {
-    validate_pointer(&entry.pointer)?;
+    validate_pointer(&entry.pointer.pointer)?;
     let rate = parse_rate(entry.rate)?;
     Ok(CostConfigEntry {
         pointer: NormalizedCostPointerConfig::Unified {
-            pointer: entry.pointer,
+            pointer: entry.pointer.pointer,
         },
         rate,
         required: entry.required,
@@ -1089,63 +1076,31 @@ cost_per_million = 3.0
     }
 
     // ========================================================================
-    // load_batch_cost_config tests
+    // load_unified_cost_config tests
     // ========================================================================
 
-    // ========================================================================
-    // load_embedding_cost_config tests
-    // ========================================================================
-
-    #[test]
-    fn test_load_embedding_cost_config_rejects_split_pointers() {
-        let config = vec![UninitializedCostConfigEntry {
-            pointer: split("/usage/total", "/usage/stream_total"),
-            rate: per_million(Decimal::from(1)),
-            required: false,
-        }];
-        let err = load_embedding_cost_config(config)
-            .expect_err("should reject split pointers for embedding cost config");
-        let msg = err.to_string();
-        assert!(
-            msg.contains("split pointers"),
-            "error should mention split pointers: {msg}"
-        );
+    fn unified_entry(
+        pointer: &str,
+        rate: UninitializedCostRate,
+        required: bool,
+    ) -> UninitializedCostConfigEntry<tensorzero_types::UnifiedCostPointerConfig> {
+        UninitializedCostConfigEntry {
+            pointer: tensorzero_types::UnifiedCostPointerConfig {
+                pointer: pointer.to_string(),
+            },
+            rate,
+            required,
+        }
     }
 
     #[test]
-    fn test_load_embedding_cost_config_accepts_unified() {
-        let config = vec![UninitializedCostConfigEntry {
-            pointer: unified("/usage/total_tokens"),
-            rate: per_million(Decimal::from(1)),
-            required: false,
-        }];
-        let result = load_embedding_cost_config(config)
-            .expect("should accept unified pointer for embedding cost config");
-        assert_eq!(result.len(), 1, "should have one entry");
-        assert!(
-            matches!(
-                result[0].pointer,
-                NormalizedCostPointerConfig::Unified { .. }
-            ),
-            "embedding cost entry should have a unified pointer"
-        );
-    }
-
-    #[test]
-    fn test_load_batch_cost_config_valid() {
+    fn test_load_unified_cost_config_valid() {
         let config = vec![
-            UninitializedBatchCostConfigEntry {
-                pointer: "/usage/input_tokens".to_string(),
-                rate: per_million(Decimal::from(1)),
-                required: true,
-            },
-            UninitializedBatchCostConfigEntry {
-                pointer: "/usage/output_tokens".to_string(),
-                rate: per_unit(Decimal::new(5, 6)),
-                required: false,
-            },
+            unified_entry("/usage/input_tokens", per_million(Decimal::from(1)), true),
+            unified_entry("/usage/output_tokens", per_unit(Decimal::new(5, 6)), false),
         ];
-        let result = load_batch_cost_config(config).expect("should load valid batch cost config");
+        let result =
+            load_unified_cost_config(config).expect("should load valid unified cost config");
         assert_eq!(result.len(), 2, "should have two entries");
 
         assert!(
@@ -1153,7 +1108,7 @@ cost_per_million = 3.0
                 result[0].pointer,
                 NormalizedCostPointerConfig::Unified { .. }
             ),
-            "batch cost entries should always be unified pointers"
+            "unified cost entries should always be unified pointers"
         );
         assert!(result[0].required, "first entry should be required");
 
@@ -1165,14 +1120,14 @@ cost_per_million = 3.0
     }
 
     #[test]
-    fn test_load_batch_cost_config_invalid_pointer_rejected() {
-        let config = vec![UninitializedBatchCostConfigEntry {
-            pointer: "no_leading_slash".to_string(),
-            rate: per_million(Decimal::from(1)),
-            required: false,
-        }];
-        let err =
-            load_batch_cost_config(config).expect_err("should fail on invalid batch cost pointer");
+    fn test_load_unified_cost_config_invalid_pointer_rejected() {
+        let config = vec![unified_entry(
+            "no_leading_slash",
+            per_million(Decimal::from(1)),
+            false,
+        )];
+        let err = load_unified_cost_config(config)
+            .expect_err("should fail on invalid unified cost pointer");
         let msg = err.to_string();
         assert!(
             msg.contains("invalid JSON pointer"),
@@ -1181,17 +1136,17 @@ cost_per_million = 3.0
     }
 
     #[test]
-    fn test_load_batch_cost_config_missing_rate_rejected() {
-        let config = vec![UninitializedBatchCostConfigEntry {
-            pointer: "/usage/tokens".to_string(),
-            rate: UninitializedCostRate {
+    fn test_load_unified_cost_config_missing_rate_rejected() {
+        let config = vec![unified_entry(
+            "/usage/tokens",
+            UninitializedCostRate {
                 cost_per_million: None,
                 cost_per_unit: None,
             },
-            required: false,
-        }];
-        let err =
-            load_batch_cost_config(config).expect_err("should fail when neither rate is specified");
+            false,
+        )];
+        let err = load_unified_cost_config(config)
+            .expect_err("should fail when neither rate is specified");
         let msg = err.to_string();
         assert!(
             msg.contains("must specify exactly one of"),
@@ -1200,12 +1155,12 @@ cost_per_million = 3.0
     }
 
     #[derive(Deserialize)]
-    struct UninitializedBatchCostConfigWrapper {
-        batch_cost: UninitializedBatchCostConfig,
+    struct UninitializedUnifiedCostConfigWrapper {
+        batch_cost: UninitializedUnifiedCostConfig,
     }
 
     #[test]
-    fn test_deserialize_batch_cost_config() {
+    fn test_deserialize_unified_cost_config() {
         let toml_str = r#"
 [[batch_cost]]
 pointer = "/usage/input_tokens"
@@ -1217,15 +1172,15 @@ cost_per_million = 6.0
 required = true
 "#;
 
-        let wrapper: UninitializedBatchCostConfigWrapper =
-            toml::from_str(toml_str).expect("should deserialize batch cost config");
+        let wrapper: UninitializedUnifiedCostConfigWrapper =
+            toml::from_str(toml_str).expect("should deserialize unified cost config");
         assert_eq!(
             wrapper.batch_cost.len(),
             2,
-            "should have two batch cost entries"
+            "should have two unified cost entries"
         );
         assert_eq!(
-            wrapper.batch_cost[0].pointer, "/usage/input_tokens",
+            wrapper.batch_cost[0].pointer.pointer, "/usage/input_tokens",
             "first pointer should match"
         );
         assert!(

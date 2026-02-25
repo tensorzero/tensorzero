@@ -7,7 +7,7 @@ use crate::embeddings::{UninitializedEmbeddingModelConfig, UninitializedEmbeddin
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::model::UninitializedProviderConfig;
-use tensorzero_types::UninitializedCostConfig;
+use tensorzero_types::UninitializedUnifiedCostConfig;
 
 /// Stored version of `UninitializedEmbeddingModelConfig`.
 ///
@@ -83,7 +83,7 @@ pub struct StoredEmbeddingProviderConfig {
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
-    pub cost: Option<UninitializedCostConfig>,
+    pub cost: Option<UninitializedUnifiedCostConfig>,
 }
 
 impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfig {

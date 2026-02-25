@@ -21,8 +21,8 @@ pub use content::{
     Arguments, RawText, System, Template, Text, Thought, ThoughtSummaryBlock, Unknown,
 };
 pub use cost::{
-    CostPointerConfig, UninitializedBatchCostConfig, UninitializedBatchCostConfigEntry,
-    UninitializedCostConfig, UninitializedCostConfigEntry, UninitializedCostRate,
+    CostPointerConfig, UnifiedCostPointerConfig, UninitializedCostConfig,
+    UninitializedCostConfigEntry, UninitializedCostRate, UninitializedUnifiedCostConfig,
 };
 pub use error::TypeError;
 pub use file::{

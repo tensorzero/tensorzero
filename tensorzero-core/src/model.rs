@@ -27,7 +27,7 @@ use crate::config::{
     Namespace, OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
 };
 use crate::cost::{
-    CostConfig, ResponseMode, compute_cost, load_batch_cost_config, load_cost_config,
+    CostConfig, ResponseMode, compute_cost, load_cost_config, load_unified_cost_config,
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
@@ -38,7 +38,7 @@ use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
-use tensorzero_types::{UninitializedBatchCostConfig, UninitializedCostConfig};
+use tensorzero_types::{UninitializedCostConfig, UninitializedUnifiedCostConfig};
 
 use crate::inference::WrappedProvider;
 use crate::inference::types::batch::{
@@ -153,7 +153,7 @@ impl UninitializedModelConfig {
                     })?;
                 let batch_cost = provider
                     .batch_cost
-                    .map(load_batch_cost_config)
+                    .map(load_unified_cost_config)
                     .transpose()
                     .map_err(|e| {
                         Error::new(ErrorDetails::Config {
@@ -1010,7 +1010,7 @@ pub struct UninitializedModelProvider {
     pub cost: Option<UninitializedCostConfig>,
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
-    pub batch_cost: Option<UninitializedBatchCostConfig>,
+    pub batch_cost: Option<UninitializedUnifiedCostConfig>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

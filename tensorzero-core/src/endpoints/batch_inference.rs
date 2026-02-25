@@ -23,7 +23,7 @@ use super::inference::{
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::cost::{
-    CostConfig, ResponseMode, compute_cost, load_batch_cost_config, load_cost_config,
+    CostConfig, ResponseMode, compute_cost, load_cost_config, load_unified_cost_config,
 };
 use crate::db::ConfigQueries;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
@@ -960,7 +960,7 @@ async fn resolve_batch_cost_config(
                 provider
                     .batch_cost
                     .clone()
-                    .and_then(|bc| load_batch_cost_config(bc).ok())
+                    .and_then(|bc| load_unified_cost_config(bc).ok())
                     .or_else(|| provider.cost.clone().and_then(|c| load_cost_config(c).ok()))
             });
         if result.is_some() {

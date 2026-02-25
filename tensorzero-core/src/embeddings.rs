@@ -10,7 +10,7 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write,
 };
 use crate::config::provider_types::ProviderTypesConfig;
-use crate::cost::{CostConfig, ResponseMode, compute_cost, load_embedding_cost_config};
+use crate::cost::{CostConfig, ResponseMode, compute_cost, load_unified_cost_config};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
@@ -39,7 +39,7 @@ use crate::{
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
-use tensorzero_types::UninitializedCostConfig;
+use tensorzero_types::UninitializedUnifiedCostConfig;
 use tokio::time::error::Elapsed;
 use tracing::{Span, instrument};
 use tracing_futures::Instrument;
@@ -729,7 +729,7 @@ pub struct UninitializedEmbeddingProviderConfig {
     #[serde(default)]
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(default)]
-    pub cost: Option<UninitializedCostConfig>,
+    pub cost: Option<UninitializedUnifiedCostConfig>,
 }
 
 impl UninitializedEmbeddingProviderConfig {
@@ -751,7 +751,7 @@ impl UninitializedEmbeddingProviderConfig {
         let extra_headers = self.extra_headers;
         let cost = self
             .cost
-            .map(load_embedding_cost_config)
+            .map(load_unified_cost_config)
             .transpose()
             .map_err(|e| {
                 Error::new(ErrorDetails::Config {
