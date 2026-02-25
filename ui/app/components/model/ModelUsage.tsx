@@ -186,7 +186,7 @@ export function ModelUsage({
                   countWithCost += Number(row.count_with_cost ?? 0);
                 }
                 if (totalCount > 0) {
-                  costCoveragePercent = Math.round(
+                  costCoveragePercent = Math.floor(
                     (countWithCost / totalCount) * 100,
                   );
                 }
