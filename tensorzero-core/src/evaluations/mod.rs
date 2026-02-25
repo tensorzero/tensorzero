@@ -109,6 +109,7 @@ pub type EvaluationFunctionConfigTable = HashMap<String, EvaluationFunctionConfi
 
 impl EvaluatorConfig {
     // TODO(shuyangli): Remove this config option and make it a CLI flag instead.
+    #[expect(deprecated)]
     pub fn cutoff(&self) -> Option<f32> {
         match self {
             EvaluatorConfig::ExactMatch(config) => config.cutoff,
@@ -144,6 +145,9 @@ impl EvaluatorConfig {
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
+    #[deprecated(
+        note = "Evaluator config `cutoff` is deprecated. Use evaluations CLI `--cutoffs` instead."
+    )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cutoff: Option<f32>,
 }
@@ -205,6 +209,9 @@ pub struct LLMJudgeConfig {
     pub output_type: LLMJudgeOutputType,
     pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
+    #[deprecated(
+        note = "Evaluator config `cutoff` is deprecated. Use evaluations CLI `--cutoffs` instead."
+    )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cutoff: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -480,6 +487,9 @@ pub struct UninitializedLLMJudgeConfig {
     pub optimize: LLMJudgeOptimize,
     #[serde(default)]
     pub include: LLMJudgeIncludeConfig,
+    #[deprecated(
+        note = "Evaluator config `cutoff` is deprecated. Use evaluations CLI `--cutoffs` instead."
+    )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub cutoff: Option<f32>,
@@ -624,6 +634,7 @@ impl UninitializedEvaluatorConfig {
                     all_explicit_template_names: all_template_names,
                     experimentation,
                 });
+                #[expect(deprecated)]
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
                         input_format: params.input_format,
@@ -1420,10 +1431,10 @@ mod tests {
         // Test case 1: Successful loading with exact match evaluator
         {
             let mut evaluators = HashMap::new();
-            evaluators.insert(
-                "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) }),
-            );
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) });
+            evaluators.insert("em_evaluator".to_string(), exact_match);
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
@@ -1449,7 +1460,9 @@ mod tests {
             else {
                 panic!("Expected ExactMatch evaluator")
             };
-            assert_eq!(params.cutoff, Some(0.4));
+            #[expect(deprecated)]
+            let cutoff = params.cutoff;
+            assert_eq!(cutoff, Some(0.4));
             // No additional function configs for exact match
             assert_eq!(additional_functions.len(), 0);
 
@@ -1507,6 +1520,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -1650,6 +1664,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -1749,10 +1764,10 @@ mod tests {
         // Test case 3: Error when function doesn't exist
         {
             let mut evaluators = HashMap::new();
-            evaluators.insert(
-                "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-            );
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+            evaluators.insert("em_evaluator".to_string(), exact_match);
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
@@ -1771,10 +1786,10 @@ mod tests {
         // Test case 4: Error when evaluation name contains "::"
         {
             let mut evaluators = HashMap::new();
-            evaluators.insert(
-                "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-            );
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+            evaluators.insert("em_evaluator".to_string(), exact_match);
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
@@ -1865,6 +1880,7 @@ mod tests {
                 variants.insert(k, v);
             }
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -1923,10 +1939,10 @@ mod tests {
             );
 
             let mut evaluators = HashMap::new();
-            evaluators.insert(
-                "foo::invalid_name".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-            );
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+            evaluators.insert("foo::invalid_name".to_string(), exact_match);
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
@@ -1980,6 +1996,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -2060,6 +2077,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -2141,6 +2159,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,

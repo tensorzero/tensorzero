@@ -154,10 +154,9 @@ mod tests {
     fn create_test_config_with_chat_function() -> Config {
         let mut evaluations = HashMap::new();
         let mut evaluators = HashMap::new();
-        evaluators.insert(
-            "exact_match".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
+        #[expect(deprecated)]
+        let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match);
         evaluations.insert(
             "test_eval".to_string(),
             Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
@@ -183,10 +182,9 @@ mod tests {
     fn create_test_config_with_json_function() -> Config {
         let mut evaluations = HashMap::new();
         let mut evaluators = HashMap::new();
-        evaluators.insert(
-            "exact_match".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
+        #[expect(deprecated)]
+        let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match);
         evaluations.insert(
             "test_eval".to_string(),
             Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
@@ -341,10 +339,9 @@ mod tests {
         // Create config with evaluation but missing function
         let mut evaluations = HashMap::new();
         let mut evaluators = HashMap::new();
-        evaluators.insert(
-            "exact_match".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
+        #[expect(deprecated)]
+        let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match);
         evaluations.insert(
             "test_eval".to_string(),
             Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
@@ -413,14 +410,12 @@ mod tests {
     #[tokio::test]
     async fn test_get_evaluation_results_multiple_evaluators() {
         let mut evaluators = HashMap::new();
-        evaluators.insert(
-            "exact_match".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
-        evaluators.insert(
-            "llm_judge".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }), // Just using ExactMatch for simplicity
-        );
+        #[expect(deprecated)]
+        let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match);
+        #[expect(deprecated)]
+        let llm_judge = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("llm_judge".to_string(), llm_judge);
 
         let mut evaluations = HashMap::new();
         evaluations.insert(

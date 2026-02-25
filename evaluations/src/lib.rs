@@ -277,6 +277,7 @@ pub async fn run_evaluation(
 
     // Convert Vec<(String, f32)> to HashMap<String, f32> for precision_targets
     let precision_targets: HashMap<String, f32> = args.precision_targets.into_iter().collect();
+    let cli_cutoffs: HashMap<String, f32> = args.cutoffs.into_iter().collect();
 
     let output_format = args.format.clone();
     let result =
@@ -317,7 +318,13 @@ pub async fn run_evaluation(
         }
 
         // Check cutoffs and handle failures
-        let failures = check_evaluator_cutoffs(&stats, &inference_evaluation_config.evaluators)?;
+        let effective_cutoffs =
+            resolve_effective_cutoffs(&inference_evaluation_config.evaluators, &cli_cutoffs)?;
+        let failures = check_evaluator_cutoffs(
+            &stats,
+            &inference_evaluation_config.evaluators,
+            &effective_cutoffs,
+        )?;
 
         // Print failure messages
         for (name, cutoff, actual) in &failures {
@@ -741,12 +748,60 @@ pub async fn run_evaluation_core_streaming(
     })
 }
 
+/// Resolves cutoff thresholds for pass/fail checks during migration.
+///
+/// Sources:
+/// - legacy config cutoff (`EvaluatorConfig::cutoff()`)
+/// - CLI cutoff (`--cutoff`)
+///
+/// Precedence:
+/// - If both are present for the same evaluator, CLI value wins and a warning is emitted.
+/// - If only one source is present, that value is used.
+///
+/// TODO(#6603): Delete this after fully removing cutoffs in evaluator configs.
+pub fn resolve_effective_cutoffs(
+    evaluator_configs: &HashMap<String, EvaluatorConfig>,
+    cli_cutoffs: &HashMap<String, f32>,
+) -> Result<HashMap<String, f32>> {
+    for evaluator_name in cli_cutoffs.keys() {
+        if !evaluator_configs.contains_key(evaluator_name) {
+            return Err(anyhow!("Unknown evaluator in --cutoff: `{evaluator_name}`"));
+        }
+    }
+
+    let mut effective_cutoffs = HashMap::new();
+
+    for (evaluator_name, evaluator_config) in evaluator_configs {
+        let config_cutoff = evaluator_config.cutoff();
+        let cli_cutoff = cli_cutoffs.get(evaluator_name).copied();
+
+        match (config_cutoff, cli_cutoff) {
+            (Some(config_value), Some(cli_value)) => {
+                tracing::warn!(
+                    evaluator_name = %evaluator_name,
+                    config_cutoff = config_value,
+                    cli_cutoff = cli_value,
+                    "Evaluator config `cutoff` is deprecated; please remove `cutoff` from config. Using CLI `--cutoffs` value."
+                );
+                effective_cutoffs.insert(evaluator_name.clone(), cli_value);
+            }
+            (Some(cutoff), None) | (None, Some(cutoff)) => {
+                effective_cutoffs.insert(evaluator_name.clone(), cutoff);
+            }
+            (None, None) => {}
+        }
+    }
+
+    Ok(effective_cutoffs)
+}
+
 /// Checks if evaluator results meet their cutoff thresholds
 ///
 /// Returns a vector of failures with (evaluator_name, cutoff, actual_value)
 pub fn check_evaluator_cutoffs(
     stats: &HashMap<String, stats::EvaluatorStats>,
     evaluator_configs: &HashMap<String, EvaluatorConfig>,
+    effective_cutoffs: &HashMap<String, f32>,
 ) -> Result<Vec<(String, f32, f32)>> {
     let mut failures = Vec::new();
 
@@ -755,7 +810,7 @@ pub fn check_evaluator_cutoffs(
             .get(evaluator_name)
             .ok_or_else(|| anyhow!("Evaluator not found for computing stats"))?;
 
-        if let Some(cutoff) = evaluator_config.cutoff() {
+        if let Some(cutoff) = effective_cutoffs.get(evaluator_name).copied() {
             match evaluator_config.optimize() {
                 MetricConfigOptimize::Max => {
                     if evaluator_stats.mean < cutoff {
@@ -1250,27 +1305,108 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "evaluator1".to_string(),
+                #[expect(deprecated)]
                 EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.5) }),
             );
             evaluators.insert(
                 "evaluator2".to_string(),
+                #[expect(deprecated)]
                 EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.6) }),
             );
             evaluators.insert(
                 "evaluator3".to_string(),
+                #[expect(deprecated)]
                 EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
             evaluators
         };
-        let failures = check_evaluator_cutoffs(&stats, &evaluators).unwrap();
+
+        let cli_cutoffs = HashMap::new();
+        let effective_cutoffs = resolve_effective_cutoffs(&evaluators, &cli_cutoffs)
+            .expect("cutoff resolution should succeed");
+
+        let failures = check_evaluator_cutoffs(&stats, &evaluators, &effective_cutoffs)
+            .expect("cutoff checks should succeed");
         assert_eq!(failures.len(), 2);
 
         // Check that both expected failures are present, regardless of order
-        assert!(failures.contains(&("evaluator1".to_string(), 0.5, 0.4)));
-        assert!(failures.contains(&("evaluator2".to_string(), 0.6, 0.3)));
+        assert!(
+            failures.contains(&("evaluator1".to_string(), 0.5, 0.4)),
+            "should include evaluator1 failure when mean is below cutoff"
+        );
+        assert!(
+            failures.contains(&("evaluator2".to_string(), 0.6, 0.3)),
+            "should include evaluator2 failure when mean is below cutoff"
+        );
 
         // Check that evaluator3 is not in the failures list since it has no cutoff
-        assert!(!failures.iter().any(|(name, _, _)| name == "evaluator3"));
+        assert!(
+            !failures.iter().any(|(name, _, _)| name == "evaluator3"),
+            "should not include evaluator3 when no cutoff is configured"
+        );
+    }
+
+    #[test]
+    fn test_resolve_effective_cutoffs_cli_takes_precedence() {
+        let mut evaluators = HashMap::new();
+        evaluators.insert(
+            "evaluator1".to_string(),
+            #[expect(deprecated)]
+            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.5) }),
+        );
+        evaluators.insert(
+            "evaluator2".to_string(),
+            #[expect(deprecated)]
+            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.6) }),
+        );
+
+        let cli_cutoffs = HashMap::from([
+            ("evaluator1".to_string(), 0.8),
+            ("evaluator3".to_string(), 0.3),
+        ]);
+
+        let err = resolve_effective_cutoffs(&evaluators, &cli_cutoffs)
+            .expect_err("unknown evaluator in CLI cutoffs should error");
+        assert!(
+            err.to_string()
+                .contains("Unknown evaluator in --cutoff: `evaluator3`"),
+            "should error on unknown evaluator cutoff names"
+        );
+
+        let cli_cutoffs = HashMap::from([("evaluator1".to_string(), 0.8)]);
+        let effective = resolve_effective_cutoffs(&evaluators, &cli_cutoffs)
+            .expect("cutoff resolution should succeed when evaluator names are valid");
+
+        assert_eq!(
+            effective.get("evaluator1"),
+            Some(&0.8),
+            "CLI cutoff should override config cutoff for the same evaluator"
+        );
+        assert_eq!(
+            effective.get("evaluator2"),
+            Some(&0.6),
+            "config cutoff should still apply when no CLI cutoff is provided"
+        );
+    }
+
+    #[test]
+    fn test_resolve_effective_cutoffs_unknown_evaluator() {
+        let evaluators = HashMap::from([(
+            "evaluator1".to_string(),
+            EvaluatorConfig::ExactMatch(ExactMatchConfig::default()),
+        )]);
+        let cli_cutoffs = HashMap::from([
+            ("nonexistent".to_string(), 0.5),
+            ("evaluator1".to_string(), 0.8),
+        ]);
+
+        let err = resolve_effective_cutoffs(&evaluators, &cli_cutoffs)
+            .expect_err("should error when CLI cutoff references unknown evaluator");
+        assert!(
+            err.to_string()
+                .contains("Unknown evaluator in --cutoff: `nonexistent`"),
+            "error should name the unknown evaluator, got: {err}"
+        );
     }
 
     #[test]

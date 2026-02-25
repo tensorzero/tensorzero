@@ -143,6 +143,7 @@ async fn run_evaluations_json() {
         inference_cache: CacheEnabledMode::On,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -416,6 +417,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
         inference_cache: CacheEnabledMode::On,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -444,6 +446,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
         inference_cache: CacheEnabledMode::On,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -483,6 +486,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
         inference_cache: CacheEnabledMode::On,
         max_datapoints: Some(10),
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -611,6 +615,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -705,6 +710,7 @@ async fn run_exact_match_evaluation_chat() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -846,6 +852,7 @@ async fn run_llm_judge_evaluation_chat() {
         inference_cache: CacheEnabledMode::On,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -1074,6 +1081,7 @@ async fn run_image_evaluation() {
         inference_cache: CacheEnabledMode::WriteOnly,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -1296,6 +1304,7 @@ async fn check_invalid_image_evaluation() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -1407,6 +1416,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -1453,6 +1463,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -1557,6 +1568,8 @@ async fn test_parse_args() {
         "20",
         "--adaptive-stopping-precision",
         "exact_match=0.10,count_sports=0.15",
+        "--cutoffs",
+        "exact_match=0.95,count_sports=0.50",
     ])
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
@@ -1577,6 +1590,13 @@ async fn test_parse_args() {
         vec![
             ("exact_match".to_string(), 0.10),
             ("count_sports".to_string(), 0.15)
+        ]
+    );
+    assert_eq!(
+        args.cutoffs,
+        vec![
+            ("exact_match".to_string(), 0.95),
+            ("count_sports".to_string(), 0.50)
         ]
     );
 
@@ -1611,6 +1631,19 @@ async fn test_parse_args() {
         args.to_string()
             .contains("invalid value 'invalid' for '--format <FORMAT>'")
     );
+
+    // Test invalid cutoff value
+    let args = Args::try_parse_from([
+        "test",
+        "--evaluation-name",
+        "my-evaluation",
+        "--variant-name",
+        "my-variant",
+        "--cutoffs",
+        "exact_match=-0.1",
+    ])
+    .unwrap_err();
+    assert!(args.to_string().contains("non-negative"));
 }
 
 #[tokio::test]
@@ -1658,6 +1691,7 @@ async fn run_evaluations_errors() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -1688,6 +1722,7 @@ async fn run_evaluations_errors() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[expect(deprecated)]
 async fn test_run_llm_judge_evaluator_chat() {
     init_tracing_for_tests();
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
@@ -1888,6 +1923,7 @@ async fn test_run_llm_judge_evaluator_chat() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[expect(deprecated)]
 async fn test_run_llm_judge_evaluator_json() {
     init_tracing_for_tests();
     let tensorzero_client = get_tensorzero_client().await;
@@ -2105,6 +2141,7 @@ async fn run_evaluations_best_of_3() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -2298,6 +2335,7 @@ async fn run_evaluations_mixture_of_3() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -2494,6 +2532,7 @@ async fn run_evaluations_dicl() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -3164,6 +3203,7 @@ async fn test_cli_args_max_datapoints() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: Some(21),
         precision_targets: vec![],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
@@ -3224,6 +3264,7 @@ async fn test_cli_args_precision_targets() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![("exact_match".to_string(), 0.2)],
+        cutoffs: vec![],
     };
 
     let mut output = Vec::new();
