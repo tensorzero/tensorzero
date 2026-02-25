@@ -305,6 +305,7 @@ async fn query_episode_table_impl(
 
 async fn query_episode_table_bounds_impl(pool: &PgPool) -> Result<TableBoundsWithCount, Error> {
     // Bounds: find the min/max episode_id across chat and json inferences.
+    // TODO(#6472): Implement accurate episode count.
     #[derive(sqlx::FromRow)]
     struct BoundsRow {
         first_id: Option<Uuid>,
