@@ -112,7 +112,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
     async fn search_evaluation_runs(
         &self,
         evaluation_name: &str,
-        function_name: &str,
+        function_name: Option<&str>,
         query: &str,
         limit: u32,
         offset: u32,
@@ -349,7 +349,7 @@ fn build_count_datapoints_for_evaluation_query(
 
 fn build_search_evaluation_runs_query(
     evaluation_name: &str,
-    function_name: &str,
+    function_name: Option<&str>,
     query: &str,
     limit: u32,
     offset: u32,
@@ -364,8 +364,12 @@ fn build_search_evaluation_runs_query(
             WHERE tags->>'tensorzero::evaluation_name' = ",
     );
     qb.push_bind(evaluation_name.to_string());
-    qb.push(" AND function_name = ");
-    qb.push_bind(function_name.to_string());
+    if let Some(fn_name) = function_name {
+        qb.push(" AND function_name = ");
+        qb.push_bind(fn_name.to_string());
+    } else {
+        qb.push(" AND NOT function_name LIKE 'tensorzero::%'");
+    }
     qb.push(
         r"
             AND tags ? 'tensorzero::evaluation_run_id'
@@ -377,8 +381,12 @@ fn build_search_evaluation_runs_query(
             WHERE tags->>'tensorzero::evaluation_name' = ",
     );
     qb.push_bind(evaluation_name.to_string());
-    qb.push(" AND function_name = ");
-    qb.push_bind(function_name.to_string());
+    if let Some(fn_name) = function_name {
+        qb.push(" AND function_name = ");
+        qb.push_bind(fn_name.to_string());
+    } else {
+        qb.push(" AND NOT function_name LIKE 'tensorzero::%'");
+    }
     qb.push(
         r"
             AND tags ? 'tensorzero::evaluation_run_id'
@@ -798,8 +806,13 @@ mod tests {
 
     #[test]
     fn test_build_search_evaluation_runs_query() {
-        let qb =
-            build_search_evaluation_runs_query("test_eval", "test_func", "search_term", 50, 10);
+        let qb = build_search_evaluation_runs_query(
+            "test_eval",
+            Some("test_func"),
+            "search_term",
+            50,
+            10,
+        );
         let sql = qb.sql();
         let sql = sql.as_str();
 
@@ -826,6 +839,39 @@ mod tests {
             WHERE (evaluation_run_id ILIKE $5 OR variant_name ILIKE $6)
             ORDER BY evaluation_run_id::UUID DESC
             LIMIT $7 OFFSET $8
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_search_evaluation_runs_query_no_function_name() {
+        let qb = build_search_evaluation_runs_query("test_eval", None, "search_term", 50, 10);
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            WITH evaluation_inferences AS (
+                SELECT DISTINCT
+                    tags->>'tensorzero::evaluation_run_id' as evaluation_run_id,
+                    variant_name
+                FROM tensorzero.chat_inferences
+                WHERE tags->>'tensorzero::evaluation_name' = $1 AND NOT function_name LIKE 'tensorzero::%'
+                AND tags ? 'tensorzero::evaluation_run_id'
+                UNION ALL
+                SELECT DISTINCT
+                    tags->>'tensorzero::evaluation_run_id' as evaluation_run_id,
+                    variant_name
+                FROM tensorzero.json_inferences
+                WHERE tags->>'tensorzero::evaluation_name' = $2 AND NOT function_name LIKE 'tensorzero::%'
+                AND tags ? 'tensorzero::evaluation_run_id'
+            )
+            SELECT DISTINCT evaluation_run_id::UUID as evaluation_run_id, variant_name
+            FROM evaluation_inferences
+            WHERE (evaluation_run_id ILIKE $3 OR variant_name ILIKE $4)
+            ORDER BY evaluation_run_id::UUID DESC
+            LIMIT $5 OFFSET $6
             ",
         );
     }
