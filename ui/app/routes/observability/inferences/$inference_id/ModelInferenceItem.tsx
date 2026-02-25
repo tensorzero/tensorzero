@@ -1,5 +1,5 @@
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
-import Input from "~/components/inference/Input";
+import { InputElement } from "~/components/input_output/InputElement";
 import {
   BasicInfoLayout,
   BasicInfoItem,
@@ -19,8 +19,10 @@ import {
   Output,
   Calendar,
   Cached,
+  Cost,
 } from "~/components/icons/Icons";
 import Chip from "~/components/ui/Chip";
+import { formatCost } from "~/utils/cost";
 import { formatDateWithSeconds } from "~/utils/date";
 import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import {
@@ -67,7 +69,14 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
                   label={`${inference.output_tokens === undefined ? "null" : inference.output_tokens} tok`}
                   tooltip="Output Tokens"
                 />
-                {inference.response_time_ms !== null && (
+                {inference.cost !== undefined && (
+                  <Chip
+                    icon={<Cost className="text-fg-tertiary" />}
+                    label={formatCost(inference.cost)}
+                    tooltip="Cost"
+                  />
+                )}
+                {inference.response_time_ms != null && (
                   <Chip
                     icon={<Timer className="text-fg-tertiary" />}
                     label={`${inference.response_time_ms} ms`}
@@ -114,9 +123,11 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <Input
-            system={inference.system}
-            messages={inference.input_messages}
+          <InputElement
+            input={{
+              system: inference.system ?? undefined,
+              messages: inference.input_messages,
+            }}
           />
         </SectionLayout>
 
@@ -125,51 +136,55 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
           <ModelInferenceOutput output={inference.output} />
         </SectionLayout>
 
-        <SectionLayout>
-          <SectionHeader heading="Raw Request" />
-          <SnippetLayout>
-            <SnippetContent maxHeight={400}>
-              <CodeEditor
-                allowedLanguages={["json"]}
-                value={(() => {
-                  try {
-                    return JSON.stringify(
-                      JSON.parse(inference.raw_request),
-                      null,
-                      2,
-                    );
-                  } catch {
-                    return inference.raw_request;
-                  }
-                })()}
-                readOnly
-              />
-            </SnippetContent>
-          </SnippetLayout>
-        </SectionLayout>
+        {inference.raw_request != null && (
+          <SectionLayout>
+            <SectionHeader heading="Raw Request" />
+            <SnippetLayout>
+              <SnippetContent maxHeight={400}>
+                <CodeEditor
+                  allowedLanguages={["json"]}
+                  value={(() => {
+                    try {
+                      return JSON.stringify(
+                        JSON.parse(inference.raw_request),
+                        null,
+                        2,
+                      );
+                    } catch {
+                      return inference.raw_request;
+                    }
+                  })()}
+                  readOnly
+                />
+              </SnippetContent>
+            </SnippetLayout>
+          </SectionLayout>
+        )}
 
-        <SectionLayout>
-          <SectionHeader heading="Raw Response" />
-          <SnippetLayout>
-            <SnippetContent maxHeight={400}>
-              <CodeEditor
-                allowedLanguages={["json"]}
-                value={(() => {
-                  try {
-                    return JSON.stringify(
-                      JSON.parse(inference.raw_response),
-                      null,
-                      2,
-                    );
-                  } catch {
-                    return inference.raw_response;
-                  }
-                })()}
-                readOnly
-              />
-            </SnippetContent>
-          </SnippetLayout>
-        </SectionLayout>
+        {inference.raw_response != null && (
+          <SectionLayout>
+            <SectionHeader heading="Raw Response" />
+            <SnippetLayout>
+              <SnippetContent maxHeight={400}>
+                <CodeEditor
+                  allowedLanguages={["json"]}
+                  value={(() => {
+                    try {
+                      return JSON.stringify(
+                        JSON.parse(inference.raw_response),
+                        null,
+                        2,
+                      );
+                    } catch {
+                      return inference.raw_response;
+                    }
+                  })()}
+                  readOnly
+                />
+              </SnippetContent>
+            </SnippetLayout>
+          </SectionLayout>
+        )}
       </SectionsGroup>
     </PageLayout>
   );

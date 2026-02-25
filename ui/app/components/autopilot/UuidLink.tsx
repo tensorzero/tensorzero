@@ -13,6 +13,7 @@ import type { ResolvedObject } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
 import { toResolvedObjectUrl } from "~/utils/urls";
 import { UuidHoverCard } from "./UuidHoverCard";
+import { useEntitySheet } from "~/context/entity-sheet";
 
 const ICON_SIZE = 12;
 const ICON_CLASS = "mr-1 inline align-middle -translate-y-px";
@@ -85,6 +86,7 @@ function IconWithTooltip({
 
 export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
+  const { handleUuidLinkClick } = useEntitySheet();
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
   const url = obj ? toResolvedObjectUrl(uuid, obj) : null;
@@ -100,6 +102,7 @@ export function UuidLink({ uuid }: UuidLinkProps) {
         <UuidHoverCard uuid={uuid} obj={obj}>
           <Link
             to={url}
+            onClick={(e) => handleUuidLinkClick(e, obj.type, uuid)}
             className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
           >
             <IconWithTooltip label={getEntityLabel(obj.type)}>

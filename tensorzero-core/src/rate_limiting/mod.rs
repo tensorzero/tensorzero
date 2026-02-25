@@ -1,3 +1,5 @@
+use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 use sqlx::postgres::types::PgInterval;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -16,6 +18,34 @@ mod rate_limiting_manager;
 
 // Re-export RateLimitingManager at the module level
 pub use rate_limiting_manager::RateLimitingManager;
+
+/// 1 dollar = 1,000,000,000 nano-dollars
+pub const NANO_DOLLARS_PER_DOLLAR: u64 = 1_000_000_000;
+
+/// Convert a dollar amount (f64) to nano-dollars (u64).
+/// Negative values are clamped to 0. Values that would overflow `u64` are clamped to `u64::MAX`.
+pub fn cost_to_nano_cost(cost: f64) -> u64 {
+    if cost <= 0.0 {
+        return 0;
+    }
+    let nano_cost = (cost * NANO_DOLLARS_PER_DOLLAR as f64).ceil();
+    if nano_cost >= u64::MAX as f64 {
+        return u64::MAX;
+    }
+    nano_cost as u64
+}
+
+/// Convert nano-dollars (u64) back to dollars (f64).
+pub fn nano_cost_to_cost(nano_cost: u64) -> f64 {
+    nano_cost as f64 / NANO_DOLLARS_PER_DOLLAR as f64
+}
+
+/// Convert a `Decimal` dollar amount to nano-dollars (u64).
+/// Returns 0 if the conversion fails or the value is negative.
+pub fn decimal_cost_to_nano_cost(cost: Decimal) -> u64 {
+    let nano_cost = cost * Decimal::from(NANO_DOLLARS_PER_DOLLAR);
+    nano_cost.ceil().to_u64().unwrap_or(0)
+}
 
 /*
  * The high level flow for our rate limiting system is:
@@ -54,6 +84,9 @@ pub struct RateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
     pub(crate) enabled: bool,
     pub(crate) backend: RateLimitingBackend,
+    /// Default cost in nano-dollars used for cost estimation when actual cost is unknown.
+    /// Defaults to $1.00 = 1,000,000,000 nano-dollars.
+    pub(crate) default_nano_cost: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -64,6 +97,8 @@ pub struct UninitializedRateLimitingConfig {
     pub(crate) enabled: bool,
     #[serde(default)]
     pub(crate) backend: RateLimitingBackend,
+    #[serde(default = "default_nano_cost")]
+    pub(crate) default_nano_cost: u64,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -82,6 +117,7 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
             rules: config.rules,
             enabled: config.enabled,
             backend: config.backend,
+            default_nano_cost: config.default_nano_cost,
         })
     }
 }
@@ -93,11 +129,13 @@ impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
             rules,
             enabled,
             backend,
+            default_nano_cost,
         } = config;
         Self {
             rules: rules.clone(),
             enabled: *enabled,
             backend: *backend,
+            default_nano_cost: *default_nano_cost,
         }
     }
 }
@@ -106,12 +144,17 @@ fn default_enabled() -> bool {
     true
 }
 
+fn default_nano_cost() -> u64 {
+    NANO_DOLLARS_PER_DOLLAR // $1.00
+}
+
 impl Default for UninitializedRateLimitingConfig {
     fn default() -> Self {
         Self {
             rules: Vec::new(),
             enabled: true,
             backend: RateLimitingBackend::default(),
+            default_nano_cost: default_nano_cost(),
         }
     }
 }
@@ -122,6 +165,7 @@ impl Default for RateLimitingConfig {
             rules: Vec::new(),
             enabled: true,
             backend: RateLimitingBackend::default(),
+            default_nano_cost: default_nano_cost(),
         }
     }
 }
@@ -249,13 +293,40 @@ fn align_and_check_limits(
     Ok(aligned_receipts)
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq)]
 pub struct FailedRateLimit {
     pub key: ActiveRateLimitKey,
+    /// Raw value in internal units (nano-dollars for Cost, count for others)
     pub requested: u64,
+    /// Raw value in internal units (nano-dollars for Cost, count for others)
     pub available: u64,
     pub resource: RateLimitResource,
     pub scope_key: Vec<RateLimitingScopeKey>,
+}
+
+impl Serialize for FailedRateLimit {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("FailedRateLimit", 5)?;
+        state.serialize_field("key", &self.key)?;
+        // For Cost resources, convert nano-dollars to dollars for display
+        match self.resource {
+            RateLimitResource::Cost => {
+                state.serialize_field("requested", &nano_cost_to_cost(self.requested))?;
+                state.serialize_field("available", &nano_cost_to_cost(self.available))?;
+            }
+            _ => {
+                state.serialize_field("requested", &self.requested)?;
+                state.serialize_field("available", &self.available)?;
+            }
+        }
+        state.serialize_field("resource", &self.resource)?;
+        state.serialize_field("scope_key", &self.scope_key)?;
+        state.end()
+    }
 }
 
 /// Since the database will tell us all borrows failed if any failed, we figure out which rate limits
@@ -427,7 +498,7 @@ pub struct RateLimit {
 pub enum RateLimitResource {
     ModelInference,
     Token,
-    // Cent, // or something more granular?
+    Cost,
 }
 
 impl RateLimitResource {
@@ -436,6 +507,7 @@ impl RateLimitResource {
         match self {
             RateLimitResource::ModelInference => "model_inference",
             RateLimitResource::Token => "token",
+            RateLimitResource::Cost => "cost",
         }
     }
 }
@@ -444,19 +516,32 @@ impl RateLimitResource {
 pub enum RateLimitResourceUsage {
     /// We received an exact usage amount back from the provider, so we can consume extra/release unused
     /// rate limiting resources, depending on whether our initial estimate was too high or too low
-    Exact { model_inferences: u64, tokens: u64 },
+    Exact {
+        model_inferences: u64,
+        tokens: u64,
+        /// Cost in nano-dollars. `None` means cost is unknown.
+        nano_cost: Option<u64>,
+    },
     /// We were only able to estimate the usage (e.g. if an error occurred in an inference stream,
     /// and there might have been additional usage chunks that we missed; or the provider did not report token usage).
     /// We'll still consume tokens/inferences if we went over the initial estimate, but we will *not*
     /// return tickets if our initial estimate seems to be too high (since the error could have
     /// hidden the actual usage).
-    UnderEstimate { model_inferences: u64, tokens: u64 },
+    UnderEstimate {
+        model_inferences: u64,
+        tokens: u64,
+        /// Cost in nano-dollars. `None` means cost is unknown.
+        nano_cost: Option<u64>,
+    },
 }
 
 #[derive(Debug)]
 pub struct EstimatedRateLimitResourceUsage {
     pub model_inferences: Option<u64>,
     pub tokens: Option<u64>,
+    /// Cost estimate in nano-dollars. Filled in by the rate limiting manager
+    /// using `default_nano_cost` when cost rate limiting is active.
+    pub nano_cost: Option<u64>,
 }
 
 impl EstimatedRateLimitResourceUsage {
@@ -464,6 +549,7 @@ impl EstimatedRateLimitResourceUsage {
         match resource {
             RateLimitResource::ModelInference => self.model_inferences,
             RateLimitResource::Token => self.tokens,
+            RateLimitResource::Cost => self.nano_cost,
         }
     }
 }
@@ -911,6 +997,7 @@ pub trait RateLimitedRequest {
     fn estimated_resource_usage(
         &self,
         resources: &[RateLimitResource],
+        rate_limiting_config: &RateLimitingConfig,
     ) -> Result<EstimatedRateLimitResourceUsage, Error>;
 }
 
@@ -1472,14 +1559,14 @@ mod tests {
         let config_enabled = RateLimitingConfig {
             rules: vec![],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         };
         assert!(config_enabled.enabled());
 
         let config_disabled = RateLimitingConfig {
             rules: vec![],
             enabled: false,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         };
         assert!(!config_disabled.enabled());
 
@@ -1544,7 +1631,7 @@ mod tests {
         let uninitialized = UninitializedRateLimitingConfig {
             rules: vec![rule_priority_5, rule_always],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         };
         let err_message = RateLimitingConfig::try_from(uninitialized)
             .unwrap_err()
@@ -1603,7 +1690,7 @@ mod tests {
         let config_numeric_priorities = RateLimitingConfig {
             rules: vec![rule_priority_3, rule_priority_7],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         };
 
         let active_limits = config_numeric_priorities.get_active_limits(&scope_info);
@@ -1630,7 +1717,7 @@ mod tests {
         let config_multiple_limits = RateLimitingConfig {
             rules: vec![rule_multiple_limits],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         };
 
         let active_limits = config_multiple_limits.get_active_limits(&scope_info);
@@ -1784,6 +1871,7 @@ mod tests {
         let usage = EstimatedRateLimitResourceUsage {
             model_inferences: Some(5),
             tokens: Some(50),
+            nano_cost: None,
         };
 
         let consume_request = token_active_limit
@@ -1867,7 +1955,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         };
         let resources = config_with_token.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -1887,7 +1975,7 @@ mod tests {
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         };
         let resources = config_model_only.get_rate_limited_resources(&scope_info);
         assert_eq!(resources.len(), 1);
@@ -1902,7 +1990,7 @@ mod tests {
                 scope: RateLimitingConfigScopes(vec![]),
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
-            backend: RateLimitingBackend::default(),
+            ..Default::default()
         };
         assert!(
             config_disabled
@@ -2170,11 +2258,13 @@ mod tests {
         let token_usage_exact = RateLimitResourceUsage::Exact {
             model_inferences: 1,
             tokens: 100, // Actual usage is 100 tokens
+            nano_cost: None,
         };
 
         let token_usage_underestimate = RateLimitResourceUsage::UnderEstimate {
             model_inferences: 1,
             tokens: 0, // This is what we use when usage is None
+            nano_cost: None,
         };
 
         // Verify that Exact usage allows refunds (when actual < estimate)
@@ -2270,6 +2360,165 @@ mod tests {
         assert!(
             err.contains("must be 12 characters long"),
             "Error should mention length requirement: {err}"
+        );
+    }
+
+    #[test]
+    fn test_estimated_resource_usage_get_cost() {
+        let usage = EstimatedRateLimitResourceUsage {
+            model_inferences: Some(1),
+            tokens: Some(100),
+            nano_cost: Some(500_000_000),
+        };
+        assert_eq!(
+            usage.get_usage(RateLimitResource::Cost),
+            Some(500_000_000),
+            "Should return cost in nano-dollars"
+        );
+
+        let usage_no_cost = EstimatedRateLimitResourceUsage {
+            model_inferences: Some(1),
+            tokens: Some(100),
+            nano_cost: None,
+        };
+        assert_eq!(
+            usage_no_cost.get_usage(RateLimitResource::Cost),
+            None,
+            "Should return None when cost is not set"
+        );
+    }
+
+    #[test]
+    fn test_active_rate_limit_key_cost_different_from_token() {
+        let token_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Token,
+            interval: RateLimitInterval::Day,
+            capacity: 1000,
+            refill_rate: 1000,
+        });
+
+        let cost_limit = Arc::new(RateLimit {
+            resource: RateLimitResource::Cost,
+            interval: RateLimitInterval::Day,
+            capacity: 10_000_000_000,
+            refill_rate: 10_000_000_000,
+        });
+
+        let scope_key = vec![RateLimitingScopeKey::TagConcrete {
+            key: "user_id".to_string(),
+            value: "123".to_string(),
+        }];
+
+        let token_active = ActiveRateLimit {
+            limit: token_limit,
+            scope_key: scope_key.clone(),
+        };
+        let cost_active = ActiveRateLimit {
+            limit: cost_limit,
+            scope_key,
+        };
+
+        let token_key = token_active.get_key().unwrap();
+        let cost_key = cost_active.get_key().unwrap();
+        assert_ne!(
+            token_key.0, cost_key.0,
+            "Cost and Token keys should be different"
+        );
+    }
+
+    #[test]
+    fn test_failed_rate_limit_serialization_cost_displays_dollars() {
+        let failed = FailedRateLimit {
+            key: ActiveRateLimitKey("test_key".to_string()),
+            requested: 1_500_000_000, // 1.5 nano-dollars
+            available: 500_000_000,   // 0.5 nano-dollars
+            resource: RateLimitResource::Cost,
+            scope_key: vec![],
+        };
+
+        let json = serde_json::to_value(&failed).unwrap();
+        assert_eq!(
+            json["requested"], 1.5,
+            "Cost requested should be displayed in dollars"
+        );
+        assert_eq!(
+            json["available"], 0.5,
+            "Cost available should be displayed in dollars"
+        );
+        assert_eq!(json["resource"], "cost");
+    }
+
+    #[test]
+    fn test_failed_rate_limit_serialization_token_displays_raw() {
+        let failed = FailedRateLimit {
+            key: ActiveRateLimitKey("test_key".to_string()),
+            requested: 1000,
+            available: 500,
+            resource: RateLimitResource::Token,
+            scope_key: vec![],
+        };
+
+        let json = serde_json::to_value(&failed).unwrap();
+        assert_eq!(
+            json["requested"], 1000,
+            "Token requested should be displayed as raw integer"
+        );
+        assert_eq!(
+            json["available"], 500,
+            "Token available should be displayed as raw integer"
+        );
+    }
+
+    #[test]
+    fn test_nano_dollar_conversions() {
+        assert_eq!(
+            cost_to_nano_cost(1.0),
+            1_000_000_000,
+            "$1.00 should be 1 billion nano-dollars"
+        );
+        assert_eq!(
+            cost_to_nano_cost(0.001),
+            1_000_000,
+            "$0.001 should be 1 million nano-dollars"
+        );
+        assert_eq!(cost_to_nano_cost(0.0), 0, "$0.00 should be 0 nano-dollars");
+        assert_eq!(
+            cost_to_nano_cost(-1.0),
+            0,
+            "Negative values should clamp to 0"
+        );
+
+        let nano_cost = 1_500_000_000u64;
+        let cost = nano_cost_to_cost(nano_cost);
+        assert!(
+            (cost - 1.5).abs() < f64::EPSILON,
+            "1.5 billion nano-dollars should be $1.50"
+        );
+    }
+
+    #[test]
+    fn test_decimal_cost_to_nano_cost_conversion() {
+        use rust_decimal::Decimal;
+
+        let d = Decimal::new(150, 2); // 1.50
+        assert_eq!(
+            decimal_cost_to_nano_cost(d),
+            1_500_000_000,
+            "$1.50 as Decimal should be 1.5 billion nano-dollars"
+        );
+
+        let d = Decimal::new(1, 3); // 0.001
+        assert_eq!(
+            decimal_cost_to_nano_cost(d),
+            1_000_000,
+            "$0.001 as Decimal should be 1 million nano-dollars"
+        );
+
+        let d = Decimal::ZERO;
+        assert_eq!(
+            decimal_cost_to_nano_cost(d),
+            0,
+            "$0.00 should be 0 nano-dollars"
         );
     }
 }

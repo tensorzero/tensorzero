@@ -10,7 +10,7 @@ PART_SIZE = 8388608
 # When a file needs updating, add version suffix to remote name (e.g., "file_v2.jsonl")
 # and keep the local name unchanged (e.g., "file.jsonl")
 SMALL_FIXTURES = {
-    "model_inference_examples_20260203.jsonl": "model_inference_examples.jsonl",
+    "model_inference_examples_20260224.jsonl": "model_inference_examples.jsonl",
     "chat_inference_examples_20260123.jsonl": "chat_inference_examples.jsonl",
     "json_inference_examples.jsonl": "json_inference_examples.jsonl",
     "boolean_metric_feedback_examples.jsonl": "boolean_metric_feedback_examples.jsonl",

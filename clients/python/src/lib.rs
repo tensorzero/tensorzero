@@ -1638,17 +1638,56 @@ impl TensorZeroGateway {
     /// This is a convenience method that handles fetching inferences, rendering samples,
     /// and launching the optimization job server-side.
     ///
-    /// :param params: A dictionary with the workflow parameters (function_name, template_variant_name,
-    ///     output_source, optimizer_config, and optionally limit, val_fraction, etc.).
+    /// :param function_name: The name of the function to optimize.
+    /// :param template_variant_name: The name of the template variant to use.
+    /// :param output_source: The source of the output (e.g. "inference" or "demonstration").
+    /// :param optimizer_config: The optimizer configuration dictionary.
+    /// :param query_variant_name: Optional name of the query variant.
+    /// :param filters: Optional inference filters.
+    /// :param order_by: Optional ordering specification.
+    /// :param limit: Optional limit on the number of inferences to use.
+    /// :param offset: Optional offset for pagination.
+    /// :param val_fraction: Optional fraction of data to use for validation.
     /// :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
-    #[pyo3(signature = (*, params))]
+    #[expect(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, function_name, template_variant_name, output_source, optimizer_config, query_variant_name=None, filters=None, order_by=None, limit=None, offset=None, val_fraction=None))]
     fn experimental_launch_optimization_workflow(
         this: PyRef<'_, Self>,
-        params: Bound<'_, PyAny>,
+        function_name: String,
+        template_variant_name: String,
+        output_source: Bound<'_, PyAny>,
+        optimizer_config: Bound<'_, PyAny>,
+        query_variant_name: Option<String>,
+        filters: Option<Bound<'_, PyAny>>,
+        order_by: Option<Bound<'_, PyAny>>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+        val_fraction: Option<f64>,
     ) -> PyResult<OptimizationJobHandle> {
         let client = this.as_super().client.clone();
-        let params: LaunchOptimizationWorkflowParams = deserialize_from_pyobj(this.py(), &params)?;
-        let fut = client.experimental_launch_optimization_workflow(params);
+        let output_source = deserialize_from_pyobj(this.py(), &output_source)?;
+        let optimizer_config = deserialize_optimization_config(&optimizer_config)?;
+        let filters = filters
+            .map(|f| deserialize_from_pyobj(this.py(), &f))
+            .transpose()?;
+        let order_by = order_by
+            .map(|o| deserialize_from_pyobj(this.py(), &o))
+            .transpose()?;
+        let fut =
+            client.experimental_launch_optimization_workflow(LaunchOptimizationWorkflowParams {
+                function_name,
+                template_variant_name,
+                query_variant_name,
+                filters,
+                output_source,
+                order_by,
+                limit,
+                offset,
+                val_fraction,
+                optimizer_config: UninitializedOptimizerInfo {
+                    inner: optimizer_config,
+                },
+            });
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
@@ -2835,19 +2874,57 @@ impl AsyncTensorZeroGateway {
     /// This is a convenience method that handles fetching inferences, rendering samples,
     /// and launching the optimization job server-side.
     ///
-    /// :param params: A dictionary with the workflow parameters (function_name, template_variant_name,
-    ///     output_source, optimizer_config, and optionally limit, val_fraction, etc.).
+    /// :param function_name: The name of the function to optimize.
+    /// :param template_variant_name: The name of the template variant to use.
+    /// :param output_source: The source of the output (e.g. "inference" or "demonstration").
+    /// :param optimizer_config: The optimizer configuration dictionary.
+    /// :param query_variant_name: Optional name of the query variant.
+    /// :param filters: Optional inference filters.
+    /// :param order_by: Optional ordering specification.
+    /// :param limit: Optional limit on the number of inferences to use.
+    /// :param offset: Optional offset for pagination.
+    /// :param val_fraction: Optional fraction of data to use for validation.
     /// :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
-    #[pyo3(signature = (*, params))]
+    #[expect(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, function_name, template_variant_name, output_source, optimizer_config, query_variant_name=None, filters=None, order_by=None, limit=None, offset=None, val_fraction=None))]
     fn experimental_launch_optimization_workflow<'a>(
         this: PyRef<'a, Self>,
-        params: Bound<'a, PyAny>,
+        function_name: String,
+        template_variant_name: String,
+        output_source: Bound<'a, PyAny>,
+        optimizer_config: Bound<'a, PyAny>,
+        query_variant_name: Option<String>,
+        filters: Option<Bound<'a, PyAny>>,
+        order_by: Option<Bound<'a, PyAny>>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+        val_fraction: Option<f64>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
-        let params: LaunchOptimizationWorkflowParams = deserialize_from_pyobj(this.py(), &params)?;
+        let output_source = deserialize_from_pyobj(this.py(), &output_source)?;
+        let optimizer_config = deserialize_optimization_config(&optimizer_config)?;
+        let filters = filters
+            .map(|f| deserialize_from_pyobj(this.py(), &f))
+            .transpose()?;
+        let order_by = order_by
+            .map(|o| deserialize_from_pyobj(this.py(), &o))
+            .transpose()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .experimental_launch_optimization_workflow(params)
+                .experimental_launch_optimization_workflow(LaunchOptimizationWorkflowParams {
+                    function_name,
+                    template_variant_name,
+                    query_variant_name,
+                    filters,
+                    output_source,
+                    order_by,
+                    limit,
+                    offset,
+                    val_fraction,
+                    optimizer_config: UninitializedOptimizerInfo {
+                        inner: optimizer_config,
+                    },
+                })
                 .await;
             match res {
                 Ok(job_handle) => Ok(job_handle),

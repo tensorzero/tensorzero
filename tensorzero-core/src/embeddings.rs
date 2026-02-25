@@ -10,7 +10,7 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write,
 };
 use crate::config::provider_types::ProviderTypesConfig;
-use crate::cost::{CostConfig, ResponseMode, compute_cost, load_cost_config};
+use crate::cost::{CostConfig, ResponseMode, compute_cost, load_unified_cost_config};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
@@ -24,7 +24,8 @@ use crate::providers::azure::AzureProvider;
 use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
-    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, get_estimated_tokens,
+    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, RateLimitingConfig,
+    decimal_cost_to_nano_cost, get_estimated_tokens,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -38,7 +39,7 @@ use crate::{
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
-use tensorzero_types::UninitializedCostConfig;
+use tensorzero_types::UninitializedUnifiedCostConfig;
 use tokio::time::error::Elapsed;
 use tracing::{Span, instrument};
 use tracing_futures::Instrument;
@@ -356,6 +357,7 @@ impl RateLimitedRequest for EmbeddingRequest {
     fn estimated_resource_usage(
         &self,
         resources: &[RateLimitResource],
+        rate_limiting_config: &RateLimitingConfig,
     ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let EmbeddingRequest {
             input,
@@ -375,9 +377,16 @@ impl RateLimitedRequest for EmbeddingRequest {
             None
         };
 
+        let nano_cost = if resources.contains(&RateLimitResource::Cost) {
+            Some(rate_limiting_config.default_nano_cost)
+        } else {
+            None
+        };
+
         Ok(EstimatedRateLimitResourceUsage {
             model_inferences,
             tokens,
+            nano_cost,
         })
     }
 }
@@ -412,15 +421,18 @@ pub struct EmbeddingProviderResponse {
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
     fn resource_usage(&self) -> RateLimitResourceUsage {
+        let nano_cost = self.usage.cost.map(decimal_cost_to_nano_cost);
         if let Some(tokens) = self.usage.total_tokens() {
             RateLimitResourceUsage::Exact {
                 model_inferences: 1,
                 tokens: tokens as u64,
+                nano_cost,
             }
         } else {
             RateLimitResourceUsage::UnderEstimate {
                 model_inferences: 1,
                 tokens: 0,
+                nano_cost,
             }
         }
     }
@@ -717,7 +729,7 @@ pub struct UninitializedEmbeddingProviderConfig {
     #[serde(default)]
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(default)]
-    pub cost: Option<UninitializedCostConfig>,
+    pub cost: Option<UninitializedUnifiedCostConfig>,
 }
 
 impl UninitializedEmbeddingProviderConfig {
@@ -737,11 +749,15 @@ impl UninitializedEmbeddingProviderConfig {
 
         let extra_body = self.extra_body;
         let extra_headers = self.extra_headers;
-        let cost = self.cost.map(load_cost_config).transpose().map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!("cost: {e}"),
-            })
-        })?;
+        let cost = self
+            .cost
+            .map(load_unified_cost_config)
+            .transpose()
+            .map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("cost: {e}"),
+                })
+            })?;
 
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {

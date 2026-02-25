@@ -37,7 +37,6 @@ import {
   formatConfidenceInterval,
 } from "~/utils/config/feedback";
 import type {
-  EvaluatorConfig,
   MetricConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
@@ -46,7 +45,7 @@ import {
   useColorAssigner,
   ColorAssignerProvider,
 } from "~/hooks/evaluations/ColorAssigner";
-import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
+import MetricValue from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { InputElement } from "~/components/input_output/InputElement";
@@ -614,10 +613,6 @@ export function EvaluationTable({
                                                 ? evaluatorConfig.optimize
                                                 : "max"
                                             }
-                                            cutoff={
-                                              evaluatorConfig.cutoff ??
-                                              undefined
-                                            }
                                           />
                                           {/* Make feedback editor appear on hover */}
                                           {evaluatorConfig.type ===
@@ -715,7 +710,6 @@ const EvaluatorHeader = ({
           <EvaluatorProperties
             metricConfig={metricProperties}
             summaryStats={summaryStats}
-            evaluatorConfig={evaluatorConfig}
           />
         </div>
       </TooltipTrigger>
@@ -731,12 +725,6 @@ const EvaluatorHeader = ({
               {metricProperties.optimize}
             </span>
           </div>
-          {evaluatorConfig.cutoff !== undefined && (
-            <div>
-              <span className="font-medium">Cutoff:</span>
-              <span className="ml-2 font-medium">{evaluatorConfig.cutoff}</span>
-            </div>
-          )}
         </div>
       </TooltipContent>
     </Tooltip>
@@ -746,11 +734,9 @@ const EvaluatorHeader = ({
 const EvaluatorProperties = ({
   metricConfig,
   summaryStats,
-  evaluatorConfig,
 }: {
   metricConfig: MetricConfig;
   summaryStats: EvaluationStatistics[];
-  evaluatorConfig: EvaluatorConfig;
 }) => {
   const [searchParams] = useSearchParams();
   const selectedRunIdsParam = searchParams.get("evaluation_run_ids") || "";
@@ -780,20 +766,10 @@ const EvaluatorProperties = ({
               stat.evaluation_run_id,
               false,
             ); // Pass 'false' to get non-hover version
-            const failed =
-              evaluatorConfig.type === "llm_judge" && evaluatorConfig.cutoff
-                ? isCutoffFailed(
-                    stat.mean_metric,
-                    evaluatorConfig.optimize,
-                    evaluatorConfig.cutoff,
-                  )
-                : false;
             return (
               <div
                 key={stat.evaluation_run_id}
-                className={`mt-1 flex items-center justify-center gap-1.5 ${
-                  failed ? "text-red-700" : ""
-                }`}
+                className="mt-1 flex items-center justify-center gap-1.5"
               >
                 <div
                   className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}

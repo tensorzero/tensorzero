@@ -1,4 +1,4 @@
-import { RefreshCw, UserPen } from "lucide-react";
+import { DollarSign, RefreshCw, UserPen } from "lucide-react";
 import React from "react";
 
 export interface IconProps {
@@ -655,6 +655,12 @@ export const SequenceChecks: React.FC<IconProps> = (props) => (
 );
 
 export const UserFeedback: React.FC = () => <UserPen size={12} />;
+
+export const Cost: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <DollarSign size={16} />
+  </IconWrapper>
+);
 
 export const Refresh: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
