@@ -513,7 +513,7 @@ pub async fn run_gepa_iteration(
         EvaluationConfig::Inference(cfg) => &cfg.evaluators,
     };
 
-    let mut pareto_frontier = ParetoFrontier::from_checkpoint(checkpoint);
+    let mut pareto_frontier = ParetoFrontier::from_checkpoint(checkpoint, params.iteration as u64);
 
     let parent = match pareto_frontier.sample_by_frequency() {
         Ok(variant) => variant,

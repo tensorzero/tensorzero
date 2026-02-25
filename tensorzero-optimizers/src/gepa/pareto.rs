@@ -162,9 +162,11 @@ impl ParetoFrontier {
     /// Restore a Pareto frontier from a checkpoint.
     ///
     /// Rebuilds the `objective_vector_cache` from the restored scores and layout.
-    pub fn from_checkpoint(checkpoint: ParetoCheckpoint) -> Self {
+    /// The `iteration` offset ensures the RNG advances across checkpoint boundaries,
+    /// so different parents are sampled even when the frontier is unchanged.
+    pub fn from_checkpoint(checkpoint: ParetoCheckpoint, iteration: u64) -> Self {
         let rng = match checkpoint.seed {
-            Some(seed) => StdRng::seed_from_u64(seed),
+            Some(seed) => StdRng::seed_from_u64(seed.wrapping_add(iteration)),
             None => {
                 let mut thread_rng = rand::rng();
                 StdRng::from_rng(&mut thread_rng)

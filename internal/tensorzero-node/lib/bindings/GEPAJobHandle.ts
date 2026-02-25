@@ -4,6 +4,6 @@
  * Job handle for GEPA optimization
  *
  * Contains the task ID of the durable GEPA optimization task.
- * Poll the task via SpawnClient to get the result.
+ * Poll the task via `SpawnClient` to get the result.
  */
 export type GEPAJobHandle = { task_id: string };
