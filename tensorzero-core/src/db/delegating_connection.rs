@@ -28,6 +28,7 @@ use crate::db::datasets::{
 use crate::db::evaluation_queries::{
     EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
     EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
+    InferenceEvaluationRunInsert,
 };
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CumulativeFeedbackTimeSeriesPoint,
@@ -868,6 +869,15 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
 
 #[async_trait]
 impl EvaluationQueries for DelegatingDatabaseConnection {
+    async fn insert_inference_evaluation_run(
+        &self,
+        run: &InferenceEvaluationRunInsert,
+    ) -> Result<(), Error> {
+        self.get_database()
+            .insert_inference_evaluation_run(run)
+            .await
+    }
+
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
         self.get_database().count_total_evaluation_runs().await
     }

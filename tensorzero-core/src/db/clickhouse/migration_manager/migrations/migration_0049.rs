@@ -70,7 +70,6 @@ impl Migration for Migration0049<'_> {
                     metrics String,
                     source LowCardinality(String),
                     snapshot_hash Nullable(String),
-                    completed_at Nullable(DateTime64(3, 'UTC')),
                     created_at DateTime64(3, 'UTC'),
                     updated_at DateTime64(3, 'UTC')
                 )
@@ -100,7 +99,6 @@ impl Migration for Migration0049<'_> {
                     metrics,
                     source,
                     snapshot_hash,
-                    completed_at,
                     created_at,
                     updated_at
                 )
@@ -185,7 +183,6 @@ impl Migration for Migration0049<'_> {
                     coalesce(any(mbr.metrics), '[]') AS metrics,
                     'dataset_name' AS source,
                     if(isNull(any(ei.snapshot_hash)), NULL, lower(hex(any(ei.snapshot_hash)))) AS snapshot_hash,
-                    max(ei.inference_timestamp) AS completed_at,
                     min(ei.inference_timestamp) AS created_at,
                     now64(3) AS updated_at
                 FROM evaluation_inferences ei

@@ -12,7 +12,6 @@ CREATE TABLE tensorzero.inference_evaluation_runs (
     metrics JSONB NOT NULL DEFAULT '[]'::JSONB,
     source TEXT NOT NULL CHECK (source IN ('dataset_name', 'datapoint_ids')),
     snapshot_hash BYTEA,
-    completed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CHECK (jsonb_typeof(variant_names) = 'array'),
@@ -81,8 +80,7 @@ filtered_runs AS (
         MIN(dataset_name) AS dataset_name,
         to_jsonb(ARRAY_AGG(DISTINCT variant_name ORDER BY variant_name)) AS variant_names,
         MIN(snapshot_hash) AS snapshot_hash,
-        MIN(created_at) AS created_at,
-        MAX(created_at) AS completed_at
+        MIN(created_at) AS created_at
     FROM evaluation_inferences
     WHERE
         run_id IS NOT NULL
@@ -141,7 +139,6 @@ INSERT INTO tensorzero.inference_evaluation_runs (
     metrics,
     source,
     snapshot_hash,
-    completed_at,
     created_at
 )
 SELECT
@@ -154,7 +151,6 @@ SELECT
     COALESCE(mbr.metrics, '[]'::JSONB) AS metrics,
     'dataset_name' AS source,
     fr.snapshot_hash,
-    fr.completed_at,
     fr.created_at
 FROM filtered_runs fr
 LEFT JOIN metrics_by_run mbr ON mbr.run_id = fr.run_id
@@ -167,5 +163,4 @@ ON CONFLICT (run_id) DO UPDATE SET
     metrics = EXCLUDED.metrics,
     source = EXCLUDED.source,
     snapshot_hash = EXCLUDED.snapshot_hash,
-    completed_at = EXCLUDED.completed_at,
     updated_at = NOW();
