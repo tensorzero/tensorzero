@@ -254,24 +254,18 @@ jobs:
         with:
           version: "0.9.27"
 
-      # The `packageManager` field in package.json triggers corepack to download pnpm on first invocation,
-      # which can fail with transient 403s from the npm registry. Retry the bootstrap separately so the
-      # actual script doesn't need retry logic.
-      - name: Bootstrap pnpm
+      - name: Generate Python schemas
         run: |
           for attempt in 1 2 3; do
-            if pnpm --version; then
+            if pnpm generate-python-schemas; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to bootstrap pnpm after 3 attempts"
+              echo "Failed to generate Python schemas after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
           done
-
-      - name: Generate Python schemas
-        run: pnpm generate-python-schemas
 
       - name: Check for git diff after generating schemas
         id: git_diff_check
