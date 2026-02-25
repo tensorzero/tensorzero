@@ -4,8 +4,8 @@
  * Evaluator that checks whether an inference's tool calls match the expected behavior.
  */
 export type ToolUseConfig =
-  | { behavior: "none"; cutoff?: number }
-  | { behavior: "none_of"; tools: Array<string>; cutoff?: number }
-  | { behavior: "any"; cutoff?: number }
-  | { behavior: "any_of"; tools: Array<string>; cutoff?: number }
-  | { behavior: "all_of"; tools: Array<string>; cutoff?: number };
+  | { behavior: "none" }
+  | { behavior: "none_of"; tools: Array<string> }
+  | { behavior: "any" }
+  | { behavior: "any_of"; tools: Array<string> }
+  | { behavior: "all_of"; tools: Array<string> };

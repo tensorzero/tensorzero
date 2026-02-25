@@ -30,17 +30,11 @@ pub(super) fn run_tool_use_evaluator(
     debug!(called_tools = ?called_tools, behavior = %config, "Evaluating tool use");
 
     let result = match config {
-        ToolUseConfig::None { .. } => called_tools.is_empty(),
-        ToolUseConfig::Any { .. } => !called_tools.is_empty(),
-        ToolUseConfig::NoneOf { tools, .. } => {
-            tools.iter().all(|t| !called_tools.contains(t.as_str()))
-        }
-        ToolUseConfig::AnyOf { tools, .. } => {
-            tools.iter().any(|t| called_tools.contains(t.as_str()))
-        }
-        ToolUseConfig::AllOf { tools, .. } => {
-            tools.iter().all(|t| called_tools.contains(t.as_str()))
-        }
+        ToolUseConfig::None => called_tools.is_empty(),
+        ToolUseConfig::Any => !called_tools.is_empty(),
+        ToolUseConfig::NoneOf { tools } => tools.iter().all(|t| !called_tools.contains(t.as_str())),
+        ToolUseConfig::AnyOf { tools } => tools.iter().any(|t| called_tools.contains(t.as_str())),
+        ToolUseConfig::AllOf { tools } => tools.iter().all(|t| called_tools.contains(t.as_str())),
     };
 
     debug!(result = %result, "Tool use evaluation completed");
@@ -114,7 +108,7 @@ mod tests {
     #[test]
     fn test_behavior_none_no_tools() {
         let response = make_chat_response(&[]);
-        let config = ToolUseConfig::None { cutoff: None };
+        let config = ToolUseConfig::None;
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for chat response with no tools");
         assert_eq!(
@@ -127,7 +121,7 @@ mod tests {
     #[test]
     fn test_behavior_none_with_tools() {
         let response = make_chat_response(&["search"]);
-        let config = ToolUseConfig::None { cutoff: None };
+        let config = ToolUseConfig::None;
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for chat response with tools");
         assert_eq!(
@@ -140,7 +134,7 @@ mod tests {
     #[test]
     fn test_behavior_any_with_tools() {
         let response = make_chat_response(&["search"]);
-        let config = ToolUseConfig::Any { cutoff: None };
+        let config = ToolUseConfig::Any;
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for chat response with tools");
         assert_eq!(
@@ -153,7 +147,7 @@ mod tests {
     #[test]
     fn test_behavior_any_no_tools() {
         let response = make_chat_response(&[]);
-        let config = ToolUseConfig::Any { cutoff: None };
+        let config = ToolUseConfig::Any;
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for chat response with no tools");
         assert_eq!(
@@ -168,7 +162,6 @@ mod tests {
         let response = make_chat_response(&["search", "weather"]);
         let config = ToolUseConfig::NoneOf {
             tools: vec!["calculator".to_string(), "email".to_string()],
-            cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for none_of with no forbidden tools called");
@@ -184,7 +177,6 @@ mod tests {
         let response = make_chat_response(&["search", "calculator"]);
         let config = ToolUseConfig::NoneOf {
             tools: vec!["calculator".to_string(), "email".to_string()],
-            cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for none_of with forbidden tool called");
@@ -200,7 +192,6 @@ mod tests {
         let response = make_chat_response(&["search", "calculator"]);
         let config = ToolUseConfig::AnyOf {
             tools: vec!["calculator".to_string(), "email".to_string()],
-            cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for any_of with matching tool");
@@ -216,7 +207,6 @@ mod tests {
         let response = make_chat_response(&["search", "weather"]);
         let config = ToolUseConfig::AnyOf {
             tools: vec!["calculator".to_string(), "email".to_string()],
-            cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for any_of with no matching tools");
@@ -232,7 +222,6 @@ mod tests {
         let response = make_chat_response(&["search", "calculator", "email"]);
         let config = ToolUseConfig::AllOf {
             tools: vec!["calculator".to_string(), "search".to_string()],
-            cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for all_of with all tools present");
@@ -248,7 +237,6 @@ mod tests {
         let response = make_chat_response(&["search"]);
         let config = ToolUseConfig::AllOf {
             tools: vec!["calculator".to_string(), "search".to_string()],
-            cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for all_of with partial tools");
@@ -262,7 +250,7 @@ mod tests {
     #[test]
     fn test_json_inference_error() {
         let response = make_json_response();
-        let config = ToolUseConfig::Any { cutoff: None };
+        let config = ToolUseConfig::Any;
         let result = run_tool_use_evaluator(&response, &config);
         assert!(result.is_err(), "should error for JSON inferences");
     }
@@ -272,7 +260,6 @@ mod tests {
         let response = make_chat_response(&["search", "search", "search"]);
         let config = ToolUseConfig::AllOf {
             tools: vec!["search".to_string()],
-            cutoff: None,
         };
         let result = run_tool_use_evaluator(&response, &config)
             .expect("evaluator should succeed for all_of with duplicate tool calls");

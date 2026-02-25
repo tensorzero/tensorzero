@@ -112,7 +112,7 @@ impl EvaluatorConfig {
         match self {
             EvaluatorConfig::ExactMatch(config) => config.cutoff,
             EvaluatorConfig::LLMJudge(config) => config.cutoff,
-            EvaluatorConfig::ToolUse(config) => config.cutoff(),
+            EvaluatorConfig::ToolUse(_) => Option::None,
         }
     }
 
@@ -153,53 +153,23 @@ pub struct ExactMatchConfig {
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum ToolUseConfig {
     /// The inference must not contain any tool calls.
-    None {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        cutoff: Option<f32>,
-    },
+    None,
     /// None of the listed tools may appear in the inference's tool calls.
-    NoneOf {
-        tools: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        cutoff: Option<f32>,
-    },
+    NoneOf { tools: Vec<String> },
     /// The inference must contain at least one tool call (any tool).
-    Any {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        cutoff: Option<f32>,
-    },
+    Any,
     /// At least one of the listed tools must appear in the inference's tool calls.
-    AnyOf {
-        tools: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        cutoff: Option<f32>,
-    },
+    AnyOf { tools: Vec<String> },
     /// All of the listed tools must appear in the inference's tool calls.
-    AllOf {
-        tools: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        cutoff: Option<f32>,
-    },
-}
-
-impl ToolUseConfig {
-    pub fn cutoff(&self) -> Option<f32> {
-        match self {
-            ToolUseConfig::None { cutoff, .. }
-            | ToolUseConfig::NoneOf { cutoff, .. }
-            | ToolUseConfig::Any { cutoff, .. }
-            | ToolUseConfig::AnyOf { cutoff, .. }
-            | ToolUseConfig::AllOf { cutoff, .. } => *cutoff,
-        }
-    }
+    AllOf { tools: Vec<String> },
 }
 
 impl std::fmt::Display for ToolUseConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ToolUseConfig::None { .. } => write!(f, "none"),
+            ToolUseConfig::None => write!(f, "none"),
             ToolUseConfig::NoneOf { .. } => write!(f, "none_of"),
-            ToolUseConfig::Any { .. } => write!(f, "any"),
+            ToolUseConfig::Any => write!(f, "any"),
             ToolUseConfig::AnyOf { .. } => write!(f, "any_of"),
             ToolUseConfig::AllOf { .. } => write!(f, "all_of"),
         }
@@ -653,10 +623,10 @@ impl UninitializedEvaluatorConfig {
             }
             UninitializedEvaluatorConfig::ToolUse(config) => {
                 match &config {
-                    ToolUseConfig::None { .. } | ToolUseConfig::Any { .. } => {}
-                    ToolUseConfig::NoneOf { tools, .. }
-                    | ToolUseConfig::AnyOf { tools, .. }
-                    | ToolUseConfig::AllOf { tools, .. } => {
+                    ToolUseConfig::None | ToolUseConfig::Any => {}
+                    ToolUseConfig::NoneOf { tools }
+                    | ToolUseConfig::AnyOf { tools }
+                    | ToolUseConfig::AllOf { tools } => {
                         if tools.is_empty() {
                             return Err(ErrorDetails::Config {
                                 message: format!(
