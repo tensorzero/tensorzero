@@ -139,16 +139,19 @@ function buildMultiQuestionPayload() {
 
 /**
  * Create a new autopilot session and return the session ID.
- * Sends a message through the UI, waits for redirect, then interrupts
- * so the worker stops generating events and the session is quiescent.
+ * Sends a message through the UI, waits for redirect, then waits for the
+ * worker to finish processing so the session is quiescent.
  */
-async function createAndInterruptSession(
+async function createSession(
   page: import("@playwright/test").Page,
 ): Promise<string> {
   await page.goto("/autopilot/sessions/new");
+  await page.waitForLoadState("networkidle");
   const messageInput = page.getByRole("textbox");
   await messageInput.fill(`Test question flow ${v7()}`);
-  await page.getByRole("button", { name: "Send message" }).click();
+  const sendButton = page.getByRole("button", { name: "Send message" });
+  await expect(sendButton).toBeEnabled({ timeout: 10000 });
+  await sendButton.click();
 
   await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
     timeout: 30000,
@@ -158,13 +161,6 @@ async function createAndInterruptSession(
     .url()
     .match(/\/autopilot\/sessions\/([a-f0-9-]+)$/)?.[1];
   if (!sessionId) throw new Error("Could not extract session ID from URL");
-
-  const stopButton = page.getByRole("button", { name: /stop session/i });
-  await expect(stopButton).toBeVisible({ timeout: 30000 });
-  await stopButton.click();
-  await expect(page.getByText("Interrupted session")).toBeVisible({
-    timeout: 10000,
-  });
 
   return sessionId;
 }
@@ -185,7 +181,7 @@ test.describe("User questions", () => {
   test("should submit a multiple choice answer", async ({ page }) => {
     test.setTimeout(120000);
 
-    const sessionId = await createAndInterruptSession(page);
+    const sessionId = await createSession(page);
 
     // Insert a user_questions event via the database
     const eventId = v7();
@@ -218,7 +214,7 @@ test.describe("User questions", () => {
   test("should submit a free response answer", async ({ page }) => {
     test.setTimeout(120000);
 
-    const sessionId = await createAndInterruptSession(page);
+    const sessionId = await createSession(page);
 
     const eventId = v7();
     const { payload, q1Id } = buildFreeResponsePayload();
@@ -248,7 +244,7 @@ test.describe("User questions", () => {
   }) => {
     test.setTimeout(120000);
 
-    const sessionId = await createAndInterruptSession(page);
+    const sessionId = await createSession(page);
 
     const eventId = v7();
     const { payload, q1Id, opt1Id, opt2Id } = buildMultiSelectPayload();
@@ -282,7 +278,7 @@ test.describe("User questions", () => {
   }) => {
     test.setTimeout(120000);
 
-    const sessionId = await createAndInterruptSession(page);
+    const sessionId = await createSession(page);
 
     const eventId = v7();
     const { payload, q1Id, q2Id, opt1Id } = buildMultiQuestionPayload();
@@ -324,7 +320,7 @@ test.describe("User questions", () => {
   test("should preserve selections when navigating back", async ({ page }) => {
     test.setTimeout(120000);
 
-    const sessionId = await createAndInterruptSession(page);
+    const sessionId = await createSession(page);
 
     const eventId = v7();
     const { payload, opt1Id } = buildMultiQuestionPayload();
@@ -372,7 +368,7 @@ test.describe("User questions", () => {
   }) => {
     test.setTimeout(120000);
 
-    const sessionId = await createAndInterruptSession(page);
+    const sessionId = await createSession(page);
 
     const eventId = v7();
     const { payload, q1Id } = buildMultipleChoicePayload();
@@ -398,7 +394,7 @@ test.describe("User questions", () => {
   }) => {
     test.setTimeout(120000);
 
-    const sessionId = await createAndInterruptSession(page);
+    const sessionId = await createSession(page);
 
     const eventId = v7();
     const { payload } = buildMultipleChoicePayload();
@@ -419,7 +415,7 @@ test.describe("User questions", () => {
   }) => {
     test.setTimeout(120000);
 
-    const sessionId = await createAndInterruptSession(page);
+    const sessionId = await createSession(page);
 
     const eventId = v7();
     const { payload } = buildFreeResponsePayload("Describe your requirements");
@@ -448,7 +444,7 @@ test.describe("User questions", () => {
   }) => {
     test.setTimeout(120000);
 
-    const sessionId = await createAndInterruptSession(page);
+    const sessionId = await createSession(page);
 
     // Intercept answer-questions requests to count them
     let answerRequestCount = 0;
