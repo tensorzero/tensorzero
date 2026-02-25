@@ -3,10 +3,10 @@ use std::sync::Arc;
 use tensorzero_auth::key::PUBLIC_ID_LENGTH;
 
 use crate::rate_limiting::{
-    ApiKeyPublicIdConfigScope, ApiKeyPublicIdValueScope, RateLimit, RateLimitInterval,
-    RateLimitResource, RateLimitingBackend, RateLimitingConfigPriority, RateLimitingConfigRule,
-    RateLimitingConfigScope, RateLimitingConfigScopes, TagRateLimitingConfigScope, TagValueScope,
-    UninitializedRateLimitingConfig,
+    ApiKeyPublicIdConfigScope, ApiKeyPublicIdValueScope, NANO_DOLLARS_PER_DOLLAR, RateLimit,
+    RateLimitInterval, RateLimitResource, RateLimitingBackend, RateLimitingConfigPriority,
+    RateLimitingConfigRule, RateLimitingConfigScope, RateLimitingConfigScopes,
+    TagRateLimitingConfigScope, TagValueScope, UninitializedRateLimitingConfig, cost_to_nano_cost,
 };
 
 /*
@@ -44,6 +44,10 @@ pub struct TomlUninitializedRateLimitingConfig {
     pub(crate) enabled: bool,
     #[serde(default)]
     pub(crate) backend: RateLimitingBackend,
+    /// Default cost in dollars for cost rate limiting estimation.
+    /// Converted to nano-dollars internally. Defaults to 1 (= $1.00).
+    #[serde(default)]
+    pub(crate) default_cost: Option<f64>,
 }
 
 impl Default for TomlUninitializedRateLimitingConfig {
@@ -52,6 +56,7 @@ impl Default for TomlUninitializedRateLimitingConfig {
             rules: Vec::new(),
             enabled: true,
             backend: RateLimitingBackend::default(),
+            default_cost: None,
         }
     }
 }
@@ -60,13 +65,29 @@ fn default_enabled() -> bool {
     true
 }
 
-impl From<TomlUninitializedRateLimitingConfig> for UninitializedRateLimitingConfig {
-    fn from(toml_config: TomlUninitializedRateLimitingConfig) -> Self {
-        Self {
+impl TryFrom<TomlUninitializedRateLimitingConfig> for UninitializedRateLimitingConfig {
+    type Error = String;
+
+    fn try_from(toml_config: TomlUninitializedRateLimitingConfig) -> Result<Self, Self::Error> {
+        // Validate and convert default_cost
+        let default_nano_cost = match toml_config.default_cost {
+            Some(cost) => {
+                if !cost.is_finite() || cost < 0.0 {
+                    return Err(format!(
+                        "`default_cost` must be a finite non-negative number, got {cost}"
+                    ));
+                }
+                cost_to_nano_cost(cost)
+            }
+            None => NANO_DOLLARS_PER_DOLLAR, // $1.00 default
+        };
+
+        Ok(Self {
             rules: toml_config.rules.into_iter().map(Into::into).collect(),
             enabled: toml_config.enabled,
             backend: toml_config.backend,
-        }
+            default_nano_cost,
+        })
     }
 }
 
@@ -102,6 +123,20 @@ enum CapacityHelper {
     Amount(u64),
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CostBucketConfig {
+    capacity: f64,
+    refill_rate: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum CostCapacityHelper {
+    Bucket(CostBucketConfig),
+    Amount(f64),
+}
+
 impl<'de> Deserialize<'de> for TomlRateLimitingConfigRule {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -124,21 +159,58 @@ impl<'de> Deserialize<'de> for TomlRateLimitingConfigRule {
                     )));
                 }
 
-                let value =
-                    CapacityHelper::deserialize(value.clone()).map_err(|_| {
-                        serde::de::Error::custom("Rate limit value must either be a nonnegative integer or { capacity = .., refill_rate = .. } where both are nonnegative integers")
-                    })?;
-
-                let (capacity, refill_rate) = match value {
-                    CapacityHelper::Amount(amount) => (amount, amount),
-                    CapacityHelper::Bucket(bucket) => (bucket.capacity, bucket.refill_rate),
-                };
-
                 let resource = parse_resource(parts[0]).map_err(serde::de::Error::custom)?;
 
                 let interval = RateLimitInterval::deserialize(
                     serde::de::value::StrDeserializer::new(parts[1]),
                 )?;
+
+                // Cost resources use f64 values (dollars), converted to nano-dollars internally.
+                // Token and ModelInference resources use u64 values.
+                let (capacity, refill_rate) = match resource {
+                    RateLimitResource::Cost => {
+                        let cost_value =
+                            CostCapacityHelper::deserialize(value.clone()).map_err(|_| {
+                                serde::de::Error::custom("Cost rate limit value must either be a nonnegative number or { capacity = .., refill_rate = .. } where both are nonnegative numbers")
+                            })?;
+                        match cost_value {
+                            CostCapacityHelper::Amount(amount) => {
+                                if !amount.is_finite() || amount < 0.0 {
+                                    return Err(serde::de::Error::custom(
+                                        "Cost rate limit value must be a finite non-negative number",
+                                    ));
+                                }
+                                let nano_cost = cost_to_nano_cost(amount);
+                                (nano_cost, nano_cost)
+                            }
+                            CostCapacityHelper::Bucket(bucket) => {
+                                if !bucket.capacity.is_finite()
+                                    || !bucket.refill_rate.is_finite()
+                                    || bucket.capacity < 0.0
+                                    || bucket.refill_rate < 0.0
+                                {
+                                    return Err(serde::de::Error::custom(
+                                        "Cost rate limit `capacity` and `refill_rate` must be finite non-negative numbers",
+                                    ));
+                                }
+                                (
+                                    cost_to_nano_cost(bucket.capacity),
+                                    cost_to_nano_cost(bucket.refill_rate),
+                                )
+                            }
+                        }
+                    }
+                    _ => {
+                        let value =
+                            CapacityHelper::deserialize(value.clone()).map_err(|_| {
+                                serde::de::Error::custom("Rate limit value must either be a nonnegative integer or { capacity = .., refill_rate = .. } where both are nonnegative integers")
+                            })?;
+                        match value {
+                            CapacityHelper::Amount(amount) => (amount, amount),
+                            CapacityHelper::Bucket(bucket) => (bucket.capacity, bucket.refill_rate),
+                        }
+                    }
+                };
 
                 limits.push(Arc::new(RateLimit {
                     resource,
@@ -191,7 +263,7 @@ fn parse_resource(resource_str: &str) -> Result<RateLimitResource, String> {
     match resource_str {
         "model_inferences" => Ok(RateLimitResource::ModelInference),
         "tokens" => Ok(RateLimitResource::Token),
-        // "cents" => Ok(RateLimitResource::Cent),
+        "cost" => Ok(RateLimitResource::Cost),
         _ => Err(format!("Unknown resource: {resource_str}")),
     }
 }
@@ -408,7 +480,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
 
@@ -456,7 +528,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 8);
@@ -485,7 +557,7 @@ mod tests {
         "#;
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 2);
 
@@ -511,7 +583,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
 
@@ -533,7 +605,7 @@ mod tests {
         "#;
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].scope.len(), 1);
@@ -559,7 +631,7 @@ mod tests {
         "#;
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
         let check_config = |config: RateLimitingConfig| {
@@ -598,7 +670,7 @@ mod tests {
         "#;
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         check_config(config);
     }
@@ -639,7 +711,7 @@ mod tests {
         "#;
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 4);
 
@@ -777,7 +849,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert!(config.enabled());
 
@@ -797,7 +869,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert!(!config.enabled());
 
@@ -814,7 +886,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 0);
         assert!(config.enabled());
@@ -999,7 +1071,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
 
@@ -1065,7 +1137,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 0);
@@ -1080,7 +1152,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits[0].capacity, 0);
@@ -1095,7 +1167,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits[0].capacity, 9223372036854775807);
@@ -1107,15 +1179,15 @@ mod tests {
             [[rules]]
             model_inferences_per_second = 1
             tokens_per_minute = 2
-            # cents_per_hour = 3
+            cost_per_hour = 3.0
             priority = 0
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
-        assert_eq!(config.rules()[0].limits.len(), 2);
+        assert_eq!(config.rules()[0].limits.len(), 3);
 
         let resources: Vec<_> = config.rules()[0]
             .limits
@@ -1124,7 +1196,7 @@ mod tests {
             .collect();
         assert!(resources.contains(&RateLimitResource::ModelInference));
         assert!(resources.contains(&RateLimitResource::Token));
-        // assert!(resources.contains(&RateLimitResource::Cent));
+        assert!(resources.contains(&RateLimitResource::Cost));
     }
 
     #[test]
@@ -1160,7 +1232,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 1);
@@ -1182,7 +1254,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 2);
@@ -1216,7 +1288,7 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(config.rules().len(), 1);
         assert_eq!(config.rules()[0].limits.len(), 2);
@@ -1293,7 +1365,7 @@ mod tests {
         "#;
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let result: Result<RateLimitingConfig, _> = uninitialized_config.try_into();
 
         assert!(result.is_err());
@@ -1392,7 +1464,7 @@ mod tests {
         "#;
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.into();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
 
         // Serialize to JSON
         let json_str = serde_json::to_string(&uninitialized_config).unwrap();
@@ -1409,6 +1481,227 @@ mod tests {
         assert_eq!(
             roundtrip_config.rules[0].priority,
             RateLimitingConfigPriority::Priority(1)
+        );
+    }
+
+    #[test]
+    fn test_cost_per_day_simple() {
+        let toml_str = r"
+            [[rules]]
+            cost_per_day = 10.0
+            always = true
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits.len(), 1);
+
+        let limit = &config.rules()[0].limits[0];
+        assert_eq!(limit.resource, RateLimitResource::Cost);
+        assert_eq!(limit.interval, RateLimitInterval::Day);
+        assert_eq!(
+            limit.capacity, 10_000_000_000,
+            "$10.00 should be 10 billion nano-dollars"
+        );
+        assert_eq!(
+            limit.refill_rate, 10_000_000_000,
+            "refill_rate should equal capacity for simple format"
+        );
+    }
+
+    #[test]
+    fn test_cost_per_hour_bucket_format() {
+        let toml_str = r"
+            [[rules]]
+            cost_per_hour = { capacity = 5.0, refill_rate = 2.5 }
+            priority = 1
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(config.rules()[0].limits.len(), 1);
+
+        let limit = &config.rules()[0].limits[0];
+        assert_eq!(limit.resource, RateLimitResource::Cost);
+        assert_eq!(limit.interval, RateLimitInterval::Hour);
+        assert_eq!(
+            limit.capacity, 5_000_000_000,
+            "$5.00 should be 5 billion nano-dollars"
+        );
+        assert_eq!(
+            limit.refill_rate, 2_500_000_000,
+            "$2.50 should be 2.5 billion nano-dollars"
+        );
+    }
+
+    #[test]
+    fn test_cost_combined_with_tokens() {
+        let toml_str = r"
+            [[rules]]
+            cost_per_day = 100.0
+            tokens_per_minute = 1000000
+            always = true
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+        assert_eq!(config.rules().len(), 1);
+        assert_eq!(
+            config.rules()[0].limits.len(),
+            2,
+            "Should have both cost and token limits"
+        );
+
+        let resources: Vec<_> = config.rules()[0]
+            .limits
+            .iter()
+            .map(|l| l.resource)
+            .collect();
+        assert!(
+            resources.contains(&RateLimitResource::Cost),
+            "Should contain Cost resource"
+        );
+        assert!(
+            resources.contains(&RateLimitResource::Token),
+            "Should contain Token resource"
+        );
+    }
+
+    #[test]
+    fn test_default_cost_parsing() {
+        // Explicit default_cost
+        let toml_str = r"
+            default_cost = 0.50
+            [[rules]]
+            cost_per_day = 10.0
+            always = true
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        assert_eq!(
+            uninitialized_config.default_nano_cost, 500_000_000,
+            "$0.50 should be 500 million nano-dollars"
+        );
+
+        // Default when not specified
+        let toml_str = r"
+            [[rules]]
+            cost_per_day = 10.0
+            always = true
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        assert_eq!(
+            uninitialized_config.default_nano_cost, 1_000_000_000,
+            "Default should be $1.00 = 1 billion nano-dollars"
+        );
+    }
+
+    #[test]
+    fn test_negative_default_cost_rejected() {
+        let toml_str = r"
+            default_cost = -1.0
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let result: Result<UninitializedRateLimitingConfig, _> = toml_config.try_into();
+        assert!(result.is_err(), "Negative default_cost should be rejected");
+    }
+
+    #[test]
+    fn test_nan_default_cost_rejected() {
+        // NaN cannot be represented directly in TOML, so we construct the config manually
+        let toml_config = TomlUninitializedRateLimitingConfig {
+            default_cost: Some(f64::NAN),
+            ..Default::default()
+        };
+        let result: Result<UninitializedRateLimitingConfig, _> = toml_config.try_into();
+        assert!(result.is_err(), "NaN default_cost should be rejected");
+    }
+
+    #[test]
+    fn test_infinity_default_cost_rejected() {
+        let toml_config = TomlUninitializedRateLimitingConfig {
+            default_cost: Some(f64::INFINITY),
+            ..Default::default()
+        };
+        let result: Result<UninitializedRateLimitingConfig, _> = toml_config.try_into();
+        assert!(result.is_err(), "Infinite default_cost should be rejected");
+    }
+
+    #[test]
+    fn test_cost_integer_toml_values() {
+        // TOML distinguishes integers (10) from floats (10.0).
+        // Verify that integer literals work for cost fields, which deserialize as f64.
+        let toml_str = r"
+            default_cost = 1
+            [[rules]]
+            cost_per_day = 10
+            always = true
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        assert_eq!(
+            uninitialized_config.default_nano_cost, 1_000_000_000,
+            "default_cost = 1 (integer) should parse as $1.00"
+        );
+
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+        let limit = &config.rules()[0].limits[0];
+        assert_eq!(
+            limit.capacity, 10_000_000_000,
+            "cost_per_day = 10 (integer) should parse as $10.00"
+        );
+    }
+
+    #[test]
+    fn test_cost_integer_toml_bucket_values() {
+        // Verify that integer literals work in bucket format for cost fields.
+        let toml_str = r"
+            [[rules]]
+            cost_per_hour = { capacity = 5, refill_rate = 2 }
+            priority = 1
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+
+        let limit = &config.rules()[0].limits[0];
+        assert_eq!(
+            limit.capacity, 5_000_000_000,
+            "capacity = 5 (integer) should parse as $5.00"
+        );
+        assert_eq!(
+            limit.refill_rate, 2_000_000_000,
+            "refill_rate = 2 (integer) should parse as $2.00"
+        );
+    }
+
+    #[test]
+    fn test_small_cost_value() {
+        let toml_str = r"
+            [[rules]]
+            cost_per_day = 0.001
+            always = true
+        ";
+
+        let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
+        let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+
+        let limit = &config.rules()[0].limits[0];
+        assert_eq!(
+            limit.capacity, 1_000_000,
+            "$0.001 should be 1 million nano-dollars"
         );
     }
 }

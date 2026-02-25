@@ -24,7 +24,8 @@ use crate::providers::azure::AzureProvider;
 use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
-    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, get_estimated_tokens,
+    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, RateLimitingConfig,
+    decimal_cost_to_nano_cost, get_estimated_tokens,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -356,6 +357,7 @@ impl RateLimitedRequest for EmbeddingRequest {
     fn estimated_resource_usage(
         &self,
         resources: &[RateLimitResource],
+        rate_limiting_config: &RateLimitingConfig,
     ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let EmbeddingRequest {
             input,
@@ -375,9 +377,16 @@ impl RateLimitedRequest for EmbeddingRequest {
             None
         };
 
+        let nano_cost = if resources.contains(&RateLimitResource::Cost) {
+            Some(rate_limiting_config.default_nano_cost)
+        } else {
+            None
+        };
+
         Ok(EstimatedRateLimitResourceUsage {
             model_inferences,
             tokens,
+            nano_cost,
         })
     }
 }
@@ -412,15 +421,18 @@ pub struct EmbeddingProviderResponse {
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
     fn resource_usage(&self) -> RateLimitResourceUsage {
+        let nano_cost = self.usage.cost.map(decimal_cost_to_nano_cost);
         if let Some(tokens) = self.usage.total_tokens() {
             RateLimitResourceUsage::Exact {
                 model_inferences: 1,
                 tokens: tokens as u64,
+                nano_cost,
             }
         } else {
             RateLimitResourceUsage::UnderEstimate {
                 model_inferences: 1,
                 tokens: 0,
+                nano_cost,
             }
         }
     }
