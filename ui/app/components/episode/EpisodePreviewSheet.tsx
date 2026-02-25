@@ -121,7 +121,7 @@ export function EpisodePreviewSheet({
 
         <SheetHeader className="space-y-3">
           <Breadcrumbs
-            segments={[{ label: "Episodes", href: "/observability/episodes" }]}
+            segments={[{ label: "Episode", href: "/observability/episodes" }]}
           />
           <SheetTitle className="font-mono text-2xl font-medium">
             {episodeId ? (
