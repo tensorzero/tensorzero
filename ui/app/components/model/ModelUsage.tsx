@@ -153,10 +153,8 @@ export function ModelUsage({
             errorElement={<ModelUsageError />}
           >
             {(modelUsageData) => {
-              const { data, modelNames } = transformModelUsageData(
-                modelUsageData,
-                selectedMetric,
-              );
+              const { data, modelNames, visiblePeriods } =
+                transformModelUsageData(modelUsageData, selectedMetric);
               const chartConfig: Record<
                 string,
                 { label: string; color: string }
@@ -171,15 +169,19 @@ export function ModelUsage({
                 {},
               );
 
-              // Compute cost coverage percentage using backend-provided count_with_cost
+              // Compute cost coverage percentage using backend-provided count_with_cost,
+              // limited to the visible periods shown in the chart
               let costCoveragePercent: number | null = null;
               if (selectedMetric === "cost") {
-                const filtered = modelUsageData.filter(
-                  (row) => row.count && Number(row.count) > 0,
+                const visibleRows = modelUsageData.filter(
+                  (row) =>
+                    row.count &&
+                    Number(row.count) > 0 &&
+                    visiblePeriods.has(row.period_start),
                 );
                 let totalCount = 0;
                 let countWithCost = 0;
-                for (const row of filtered) {
+                for (const row of visibleRows) {
                   totalCount += Number(row.count);
                   countWithCost += Number(row.count_with_cost ?? 0);
                 }
@@ -327,6 +329,7 @@ export function transformModelUsageData(
 ): {
   data: ModelUsageData[];
   modelNames: string[];
+  visiblePeriods: Set<string>;
 } {
   // Remove rows with count=0 or null
   const filtered = modelUsageData.filter(
@@ -410,8 +413,11 @@ export function transformModelUsageData(
         )
       : modelNames;
 
+  const visiblePeriods = new Set(sortedAndLimited.map((entry) => entry.date));
+
   return {
     data,
     modelNames: filteredModelNames,
+    visiblePeriods,
   };
 }
