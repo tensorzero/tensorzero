@@ -73,7 +73,17 @@ jobs:
         shell: bash
 
       - name: Install `pnpm` dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Build `tensorzero-node`
         working-directory: internal/tensorzero-node
