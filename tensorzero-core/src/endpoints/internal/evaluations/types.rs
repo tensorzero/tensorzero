@@ -86,7 +86,7 @@ pub struct DatapointStatsResponse {
 #[derive(Debug, Deserialize)]
 pub struct SearchEvaluationRunsParams {
     pub evaluation_name: String,
-    pub function_name: String,
+    pub function_name: Option<String>,
     pub query: String,
     #[serde(default = "default_limit")]
     pub limit: u32,
