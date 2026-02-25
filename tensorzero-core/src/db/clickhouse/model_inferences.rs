@@ -163,6 +163,9 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
             ),
         };
 
+        // count_with_cost operates at (model, provider, minute) bucket granularity,
+        // not per-inference. See #6574 for a proposed fix using COUNT(cost) in the
+        // rollup table.
         let query = format!(
             r"
             SELECT

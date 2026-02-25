@@ -324,6 +324,11 @@ async fn test_model_usage_monthly_specific_data(conn: impl ModelInferenceQueries
         may_gemini.cost, None,
         "Cost should be None for fixture data that predates cost tracking"
     );
+    assert_eq!(
+        may_gemini.count_with_cost,
+        Some(0),
+        "count_with_cost should be 0 for fixture data that predates cost tracking"
+    );
 
     let may_gpt4o_mini = model_usage.iter().find(|u| {
         u.period_start.format("%Y-%m-%d").to_string() == "2025-05-01"
@@ -825,6 +830,94 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
     ]
 }
 
+/// Helper to create model inferences in two separate minute buckets:
+/// - Minute A (5 minutes ago): 2 inferences WITH cost
+/// - Minute B (3 minutes ago): 1 inference WITHOUT cost
+///
+/// This tests that `count_with_cost` correctly counts inferences only from
+/// minute-buckets where cost data is present.
+fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // Minute A: 5 minutes ago — inferences WITH cost
+    let minute_a_secs = now_secs - 5 * 60;
+    let ts_a1 = uuid::Timestamp::from_unix_time(minute_a_secs, 0, 0, 0);
+    let ts_a2 = uuid::Timestamp::from_unix_time(minute_a_secs, 500_000_000, 0, 0);
+
+    // Minute B: 3 minutes ago — inference WITHOUT cost
+    let minute_b_secs = now_secs - 3 * 60;
+    let ts_b1 = uuid::Timestamp::from_unix_time(minute_b_secs, 0, 0, 0);
+
+    vec![
+        // Minute A, inference 1: has cost
+        StoredModelInference {
+            id: uuid::Uuid::new_v7(ts_a1),
+            inference_id: uuid::Uuid::new_v7(ts_a1),
+            raw_request: Some("{}".to_string()),
+            raw_response: Some("{}".to_string()),
+            system: None,
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            response_time_ms: Some(200),
+            model_name: model_name.to_string(),
+            model_provider_name: "test-provider".to_string(),
+            ttft_ms: None,
+            cached: false,
+            cost: Some(Decimal::new(500, 6)), // 0.000500
+            finish_reason: Some(FinishReason::Stop),
+            snapshot_hash: None,
+            timestamp: None,
+        },
+        // Minute A, inference 2: has cost
+        StoredModelInference {
+            id: uuid::Uuid::new_v7(ts_a2),
+            inference_id: uuid::Uuid::new_v7(ts_a2),
+            raw_request: Some("{}".to_string()),
+            raw_response: Some("{}".to_string()),
+            system: None,
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
+            input_tokens: Some(200),
+            output_tokens: Some(100),
+            response_time_ms: Some(300),
+            model_name: model_name.to_string(),
+            model_provider_name: "test-provider".to_string(),
+            ttft_ms: None,
+            cached: false,
+            cost: Some(Decimal::new(1500, 6)), // 0.001500
+            finish_reason: Some(FinishReason::Stop),
+            snapshot_hash: None,
+            timestamp: None,
+        },
+        // Minute B, inference 1: NO cost
+        StoredModelInference {
+            id: uuid::Uuid::new_v7(ts_b1),
+            inference_id: uuid::Uuid::new_v7(ts_b1),
+            raw_request: Some("{}".to_string()),
+            raw_response: Some("{}".to_string()),
+            system: None,
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
+            input_tokens: Some(300),
+            output_tokens: Some(150),
+            response_time_ms: Some(100),
+            model_name: model_name.to_string(),
+            model_provider_name: "test-provider".to_string(),
+            ttft_ms: None,
+            cached: false,
+            cost: None,
+            finish_reason: Some(FinishReason::Stop),
+            snapshot_hash: None,
+            timestamp: None,
+        },
+    ]
+}
+
 /// ClickHouse-only test: insert model inferences with known costs, then verify
 /// the materialized view aggregates the cost correctly.
 async fn test_cost_aggregation_clickhouse(
@@ -870,6 +963,15 @@ async fn test_cost_aggregation_clickhouse(
         our_model.cost,
         Some(Decimal::new(2000, 6)),
         "Cost should sum to 0.002000 (NULL costs excluded from SUM)"
+    );
+    // count_with_cost operates at (model, provider, minute) bucket granularity,
+    // not per-inference (#6574). All 3 inferences land in the same bucket, and
+    // because at least one has a non-null cost, the entire bucket's
+    // inference_count is included.
+    assert_eq!(
+        our_model.count_with_cost,
+        Some(3),
+        "count_with_cost should be 3 (all inferences in a bucket with any cost data)"
     );
 }
 
@@ -931,5 +1033,171 @@ async fn test_cost_aggregation_postgres() {
         our_model.cost,
         Some(Decimal::new(2000, 6)),
         "Cost should sum to 0.002000 (NULL costs excluded from SUM)"
+    );
+    // count_with_cost operates at (model, provider, minute) bucket granularity,
+    // not per-inference (#6574). All 3 inferences land in the same bucket, and
+    // because at least one has a non-null cost, the entire bucket's
+    // inference_count is included.
+    assert_eq!(
+        our_model.count_with_cost,
+        Some(3),
+        "count_with_cost should be 3 (all inferences in a bucket with any cost data)"
+    );
+}
+
+// ===== CROSS-MINUTE COST AGGREGATION TESTS =====
+
+/// ClickHouse test: verify count_with_cost works correctly across separate
+/// minute buckets. Inferences with cost in minute A should be counted, while
+/// inferences without cost in minute B should not.
+///
+/// NOTE: We use `TimeWindow::Minute` here because ClickHouse's `sumMerge`
+/// loses per-bucket NULL distinction when merging states across minutes
+/// (as happens with `Cumulative`). At minute granularity, each bucket is
+/// queried independently, preserving the NULL/non-null cost distinction.
+/// See #6574 for a proposed fix using `COUNT(cost)` in the rollup table.
+async fn test_cost_aggregation_cross_minute_clickhouse(
+    conn: tensorzero_core::db::clickhouse::ClickHouseConnectionInfo,
+) {
+    let model_name = format!("cost-cross-minute-test-ch-{}", uuid::Uuid::now_v7());
+    let inferences = make_cross_minute_cost_test_inferences(&model_name);
+
+    conn.insert_model_inferences(&inferences).await.unwrap();
+
+    // Wait for the ClickHouse MV to process the inserts
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    // Use Minute granularity so each minute bucket is queried separately.
+    // With Cumulative, ClickHouse's sumMerge would merge states across all
+    // minutes, losing the per-minute NULL distinction for cost.
+    let usage = conn
+        .get_model_usage_timeseries(TimeWindow::Minute, 10)
+        .await
+        .unwrap();
+
+    let our_rows: Vec<_> = usage
+        .iter()
+        .filter(|u| u.model_name == model_name)
+        .collect();
+    assert_eq!(
+        our_rows.len(),
+        2,
+        "Should find 2 rows (one per minute) for test model `{model_name}`"
+    );
+
+    // Sum across both minute rows to verify totals
+    let total_count: u64 = our_rows.iter().filter_map(|r| r.count).sum();
+    let total_input_tokens: u64 = our_rows.iter().filter_map(|r| r.input_tokens).sum();
+    let total_output_tokens: u64 = our_rows.iter().filter_map(|r| r.output_tokens).sum();
+    let total_count_with_cost: u64 = our_rows.iter().filter_map(|r| r.count_with_cost).sum();
+
+    assert_eq!(
+        total_count, 3,
+        "Should have 3 total inferences across both minutes"
+    );
+    assert_eq!(
+        total_input_tokens, 600,
+        "Input tokens should sum to 100 + 200 + 300 = 600"
+    );
+    assert_eq!(
+        total_output_tokens, 300,
+        "Output tokens should sum to 50 + 100 + 150 = 300"
+    );
+    // count_with_cost should be 2: only the 2 inferences from minute A
+    // where the bucket has non-null cost. Minute B's inference is excluded
+    // because its bucket has no cost data.
+    assert_eq!(
+        total_count_with_cost, 2,
+        "count_with_cost should be 2 (only inferences from minute-bucket with cost)"
+    );
+
+    // Verify each minute row individually
+    let minute_with_cost = our_rows.iter().find(|r| r.count == Some(2)).unwrap();
+    assert_eq!(
+        minute_with_cost.count_with_cost,
+        Some(2),
+        "Minute with cost data should have count_with_cost = 2"
+    );
+    assert_eq!(
+        minute_with_cost.cost,
+        Some(Decimal::new(2000, 6)),
+        "Minute with cost data should have cost = 0.002000"
+    );
+
+    let minute_without_cost = our_rows.iter().find(|r| r.count == Some(1)).unwrap();
+    assert_eq!(
+        minute_without_cost.count_with_cost,
+        Some(0),
+        "Minute without cost data should have count_with_cost = 0"
+    );
+}
+
+#[tokio::test]
+async fn test_cost_aggregation_cross_minute_clickhouse_clickhouse() {
+    let conn = tensorzero_core::db::clickhouse::test_helpers::get_clickhouse().await;
+    test_cost_aggregation_cross_minute_clickhouse(conn).await;
+}
+
+/// Postgres test: verify count_with_cost works correctly across separate
+/// minute buckets. Inferences with cost in minute A should be counted, while
+/// inferences without cost in minute B should not.
+#[tokio::test]
+async fn test_cost_aggregation_cross_minute_postgres() {
+    let conn = crate::db::get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    let model_name = format!("cost-cross-minute-test-pg-{}", uuid::Uuid::now_v7());
+    let inferences = make_cross_minute_cost_test_inferences(&model_name);
+
+    conn.insert_model_inferences(&inferences).await.unwrap();
+
+    // Trigger the incremental refresh to populate the statistics table
+    sqlx::query(
+        "SELECT tensorzero.refresh_model_provider_statistics_incremental(full_refresh => TRUE)",
+    )
+    .execute(pool)
+    .await
+    .expect("refresh_model_provider_statistics_incremental should succeed");
+
+    let usage = conn
+        .get_model_usage_timeseries(TimeWindow::Cumulative, 1)
+        .await
+        .unwrap();
+
+    let our_model = usage.iter().find(|u| u.model_name == model_name);
+    assert!(
+        our_model.is_some(),
+        "Should find aggregated data for test model `{model_name}`"
+    );
+    let our_model = our_model.unwrap();
+
+    assert_eq!(
+        our_model.count,
+        Some(3),
+        "Should have 3 total inferences across both minutes"
+    );
+    assert_eq!(
+        our_model.input_tokens,
+        Some(600),
+        "Input tokens should sum to 100 + 200 + 300 = 600"
+    );
+    assert_eq!(
+        our_model.output_tokens,
+        Some(300),
+        "Output tokens should sum to 50 + 100 + 150 = 300"
+    );
+    // SUM of costs: 0.000500 + 0.001500 = 0.002000 (minute B has NULL cost)
+    assert_eq!(
+        our_model.cost,
+        Some(Decimal::new(2000, 6)),
+        "Cost should sum to 0.002000 (only minute A has cost data)"
+    );
+    // count_with_cost should be 2: only the 2 inferences from minute A
+    // where the bucket has non-null cost. Minute B's inference is excluded
+    // because its bucket has no cost data.
+    assert_eq!(
+        our_model.count_with_cost,
+        Some(2),
+        "count_with_cost should be 2 (only inferences from minute-bucket with cost)"
     );
 }
