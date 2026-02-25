@@ -400,10 +400,13 @@ export function transformModelUsageData(
   });
 
   // When cost is selected, filter to only models with at least one non-null cost value
+  // in the visible periods (sortedAndLimited, not the full groupedByDate)
   const filteredModelNames =
     selectedMetric === "cost"
       ? modelNames.filter((modelName) =>
-          groupedByDate.some((entry) => entry.models[modelName]?.cost != null),
+          sortedAndLimited.some(
+            (entry) => entry.models[modelName]?.cost != null,
+          ),
         )
       : modelNames;
 
