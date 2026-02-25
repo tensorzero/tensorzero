@@ -97,7 +97,7 @@ export function ModelInferencePreviewSheet({
         </div>
 
         <SheetHeader className="space-y-3">
-          <Breadcrumbs segments={[{ label: "Model Inferences" }]} />
+          <Breadcrumbs segments={[{ label: "Model Inference" }]} />
           <SheetTitle className="font-mono text-2xl font-medium">
             {fetcherData ? (
               <Link
