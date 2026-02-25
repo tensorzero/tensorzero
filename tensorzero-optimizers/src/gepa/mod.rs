@@ -82,11 +82,16 @@ impl Optimizer for GEPAConfig {
             })
         })?;
 
-        let llm_params = serde_json::json!({
-            "gepa_config": self.as_uninitialized(),
-            "train_examples": train_examples,
-            "val_examples": val_examples,
-        });
+        let llm_params = serde_json::to_value(GepaToolParams {
+            gepa_config: self.as_uninitialized(),
+            train_examples,
+            val_examples,
+        })
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
 
         let episode_id = Uuid::now_v7();
         let side_info = serde_json::json!({
