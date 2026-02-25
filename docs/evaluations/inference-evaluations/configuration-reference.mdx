@@ -17,7 +17,7 @@ You can define multiple evaluations by including multiple `[evaluations.evaluati
 If your `evaluation_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define an evaluation named `foo.bar` as `[evaluations."foo.bar"]`.
 
-```toml mark="email-guardrails" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="email-guardrails"
 [evaluations.email-guardrails]
 # ...
 ```
@@ -51,7 +51,7 @@ You can define multiple evaluators by including multiple `[evaluations.evaluatio
 If your `evaluator_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `includes.jpg` as `[evaluations.evaluation_name.evaluators."includes.jpg"]`.
 
-```toml mark="draft-email" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="draft-email"
 [evaluations.email-guardrails]
 # ...
 
@@ -61,15 +61,6 @@ For example, periods are not allowed in basic strings, so you can define `includ
 [evaluations.email-guardrails.evaluators.check-signature]
 # ...
 ```
-
-#### `cutoff`
-
-- **Type:** float
-- **Required:** no
-
-The `exact_match` and `llm_judge` evaluator types support an optional `cutoff` field.
-It sets a threshold at which the test is considered passing, which is useful when evaluations are run as an automated test.
-If the average value of this evaluator is below the cutoff (when `optimize` is `max`) or above the cutoff (when `optimize` is `min`), the evaluations binary will return a nonzero status code.
 
 #### `type`
 
@@ -101,7 +92,6 @@ If the datapoint has no reference output, this evaluator is skipped.
 ```toml title="tensorzero.toml"
 [evaluations.email-guardrails.evaluators.check-exact]
 type = "exact_match"
-cutoff = 0.9
 ```
 
 </Accordion>

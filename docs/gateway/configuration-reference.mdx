@@ -378,7 +378,7 @@ A list of provider names to route requests to.
 The providers must be defined in the `providers` sub-section (see below).
 The TensorZero Gateway will attempt to route a request to the first provider in the list, and fallback to subsequent providers in order if the request is not successful.
 
-```toml mark="openai" mark="azure" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="openai" mark="azure"
 [models.gpt-4o]
 # ...
 routing = ["openai", "azure"]
@@ -469,7 +469,7 @@ You can define multiple providers by including multiple `[models.model_name.prov
 If your `provider_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `vllm.internal` as `[models.model_name.providers."vllm.internal"]`.
 
-```toml mark="gpt-4o" mark="openai" mark="azure" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="gpt-4o" mark="openai" mark="azure"
 [models.gpt-4o]
 # ...
 routing = ["openai", "azure"]
@@ -2193,7 +2193,7 @@ A list of provider names to route requests to.
 The providers must be defined in the `providers` sub-section (see below).
 The TensorZero Gateway will attempt to route a request to the first provider in the list, and fallback to subsequent providers in order if the request is not successful.
 
-```toml mark="openai" mark="azure" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="openai" mark="azure"
 [embedding_models.model-name]
 # ...
 routing = ["openai", "alternative-provider"]
@@ -2232,7 +2232,7 @@ You can define multiple providers by including multiple `[embedding_models.model
 If your `provider_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `vllm.internal` as `[embedding_models.model_name.providers."vllm.internal"]`.
 
-```toml mark="openai" mark="azure" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="openai" mark="azure"
 [embedding_models.model-name]
 # ...
 routing = ["openai", "alternative-provider"]
@@ -3026,7 +3026,7 @@ The supported tool choice strategies are:
 - `required`: The model should use a tool. If multiple tools are available, the model decides which tool to use.
 - `{ specific = "tool_name" }`: The model should use a specific tool. The tool must be defined in the `tools` field (see below).
 
-```toml mark="run-python" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="run-python"
 [functions.solve-math-problem]
 # ...
 type = "chat"
@@ -3043,7 +3043,7 @@ tools = [
 
 ```
 
-```toml mark="query-database" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="query-database"
 [functions.generate-query]
 # ...
 type = "chat"
@@ -3068,7 +3068,7 @@ Determines the tools that the function can use.
 
 The supported tools are defined in `[tools.tool_name]` sections (see below).
 
-```toml mark="query-database" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="query-database"
 [functions.draft-email]
 # ...
 type = "chat"
@@ -3145,7 +3145,7 @@ You can define multiple variants by including multiple `[functions.function_name
 If your `variant_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `llama-3.1-8b-instruct` as `[functions.function_name.variants."llama-3.1-8b-instruct"]`.
 
-```toml mark="draft-email" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="draft-email"
 [functions.draft-email]
 # ...
 
@@ -4737,7 +4737,7 @@ For example, periods are not allowed in basic strings, so you can define `run-py
 
 You can enable a tool for a function by adding it to the function's `tools` field.
 
-```toml mark="get-temperature" title="tensorzero.toml"
+```toml title="tensorzero.toml" mark="get-temperature"
 [functions.weather-chatbot]
 # ...
 type = "chat"
