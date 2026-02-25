@@ -118,7 +118,7 @@ export function InferencePreviewSheet({
         <SheetHeader className="space-y-3">
           <Breadcrumbs
             segments={[
-              { label: "Inferences", href: "/observability/inferences" },
+              { label: "Inference", href: "/observability/inferences" },
             ]}
           />
           <SheetTitle className="font-mono text-2xl font-medium">
