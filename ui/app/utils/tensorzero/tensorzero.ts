@@ -1387,8 +1387,8 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   /**
    * Searches evaluation runs by ID or variant name.
    * @param evaluationName - The name of the evaluation
-   * @param functionName - The name of the function being evaluated
    * @param query - The search query (case-insensitive)
+   * @param functionName - Optional function name filter
    * @param limit - Maximum number of results to return (default: 100)
    * @param offset - Number of results to skip (default: 0)
    * @returns A promise that resolves with the search results
@@ -1396,14 +1396,16 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    */
   async searchEvaluationRuns(
     evaluationName: string,
-    functionName: string,
     query: string,
+    functionName?: string,
     limit: number = 100,
     offset: number = 0,
   ): Promise<SearchEvaluationRunsResponse> {
     const searchParams = new URLSearchParams();
     searchParams.append("evaluation_name", evaluationName);
-    searchParams.append("function_name", functionName);
+    if (functionName) {
+      searchParams.append("function_name", functionName);
+    }
     searchParams.append("query", query);
     searchParams.append("limit", limit.toString());
     searchParams.append("offset", offset.toString());
@@ -1672,6 +1674,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       maxDatapoints,
       precisionTargets,
       onEvent,
+      signal,
     } = params;
 
     const requestBody: RunEvaluationRequest = {
@@ -1695,6 +1698,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
         Accept: "text/event-stream",
       },
       body: JSON.stringify(requestBody),
+      signal,
     });
 
     if (!response.ok) {
@@ -1862,4 +1866,6 @@ export interface RunEvaluationStreamingParams {
   precisionTargets?: Record<string, number>;
   /** Callback for SSE events */
   onEvent: (event: EvaluationRunEvent) => void;
+  /** Optional signal to abort the request */
+  signal?: AbortSignal;
 }

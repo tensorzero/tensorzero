@@ -135,7 +135,7 @@ describe("Extra Content", () => {
 
     // Reconstruct extra content for round-trip (filter for chunks with insert_index)
     const reconstructedExtraContent = extraContentChunks.filter(
-      (chunk) => chunk.insert_index !== undefined
+      (chunk) => chunk.insert_index !== undefined,
     );
 
     // Step 4: Round-trip if we have valid content

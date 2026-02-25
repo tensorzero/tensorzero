@@ -75,11 +75,11 @@ impl MixtureOfNConfig {
 
     /// Converts this initialized config back to its uninitialized form.
     #[expect(deprecated)]
-    pub fn as_uninitialized(self) -> UninitializedMixtureOfNConfig {
+    pub fn as_uninitialized(&self) -> UninitializedMixtureOfNConfig {
         UninitializedMixtureOfNConfig {
             weight: self.weight,
             timeout_s: None,
-            candidates: self.candidates,
+            candidates: self.candidates.clone(),
             fuser: UninitializedFuserConfig {
                 inner: self.fuser.inner.as_uninitialized(),
             },
@@ -1553,6 +1553,7 @@ mod tests {
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
                             cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1683,6 +1684,7 @@ mod tests {
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
                             cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1768,6 +1770,7 @@ mod tests {
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
                             cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),

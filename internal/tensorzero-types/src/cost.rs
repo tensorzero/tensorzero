@@ -30,3 +30,14 @@ pub struct CostPointerConfig {
     #[serde(default)]
     pub pointer_streaming: Option<String>,
 }
+
+pub type UninitializedBatchCostConfig = Vec<UninitializedBatchCostConfigEntry>;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct UninitializedBatchCostConfigEntry {
+    pub pointer: String,
+    #[serde(flatten)]
+    pub rate: UninitializedCostRate,
+    #[serde(default)]
+    pub required: bool,
+}

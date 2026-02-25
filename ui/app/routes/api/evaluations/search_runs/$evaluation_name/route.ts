@@ -1,4 +1,3 @@
-import { getConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { abortableTimeout } from "~/utils/common";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
@@ -10,25 +9,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     return new Response("Missing evaluation_name parameter", { status: 400 });
   }
   const query = url.searchParams.get("q") || "";
-  const config = await getConfig();
-  const function_name = config.evaluations[evaluationName]?.function_name;
-
-  if (!evaluationName) {
-    return new Response("Missing evaluation_name parameter", { status: 400 });
-  }
-
-  if (!function_name) {
-    return new Response(
-      `Failed to find config for evaluation ${evaluationName}`,
-      { status: 400 },
-    );
-  }
 
   const runs = await getTensorZeroClient()
     .searchEvaluationRuns(
       evaluationName,
-      function_name,
       query,
+      /*functionName=*/ undefined,
       /*limit=*/ 100,
       /*offset=*/ 0,
     )

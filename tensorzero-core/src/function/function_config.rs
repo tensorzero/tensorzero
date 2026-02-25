@@ -1,6 +1,11 @@
 use crate::config::Namespace;
 use crate::config::SchemaData;
 use crate::config::gateway::GatewayConfig;
+use crate::config::path::ResolvedTomlPathData;
+use crate::config::{
+    UninitializedFunctionConfig, UninitializedFunctionConfigChat, UninitializedFunctionConfigJson,
+    UninitializedSchemas,
+};
 #[cfg(feature = "pyo3")]
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::experimentation::{ExperimentationConfig, ExperimentationConfigWithNamespaces};
@@ -183,6 +188,77 @@ impl FunctionConfig {
             FunctionConfig::Json(_config) => Box::new(std::iter::empty()),
         }
     }
+
+    pub fn as_uninitialized(&self) -> UninitializedFunctionConfig {
+        match self {
+            FunctionConfig::Chat(chat) => {
+                UninitializedFunctionConfig::Chat(chat.as_uninitialized())
+            }
+            FunctionConfig::Json(json) => {
+                UninitializedFunctionConfig::Json(json.as_uninitialized())
+            }
+        }
+    }
+}
+
+impl FunctionConfigChat {
+    pub fn as_uninitialized(&self) -> UninitializedFunctionConfigChat {
+        UninitializedFunctionConfigChat {
+            variants: self
+                .variants
+                .iter()
+                .map(|(k, v)| (k.clone(), v.as_uninitialized()))
+                .collect(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            schemas: extract_uninitialized_schemas(&self.schemas),
+            tools: self.tools.clone(),
+            tool_choice: self.tool_choice.clone(),
+            parallel_tool_calls: self.parallel_tool_calls,
+            description: self.description.clone(),
+            experimentation: None,
+        }
+    }
+}
+
+impl FunctionConfigJson {
+    pub fn as_uninitialized(&self) -> UninitializedFunctionConfigJson {
+        UninitializedFunctionConfigJson {
+            variants: self
+                .variants
+                .iter()
+                .map(|(k, v)| (k.clone(), v.as_uninitialized()))
+                .collect(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            schemas: extract_uninitialized_schemas(&self.schemas),
+            output_schema: Some(ResolvedTomlPathData::new_fake_path(
+                "checkpoint://output_schema".to_string(),
+                self.output_schema.value.to_string(),
+            )),
+            description: self.description.clone(),
+            experimentation: None,
+        }
+    }
+}
+
+fn extract_uninitialized_schemas(schema_data: &SchemaData) -> UninitializedSchemas {
+    let paths: HashMap<String, ResolvedTomlPathData> = schema_data
+        .inner
+        .iter()
+        .map(|(name, meta)| {
+            (
+                name.clone(),
+                ResolvedTomlPathData::new_fake_path(
+                    format!("checkpoint://schema/{name}"),
+                    meta.schema.value.to_string(),
+                ),
+            )
+        })
+        .collect();
+    UninitializedSchemas::from_paths(paths)
 }
 
 #[cfg(feature = "pyo3")]

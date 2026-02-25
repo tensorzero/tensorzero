@@ -533,7 +533,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -551,6 +551,8 @@ dependencies = [
  "tensorzero-derive",
  "tensorzero-types",
  "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
  "tracing",
  "ts-rs",
  "url",
@@ -559,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-tools"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "anyhow",
  "arrow",
@@ -590,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-worker"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1583,7 +1585,7 @@ dependencies = [
 
 [[package]]
 name = "config-applier"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "pathdiff",
  "schemars 1.2.1",
@@ -2191,7 +2193,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2224,7 +2226,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "async-trait",
  "durable",
@@ -2366,7 +2368,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2459,7 +2461,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2705,9 +2707,10 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "async-stream",
+ "autopilot-client",
  "autopilot-tools",
  "autopilot-worker",
  "axum",
@@ -2734,6 +2737,7 @@ dependencies = [
  "tensorzero-unsafe-helpers",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tower-http",
  "tracing",
  "ts-rs",
@@ -4074,7 +4078,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "minijinja",
  "serde",
@@ -4805,6 +4809,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
+name = "postgres-inference-load-test"
+version = "2026.2.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "clap",
+ "reqwest 0.12.28",
+ "rlt",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5374,7 +5396,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5709,7 +5731,7 @@ dependencies = [
 
 [[package]]
 name = "reqwest-sse-stream"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "async-stream",
  "futures",
@@ -6844,7 +6866,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "axum",
  "chrono",
@@ -6864,11 +6886,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-config-paths"
-version = "2026.2.1"
+version = "2026.2.2"
 
 [[package]]
 name = "tensorzero-core"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6992,7 +7014,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "config-applier",
  "napi",
@@ -7007,7 +7029,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -7042,7 +7064,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "evaluations",
  "futures",
@@ -7060,11 +7082,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-ts-types"
-version = "2026.2.1"
+version = "2026.2.2"
 
 [[package]]
 name = "tensorzero-types"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "aws-smithy-types",
  "infer",
@@ -7085,7 +7107,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types-providers"
-version = "2026.2.1"
+version = "2026.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -7095,7 +7117,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2026.2.1"
+version = "2026.2.2"
 
 [[package]]
 name = "termcolor"
@@ -7323,6 +7345,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "pin-project-lite",
+ "slab",
  "tokio",
 ]
 

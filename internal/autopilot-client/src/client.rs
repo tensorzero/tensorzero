@@ -12,6 +12,7 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest_sse_stream::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use sqlx::PgPool;
+use tokio_util::time::FutureExt as _;
 use url::Url;
 use uuid::Uuid;
 
@@ -21,11 +22,11 @@ use crate::reject_missing_tool::reject_missing_tool;
 use crate::types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
-    GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
-    GatewayWorkspacePendingToolCallsResponse, ListConfigWritesParams, ListConfigWritesResponse,
-    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
-    S3UploadRequest, S3UploadResponse, StreamEventsParams, StreamWorkspaceToolCallsParams,
-    ToolCallAuthorizationStatus, WorkspacePendingToolCallsResponse,
+    EventPayloadToolCallAuthorization, GatewayEventPayload, GatewayListConfigWritesResponse,
+    GatewayListEventsResponse, GatewayStreamUpdate, ListConfigWritesParams,
+    ListConfigWritesResponse, ListEventsParams, ListEventsResponse, ListSessionsParams,
+    ListSessionsResponse, S3UploadRequest, S3UploadResponse, StreamEventsParams,
+    ToolCallAuthorizationStatus, ToolCallDecisionSource,
 };
 
 /// Default base URL for the Autopilot API.
@@ -62,6 +63,9 @@ pub struct AutopilotClientBuilder {
     tool_call_cache_capacity: u64,
     tool_call_cache_ttl: Duration,
     available_tools: Option<HashSet<String>>,
+    tool_whitelist: Option<HashSet<String>>,
+    deployment_id: Option<String>,
+    tensorzero_version: Option<String>,
 }
 
 impl Default for AutopilotClientBuilder {
@@ -77,6 +81,9 @@ impl Default for AutopilotClientBuilder {
             tool_call_cache_capacity: DEFAULT_TOOL_CALL_CACHE_CAPACITY,
             tool_call_cache_ttl: DEFAULT_TOOL_CALL_CACHE_TTL,
             available_tools: None,
+            tool_whitelist: None,
+            deployment_id: None,
+            tensorzero_version: None,
         }
     }
 }
@@ -156,6 +163,24 @@ impl AutopilotClientBuilder {
         self
     }
 
+    /// Sets the set of tool names that are automatically approved without manual intervention.
+    pub fn tool_whitelist(mut self, whitelist: HashSet<String>) -> Self {
+        self.tool_whitelist = Some(whitelist);
+        self
+    }
+
+    /// Sets the deployment ID used for creating events.
+    pub fn deployment_id(mut self, deployment_id: String) -> Self {
+        self.deployment_id = Some(deployment_id);
+        self
+    }
+
+    /// Sets the TensorZero version used for creating events.
+    pub fn tensorzero_version(mut self, version: String) -> Self {
+        self.tensorzero_version = Some(version);
+        self
+    }
+
     /// Builds the [`AutopilotClient`].
     ///
     /// # Errors
@@ -172,6 +197,12 @@ impl AutopilotClientBuilder {
         let available_tools = self
             .available_tools
             .ok_or(AutopilotError::MissingConfig("available_tools"))?;
+        let deployment_id = self
+            .deployment_id
+            .ok_or(AutopilotError::MissingConfig("deployment_id"))?;
+        let tensorzero_version = self
+            .tensorzero_version
+            .ok_or(AutopilotError::MissingConfig("tensorzero_version"))?;
 
         let base_url = match self.base_url {
             Some(url) => url,
@@ -220,6 +251,9 @@ impl AutopilotClientBuilder {
             spawn_client,
             tool_call_cache,
             available_tools: Arc::new(available_tools),
+            tool_whitelist: Arc::new(self.tool_whitelist.unwrap_or_default()),
+            deployment_id,
+            tensorzero_version,
         })
     }
 }
@@ -238,6 +272,12 @@ pub struct AutopilotClient {
     tool_call_cache: Cache<Uuid, EventPayloadToolCall>,
     /// Set of available tool names for filtering unknown tool calls.
     available_tools: Arc<HashSet<String>>,
+    /// Set of tool names that are automatically approved without manual intervention.
+    pub tool_whitelist: Arc<HashSet<String>>,
+    /// The deployment ID used for creating events (e.g. tool call authorizations).
+    deployment_id: String,
+    /// The TensorZero version used for creating events.
+    tensorzero_version: String,
 }
 
 impl fmt::Debug for AutopilotClient {
@@ -842,61 +882,15 @@ impl AutopilotClient {
     // Workspace Endpoints
     // -------------------------------------------------------------------------
 
-    /// Lists pending tool calls across all sessions in a workspace.
-    ///
-    /// Unknown tool calls (those not in `available_tools`) are filtered from
-    /// results and automatically rejected via a durable task.
-    /// `ToolCallAuthorization::NotAvailable` events are also filtered from results.
-    ///
-    /// Returns `GatewayWorkspacePendingToolCallsResponse` which uses `GatewayEvent` - a narrower type
-    /// that excludes `NotAvailable` authorization status. The `last_event_id` can be used
-    /// as the starting point for `stream_workspace_tool_calls` to avoid TOCTOU bugs.
-    pub async fn pending_tool_calls(
-        &self,
-    ) -> Result<GatewayWorkspacePendingToolCallsResponse, AutopilotError> {
-        let url = self.base_url.join("/v1/workspace/tool_calls/pending")?;
-        let response = self
-            .http_client
-            .get(url)
-            .headers(self.auth_headers())
-            .send()
-            .await?;
-        let response = self.check_response(response).await?;
-        let body: WorkspacePendingToolCallsResponse = response.json().await?;
-        self.cache_tool_call_events(&body.pending_tool_calls);
-
-        // Filter pending tool calls and reject unknown ones
-        let mut filtered_pending_tool_calls = Vec::new();
-        for event in body.pending_tool_calls {
-            if let EventPayload::ToolCall(tool_call) = &event.payload
-                && self.is_unknown_tool(tool_call)
-            {
-                reject_missing_tool(&self.spawn_client, tool_call).await?;
-            }
-            if Self::should_filter_event(&event, &self.available_tools) {
-                continue;
-            }
-            let gateway_event = event.try_into().map_err(|e| {
-                AutopilotError::Internal(format!("Event conversion failed after filtering: {e}"))
-            })?;
-            filtered_pending_tool_calls.push(gateway_event);
-        }
-
-        Ok(GatewayWorkspacePendingToolCallsResponse {
-            pending_tool_calls: filtered_pending_tool_calls,
-            last_event_id: body.last_event_id,
-        })
-    }
-
     /// Streams tool call events across all sessions in a workspace using Server-Sent Events.
+    ///
+    /// The server sends all pending tool calls at the start of the stream, followed by
+    /// new tool calls as they arrive.
     ///
     /// Returns a stream of tool call events. The stream will remain open until:
     /// - The client drops the stream
     /// - The server closes the connection
     /// - An error occurs
-    ///
-    /// Use `params.last_event_id` to resume from a specific event (typically the `last_event_id`
-    /// returned by `pending_tool_calls` to avoid TOCTOU bugs).
     ///
     /// # Errors
     ///
@@ -907,16 +901,11 @@ impl AutopilotClient {
     /// `NotAvailable` authorization status.
     pub async fn stream_workspace_tool_calls(
         &self,
-        params: StreamWorkspaceToolCallsParams,
     ) -> Result<
         impl Stream<Item = Result<GatewayStreamUpdate, AutopilotError>> + use<>,
         AutopilotError,
     > {
-        let mut url = self.base_url.join("/v1/workspace/tool_calls/stream")?;
-        if let Some(last_event_id) = params.last_event_id {
-            url.query_pairs_mut()
-                .append_pair("last_event_id", &last_event_id.to_string());
-        }
+        let url = self.base_url.join("/v1/workspace/tool_calls/stream")?;
 
         // Wait for connection to be established or fail.
         let event_source = self
@@ -1006,6 +995,98 @@ impl AutopilotClient {
         });
 
         Ok(stream)
+    }
+
+    // -------------------------------------------------------------------------
+    // Tool Whitelist Auto-Approval
+    // -------------------------------------------------------------------------
+
+    /// Runs the tool whitelist auto-approval loop with reconnection logic.
+    ///
+    /// This method watches for new tool calls across the workspace and automatically
+    /// approves any whose name is in `tool_whitelist`. It is a no-op if the whitelist
+    /// is empty.
+    ///
+    /// The loop reconnects on stream errors and shuts down gracefully when the
+    /// `shutdown_token` is cancelled.
+    pub async fn run_tool_whitelist_approver(
+        &self,
+        shutdown_token: tokio_util::sync::CancellationToken,
+    ) {
+        if self.tool_whitelist.is_empty() {
+            return;
+        }
+        loop {
+            match self.run_approval_loop(&shutdown_token).await {
+                Ok(()) => break, // Graceful shutdown
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Tool whitelist approver stream disconnected, reconnecting..."
+                    );
+                    tokio::select! {
+                        () = tokio::time::sleep(Duration::from_secs(5)) => {},
+                        () = shutdown_token.cancelled() => break,
+                    }
+                }
+            }
+        }
+        tracing::info!("Tool whitelist approver shut down");
+    }
+
+    /// Inner approval loop: streams tool calls (server sends pending calls at start of stream).
+    async fn run_approval_loop(
+        &self,
+        shutdown_token: &tokio_util::sync::CancellationToken,
+    ) -> Result<(), AutopilotError> {
+        let stream = self.stream_workspace_tool_calls().await?;
+        tokio::pin!(stream);
+
+        while let Some(item) = stream.next().with_cancellation_token(shutdown_token).await {
+            match item {
+                Some(Ok(update)) => {
+                    if let GatewayEventPayload::ToolCall(tc) = &update.event.payload
+                        && self.tool_whitelist.contains(&tc.name)
+                    {
+                        self.approve_whitelisted_tool_call(
+                            update.event.session_id,
+                            update.event.id,
+                        )
+                        .await;
+                    }
+                }
+                Some(Err(e)) => return Err(e),
+                None => {
+                    return Err(AutopilotError::Sse(
+                        "Tool call stream ended unexpectedly".to_string(),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Approves a single whitelisted tool call by creating a ToolCallAuthorization event.
+    async fn approve_whitelisted_tool_call(&self, session_id: Uuid, tool_call_event_id: Uuid) {
+        let request = CreateEventRequest {
+            deployment_id: self.deployment_id.clone(),
+            tensorzero_version: self.tensorzero_version.clone(),
+            payload: EventPayload::ToolCallAuthorization(EventPayloadToolCallAuthorization {
+                source: ToolCallDecisionSource::Whitelist,
+                tool_call_event_id,
+                status: ToolCallAuthorizationStatus::Approved,
+            }),
+            previous_user_message_event_id: None,
+            config_snapshot_hash: None,
+        };
+        if let Err(e) = self.create_event(session_id, request, &[]).await {
+            tracing::warn!(
+                %session_id,
+                %tool_call_event_id,
+                error = %e,
+                "Failed to auto-approve whitelisted tool call"
+            );
+        }
     }
 
     /// Converts an SSE error to the appropriate AutopilotError.
@@ -1120,6 +1201,8 @@ mod tests {
             AutopilotClient::builder()
                 .api_key("test_key")
                 .spawn_database_url("postgres://localhost/test")
+                .deployment_id("test_deployment".to_string())
+                .tensorzero_version("0.0.0".to_string())
                 .build(),
         );
 
@@ -1129,6 +1212,43 @@ mod tests {
                 Err(AutopilotError::MissingConfig("available_tools"))
             ),
             "Building without available_tools should fail with MissingConfig error"
+        );
+    }
+
+    #[test]
+    fn test_build_fails_without_deployment_id() {
+        let result = futures::executor::block_on(
+            AutopilotClient::builder()
+                .api_key("test_key")
+                .spawn_database_url("postgres://localhost/test")
+                .available_tools(HashSet::new())
+                .tensorzero_version("0.0.0".to_string())
+                .build(),
+        );
+
+        assert!(
+            matches!(result, Err(AutopilotError::MissingConfig("deployment_id"))),
+            "Building without deployment_id should fail with MissingConfig error"
+        );
+    }
+
+    #[test]
+    fn test_build_fails_without_tensorzero_version() {
+        let result = futures::executor::block_on(
+            AutopilotClient::builder()
+                .api_key("test_key")
+                .spawn_database_url("postgres://localhost/test")
+                .available_tools(HashSet::new())
+                .deployment_id("test_deployment".to_string())
+                .build(),
+        );
+
+        assert!(
+            matches!(
+                result,
+                Err(AutopilotError::MissingConfig("tensorzero_version"))
+            ),
+            "Building without tensorzero_version should fail with MissingConfig error"
         );
     }
 }

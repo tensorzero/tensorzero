@@ -9,8 +9,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-export interface ReadOnlyGuardProps
-  extends React.ComponentPropsWithRef<"button"> {
+export interface ReadOnlyGuardProps extends React.ComponentPropsWithRef<"button"> {
   asChild?: boolean;
   /**
    * Custom tooltip message to show when disabled due to read-only mode.

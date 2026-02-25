@@ -4,7 +4,8 @@ use serde_json::Value;
 
 use crate::error::{Error, ErrorDetails};
 use tensorzero_types::{
-    CostPointerConfig, UninitializedCostConfig, UninitializedCostConfigEntry, UninitializedCostRate,
+    CostPointerConfig, UninitializedBatchCostConfig, UninitializedBatchCostConfigEntry,
+    UninitializedCostConfig, UninitializedCostConfigEntry, UninitializedCostRate,
 };
 
 /// Decimal type alias for cost values.
@@ -213,6 +214,13 @@ pub fn load_cost_config(config: UninitializedCostConfig) -> Result<CostConfig, E
     config.into_iter().map(load_cost_config_entry).collect()
 }
 
+pub fn load_batch_cost_config(config: UninitializedBatchCostConfig) -> Result<CostConfig, Error> {
+    config
+        .into_iter()
+        .map(load_batch_cost_config_entry)
+        .collect()
+}
+
 fn parse_pointer_config(config: CostPointerConfig) -> Result<NormalizedCostPointerConfig, Error> {
     match (
         config.pointer,
@@ -256,6 +264,20 @@ fn load_cost_config_entry(entry: UninitializedCostConfigEntry) -> Result<CostCon
     let rate = parse_rate(entry.rate)?;
     Ok(CostConfigEntry {
         pointer,
+        rate,
+        required: entry.required,
+    })
+}
+
+fn load_batch_cost_config_entry(
+    entry: UninitializedBatchCostConfigEntry,
+) -> Result<CostConfigEntry, Error> {
+    validate_pointer(&entry.pointer)?;
+    let rate = parse_rate(entry.rate)?;
+    Ok(CostConfigEntry {
+        pointer: NormalizedCostPointerConfig::Unified {
+            pointer: entry.pointer,
+        },
         rate,
         required: entry.required,
     })
@@ -1045,6 +1067,117 @@ cost_per_million = 3.0
         assert!(
             err.to_string().contains("negative"),
             "should mention negative total: {err}"
+        );
+    }
+
+    // ========================================================================
+    // load_batch_cost_config tests
+    // ========================================================================
+
+    #[test]
+    fn test_load_batch_cost_config_valid() {
+        let config = vec![
+            UninitializedBatchCostConfigEntry {
+                pointer: "/usage/input_tokens".to_string(),
+                rate: per_million(Decimal::from(1)),
+                required: true,
+            },
+            UninitializedBatchCostConfigEntry {
+                pointer: "/usage/output_tokens".to_string(),
+                rate: per_unit(Decimal::new(5, 6)),
+                required: false,
+            },
+        ];
+        let result = load_batch_cost_config(config).expect("should load valid batch cost config");
+        assert_eq!(result.len(), 2, "should have two entries");
+
+        assert!(
+            matches!(
+                result[0].pointer,
+                NormalizedCostPointerConfig::Unified { .. }
+            ),
+            "batch cost entries should always be unified pointers"
+        );
+        assert!(result[0].required, "first entry should be required");
+
+        let expected_rate = Decimal::from(1) / Decimal::from(1_000_000);
+        assert_eq!(
+            result[0].rate.cost_per_unit, expected_rate,
+            "per_million rate should be normalized"
+        );
+    }
+
+    #[test]
+    fn test_load_batch_cost_config_invalid_pointer_rejected() {
+        let config = vec![UninitializedBatchCostConfigEntry {
+            pointer: "no_leading_slash".to_string(),
+            rate: per_million(Decimal::from(1)),
+            required: false,
+        }];
+        let err =
+            load_batch_cost_config(config).expect_err("should fail on invalid batch cost pointer");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("invalid JSON pointer"),
+            "error should mention invalid JSON pointer: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_load_batch_cost_config_missing_rate_rejected() {
+        let config = vec![UninitializedBatchCostConfigEntry {
+            pointer: "/usage/tokens".to_string(),
+            rate: UninitializedCostRate {
+                cost_per_million: None,
+                cost_per_unit: None,
+            },
+            required: false,
+        }];
+        let err =
+            load_batch_cost_config(config).expect_err("should fail when neither rate is specified");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("must specify exactly one of"),
+            "error should mention missing rate: {msg}"
+        );
+    }
+
+    #[derive(Deserialize)]
+    struct UninitializedBatchCostConfigWrapper {
+        batch_cost: UninitializedBatchCostConfig,
+    }
+
+    #[test]
+    fn test_deserialize_batch_cost_config() {
+        let toml_str = r#"
+[[batch_cost]]
+pointer = "/usage/input_tokens"
+cost_per_million = 1.5
+
+[[batch_cost]]
+pointer = "/usage/output_tokens"
+cost_per_million = 6.0
+required = true
+"#;
+
+        let wrapper: UninitializedBatchCostConfigWrapper =
+            toml::from_str(toml_str).expect("should deserialize batch cost config");
+        assert_eq!(
+            wrapper.batch_cost.len(),
+            2,
+            "should have two batch cost entries"
+        );
+        assert_eq!(
+            wrapper.batch_cost[0].pointer, "/usage/input_tokens",
+            "first pointer should match"
+        );
+        assert!(
+            !wrapper.batch_cost[0].required,
+            "required should default to false"
+        );
+        assert!(
+            wrapper.batch_cost[1].required,
+            "required should be true when set"
         );
     }
 }
