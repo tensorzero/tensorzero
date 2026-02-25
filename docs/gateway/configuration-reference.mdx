@@ -4778,20 +4778,6 @@ Rate limits help you control usage, manage costs, and prevent abuse.
 
 See [Enforce Custom Rate Limits](/operations/enforce-custom-rate-limits/) for a comprehensive guide on rate limiting.
 
-### `default_cost`
-
-- **Type:** number (dollars)
-- **Required:** no (default: `1.00`)
-
-The default cost in dollars used to estimate each request's cost upfront when cost rate limiting is active.
-After a request completes, the gateway adjusts the consumed budget based on the actual cost reported by the provider.
-If your model providers don't report cost information, the default estimate is used without adjustment.
-
-```toml
-[rate_limiting]
-default_cost = 0.50
-```
-
 ### `enabled`
 
 - **Type:** boolean
@@ -4808,7 +4794,7 @@ enabled = true
 ### `[[rate_limiting.rules]]`
 
 Rate limiting rules are defined as an array of rule configurations.
-Each rule specifies rate limits for specific resources (model inferences, tokens, cost), time windows, scopes, and priorities.
+Each rule specifies rate limits for specific resources (model inferences, tokens), time windows, scopes, and priorities.
 
 #### Rate Limit Fields
 
@@ -4826,23 +4812,15 @@ You can set rate limits for different resources and time windows using the follo
 - `tokens_per_day`
 - `tokens_per_week`
 - `tokens_per_month`
-- `cost_per_second`
-- `cost_per_minute`
-- `cost_per_hour`
-- `cost_per_day`
-- `cost_per_week`
-- `cost_per_month`
 
 Each rate limit field can be specified in two formats:
 
-**Simple Format:** A single value that sets both the capacity and refill rate to the same value.
-For `model_inferences` and `tokens`, this is an integer. For `cost`, this is a number in dollars.
+**Simple Format:** A single integer value that sets both the capacity and refill rate to the same value.
 
 ```toml
 [[rate_limiting.rules]]
 model_inferences_per_minute = 100
 tokens_per_hour = 10000
-cost_per_day = 10.0
 ```
 
 **Bucket Format:** An object with explicit `capacity` and `refill_rate` fields for fine-grained control over the token bucket algorithm.
@@ -4850,7 +4828,6 @@ cost_per_day = 10.0
 ```toml
 [[rate_limiting.rules]]
 tokens_per_minute = { capacity = 1000, refill_rate = 500 }
-cost_per_hour = { capacity = 5.0, refill_rate = 2.5 }
 ```
 
 <Note>
