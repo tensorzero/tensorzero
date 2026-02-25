@@ -10,7 +10,8 @@ import {
 import { useState, Suspense } from "react";
 import { Await, useAsyncError, isRouteErrorResponse } from "react-router";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, AlertTriangle } from "lucide-react";
+import { formatCost } from "~/utils/cost";
 
 import {
   Card,
@@ -39,7 +40,8 @@ export type ModelUsageMetric =
   | "inferences"
   | "input_tokens"
   | "output_tokens"
-  | "total_tokens";
+  | "total_tokens"
+  | "cost";
 
 const METRIC_TYPE_CONFIG = {
   inferences: {
@@ -61,6 +63,11 @@ const METRIC_TYPE_CONFIG = {
     label: "Total Tokens",
     description: "Total token usage (input + output)",
     formatter: (value: number) => `${formatDetailedNumber(value)} tokens`,
+  },
+  cost: {
+    label: "Cost",
+    description: "Estimated cost",
+    formatter: (value: number) => formatCost(value),
   },
 } as const;
 
@@ -101,6 +108,7 @@ function MetricSelector({
         <SelectItem value="input_tokens">Input Tokens</SelectItem>
         <SelectItem value="output_tokens">Output Tokens</SelectItem>
         <SelectItem value="total_tokens">Total Tokens</SelectItem>
+        <SelectItem value="cost">Cost</SelectItem>
       </SelectContent>
     </Select>
   );
@@ -163,8 +171,42 @@ export function ModelUsage({
                 {},
               );
 
+              // Compute cost coverage percentage
+              let costCoveragePercent: number | null = null;
+              if (selectedMetric === "cost") {
+                const filtered = modelUsageData.filter(
+                  (row) => row.count && Number(row.count) > 0,
+                );
+                let totalCount = 0;
+                let countWithCost = 0;
+                for (const row of filtered) {
+                  const c = Number(row.count);
+                  totalCount += c;
+                  if (row.cost != null) {
+                    countWithCost += c;
+                  }
+                }
+                if (totalCount > 0) {
+                  costCoveragePercent = Math.round(
+                    (countWithCost / totalCount) * 100,
+                  );
+                }
+              }
+
               return (
                 <>
+                  {selectedMetric === "cost" &&
+                    costCoveragePercent != null &&
+                    costCoveragePercent < 100 && (
+                      <div className="mb-4 flex items-center gap-2 rounded-md border border-yellow-500 bg-yellow-50 p-3 text-sm text-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
+                        <span>
+                          Cost data only covers ~{costCoveragePercent}% of model
+                          inferences. Some models may not have cost tracking
+                          configured.
+                        </span>
+                      </div>
+                    )}
                   <ChartContainer config={chartConfig}>
                     <BarChart accessibilityLayer data={data}>
                       <CartesianGrid vertical={false} />
@@ -186,7 +228,12 @@ export function ModelUsage({
                         tickLine={false}
                         tickMargin={10}
                         axisLine={true}
-                        tickFormatter={formatChartNumber}
+                        width={selectedMetric === "cost" ? 90 : undefined}
+                        tickFormatter={(value) =>
+                          selectedMetric === "cost"
+                            ? formatCost(value)
+                            : formatChartNumber(value)
+                        }
                       />
                       <ChartTooltip
                         content={
@@ -272,6 +319,7 @@ type UsageDataGroupedByDate = {
       count: number;
       input_tokens: number;
       output_tokens: number;
+      cost: number | null;
     }
   >;
 }[];
@@ -315,6 +363,7 @@ export function transformModelUsageData(
       count: countNum,
       input_tokens: inputTokensNum,
       output_tokens: outputTokensNum,
+      cost: row.cost,
     };
 
     return acc;
@@ -341,17 +390,28 @@ export function transformModelUsageData(
       } else if (selectedMetric === "total_tokens") {
         row[modelName] =
           (modelData?.input_tokens ?? 0) + (modelData?.output_tokens ?? 0);
+      } else if (selectedMetric === "cost") {
+        row[modelName] = modelData?.cost ?? 0;
       }
       // Keep all data for tooltip
       row[`${modelName}_count`] = modelData?.count ?? 0;
       row[`${modelName}_input_tokens`] = modelData?.input_tokens ?? 0;
       row[`${modelName}_output_tokens`] = modelData?.output_tokens ?? 0;
+      row[`${modelName}_cost`] = modelData?.cost ?? 0;
     });
     return row;
   });
 
+  // When cost is selected, filter to only models with at least one non-null cost value
+  const filteredModelNames =
+    selectedMetric === "cost"
+      ? modelNames.filter((modelName) =>
+          groupedByDate.some((entry) => entry.models[modelName]?.cost != null),
+        )
+      : modelNames;
+
   return {
     data,
-    modelNames,
+    modelNames: filteredModelNames,
   };
 }
