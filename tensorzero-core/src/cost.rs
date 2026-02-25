@@ -214,6 +214,24 @@ pub fn load_cost_config(config: UninitializedCostConfig) -> Result<CostConfig, E
     config.into_iter().map(load_cost_config_entry).collect()
 }
 
+/// Load a cost config for embedding models, which do not support streaming.
+/// Rejects split pointers (`pointer_nonstreaming`/`pointer_streaming`) since they are meaningless for embeddings.
+pub fn load_embedding_cost_config(config: UninitializedCostConfig) -> Result<CostConfig, Error> {
+    config
+        .into_iter()
+        .map(|entry| {
+            if entry.pointer.pointer_nonstreaming.is_some()
+                || entry.pointer.pointer_streaming.is_some()
+            {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "embedding cost entries do not support split pointers (`pointer_nonstreaming`/`pointer_streaming`); use `pointer` instead".to_string(),
+                }));
+            }
+            load_cost_config_entry(entry)
+        })
+        .collect()
+}
+
 pub fn load_batch_cost_config(config: UninitializedBatchCostConfig) -> Result<CostConfig, Error> {
     config
         .into_iter()
@@ -1073,6 +1091,45 @@ cost_per_million = 3.0
     // ========================================================================
     // load_batch_cost_config tests
     // ========================================================================
+
+    // ========================================================================
+    // load_embedding_cost_config tests
+    // ========================================================================
+
+    #[test]
+    fn test_load_embedding_cost_config_rejects_split_pointers() {
+        let config = vec![UninitializedCostConfigEntry {
+            pointer: split("/usage/total", "/usage/stream_total"),
+            rate: per_million(Decimal::from(1)),
+            required: false,
+        }];
+        let err = load_embedding_cost_config(config)
+            .expect_err("should reject split pointers for embedding cost config");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("split pointers"),
+            "error should mention split pointers: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_load_embedding_cost_config_accepts_unified() {
+        let config = vec![UninitializedCostConfigEntry {
+            pointer: unified("/usage/total_tokens"),
+            rate: per_million(Decimal::from(1)),
+            required: false,
+        }];
+        let result = load_embedding_cost_config(config)
+            .expect("should accept unified pointer for embedding cost config");
+        assert_eq!(result.len(), 1, "should have one entry");
+        assert!(
+            matches!(
+                result[0].pointer,
+                NormalizedCostPointerConfig::Unified { .. }
+            ),
+            "embedding cost entry should have a unified pointer"
+        );
+    }
 
     #[test]
     fn test_load_batch_cost_config_valid() {

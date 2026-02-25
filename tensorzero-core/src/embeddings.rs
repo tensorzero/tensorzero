@@ -10,7 +10,7 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write,
 };
 use crate::config::provider_types::ProviderTypesConfig;
-use crate::cost::{CostConfig, ResponseMode, compute_cost, load_cost_config};
+use crate::cost::{CostConfig, ResponseMode, compute_cost, load_embedding_cost_config};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
@@ -749,11 +749,15 @@ impl UninitializedEmbeddingProviderConfig {
 
         let extra_body = self.extra_body;
         let extra_headers = self.extra_headers;
-        let cost = self.cost.map(load_cost_config).transpose().map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!("cost: {e}"),
-            })
-        })?;
+        let cost = self
+            .cost
+            .map(load_embedding_cost_config)
+            .transpose()
+            .map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("cost: {e}"),
+                })
+            })?;
 
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {
