@@ -146,14 +146,9 @@ async function createAndInterruptSession(
   page: import("@playwright/test").Page,
 ): Promise<string> {
   await page.goto("/autopilot/sessions/new");
-  // Wait for full hydration before interacting with controlled inputs
-  await page.waitForLoadState("networkidle");
   const messageInput = page.getByRole("textbox");
-  const message = `Test question flow ${v7()}`;
-  await messageInput.fill(message);
-  const sendButton = page.getByRole("button", { name: "Send message" });
-  await expect(sendButton).toBeEnabled({ timeout: 10000 });
-  await sendButton.click();
+  await messageInput.fill(`Test question flow ${v7()}`);
+  await page.getByRole("button", { name: "Send message" }).click();
 
   await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
     timeout: 30000,
@@ -165,7 +160,7 @@ async function createAndInterruptSession(
   if (!sessionId) throw new Error("Could not extract session ID from URL");
 
   const stopButton = page.getByRole("button", { name: /stop session/i });
-  await expect(stopButton).toBeVisible({ timeout: 110000 });
+  await expect(stopButton).toBeVisible({ timeout: 30000 });
   await stopButton.click();
   await expect(page.getByText("Interrupted session")).toBeVisible({
     timeout: 10000,
@@ -188,7 +183,7 @@ function queryFirstAnswerPayload(sessionId: string): AnswerPayload {
 
 test.describe("User questions", () => {
   test("should submit a multiple choice answer", async ({ page }) => {
-    test.setTimeout(180000);
+    test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
@@ -221,7 +216,7 @@ test.describe("User questions", () => {
   });
 
   test("should submit a free response answer", async ({ page }) => {
-    test.setTimeout(180000);
+    test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
@@ -251,7 +246,7 @@ test.describe("User questions", () => {
   test("should submit multi-select question with multiple selected options", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
@@ -285,7 +280,7 @@ test.describe("User questions", () => {
   test("should navigate multi-question flow and submit all answers", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
@@ -327,7 +322,7 @@ test.describe("User questions", () => {
   });
 
   test("should preserve selections when navigating back", async ({ page }) => {
-    test.setTimeout(180000);
+    test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
@@ -375,7 +370,7 @@ test.describe("User questions", () => {
   test("should skip questions when dismiss button is clicked", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
@@ -401,7 +396,7 @@ test.describe("User questions", () => {
   test("should show Action Required badge for pending questions", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
@@ -422,7 +417,7 @@ test.describe("User questions", () => {
   test("should disable Submit when free response is empty", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
@@ -451,7 +446,7 @@ test.describe("User questions", () => {
   test("spam-clicking Submit sends only one answer request", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(120000);
 
     const sessionId = await createAndInterruptSession(page);
 
