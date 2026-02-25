@@ -988,7 +988,7 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
-- `cost`: The cost in dollars for the inference (number, optional). Only present when cost is configured for the model provider and the provider reports the relevant information.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 ##### `raw_usage`
 
@@ -1062,7 +1062,7 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
-- `cost`: The cost in dollars for the inference (number, optional). Only present when cost is configured for the model provider and the provider reports the relevant information.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 ##### `raw_usage`
 
@@ -1156,7 +1156,7 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
-- `cost`: The cost in dollars for the inference (number, optional). Only present when cost is configured for the model provider and the provider reports the relevant information.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 ##### `raw_usage`
 
@@ -1213,7 +1213,7 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
-- `cost`: The cost in dollars for the inference (number, optional). Only present when cost is configured for the model provider and the provider reports the relevant information.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 ##### `raw_usage`
 
