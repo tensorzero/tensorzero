@@ -472,10 +472,10 @@ Each entry in the array specifies a [JSON Pointer](https://datatracker.ietf.org/
 
 Each entry has the following fields:
 
-- **Pointer** (exactly one of the following):
+- Pointer (exactly one of the following):
   - `pointer` — a single JSON Pointer used for both streaming and non-streaming responses.
   - `pointer_nonstreaming` and `pointer_streaming` — separate JSON Pointers for non-streaming and streaming responses respectively. Both must be provided together.
-- **Rate** (exactly one of the following):
+- Rate (exactly one of the following):
   - `cost_per_million` (number) — cost in dollars per million units of the extracted value. This is the most common option for token-based pricing.
   - `cost_per_unit` (number) — cost in dollars per unit of the extracted value. This is useful for features billed per unit (e.g. web search calls), or when the provider response contains a cost value directly (set to `1.0`).
 - `required` (boolean, default: `false`) — if `true` and the field is missing from the response, the cost for the entire request is reported as `null`. If `false`, missing fields contribute $0 to the total.
@@ -2178,6 +2178,35 @@ routing = ["openai", "alternative-provider"]
 
 [embedding_models.model-name.providers.alternative-provider]
 # ...
+```
+
+### `cost`
+
+- **Type:** array of objects
+- **Required:** no
+
+Configures how to extract cost information from raw embedding provider responses.
+This is used for cost tracking and [cost-based rate limiting](/operations/enforce-custom-rate-limits).
+
+Each entry in the array specifies a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) to a numeric field in the provider's response, a rate to convert that value to dollars, and whether the field is required.
+
+Each entry has the following fields:
+
+- `pointer` (string) — a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) into the provider's response.
+- Rate (exactly one of the following):
+  - `cost_per_million` (number) — cost in dollars per million units of the extracted value. This is the most common option for token-based pricing.
+  - `cost_per_unit` (number) — cost in dollars per unit of the extracted value. This is useful for features billed per unit, or when the provider response contains a cost value directly (set to `1.0`).
+- `required` (boolean, default: `false`) — if `true` and the field is missing from the response, the cost for the entire request is reported as `null`. If `false`, missing fields contribute $0 to the total.
+
+The total cost is computed as the sum of `extracted_value * rate` across all entries.
+
+```toml title="tensorzero.toml"
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+cost = [
+  { pointer = "/usage/total_tokens", cost_per_million = 0.02, required = true },
+]
 ```
 
 ### `extra_body`
