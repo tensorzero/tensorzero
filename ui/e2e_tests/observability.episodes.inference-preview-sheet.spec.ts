@@ -86,10 +86,10 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
     const sheet = page.locator('[role="dialog"]');
     await sheet.waitFor({ state: "visible" });
 
-    // Wait for the inference link to appear in the header
-    const inferenceLink = sheet.locator(
-      "a[href^='/observability/inferences/']",
-    );
+    // Wait for the inference link to appear in the header (scoped to heading to avoid matching the full-page icon link)
+    const inferenceLink = sheet
+      .getByRole("heading")
+      .locator("a[href^='/observability/inferences/']");
     await inferenceLink.waitFor({ state: "visible", timeout: 10000 });
 
     // Get the href to verify navigation later
