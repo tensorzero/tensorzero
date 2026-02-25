@@ -13,11 +13,11 @@ check_and_maybe_exit() {
     avail_kb=$(df -k / | tail -1 | awk '{print $4}')
     local avail_gb=$((avail_kb / 1024 / 1024))
     if [ "$avail_kb" -ge "$TARGET_KB" ]; then
-        echo "=== Free space target reached: ${avail_gb} GB available (>= 25 GB) ==="
+        echo "=== Free space target reached: ${avail_gb} GB available (>= $((TARGET_KB / 1024 / 1024)) GB) ==="
         df -h /
         exit 0
     fi
-    echo "--- Free space: ${avail_gb} GB (target: 25 GB) ---"
+    echo "--- Free space: ${avail_gb} GB (target: $((TARGET_KB / 1024 / 1024)) GB) ---"
 }
 
 echo "=== Disk space before cleanup ==="
