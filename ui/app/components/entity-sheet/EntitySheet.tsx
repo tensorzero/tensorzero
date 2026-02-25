@@ -37,9 +37,5 @@ export function EntitySheet() {
           onClose={closeSheet}
         />
       );
-    default: {
-      const _exhaustiveCheck: never = type;
-      return _exhaustiveCheck;
-    }
   }
 }

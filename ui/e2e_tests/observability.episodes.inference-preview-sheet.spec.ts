@@ -27,7 +27,7 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
     await expect(
       sheet
         .getByRole("navigation", { name: "breadcrumb" })
-        .getByText("Inferences"),
+        .getByText("Inference"),
     ).toBeVisible();
 
     // Wait for the inference data to load (BasicInfo should show the function name)
