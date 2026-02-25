@@ -134,6 +134,81 @@ test("run evaluation with dataset with no output", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
+// Uses dummy::slow (5s per inference) to guarantee the evaluation is still
+// running when we click Stop. No model inference cache needed.
+// foo dataset has 78 datapoints for write_haiku — at 5s each with concurrency 1,
+// that's ~390s total, giving plenty of time to cancel after the first completes.
+const CANCEL_TEST_DATASET_SIZE = 78;
+test("cancel a running evaluation and verify partial results", async ({
+  page,
+}) => {
+  test.setTimeout(600_000);
+  await page.goto("/evaluations");
+  await page.waitForTimeout(500);
+  await page.getByText("New Run").click();
+  await page.waitForTimeout(500);
+  await page.getByPlaceholder("Select evaluation").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "haiku" }).click();
+  await page.waitForTimeout(500);
+  await page.getByPlaceholder("Select dataset").click();
+  await page.waitForTimeout(500);
+  await page.locator('[data-dataset-name="foo"]').click();
+  await page.waitForTimeout(500);
+  await page.getByPlaceholder("Select variant").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "dummy_slow" }).click();
+  // Concurrency 1 ensures sequential processing so each datapoint takes ~5s
+  await page.getByTestId("concurrency-limit").fill("1");
+  await page.getByRole("button", { name: "Launch" }).click();
+
+  await expect(
+    page.getByText("Select evaluation runs to compare..."),
+  ).toBeVisible();
+
+  // Wait for the evaluation to start running
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "true",
+  );
+
+  // Wait for at least one datapoint to complete (~5s per datapoint with dummy::slow)
+  await page.waitForTimeout(8_000);
+
+  // Click the Stop button
+  const stopButton = page.getByRole("button", { name: "Stop" });
+  await expect(stopButton).toBeVisible();
+  await stopButton.click();
+
+  // Verify the button shows the "Stopping..." state
+  await expect(page.getByText("Stopping...")).toBeVisible();
+
+  // Wait for the evaluation to actually stop
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "false",
+    { timeout: 30_000 },
+  );
+
+  // Verify partial results exist in ClickHouse
+  const statsText = await page
+    .getByText("n=", { exact: false })
+    .first()
+    .textContent();
+  expect(
+    statsText,
+    "Should have some evaluation results in ClickHouse",
+  ).toBeTruthy();
+  const match = statsText?.match(/n=(\d+)/);
+  expect(match, "Should match n=X pattern").toBeTruthy();
+  const n = parseInt(match![1], 10);
+  expect(n, "Should have at least 1 completed datapoint").toBeGreaterThan(0);
+  expect(
+    n,
+    "Should have fewer than all datapoints (cancellation stopped the evaluation)",
+  ).toBeLessThan(CANCEL_TEST_DATASET_SIZE);
+});
+
 // This test verifies that adaptive stopping parameters work correctly
 test("launch evaluation with adaptive stopping parameters", async ({
   page,

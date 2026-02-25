@@ -106,7 +106,7 @@ def verify_etags():
 
 def download_fixtures_from_r2(retries: int = 3) -> None:
     """Download fixtures from R2 using s5cmd with retry logic."""
-    batch_commands = "\n".join(f"cp s3://tensorzero-fixtures/{f} {LARGE_FIXTURES_DIR}/" for f in FIXTURES)
+    batch_commands = "\n".join(f"sync s3://tensorzero-fixtures/{f} {LARGE_FIXTURES_DIR}/" for f in FIXTURES)
 
     cmd = [
         "s5cmd",

@@ -3,11 +3,13 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::future::Future;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use paste::paste;
+use rust_decimal::Decimal;
 use secrecy::ExposeSecret;
 use serde_json::json;
 use tensorzero_core::utils::testing::reset_capture_logs;
@@ -451,6 +453,95 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     clean_start
 }
 
+async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
+    clickhouse: &ClickHouseConnectionInfo,
+    run_migration: F,
+) -> bool {
+    // Insert two ModelInference rows with known cost values using a unique model/provider pair.
+    // Migration 0047 added the `cost` column, which runs just before 0048, so the fixture data
+    // won't have cost values. We insert our own rows to verify the backfill.
+    let test_model_name = "test_cost_model_0048";
+    let test_provider_name = "test_cost_provider_0048";
+    let cost1 = Decimal::from_str("0.001500000").unwrap();
+    let cost2 = Decimal::from_str("0.002500000").unwrap();
+
+    let row1 = StoredModelInference {
+        id: Uuid::now_v7(),
+        inference_id: Uuid::now_v7(),
+        raw_request: Some(String::new()),
+        raw_response: Some(String::new()),
+        system: None,
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
+        input_tokens: Some(100),
+        output_tokens: Some(50),
+        response_time_ms: None,
+        model_name: test_model_name.to_string(),
+        model_provider_name: test_provider_name.to_string(),
+        ttft_ms: None,
+        cached: false,
+        cost: Some(cost1),
+        finish_reason: None,
+        snapshot_hash: Some(SnapshotHash::new_test()),
+        timestamp: None,
+    };
+    let row2 = StoredModelInference {
+        id: Uuid::now_v7(),
+        inference_id: Uuid::now_v7(),
+        raw_request: Some(String::new()),
+        raw_response: Some(String::new()),
+        system: None,
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
+        input_tokens: Some(200),
+        output_tokens: Some(100),
+        response_time_ms: None,
+        model_name: test_model_name.to_string(),
+        model_provider_name: test_provider_name.to_string(),
+        ttft_ms: None,
+        cached: false,
+        cost: Some(cost2),
+        finish_reason: None,
+        snapshot_hash: Some(SnapshotHash::new_test()),
+        timestamp: None,
+    };
+
+    clickhouse
+        .write_non_batched(Rows::Unserialized(&[row1, row2]), TableName::ModelInference)
+        .await
+        .unwrap();
+
+    // Wait for ClickHouse to process the inserts
+    sleep(Duration::from_millis(500)).await;
+
+    let clean_start = run_migration().await;
+
+    // Query ModelProviderStatistics for our test model/provider to verify the backfill
+    let response = clickhouse
+        .run_query_synchronous_no_params(format!(
+            "SELECT sumMerge(total_cost) \
+             FROM ModelProviderStatistics FINAL \
+             WHERE model_name = '{test_model_name}' \
+             AND model_provider_name = '{test_provider_name}'"
+        ))
+        .await
+        .unwrap();
+
+    let total_cost: Decimal = response
+        .response
+        .trim()
+        .parse()
+        .expect("total_cost should be a valid Decimal");
+
+    let expected_cost = cost1 + cost2;
+    assert_eq!(
+        total_cost, expected_cost,
+        "Backfilled total_cost should equal the sum of inserted costs ({expected_cost})"
+    );
+
+    clean_start
+}
+
 async fn run_rollback_instructions(
     clickhouse: &ClickHouseConnectionInfo,
     migration: &(dyn Migration + Send + Sync),
@@ -523,7 +614,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41
     ]
 );
 
@@ -686,6 +777,13 @@ async fn test_clickhouse_migration_manager() {
                     );
                     run_migration_0021_with_data(clickhouse, run_migration).await
                 }
+                "Migration0048" => {
+                    assert!(
+                        !initial_clean_start.get(),
+                        "Migration0048 should not be run on a clean start"
+                    );
+                    run_migration_0048_with_data(clickhouse, run_migration).await
+                }
                 _ => run_migration().await,
             };
 
@@ -784,7 +882,8 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let input_token_total: u64 = response.response.trim().parse().unwrap();
-    assert_eq!(input_token_total, 200000000);
+    // 200000000 from fixtures + 300 from migration 0048 test rows (100 + 200)
+    assert_eq!(input_token_total, 200000300);
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
@@ -792,7 +891,8 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let output_token_total: u64 = response.response.trim().parse().unwrap();
-    assert_eq!(output_token_total, 200000000);
+    // 200000000 from fixtures + 150 from migration 0048 test rows (50 + 100)
+    assert_eq!(output_token_total, 200000150);
     // Let's add a ModelInference row with null output tokens only then check the input tokens are correct
     let row = StoredModelInference {
         id: Uuid::now_v7(),
@@ -826,7 +926,8 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let input_token_total: u64 = response.response.trim().parse().unwrap();
-    assert_eq!(input_token_total, 200000123);
+    // 200000300 (prior total) + 123 from this row
+    assert_eq!(input_token_total, 200000423);
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
@@ -834,7 +935,8 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let output_token_total: u64 = response.response.trim().parse().unwrap();
-    assert_eq!(output_token_total, 200000000);
+    // Unchanged from prior check — this row has null output tokens
+    assert_eq!(output_token_total, 200000150);
 
     // Check that the EpisodeById migration worked
     let response = clickhouse

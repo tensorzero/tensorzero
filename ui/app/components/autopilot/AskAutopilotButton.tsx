@@ -21,6 +21,7 @@ export function AskAutopilotButton({ message }: AskAutopilotButtonProps) {
     <Button
       variant="outline"
       size="sm"
+      className="w-fit"
       onClick={() => navigate(`/autopilot/sessions/new?${params.toString()}`)}
     >
       <ButtonIcon as={Chat} variant="tertiary" />

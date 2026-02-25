@@ -31,6 +31,8 @@ export default [
       "routes/api/evaluations/search_runs/$evaluation_name/route.ts",
     ),
 
+    route("evaluations/cancel", "routes/api/evaluations/cancel.route.ts"),
+
     route(
       "function/:function_name/feedback_counts",
       "routes/api/function/$function_name/feedback_counts.route.ts",

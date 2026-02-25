@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation } from "react-router";
+import { canUseDOM, isModifiedEvent } from "~/utils/common";
 
 const SHEET_PARAM = "sheet";
 const SHEET_ID_PARAM = "sheetId";
@@ -17,6 +18,7 @@ type EntitySheetState =
   | null;
 
 function parseSheetStateFromUrl(): EntitySheetState {
+  if (!canUseDOM) return null;
   const params = new URLSearchParams(window.location.search);
   const type = params.get(SHEET_PARAM);
   const id = params.get(SHEET_ID_PARAM);
@@ -34,6 +36,12 @@ interface EntitySheetContextValue {
   openInferenceSheet: (id: string) => void;
   openEpisodeSheet: (id: string) => void;
   closeSheet: () => void;
+  /** Click handler that intercepts entity links to open the sheet. */
+  handleUuidLinkClick: (
+    e: React.MouseEvent,
+    entityType: string,
+    id: string,
+  ) => void;
 }
 
 const EntitySheetContext = createContext<EntitySheetContextValue | null>(null);
@@ -99,9 +107,35 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
     setSheetState(null);
   }, []);
 
+  const handleUuidLinkClick = useCallback(
+    (e: React.MouseEvent, entityType: string, id: string) => {
+      if (isModifiedEvent(e)) return;
+      switch (entityType) {
+        case "inference": {
+          e.preventDefault();
+          openInferenceSheet(id);
+          break;
+        }
+        case "episode": {
+          e.preventDefault();
+          openEpisodeSheet(id);
+          break;
+        }
+        // Other entity types fall through to default link navigation
+      }
+    },
+    [openInferenceSheet, openEpisodeSheet],
+  );
+
   return (
     <EntitySheetContext.Provider
-      value={{ sheetState, openInferenceSheet, openEpisodeSheet, closeSheet }}
+      value={{
+        sheetState,
+        openInferenceSheet,
+        openEpisodeSheet,
+        closeSheet,
+        handleUuidLinkClick,
+      }}
     >
       {children}
     </EntitySheetContext.Provider>

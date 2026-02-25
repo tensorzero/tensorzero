@@ -14,6 +14,14 @@ export const canUseDOM = !!(
 );
 
 /**
+ * Returns true if the mouse event has modifier keys or is a non-primary click,
+ * indicating the browser should handle it natively (e.g. open in new tab).
+ */
+export function isModifiedEvent(e: React.MouseEvent): boolean {
+  return Boolean(e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0);
+}
+
+/**
  * A helper function to merge class names conditionally, and deduplicating potentially conflicting
  * Tailwind classes. Note that deduplication can have a potentially significant performance overhead
  * for already slow-rendering components, and it is generally only useful in cases where a component

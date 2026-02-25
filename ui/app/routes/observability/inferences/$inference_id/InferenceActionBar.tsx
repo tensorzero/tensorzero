@@ -8,6 +8,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
 import type { ModelInferencesData } from "./inference-data.server";
@@ -50,6 +51,9 @@ export function InferenceActionBar({
         key={`human-${locationKey}`}
         inference={inference}
         onFeedbackAdded={onFeedbackAdded}
+      />
+      <AskAutopilotButton
+        message={`Inference ID: ${inference.inference_id}\n\n`}
       />
     </ActionBar>
   );

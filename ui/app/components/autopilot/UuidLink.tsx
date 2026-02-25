@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { CircleDot, CircleHelp } from "lucide-react";
 import { Dataset, Episodes, Inferences } from "~/components/icons/Icons";
@@ -86,24 +86,10 @@ function IconWithTooltip({
 
 export function UuidLink({ uuid }: UuidLinkProps) {
   const { data } = useResolveUuid(uuid);
-  const { openInferenceSheet, openEpisodeSheet } = useEntitySheet();
+  const { handleUuidLinkClick } = useEntitySheet();
 
   const obj = data?.object_types.length === 1 ? data.object_types[0] : null;
   const url = obj ? toResolvedObjectUrl(uuid, obj) : null;
-
-  const handleClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-      if (obj?.type === "inference") {
-        e.preventDefault();
-        openInferenceSheet(uuid);
-      } else if (obj?.type === "episode") {
-        e.preventDefault();
-        openEpisodeSheet(uuid);
-      }
-    },
-    [obj, uuid, openInferenceSheet, openEpisodeSheet],
-  );
 
   return (
     <code
@@ -116,7 +102,7 @@ export function UuidLink({ uuid }: UuidLinkProps) {
         <UuidHoverCard uuid={uuid} obj={obj}>
           <Link
             to={url}
-            onClick={handleClick}
+            onClick={(e) => handleUuidLinkClick(e, obj.type, uuid)}
             className="text-inherit no-underline after:absolute after:inset-0 hover:underline"
           >
             <IconWithTooltip label={getEntityLabel(obj.type)}>

@@ -348,6 +348,7 @@ impl JobHandle for TogetherSFTJobHandle {
                     timeouts: TimeoutsConfig::default(),
                     discard_unknown_chunks: false,
                     cost: None,
+                    batch_cost: None,
                 };
                 Ok(OptimizationJobInfo::Completed {
                     output: OptimizerOutput::Model(UninitializedModelConfig {

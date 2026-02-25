@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { HoverCard } from "radix-ui";
@@ -213,28 +213,14 @@ interface TypeHeaderLinkProps {
 
 export function TypeHeaderLink({ uuid, obj, children }: TypeHeaderLinkProps) {
   const url = toResolvedObjectUrl(uuid, obj);
-  const { openInferenceSheet, openEpisodeSheet } = useEntitySheet();
-
-  const handleClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-      if (obj.type === "inference") {
-        e.preventDefault();
-        openInferenceSheet(uuid);
-      } else if (obj.type === "episode") {
-        e.preventDefault();
-        openEpisodeSheet(uuid);
-      }
-    },
-    [obj.type, uuid, openInferenceSheet, openEpisodeSheet],
-  );
+  const { handleUuidLinkClick } = useEntitySheet();
 
   if (!url) return null;
 
   return (
     <Link
       to={url}
-      onClick={handleClick}
+      onClick={(e) => handleUuidLinkClick(e, obj.type, uuid)}
       className="text-muted-foreground hover:text-foreground inline-flex items-center text-xs transition-colors"
     >
       {children}
