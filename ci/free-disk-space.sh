@@ -6,7 +6,7 @@ set -euo pipefail
 # Runs cleanup phases in order (fastest first) and exits early
 # once the target free-space threshold is reached.
 
-TARGET_KB=$((25 * 1024 * 1024)) # 25 GB in KB
+TARGET_KB=$((35 * 1024 * 1024)) # 35 GB in KB
 
 check_and_maybe_exit() {
     local avail_kb

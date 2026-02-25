@@ -191,7 +191,17 @@ jobs:
 
       - name: Install dependencies
         working-directory: internal/tensorzero-node
-        run: pnpm install --frozen-lockfile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Build Node.js bindings
         working-directory: internal/tensorzero-node
@@ -243,6 +253,22 @@ jobs:
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
           version: "0.9.27"
+
+      # The `packageManager` field in package.json triggers corepack to download pnpm on first invocation,
+      # which can fail with transient 403s from the npm registry. Retry the bootstrap separately so the
+      # actual script doesn't need retry logic.
+      - name: Bootstrap pnpm
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --version; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to bootstrap pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Generate Python schemas
         run: pnpm generate-python-schemas
@@ -464,7 +490,17 @@ jobs:
         shell: bash
 
       - name: Install JS dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Build npm workspace
         run: pnpm -r build
@@ -610,7 +646,17 @@ jobs:
           version: "0.9.27"
 
       - name: Install JS dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Set up Helm
         uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
@@ -750,6 +796,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Cleanup disk space
+        run: bash ci/free-disk-space.sh
 
       - name: Install Rust (from rust-toolchain.toml)
         run: |

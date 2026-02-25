@@ -151,7 +151,17 @@ jobs:
         shell: bash
 
       - name: Install JS dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
