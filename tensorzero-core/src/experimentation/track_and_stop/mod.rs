@@ -1006,7 +1006,7 @@ impl TrackAndStopState {
     /// NOTE: This function may do some CPU-bound work to compute probabilities.
     ///
     /// # Assumptions
-    /// - `candidate_variants` is non-empty (validated in `UninitializedTrackAndStopConfig::load()`)
+    /// - `candidate_variants` is non-empty (validated in `UninitializedTrackAndStopExperimentationConfig::load()`)
     /// - `variant_performances` may contain feedback for non-candidate variants (these are filtered out)
     fn new(
         candidate_variants: &[String],

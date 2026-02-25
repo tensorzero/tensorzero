@@ -69,14 +69,14 @@ You can customize the sampling behavior, including fallback-only variants, using
 In the example below, both variants have an equal chance of being selected:
 
 ```toml
-[functions.draft_email]
+[functions.extract_data]
 type = "chat"
 
-[functions.draft_email.variants.gpt_5_mini]
+[functions.extract_data.variants.gpt_5_mini]
 type = "chat_completion"
 model = "openai::gpt-5-mini"
 
-[functions.draft_email.variants.claude_haiku_4_5]
+[functions.extract_data.variants.claude_haiku_4_5]
 type = "chat_completion"
 model = "anthropic::claude-haiku-4-5"
 ```
@@ -94,19 +94,19 @@ type = "static"
 candidate_variants = ["gpt_5_mini", "claude_haiku_4_5"]
 fallback_variants = ["grok_4", "gemini_2_5_flash"]
 
-[functions.draft_email.variants.gpt_5_mini]
+[functions.extract_data.variants.gpt_5_mini]
 type = "chat_completion"
 model = "openai::gpt-5-mini"
 
-[functions.draft_email.variants.claude_haiku_4_5]
+[functions.extract_data.variants.claude_haiku_4_5]
 type = "chat_completion"
 model = "anthropic::claude-haiku-4-5"
 
-[functions.draft_email.variants.grok_4]
+[functions.extract_data.variants.grok_4]
 type = "chat_completion"
 model = "xai::grok-4-0709"
 
-[functions.draft_email.variants.gemini_2_5_flash]
+[functions.extract_data.variants.gemini_2_5_flash]
 type = "chat_completion"
 model = "google_ai_studio_gemini::gemini-2.5-flash"
 ```
