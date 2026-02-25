@@ -100,7 +100,7 @@ export function DatapointPreviewSheet({
         </div>
 
         <SheetHeader className="space-y-3">
-          <Breadcrumbs segments={[{ label: "Datapoints" }]} />
+          <Breadcrumbs segments={[{ label: "Datapoint" }]} />
           <SheetTitle className="font-mono text-2xl font-medium">
             {datapointId ? (
               fetcherData ? (
