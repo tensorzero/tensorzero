@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use durable::{Durable, SpawnOptions, TaskContext, TaskHandle};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -7,9 +9,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{ClientInferenceParams, InferenceResponse};
 use tensorzero_core::cache::CacheParamsOptions;
+use tensorzero_core::client::ClientSecretString;
 use tensorzero_core::embeddings::{EmbeddingEncodingFormat, EmbeddingInput};
 use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
-use tensorzero_core::endpoints::inference::InferenceCredentials;
 use uuid::Uuid;
 
 use crate::error::{NonControlToolError, ToolResult};
@@ -532,7 +534,11 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
             dimensions: params.dimensions,
             encoding_format: params.encoding_format,
             dryrun: params.dryrun,
-            credentials: params.credentials,
+            credentials: params
+                .credentials
+                .into_iter()
+                .map(|(k, v)| (k, ClientSecretString(v)))
+                .collect(),
             cache_options: params.cache_options,
             include_raw_response: params.include_raw_response,
         };
@@ -604,10 +610,9 @@ impl<'a> SimpleToolContext<'a> {
 
 /// Serializable version of `EmbeddingsParams` for durable checkpointing.
 ///
-/// Credentials are excluded from serialization (`#[serde(skip)]`) so they
-/// are never persisted to the checkpoint database. On replay, the step result
-/// is returned from the checkpoint and the function is not re-executed, so
-/// credentials are not needed.
+/// `EmbeddingsParams::credentials` contains `SecretString` which is not
+/// serializable, so we use `ClientSecretString` (which exposes the secret
+/// for serialization) to allow checkpointing.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct SerializableEmbeddingsParams {
     input: EmbeddingInput,
@@ -615,8 +620,7 @@ struct SerializableEmbeddingsParams {
     dimensions: Option<u32>,
     encoding_format: EmbeddingEncodingFormat,
     dryrun: Option<bool>,
-    #[serde(skip)]
-    credentials: InferenceCredentials,
+    credentials: HashMap<String, ClientSecretString>,
     cache_options: CacheParamsOptions,
     include_raw_response: bool,
 }
@@ -631,7 +635,11 @@ async fn embeddings_step<S: Send + Sync + 'static>(
         dimensions: serializable.dimensions,
         encoding_format: serializable.encoding_format,
         dryrun: serializable.dryrun,
-        credentials: serializable.credentials,
+        credentials: serializable
+            .credentials
+            .into_iter()
+            .map(|(k, v)| (k, v.0))
+            .collect(),
         cache_options: serializable.cache_options,
         include_raw_response: serializable.include_raw_response,
     };
