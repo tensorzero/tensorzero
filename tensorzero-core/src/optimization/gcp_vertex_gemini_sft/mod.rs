@@ -26,7 +26,10 @@ pub struct GCPVertexGeminiSFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "GCPVertexGeminiSFTConfig"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "GCPVertexGeminiSFTConfig")
+)]
 pub struct UninitializedGCPVertexGeminiSFTConfig {
     pub model: String,
     pub learning_rate_multiplier: Option<f64>,
@@ -84,11 +87,11 @@ impl UninitializedGCPVertexGeminiSFTConfig {
         })
     }
 
-    #[expect(unused_variables)]
+    #[expect(unused_variables, clippy::unused_self)]
     #[pyo3(signature = (*, model, learning_rate_multiplier=None, adapter_size=None, n_epochs=None, export_last_checkpoint_only=None, seed=None, tuned_model_display_name=None))]
     #[expect(clippy::too_many_arguments)]
     fn __init__(
-        this: Py<Self>,
+        &self,
         model: String,
         learning_rate_multiplier: Option<f64>,
         adapter_size: Option<usize>,
@@ -96,8 +99,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
         export_last_checkpoint_only: Option<bool>,
         seed: Option<u64>,
         tuned_model_display_name: Option<String>,
-    ) -> Py<Self> {
-        this
+    ) {
     }
 }
 
@@ -120,7 +122,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct GCPVertexGeminiSFTJobHandle {
     pub job_url: Url,
     /// The API resource name (e.g., projects/{project}/locations/{region}/tuningJobs/{job_id})

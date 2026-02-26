@@ -1205,7 +1205,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,
     pub messages: Vec<ResolvedRequestMessage>,
@@ -1438,7 +1438,7 @@ pub struct JsonInferenceResult {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct JsonInferenceOutput {
     /// This is never omitted from the response even if it's None. A `null` value indicates no output from the model.
     /// It's rare and unexpected from the model, but it's possible.

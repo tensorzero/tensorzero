@@ -28,7 +28,7 @@ pub enum Detail {
 /// A file already encoded as base64
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct Base64File {
@@ -203,7 +203,7 @@ impl Base64File {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object))]
 pub struct Base64FileMetadata {
     #[serde(alias = "url")] // DEPRECATED
     #[cfg_attr(feature = "ts-bindings", ts(optional))]

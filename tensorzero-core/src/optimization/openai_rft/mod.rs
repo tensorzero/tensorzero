@@ -15,7 +15,10 @@ use crate::{
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "RFTJsonSchemaInfoOption"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "RFTJsonSchemaInfoOption")
+)]
 #[serde(untagged)]
 pub enum RFTJsonSchemaInfoOption {
     JsonSchema(JsonSchemaInfo),
@@ -41,7 +44,10 @@ impl std::fmt::Display for RFTJsonSchemaInfoOption {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "OpenAIRFTResponseFormat")
+)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIRFTResponseFormat {
@@ -84,7 +90,10 @@ pub struct OpenAIRFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "OpenAIRFTConfig")
+)]
 pub struct UninitializedOpenAIRFTConfig {
     pub model: String,
     pub grader: OpenAIGrader,
@@ -183,10 +192,10 @@ impl UninitializedOpenAIRFTConfig {
         })
     }
 
-    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[expect(unused_variables, clippy::too_many_arguments, clippy::unused_self)]
     #[pyo3(signature = (*, model, grader, response_format=None, batch_size=None, compute_multiplier=None, eval_interval=None, eval_samples=None, learning_rate_multiplier=None, n_epochs=None, reasoning_effort=None, seed=None, suffix=None))]
     fn __init__(
-        this: Py<Self>,
+        &self,
         model: String,
         grader: OpenAIGrader,
         response_format: Option<OpenAIRFTResponseFormat>,
@@ -199,8 +208,7 @@ impl UninitializedOpenAIRFTConfig {
         reasoning_effort: Option<String>,
         seed: Option<u64>,
         suffix: Option<String>,
-    ) -> Py<Self> {
-        this
+    ) {
     }
 }
 
@@ -228,7 +236,7 @@ impl UninitializedOpenAIRFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct OpenAIRFTJobHandle {
     pub job_id: String,
     /// A url to a human-readable page for the job.

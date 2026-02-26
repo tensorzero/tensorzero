@@ -48,7 +48,7 @@ pub enum StorageKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object, str))]
 pub struct StoragePath {
     pub kind: StorageKind,
     #[serde(

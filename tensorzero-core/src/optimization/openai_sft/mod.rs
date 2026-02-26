@@ -25,7 +25,10 @@ pub struct OpenAISFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "OpenAISFTConfig")
+)]
 pub struct UninitializedOpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
@@ -76,18 +79,17 @@ impl UninitializedOpenAISFTConfig {
         })
     }
 
-    #[expect(unused_variables)]
+    #[expect(unused_variables, clippy::unused_self)]
     #[pyo3(signature = (*, model, batch_size=None, learning_rate_multiplier=None, n_epochs=None, seed=None, suffix=None))]
     fn __init__(
-        this: Py<Self>,
+        &self,
         model: String,
         batch_size: Option<usize>,
         learning_rate_multiplier: Option<f64>,
         n_epochs: Option<usize>,
         seed: Option<u64>,
         suffix: Option<String>,
-    ) -> Py<Self> {
-        this
+    ) {
     }
 }
 
@@ -109,7 +111,7 @@ impl UninitializedOpenAISFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct OpenAISFTJobHandle {
     pub job_id: String,
     /// A url to a human-readable page for the job.

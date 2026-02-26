@@ -56,7 +56,10 @@ impl DatapointKind {
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "LegacyDatapoint"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "LegacyDatapoint")
+)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub enum Datapoint {
@@ -397,7 +400,7 @@ impl Datapoint {
 /// This one should be used in all public interfaces.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 pub struct ChatInferenceDatapoint {
@@ -449,7 +452,7 @@ impl std::fmt::Display for ChatInferenceDatapoint {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct JsonInferenceDatapoint {

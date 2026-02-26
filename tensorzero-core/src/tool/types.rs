@@ -41,7 +41,7 @@ use super::config::DynamicToolConfig;
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[strum(serialize_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub enum Tool {
     #[schemars(title = "FunctionTool")]
     Function(FunctionTool), // Custom deserializer below accepts no type or type="client_side_function" (legacy)
@@ -196,7 +196,7 @@ impl Tool {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct FunctionTool {
     pub description: String,
     pub parameters: Value,
@@ -265,7 +265,7 @@ impl FunctionTool {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct OpenAICustomTool {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -377,7 +377,7 @@ impl ProviderToolScope {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct ProviderTool {
     #[serde(default)]
     pub scope: ProviderToolScope,

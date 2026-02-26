@@ -41,7 +41,10 @@ pub struct FireworksSFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "FireworksSFTConfig")
+)]
 pub struct UninitializedFireworksSFTConfig {
     pub model: String,
     pub early_stop: Option<bool>,
@@ -137,10 +140,10 @@ impl UninitializedFireworksSFTConfig {
         })
     }
 
-    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[expect(unused_variables, clippy::too_many_arguments, clippy::unused_self)]
     #[pyo3(signature = (*, model, early_stop=None, epochs=None, learning_rate=None, max_context_length=None, lora_rank=None, batch_size=None, display_name=None, output_model=None, warm_start_from=None, is_turbo=None, eval_auto_carveout=None, nodes=None, mtp_enabled=None, mtp_num_draft_tokens=None, mtp_freeze_base_model=None, deploy_after_training=None))]
     fn __init__(
-        this: Py<Self>,
+        &self,
         model: String,
         early_stop: Option<bool>,
         epochs: Option<usize>,
@@ -158,8 +161,7 @@ impl UninitializedFireworksSFTConfig {
         mtp_num_draft_tokens: Option<usize>,
         mtp_freeze_base_model: Option<bool>,
         deploy_after_training: Option<bool>,
-    ) -> Py<Self> {
-        this
+    ) {
     }
 }
 
@@ -194,7 +196,7 @@ impl UninitializedFireworksSFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct FireworksSFTJobHandle {
     pub job_url: Url,
     pub job_path: String,

@@ -8,7 +8,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIGrader {
@@ -82,9 +82,10 @@ impl std::fmt::Display for OpenAIGrader {
 }
 
 #[cfg(feature = "pyo3")]
-impl<'py> FromPyObject<'py> for Box<OpenAIGrader> {
-    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
-        Ok(Box::new(OpenAIGrader::extract_bound(ob)?))
+impl FromPyObject<'_, '_> for Box<OpenAIGrader> {
+    type Error = PyErr;
+    fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
+        Ok(Box::new(ob.extract()?))
     }
 }
 
@@ -102,7 +103,10 @@ impl<'py> IntoPyObject<'py> for Box<OpenAIGrader> {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIStringCheckOp"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "OpenAIStringCheckOp")
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIStringCheckOp {
     Eq,    // equals
@@ -121,7 +125,10 @@ impl std::fmt::Display for OpenAIStringCheckOp {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISimilarityMetric"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "OpenAISimilarityMetric")
+)]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAISimilarityMetric {
     FuzzyMatch, // fuzzy_match
@@ -147,7 +154,7 @@ impl std::fmt::Display for OpenAISimilarityMetric {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 pub enum OpenAIRFTRole {
     Developer,
     User,
@@ -173,7 +180,10 @@ impl OpenAIRFTRole {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIModelGraderInputMessage"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "OpenAIModelGraderInputMessage")
+)]
 pub struct OpenAIModelGraderInput {
     pub role: OpenAIRFTRole,
     pub content: String,

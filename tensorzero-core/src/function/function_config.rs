@@ -58,7 +58,7 @@ pub enum FunctionConfig {
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(str, name = "FunctionConfigChat")]
+#[pyclass(skip_from_py_object, str, name = "FunctionConfigChat")]
 pub struct FunctionConfigChatPyClass {
     pub inner: Arc<FunctionConfig>,
 }
@@ -72,7 +72,7 @@ impl std::fmt::Display for FunctionConfigChatPyClass {
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(str, name = "FunctionConfigJson")]
+#[pyclass(skip_from_py_object, str, name = "FunctionConfigJson")]
 pub struct FunctionConfigJsonPyClass {
     pub inner: Arc<FunctionConfig>,
 }
@@ -86,7 +86,7 @@ impl std::fmt::Display for FunctionConfigJsonPyClass {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 pub enum FunctionConfigType {
     Chat,
     Json,
@@ -357,7 +357,7 @@ impl FunctionConfigJsonPyClass {
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(mapping, name = "VariantsConfig")]
+#[pyclass(skip_from_py_object, mapping, name = "VariantsConfig")]
 pub struct VariantsConfigPyClass {
     pub inner: HashMap<String, Arc<VariantInfo>>,
 }
