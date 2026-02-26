@@ -227,6 +227,7 @@ async fn get_providers() -> E2ETestProviders {
     let embedding_providers = vec![EmbeddingTestProvider {
         model_name: "text-embedding-3-small".into(),
         dimensions: 1536,
+        model_provider_name: "openai".into(),
     }];
 
     let provider_type_default_credentials_providers = vec![E2ETestProvider {

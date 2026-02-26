@@ -128,7 +128,7 @@ mod tests {
             [functions.test_function.experimentation]
             type = "static_weights"
             candidate_variants = {"variant_a" = 0.7, "variant_b" = 0.3}
-            fallback_variants = ["variant_a", "variant_b"]
+            fallback_variants = ["variant_c"]
 
             [functions.test_function.variants.variant_a]
             type = "chat_completion"
@@ -137,6 +137,10 @@ mod tests {
             [functions.test_function.variants.variant_b]
             type = "chat_completion"
             model = "anthropic::claude-sonnet-4-5"
+
+            [functions.test_function.variants.variant_c]
+            type = "chat_completion"
+            model = "openai::gpt-4"
         "#;
 
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -160,14 +164,26 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.probabilities.len(), 2);
+        assert_eq!(response.probabilities.len(), 3);
         assert!(response.probabilities.contains_key("variant_a"));
         assert!(response.probabilities.contains_key("variant_b"));
+        assert!(response.probabilities.contains_key("variant_c"));
 
         let prob_a = response.probabilities.get("variant_a").unwrap();
         let prob_b = response.probabilities.get("variant_b").unwrap();
-        assert!((prob_a - 0.7).abs() < 1e-9);
-        assert!((prob_b - 0.3).abs() < 1e-9);
+        let prob_c = response.probabilities.get("variant_c").unwrap();
+        assert!(
+            (prob_a - 0.7).abs() < 1e-9,
+            "variant_a should have probability 0.7"
+        );
+        assert!(
+            (prob_b - 0.3).abs() < 1e-9,
+            "variant_b should have probability 0.3"
+        );
+        assert!(
+            (*prob_c).abs() < 1e-9,
+            "variant_c (fallback only) should have probability 0.0"
+        );
 
         let sum: f64 = response.probabilities.values().sum();
         assert!((sum - 1.0).abs() < 1e-9);

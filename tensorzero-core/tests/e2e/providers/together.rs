@@ -129,8 +129,9 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let embeddings_providers = vec![EmbeddingTestProvider {
-        model_name: "gte-modernbert-base-together".into(),
-        dimensions: 768,
+        model_name: "multilingual-e5-together".into(),
+        dimensions: 1024,
+        model_provider_name: "together".into(),
     }];
 
     E2ETestProviders {

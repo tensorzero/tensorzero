@@ -982,14 +982,14 @@ routing = ["openrouter"]
 type = "openrouter"
 model_name = "google/gemini-embedding-001"
 
-[embedding_models.gte-modernbert-base-together]
+[embedding_models.multilingual-e5-together]
 routing = ["together"]
 
-[embedding_models.gte-modernbert-base-together.providers.together]
+[embedding_models.multilingual-e5-together.providers.together]
 type = "openai"
 api_base = "https://api.together.xyz/v1"
 api_key_location = "env::TOGETHER_API_KEY"
-model_name = "Alibaba-NLP/gte-modernbert-base"
+model_name = "intfloat/multilingual-e5-large-instruct"
 
 # Test embedding model with extra_headers for bad auth test
 [embedding_models.openai_bad_auth_extra_headers]
