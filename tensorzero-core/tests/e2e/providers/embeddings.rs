@@ -85,7 +85,7 @@ pub async fn test_bulk_embedding_with_provider(provider: EmbeddingTestProvider) 
 pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTestProvider) {
     // Some providers don't support the dimensions parameter
     if provider.model_name == "gemini_embedding_001_openrouter"
-        || provider.model_name == "gte-modernbert-base-together"
+        || provider.model_name == "multilingual-e5-together"
     {
         return;
     }
