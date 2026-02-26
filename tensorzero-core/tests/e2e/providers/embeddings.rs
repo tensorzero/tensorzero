@@ -416,7 +416,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
         "input": input_text,
         "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::cache_options": {
-            "enabled": "on",
+            "enabled": "write_only",
         }
     });
     let response_initial = Client::new()
