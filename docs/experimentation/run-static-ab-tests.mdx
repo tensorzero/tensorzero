@@ -55,7 +55,7 @@ type = "chat_completion"
 model = "xai::grok-4-0709"
 
 [functions.draft_email.experimentation]  // [!code ++:3]
-type = "uniform"
+type = "static"
 candidate_variants = ["gpt_5_mini", "claude_haiku_4_5"]
 ```
 
@@ -79,7 +79,7 @@ type = "chat_completion"
 model = "anthropic::claude-haiku-4-5"
 
 [functions.draft_email.experimentation] // [!code ++:3]
-type = "static_weights"
+type = "static"
 candidate_variants = {"gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1}
 ```
 
@@ -95,7 +95,6 @@ For example, if a variant has weight 5 and another has weight 1, the first varia
 ## Configure fallback-only variants
 
 You can configure variants that are only used as fallbacks with `fallback_variants`.
-You can use this field with both `uniform` and `static_weights` sampling.
 
 ```toml
 [functions.draft_email]
@@ -114,7 +113,7 @@ type = "chat_completion"
 model = "xai::grok-4-0709"
 
 [functions.draft_email.experimentation]
-type = "static_weights"
+type = "static"
 candidate_variants = {"gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1}
 fallback_variants = ["grok_4"] // [!code ++]
 ```

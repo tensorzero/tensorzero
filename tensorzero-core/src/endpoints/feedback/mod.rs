@@ -558,7 +558,7 @@ async fn throttled_get_function_info(
     let elapsed = match uuid_elapsed(target_id) {
         Ok(elapsed) => elapsed,
         Err(e) => {
-            // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
+            // Some UUIDs are in the future, e.g. for workflow evaluation runs.
             // In this case we should be conservative and assume no time has passed.
             if matches!(e.get_details(), ErrorDetails::UuidInFuture { .. }) {
                 // We don't log anything, since this is an expected case.

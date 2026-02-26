@@ -63,7 +63,7 @@ json_mode = "strict"
 
 # Define the experiment configuration
 [functions.extract_entities.experimentation]
-type = "track_and_stop" # the experimentation algorithm
+type = "adaptive"
 candidate_variants = ["gpt-5-mini-good-prompt", "gpt-5-mini-bad-prompt"]
 metric = "exact_match"
 update_period_s = 60  # low for the sake of the demo (recommended: 300)
@@ -161,7 +161,8 @@ See the [Configuration Reference](/gateway/configuration-reference) for more det
 
 ### Customize the experimentation algorithm
 
-The `track_and_stop` algorithm has multiple parameters that can be customized.
+The adaptive experiment uses a track-and-stop algorithm for best-arm identification.
+The algorithm exposes multiple customizable parameters.
 For example, you can trade off the speed of the experiment with the statistical confidence of the results.
 The default parameters are sensible for most use cases, but advanced users might want to customize them.
 See the [Configuration Reference](/gateway/configuration-reference) for more details.

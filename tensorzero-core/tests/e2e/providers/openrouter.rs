@@ -122,6 +122,7 @@ async fn get_providers() -> E2ETestProviders {
     let embedding_providers = vec![EmbeddingTestProvider {
         model_name: "gemini_embedding_001_openrouter".to_string(),
         dimensions: 3072,
+        model_provider_name: "openrouter".into(),
     }];
 
     // Reasoning providers for OpenRouter
