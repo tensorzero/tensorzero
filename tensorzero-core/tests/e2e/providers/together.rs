@@ -78,13 +78,22 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let reasoning_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "together-deepseek-r1".to_string(),
-        model_name: "together-deepseek-r1".to_string(),
-        model_provider_name: "together".to_string(),
-        credentials: HashMap::new(),
-    }];
+    let reasoning_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "together-deepseek-r1".to_string(),
+            model_name: "together-deepseek-r1".to_string(),
+            model_provider_name: "together".to_string(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "together-kimi".to_string(),
+            model_name: "together-kimi".to_string(),
+            model_provider_name: "together".to_string(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,

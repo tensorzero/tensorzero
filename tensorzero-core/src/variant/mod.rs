@@ -14,7 +14,10 @@ use tokio::time::error::Elapsed;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::config::{PathWithContents, TimeoutsConfig};
+use crate::config::{
+    PathWithContents, TimeoutsConfig, UninitializedVariantConfig, UninitializedVariantInfo,
+};
+use crate::cost::CostConfig;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -67,6 +70,13 @@ pub struct VariantInfo {
 impl VariantInfo {
     pub fn set_weight(&mut self, weight: Option<f64>) {
         self.inner.set_weight(weight);
+    }
+
+    pub fn as_uninitialized(&self) -> UninitializedVariantInfo {
+        UninitializedVariantInfo {
+            inner: self.inner.as_uninitialized(),
+            timeouts: Some(self.timeouts.clone()),
+        }
     }
 }
 
@@ -210,6 +220,8 @@ pub struct ModelUsedInfo {
     pub model_inference_id: Uuid,
     /// Raw response entries from failed provider attempts during model-level fallback.
     pub failed_raw_response: Vec<RawResponseEntry>,
+    /// Cost configuration from the provider, for computing cost after streaming completes.
+    pub cost_config: Option<CostConfig>,
 }
 
 pub trait Variant {
@@ -278,6 +290,24 @@ impl VariantConfig {
             VariantConfig::Dicl(params) => params.set_weight(weight),
             VariantConfig::MixtureOfN(params) => params.set_weight(weight),
             VariantConfig::ChainOfThought(params) => params.inner.set_weight(weight),
+        }
+    }
+
+    pub fn as_uninitialized(&self) -> UninitializedVariantConfig {
+        match self {
+            VariantConfig::ChatCompletion(c) => {
+                UninitializedVariantConfig::ChatCompletion(c.as_uninitialized())
+            }
+            VariantConfig::BestOfNSampling(c) => {
+                UninitializedVariantConfig::BestOfNSampling(c.as_uninitialized())
+            }
+            VariantConfig::Dicl(c) => UninitializedVariantConfig::Dicl(c.as_uninitialized()),
+            VariantConfig::MixtureOfN(c) => {
+                UninitializedVariantConfig::MixtureOfN(c.as_uninitialized())
+            }
+            VariantConfig::ChainOfThought(c) => {
+                UninitializedVariantConfig::ChainOfThought(c.as_uninitialized())
+            }
         }
     }
 
@@ -890,7 +920,7 @@ async fn infer_model_request(
     if include_raw_response && !retry_errors.is_empty() {
         let mut retry_entries = Vec::new();
         for err in &retry_errors {
-            if let Some(entries) = err.extract_raw_response_entries() {
+            if let Some(entries) = err.extract_raw_response() {
                 retry_entries.extend(entries);
             }
         }
@@ -949,6 +979,7 @@ async fn infer_model_request_stream<'request>(
                 cached,
                 model_inference_id,
                 mut failed_raw_response,
+                cost_config,
             },
         messages: input_messages,
     } = match result {
@@ -968,7 +999,7 @@ async fn infer_model_request_stream<'request>(
     if include_raw_response && !retry_errors.is_empty() {
         let mut retry_entries = Vec::new();
         for err in &retry_errors {
-            if let Some(entries) = err.extract_raw_response_entries() {
+            if let Some(entries) = err.extract_raw_response() {
                 retry_entries.extend(entries);
             }
         }
@@ -991,6 +1022,7 @@ async fn infer_model_request_stream<'request>(
         cached,
         model_inference_id,
         failed_raw_response,
+        cost_config,
     };
     let config_type = function.config_type();
     let stream =
@@ -1433,6 +1465,8 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -1462,6 +1496,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match inference_result {
@@ -1547,6 +1582,8 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -1575,6 +1612,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match inference_result {
@@ -1615,6 +1653,8 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -1759,6 +1799,8 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
+                        batch_cost: None,
                     },
                 ),
                 (
@@ -1770,6 +1812,8 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
+                        batch_cost: None,
                     },
                 ),
             ]),
@@ -1800,6 +1844,7 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                cost: None,
             }
         );
         match inference_result {
@@ -1892,6 +1937,8 @@ mod tests {
                     extra_headers: Default::default(),
                     timeouts: Default::default(),
                     discard_unknown_chunks: false,
+                    cost: None,
+                    batch_cost: None,
                 },
             )]),
             timeouts: Default::default(),
@@ -2085,6 +2132,8 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
+                        batch_cost: None,
                     },
                 ),
                 (
@@ -2096,6 +2145,8 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
+                        batch_cost: None,
                     },
                 ),
             ]),

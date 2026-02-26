@@ -60,19 +60,23 @@ impl RawEvaluationStatisticsRow {
 impl EvaluationQueries for PostgresConnectionInfo {
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
         let pool = self.get_pool_result()?;
+        // Count distinct evaluation_run_ids per table and sum.
+        // Evaluation runs target a single function type, so the sets are disjoint.
         let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(DISTINCT evaluation_run_id)::BIGINT
-            FROM (
-                SELECT tags->>'tensorzero::evaluation_run_id' as evaluation_run_id
-                FROM tensorzero.chat_inferences
-                WHERE tags ? 'tensorzero::evaluation_run_id'
-                AND NOT function_name LIKE 'tensorzero::%'
-                UNION ALL
-                SELECT tags->>'tensorzero::evaluation_run_id' as evaluation_run_id
-                FROM tensorzero.json_inferences
-                WHERE tags ? 'tensorzero::evaluation_run_id'
-                AND NOT function_name LIKE 'tensorzero::%'
-            ) sub",
+            "SELECT (
+                COALESCE((
+                    SELECT COUNT(DISTINCT tags->>'tensorzero::evaluation_run_id')
+                    FROM tensorzero.chat_inferences
+                    WHERE tags ? 'tensorzero::evaluation_run_id'
+                    AND NOT function_name LIKE 'tensorzero::%'
+                ), 0) +
+                COALESCE((
+                    SELECT COUNT(DISTINCT tags->>'tensorzero::evaluation_run_id')
+                    FROM tensorzero.json_inferences
+                    WHERE tags ? 'tensorzero::evaluation_run_id'
+                    AND NOT function_name LIKE 'tensorzero::%'
+                ), 0)
+            )::BIGINT",
         )
         .fetch_one(pool)
         .await?;
@@ -108,7 +112,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
     async fn search_evaluation_runs(
         &self,
         evaluation_name: &str,
-        function_name: &str,
+        function_name: Option<&str>,
         query: &str,
         limit: u32,
         offset: u32,
@@ -263,7 +267,8 @@ fn build_list_evaluation_runs_query(limit: u32, offset: u32) -> QueryBuilder<sql
                 function_name,
                 variant_name,
                 id,
-                created_at
+                created_at,
+                snapshot_hash
             FROM tensorzero.chat_inferences
             WHERE tags ? 'tensorzero::evaluation_run_id'
             AND NOT function_name LIKE 'tensorzero::%'
@@ -275,7 +280,8 @@ fn build_list_evaluation_runs_query(limit: u32, offset: u32) -> QueryBuilder<sql
                 function_name,
                 variant_name,
                 id,
-                created_at
+                created_at,
+                snapshot_hash
             FROM tensorzero.json_inferences
             WHERE tags ? 'tensorzero::evaluation_run_id'
             AND NOT function_name LIKE 'tensorzero::%'
@@ -286,7 +292,8 @@ fn build_list_evaluation_runs_query(limit: u32, offset: u32) -> QueryBuilder<sql
             (ARRAY_AGG(function_name))[1] as function_name,
             (ARRAY_AGG(variant_name))[1] as variant_name,
             (ARRAY_AGG(dataset_name))[1] as dataset_name,
-            MAX(created_at) as last_inference_timestamp
+            MAX(created_at) as last_inference_timestamp,
+            encode((ARRAY_AGG(snapshot_hash))[1], 'hex') as snapshot_hash
         FROM all_eval_inferences
         GROUP BY evaluation_run_id
         ORDER BY evaluation_run_id::UUID DESC
@@ -342,7 +349,7 @@ fn build_count_datapoints_for_evaluation_query(
 
 fn build_search_evaluation_runs_query(
     evaluation_name: &str,
-    function_name: &str,
+    function_name: Option<&str>,
     query: &str,
     limit: u32,
     offset: u32,
@@ -357,8 +364,12 @@ fn build_search_evaluation_runs_query(
             WHERE tags->>'tensorzero::evaluation_name' = ",
     );
     qb.push_bind(evaluation_name.to_string());
-    qb.push(" AND function_name = ");
-    qb.push_bind(function_name.to_string());
+    if let Some(fn_name) = function_name {
+        qb.push(" AND function_name = ");
+        qb.push_bind(fn_name.to_string());
+    } else {
+        qb.push(" AND NOT function_name LIKE 'tensorzero::%'");
+    }
     qb.push(
         r"
             AND tags ? 'tensorzero::evaluation_run_id'
@@ -370,8 +381,12 @@ fn build_search_evaluation_runs_query(
             WHERE tags->>'tensorzero::evaluation_name' = ",
     );
     qb.push_bind(evaluation_name.to_string());
-    qb.push(" AND function_name = ");
-    qb.push_bind(function_name.to_string());
+    if let Some(fn_name) = function_name {
+        qb.push(" AND function_name = ");
+        qb.push_bind(fn_name.to_string());
+    } else {
+        qb.push(" AND NOT function_name LIKE 'tensorzero::%'");
+    }
     qb.push(
         r"
             AND tags ? 'tensorzero::evaluation_run_id'
@@ -754,7 +769,8 @@ mod tests {
                     function_name,
                     variant_name,
                     id,
-                    created_at
+                    created_at,
+                    snapshot_hash
                 FROM tensorzero.chat_inferences
                 WHERE tags ? 'tensorzero::evaluation_run_id'
                 AND NOT function_name LIKE 'tensorzero::%'
@@ -766,7 +782,8 @@ mod tests {
                     function_name,
                     variant_name,
                     id,
-                    created_at
+                    created_at,
+                    snapshot_hash
                 FROM tensorzero.json_inferences
                 WHERE tags ? 'tensorzero::evaluation_run_id'
                 AND NOT function_name LIKE 'tensorzero::%'
@@ -777,7 +794,8 @@ mod tests {
                 (ARRAY_AGG(function_name))[1] as function_name,
                 (ARRAY_AGG(variant_name))[1] as variant_name,
                 (ARRAY_AGG(dataset_name))[1] as dataset_name,
-                MAX(created_at) as last_inference_timestamp
+                MAX(created_at) as last_inference_timestamp,
+                encode((ARRAY_AGG(snapshot_hash))[1], 'hex') as snapshot_hash
             FROM all_eval_inferences
             GROUP BY evaluation_run_id
             ORDER BY evaluation_run_id::UUID DESC
@@ -788,8 +806,13 @@ mod tests {
 
     #[test]
     fn test_build_search_evaluation_runs_query() {
-        let qb =
-            build_search_evaluation_runs_query("test_eval", "test_func", "search_term", 50, 10);
+        let qb = build_search_evaluation_runs_query(
+            "test_eval",
+            Some("test_func"),
+            "search_term",
+            50,
+            10,
+        );
         let sql = qb.sql();
         let sql = sql.as_str();
 
@@ -816,6 +839,39 @@ mod tests {
             WHERE (evaluation_run_id ILIKE $5 OR variant_name ILIKE $6)
             ORDER BY evaluation_run_id::UUID DESC
             LIMIT $7 OFFSET $8
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_search_evaluation_runs_query_no_function_name() {
+        let qb = build_search_evaluation_runs_query("test_eval", None, "search_term", 50, 10);
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            WITH evaluation_inferences AS (
+                SELECT DISTINCT
+                    tags->>'tensorzero::evaluation_run_id' as evaluation_run_id,
+                    variant_name
+                FROM tensorzero.chat_inferences
+                WHERE tags->>'tensorzero::evaluation_name' = $1 AND NOT function_name LIKE 'tensorzero::%'
+                AND tags ? 'tensorzero::evaluation_run_id'
+                UNION ALL
+                SELECT DISTINCT
+                    tags->>'tensorzero::evaluation_run_id' as evaluation_run_id,
+                    variant_name
+                FROM tensorzero.json_inferences
+                WHERE tags->>'tensorzero::evaluation_name' = $2 AND NOT function_name LIKE 'tensorzero::%'
+                AND tags ? 'tensorzero::evaluation_run_id'
+            )
+            SELECT DISTINCT evaluation_run_id::UUID as evaluation_run_id, variant_name
+            FROM evaluation_inferences
+            WHERE (evaluation_run_id ILIKE $3 OR variant_name ILIKE $4)
+            ORDER BY evaluation_run_id::UUID DESC
+            LIMIT $5 OFFSET $6
             ",
         );
     }

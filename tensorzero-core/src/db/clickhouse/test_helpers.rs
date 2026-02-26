@@ -441,7 +441,7 @@ pub async fn select_latest_batch_request_clickhouse(
     batch_id: Uuid,
 ) -> Option<Value> {
     let query = format!(
-        "SELECT * FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
+        "SELECT * FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY toUInt128(id) DESC LIMIT 1 FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info

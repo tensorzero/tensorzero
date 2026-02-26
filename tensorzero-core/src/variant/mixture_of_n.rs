@@ -75,11 +75,11 @@ impl MixtureOfNConfig {
 
     /// Converts this initialized config back to its uninitialized form.
     #[expect(deprecated)]
-    pub fn as_uninitialized(self) -> UninitializedMixtureOfNConfig {
+    pub fn as_uninitialized(&self) -> UninitializedMixtureOfNConfig {
         UninitializedMixtureOfNConfig {
             weight: self.weight,
             timeout_s: None,
-            candidates: self.candidates,
+            candidates: self.candidates.clone(),
             fuser: UninitializedFuserConfig {
                 inner: self.fuser.inner.as_uninitialized(),
             },
@@ -363,6 +363,8 @@ pub fn stream_inference_from_non_stream(
         provider_type: model_inference_result.provider_type.clone(),
         raw_request: model_inference_result.raw_request.clone(),
         inference_params: inference_params.clone(),
+        // Cost is already computed for non-streaming results; no need for cost_config in fake stream
+        cost_config: None,
         // Preserve the raw response from the candidate we chose (rather than attempting
         // to concatenate the raw_response from the chunks in our fake stream)
         raw_response: Some(model_inference_result.raw_response.clone()),
@@ -603,7 +605,7 @@ impl MixtureOfNConfig {
             if include_raw_response {
                 let failed_entries: Vec<_> = candidate_errors
                     .values()
-                    .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                    .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                     .collect();
                 if !failed_entries.is_empty()
                     && let Some(first) = selected.mut_model_inference_results().first_mut()
@@ -669,7 +671,7 @@ impl MixtureOfNConfig {
                 if include_raw_response {
                     let failed_entries: Vec<_> = candidate_errors
                         .values()
-                        .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                        .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                         .collect();
                     if !failed_entries.is_empty()
                         && let Some(first) =
@@ -688,7 +690,7 @@ impl MixtureOfNConfig {
                 // Inject fuser failure raw_responses
                 if include_raw_response
                     && let Some(fuser_err) = &fuser_error
-                    && let Some(entries) = fuser_err.extract_raw_response_entries()
+                    && let Some(entries) = fuser_err.extract_raw_response()
                     && let Some(first) = inference_result.mut_model_inference_results().first_mut()
                 {
                     first.failed_raw_response.extend(entries);
@@ -706,7 +708,7 @@ impl MixtureOfNConfig {
                 if include_raw_response {
                     let failed_entries: Vec<_> = candidate_errors
                         .values()
-                        .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                        .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                         .collect();
                     if !failed_entries.is_empty()
                         && let Some(first) =
@@ -1248,6 +1250,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1285,6 +1288,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1341,6 +1345,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1381,6 +1386,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1462,6 +1468,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1499,6 +1506,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1544,6 +1552,8 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1622,6 +1632,7 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: Some(35),
             output_tokens: Some(46),
+            cost: None,
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
@@ -1672,6 +1683,8 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1756,6 +1769,8 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1896,6 +1911,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             }),
             None, // raw_usage_entries
         )
@@ -1946,6 +1962,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_response: None,

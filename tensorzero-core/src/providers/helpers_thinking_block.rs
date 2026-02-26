@@ -62,13 +62,26 @@ pub enum ThinkingState {
     Finished,
 }
 
-pub const THINK_CHUNK_ID: u64 = 1;
+// `collect_chunks` (in streams.rs) merges streaming content blocks by `(type, id)`.
+// Each distinct logical stream needs its own ID so they aren't concatenated together.
+//
+// Allocated IDs:
+//   "0" — Normal text (before any `<think>` tag, or when think-block parsing is off)
+//   "1" — Content inside `<think>…</think>` tags (`ThinkingState::Thinking`)
+//   "2" — Text after `</think>` (`ThinkingState::Finished`)
+//   "3" — Reasoning from the `reasoning` / `reasoning_content` JSON field
+//
+// "1" and "3" are both Thought blocks but carry different `reasoning_format`
+// metadata (`think_tags` vs `reasoning_field`). If a provider streams both in one
+// response, distinct IDs prevent them from being incorrectly merged.
+pub const THINK_CHUNK_ID: &str = "1";
+pub const REASONING_FIELD_CHUNK_ID: &str = "3";
 
 impl ThinkingState {
     pub fn get_id(&self) -> String {
         match self {
             ThinkingState::Normal => "0".to_string(),
-            ThinkingState::Thinking => "1".to_string(),
+            ThinkingState::Thinking => THINK_CHUNK_ID.to_string(),
             ThinkingState::Finished => "2".to_string(),
         }
     }

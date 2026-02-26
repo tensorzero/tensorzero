@@ -135,7 +135,7 @@ impl TensorZeroClient for EmbeddedClient {
             config_snapshot_hash,
         };
 
-        create_event(autopilot_client, session_id, full_request)
+        create_event(autopilot_client, session_id, full_request, &[])
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
@@ -381,6 +381,18 @@ impl TensorZeroClient for EmbeddedClient {
             &self.app_state.get_delegating_database(),
             &dataset_name,
             request,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn delete_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::datasets::v1::delete_dataset(
+            &self.app_state.get_delegating_database(),
+            &dataset_name,
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))

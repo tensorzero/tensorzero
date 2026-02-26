@@ -1,9 +1,3 @@
-[target.'cfg(not(target_arch = "wasm32"))']
-rustflags = [
-    "--cfg",
-    "aws_sdk_unstable", # needed for aws-smithy-types + serde-(de)serialize
-]
-
 [target.x86_64-apple-darwin]
 rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"] # for NAPI
 
@@ -109,6 +103,13 @@ test-feedback-load = [
     "feedback-load-test",
     "--",
 ]
+test-postgres-inference-load = [
+    "run",
+    "--release",
+    "--package",
+    "postgres-inference-load-test",
+    "--",
+]
 
 
 build-e2e = "build --bin gateway --features e2e_tests"
@@ -139,6 +140,8 @@ tsbuild = [
     "config-applier",
     "-p",
     "autopilot-tools",
+    "-p",
+    "durable-tools",
     # TODO(shuyangli): Remove `gateway` when we redesign evaluations crate.
     "-p",
     "gateway",

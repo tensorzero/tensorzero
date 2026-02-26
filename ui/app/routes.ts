@@ -31,6 +31,8 @@ export default [
       "routes/api/evaluations/search_runs/$evaluation_name/route.ts",
     ),
 
+    route("evaluations/cancel", "routes/api/evaluations/cancel.route.ts"),
+
     route(
       "function/:function_name/feedback_counts",
       "routes/api/function/$function_name/feedback_counts.route.ts",
@@ -42,6 +44,14 @@ export default [
       route(
         "resolve_uuid/:uuid",
         "routes/api/tensorzero/resolve_uuid.route.ts",
+      ),
+      route(
+        "inference_preview/:inference_id",
+        "routes/api/tensorzero/inference_preview.route.ts",
+      ),
+      route(
+        "episode_preview/:episode_id",
+        "routes/api/tensorzero/episode_preview.route.ts",
       ),
     ]),
 
@@ -68,6 +78,10 @@ export default [
     route(
       "autopilot/sessions/:session_id/events/authorize",
       "routes/api/autopilot/sessions/$session_id/events/authorize.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/events/answer-questions",
+      "routes/api/autopilot/sessions/$session_id/events/answer-questions.route.ts",
     ),
     route(
       "autopilot/sessions/:session_id/events/message",

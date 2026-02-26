@@ -145,13 +145,22 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
-    let reasoning_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "anthropic-haiku-4-5-thinking".to_string(),
-        model_name: "claude-haiku-4-5-thinking".into(),
-        model_provider_name: "anthropic".into(),
-        credentials: HashMap::new(),
-    }];
+    let reasoning_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "anthropic-haiku-4-5-thinking".to_string(),
+            model_name: "claude-haiku-4-5-thinking".into(),
+            model_provider_name: "anthropic".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "anthropic-sonnet-4-6-reasoning".to_string(),
+            model_name: "claude-sonnet-4-6".into(),
+            model_provider_name: "anthropic".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),

@@ -37,6 +37,7 @@ import {
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { AppProviders } from "./providers/app-providers";
+import { EntitySheet } from "./components/entity-sheet/EntitySheet";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
 import {
   loadFeatureFlags,
@@ -166,6 +167,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
           <Outlet />
         </ContentLayout>
       </div>
+      <EntitySheet />
       {infraError && (
         <ErrorDialog
           open={dialogOpen}

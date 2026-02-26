@@ -71,6 +71,7 @@ impl From<XAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens,
+            cost: None,
         }
     }
 }

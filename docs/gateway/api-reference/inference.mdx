@@ -988,6 +988,7 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 ##### `raw_usage`
 
@@ -1061,6 +1062,7 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 ##### `raw_usage`
 
@@ -1154,6 +1156,7 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 ##### `raw_usage`
 
@@ -1210,6 +1213,7 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 ##### `raw_usage`
 
@@ -1332,7 +1336,8 @@ curl -X POST http://localhost:3000/inference \
   ]
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1358,7 +1363,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1504,7 +1510,8 @@ curl -X POST http://localhost:3000/inference \
   ]
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1530,7 +1537,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1660,7 +1668,8 @@ curl -X POST http://localhost:3000/inference \
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1687,7 +1696,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1865,7 +1875,8 @@ curl -X POST http://localhost:3000/inference \
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1891,7 +1902,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2041,7 +2053,8 @@ curl -X POST http://localhost:3000/inference \
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2068,7 +2081,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2180,7 +2194,8 @@ curl -X POST http://localhost:3000/inference \
   ]
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2205,7 +2220,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2315,7 +2331,8 @@ curl -X POST http://localhost:3000/inference \
   }
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2335,7 +2352,8 @@ Each JSON message has the following fields:
   "raw": "{\"email\":", // a JSON content delta
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```

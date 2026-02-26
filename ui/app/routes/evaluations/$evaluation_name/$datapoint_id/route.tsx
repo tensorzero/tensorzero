@@ -620,14 +620,6 @@ const MetricRow = ({
                 {metricProperties.optimize}
               </span>
             </div>
-            {evaluatorConfig.cutoff !== undefined && (
-              <div>
-                <span className="font-medium">Cutoff:</span>
-                <span className="ml-2 font-medium">
-                  {evaluatorConfig.cutoff}
-                </span>
-              </div>
-            )}
           </div>
         </TooltipContent>
       </Tooltip>
@@ -639,7 +631,6 @@ const MetricRow = ({
             ? evaluatorConfig.optimize
             : "max"
         }
-        cutoff={evaluatorConfig.cutoff ?? undefined}
         isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />

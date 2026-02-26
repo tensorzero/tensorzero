@@ -287,3 +287,93 @@ optimize = "max"
         "Tag merge should add brand new keys from the second write"
     );
 }
+
+/// Test that write_config rejects a config with a variant referencing a nonexistent model.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_write_config_rejects_invalid_model_ref() {
+    let http_client = Client::new();
+
+    let config_toml = r#"
+[functions.test_invalid_func]
+type = "chat"
+
+[functions.test_invalid_func.variants.bad_variant]
+type = "chat_completion"
+model = "nonexistent_model_that_does_not_exist"
+"#;
+
+    let config: UninitializedConfig = toml::from_str(config_toml).unwrap();
+
+    let request = WriteConfigRequest {
+        config,
+        extra_templates: HashMap::new(),
+        tags: HashMap::new(),
+    };
+
+    let url = get_gateway_endpoint("/internal/config");
+    let response = http_client.post(url).json(&request).send().await.unwrap();
+
+    assert!(
+        !response.status().is_success(),
+        "write_config should reject a config with an invalid model reference"
+    );
+}
+
+/// Test that write_config rejects a config with a chat function referencing a nonexistent tool.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_write_config_rejects_invalid_tool_ref() {
+    let http_client = Client::new();
+
+    let config_toml = r#"
+[functions.test_invalid_tool_func]
+type = "chat"
+tools = ["nonexistent_tool_that_does_not_exist"]
+
+[functions.test_invalid_tool_func.variants]
+"#;
+
+    let config: UninitializedConfig = toml::from_str(config_toml).unwrap();
+
+    let request = WriteConfigRequest {
+        config,
+        extra_templates: HashMap::new(),
+        tags: HashMap::new(),
+    };
+
+    let url = get_gateway_endpoint("/internal/config");
+    let response = http_client.post(url).json(&request).send().await.unwrap();
+
+    assert!(
+        !response.status().is_success(),
+        "write_config should reject a config with an invalid tool reference"
+    );
+}
+
+/// Test that write_config rejects a config with a reserved metric name.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_write_config_rejects_reserved_metric_name() {
+    let http_client = Client::new();
+
+    let config_toml = r#"
+[metrics.comment]
+type = "boolean"
+level = "inference"
+optimize = "max"
+"#;
+
+    let config: UninitializedConfig = toml::from_str(config_toml).unwrap();
+
+    let request = WriteConfigRequest {
+        config,
+        extra_templates: HashMap::new(),
+        tags: HashMap::new(),
+    };
+
+    let url = get_gateway_endpoint("/internal/config");
+    let response = http_client.post(url).json(&request).send().await.unwrap();
+
+    assert!(
+        !response.status().is_success(),
+        "write_config should reject a config with a reserved metric name"
+    );
+}

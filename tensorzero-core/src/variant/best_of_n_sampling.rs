@@ -71,11 +71,11 @@ impl BestOfNSamplingConfig {
 
     /// Converts this initialized config back to its uninitialized form.
     #[expect(deprecated)]
-    pub fn as_uninitialized(self) -> UninitializedBestOfNSamplingConfig {
+    pub fn as_uninitialized(&self) -> UninitializedBestOfNSamplingConfig {
         UninitializedBestOfNSamplingConfig {
             weight: self.weight,
             timeout_s: None,
-            candidates: self.candidates,
+            candidates: self.candidates.clone(),
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: self.evaluator.inner.as_uninitialized(),
             },
@@ -439,7 +439,7 @@ impl BestOfNSamplingConfig {
             if clients.include_raw_response {
                 let failed_entries: Vec<_> = candidate_errors
                     .values()
-                    .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                    .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                     .collect();
                 if !failed_entries.is_empty()
                     && let Some(first) = selected.mut_model_inference_results().first_mut()
@@ -496,7 +496,7 @@ impl BestOfNSamplingConfig {
         if clients.include_raw_response {
             let failed_entries: Vec<_> = candidate_errors
                 .values()
-                .flat_map(|e| e.extract_raw_response_entries().unwrap_or_default())
+                .flat_map(|e| e.extract_raw_response().unwrap_or_default())
                 .collect();
             if !failed_entries.is_empty()
                 && let Some(first) = selected_candidate.mut_model_inference_results().first_mut()
@@ -519,7 +519,7 @@ impl BestOfNSamplingConfig {
         // Inject evaluator failure raw_responses
         if clients.include_raw_response
             && let Some(eval_err) = &evaluator_error
-            && let Some(entries) = eval_err.extract_raw_response_entries()
+            && let Some(entries) = eval_err.extract_raw_response()
             && let Some(first) = selected_candidate.mut_model_inference_results().first_mut()
         {
             first.failed_raw_response.extend(entries);
@@ -1126,6 +1126,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1166,6 +1167,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1225,6 +1227,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1268,6 +1271,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1343,6 +1347,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1383,6 +1388,7 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1428,6 +1434,8 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1503,6 +1511,7 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: Some(75),
             output_tokens: Some(126),
+            cost: None,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
         assert_eq!(selected.usage_considering_cached(), expected_usage);
@@ -1550,6 +1559,8 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1627,6 +1638,8 @@ mod tests {
                             extra_headers: Default::default(),
                             timeouts: Default::default(),
                             discard_unknown_chunks: false,
+                            cost: None,
+                            batch_cost: None,
                         },
                     )]),
                     timeouts: Default::default(),
@@ -1724,6 +1737,8 @@ mod tests {
                         extra_headers: Default::default(),
                         timeouts: Default::default(),
                         discard_unknown_chunks: false,
+                        cost: None,
+                        batch_cost: None,
                     },
                 )]),
                 timeouts: Default::default(),

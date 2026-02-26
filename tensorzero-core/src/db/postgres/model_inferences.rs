@@ -10,6 +10,8 @@ use sqlx::{PgPool, QueryBuilder, Row};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
+use rust_decimal::Decimal;
+
 use crate::config::snapshot::SnapshotHash;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::query_helpers::uuid_to_datetime;
@@ -198,6 +200,7 @@ fn build_get_model_inferences_query(inference_id: Uuid) -> QueryBuilder<sqlx::Po
             i.model_provider_name,
             i.ttft_ms,
             i.cached,
+            i.cost,
             i.finish_reason,
             i.snapshot_hash,
             i.created_at
@@ -225,7 +228,7 @@ pub(super) fn build_insert_model_inferences_query(
         INSERT INTO tensorzero.model_inferences (
             id, inference_id, input_tokens, output_tokens,
             response_time_ms, model_name, model_provider_name,
-            ttft_ms, cached, finish_reason, snapshot_hash, created_at
+            ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
         ) ",
     );
 
@@ -241,6 +244,7 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(row.cached)
             .push_bind(row.finish_reason)
             .push_bind(row.snapshot_hash.as_ref())
+            .push_bind(row.cost)
             .push_bind(created_at);
     });
 
@@ -316,6 +320,9 @@ async fn get_model_usage_timeseries_impl(
 }
 
 /// Builds the query for model usage timeseries (non-cumulative).
+///
+/// Note: `count_with_cost` operates at (model, provider, minute) bucket
+/// granularity, not per-inference. See #6574 for a proposed fix.
 fn build_model_usage_timeseries_query(
     time_window: &TimeWindow,
     max_periods: u32,
@@ -331,7 +338,9 @@ fn build_model_usage_timeseries_query(
             model_name,
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
-            SUM(inference_count)::BIGINT as count
+            SUM(inference_count)::BIGINT as count,
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('",
@@ -354,6 +363,8 @@ fn build_model_usage_timeseries_query(
     query_builder
 }
 
+/// Note: `count_with_cost` operates at (model, provider, minute) bucket
+/// granularity, not per-inference. See #6574 for a proposed fix.
 async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimePoint>, Error> {
     let rows: Vec<ModelUsageTimePoint> = sqlx::query_as(
         r"
@@ -362,7 +373,9 @@ async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimeP
             model_name,
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
-            SUM(inference_count)::BIGINT as count
+            SUM(inference_count)::BIGINT as count,
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         GROUP BY model_name
         ORDER BY model_name
@@ -654,6 +667,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for ModelUsageTimePoint {
         let input_tokens: Option<i64> = row.try_get("input_tokens")?;
         let output_tokens: Option<i64> = row.try_get("output_tokens")?;
         let count: Option<i64> = row.try_get("count")?;
+        let cost: Option<Decimal> = row.try_get("cost")?;
+        let count_with_cost: Option<i64> = row.try_get("count_with_cost")?;
 
         Ok(ModelUsageTimePoint {
             period_start,
@@ -661,6 +676,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for ModelUsageTimePoint {
             input_tokens: input_tokens.map(|v| v as u64),
             output_tokens: output_tokens.map(|v| v as u64),
             count: count.map(|v| v as u64),
+            cost,
+            count_with_cost: count_with_cost.map(|v| v as u64),
         })
     }
 }
@@ -684,6 +701,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
         let model_provider_name: String = row.try_get("model_provider_name")?;
         let ttft_ms: Option<i32> = row.try_get("ttft_ms")?;
         let cached: bool = row.try_get("cached")?;
+        let cost: Option<Decimal> = row.try_get("cost")?;
         let finish_reason: Option<FinishReason> = row.try_get("finish_reason")?;
         let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
         let created_at: DateTime<Utc> = row.try_get("created_at")?;
@@ -703,6 +721,7 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
             model_provider_name,
             ttft_ms: ttft_ms.map(|v| v as u32),
             cached,
+            cost,
             finish_reason,
             snapshot_hash,
             timestamp: Some(created_at.to_rfc3339()),
@@ -734,7 +753,9 @@ mod tests {
             model_name,
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
-            SUM(inference_count)::BIGINT as count
+            SUM(inference_count)::BIGINT as count,
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('hour', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -754,7 +775,9 @@ mod tests {
             model_name,
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
-            SUM(inference_count)::BIGINT as count
+            SUM(inference_count)::BIGINT as count,
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('day', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -774,7 +797,9 @@ mod tests {
             model_name,
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
-            SUM(inference_count)::BIGINT as count
+            SUM(inference_count)::BIGINT as count,
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('minute', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -794,7 +819,9 @@ mod tests {
             model_name,
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
-            SUM(inference_count)::BIGINT as count
+            SUM(inference_count)::BIGINT as count,
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('week', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -814,7 +841,9 @@ mod tests {
             model_name,
             SUM(total_input_tokens)::BIGINT as input_tokens,
             SUM(total_output_tokens)::BIGINT as output_tokens,
-            SUM(inference_count)::BIGINT as count
+            SUM(inference_count)::BIGINT as count,
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('month', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -1165,6 +1194,7 @@ mod tests {
                 i.model_provider_name,
                 i.ttft_ms,
                 i.cached,
+                i.cost,
                 i.finish_reason,
                 i.snapshot_hash,
                 i.created_at
@@ -1192,6 +1222,7 @@ mod tests {
             model_provider_name: "test_provider".to_string(),
             ttft_ms: Some(50),
             cached: false,
+            cost: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
             timestamp: None,
@@ -1204,8 +1235,8 @@ mod tests {
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
-                ttft_ms, cached, finish_reason, snapshot_hash, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             ",
         );
 
@@ -1239,6 +1270,7 @@ mod tests {
                 model_provider_name: "provider1".to_string(),
                 ttft_ms: None,
                 cached: false,
+                cost: None,
                 finish_reason: None,
                 snapshot_hash: None,
                 timestamp: None,
@@ -1258,6 +1290,7 @@ mod tests {
                 model_provider_name: "provider2".to_string(),
                 ttft_ms: Some(25),
                 cached: true,
+                cost: None,
                 finish_reason: Some(FinishReason::ToolCall),
                 snapshot_hash: None,
                 timestamp: None,
@@ -1271,9 +1304,9 @@ mod tests {
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, input_tokens, output_tokens,
                 response_time_ms, model_name, model_provider_name,
-                ttft_ms, cached, finish_reason, snapshot_hash, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12),
-            ($13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+                ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13),
+            ($14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
             ",
         );
 

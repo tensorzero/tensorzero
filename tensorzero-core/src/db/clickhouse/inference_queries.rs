@@ -1012,6 +1012,10 @@ fn generate_single_table_query_for_type(
     select_clauses.push("i.inference_params as inference_params".to_string());
     select_clauses.push("i.processing_time_ms as processing_time_ms".to_string());
     select_clauses.push("i.ttft_ms as ttft_ms".to_string());
+    select_clauses.push(
+        "if(isNull(i.snapshot_hash), NULL, lower(hex(i.snapshot_hash))) as snapshot_hash"
+            .to_string(),
+    );
 
     let mut where_clauses: Vec<String> = Vec::new();
 
@@ -1421,6 +1425,7 @@ mod tests {
             i.inference_params as inference_params,
             i.processing_time_ms as processing_time_ms,
             i.ttft_ms as ttft_ms,
+            if(isNull(i.snapshot_hash), NULL, lower(hex(i.snapshot_hash))) as snapshot_hash,
             i.output as output
         FROM
             ChatInference AS i
@@ -1449,6 +1454,7 @@ mod tests {
             i.inference_params as inference_params,
             i.processing_time_ms as processing_time_ms,
             i.ttft_ms as ttft_ms,
+            if(isNull(i.snapshot_hash), NULL, lower(hex(i.snapshot_hash))) as snapshot_hash,
             i.output as output
         FROM
             JsonInference AS i
@@ -1499,6 +1505,7 @@ mod tests {
             i.inference_params as inference_params,
             i.processing_time_ms as processing_time_ms,
             i.ttft_ms as ttft_ms,
+            if(isNull(i.snapshot_hash), NULL, lower(hex(i.snapshot_hash))) as snapshot_hash,
             i.output as output
         FROM
             JsonInference AS i

@@ -4,6 +4,7 @@
 //! These types are used by both tensorzero-core and autopilot-client.
 
 pub mod content;
+pub mod cost;
 pub mod error;
 pub mod file;
 pub mod message;
@@ -18,6 +19,10 @@ pub(crate) fn deprecation_warning(message: &str) {
 // Re-export all public types at the crate root for convenience
 pub use content::{
     Arguments, RawText, System, Template, Text, Thought, ThoughtSummaryBlock, Unknown,
+};
+pub use cost::{
+    CostPointerConfig, UnifiedCostPointerConfig, UninitializedCostConfig,
+    UninitializedCostConfigEntry, UninitializedCostRate, UninitializedUnifiedCostConfig,
 };
 pub use error::TypeError;
 pub use file::{

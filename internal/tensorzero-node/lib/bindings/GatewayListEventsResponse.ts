@@ -24,4 +24,8 @@ export type GatewayListEventsResponse = {
    * All EventPayloads in these Events should be of type ToolCall.
    */
   pending_tool_calls: Array<GatewayEvent>;
+  /**
+   * All user_questions events that do not have a matching user_questions_answers event.
+   */
+  pending_user_questions: Array<GatewayEvent>;
 };

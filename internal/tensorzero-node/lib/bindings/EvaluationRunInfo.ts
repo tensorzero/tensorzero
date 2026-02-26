@@ -10,4 +10,5 @@ export type EvaluationRunInfo = {
   function_name: string;
   variant_name: string;
   last_inference_timestamp: string;
+  snapshot_hash?: string;
 };

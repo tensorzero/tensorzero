@@ -798,6 +798,12 @@ model = "together-deepseek-r1"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
+[functions.basic_test.variants.together-kimi]
+type = "chat_completion"
+model = "together-kimi"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.reasoner]
 type = "chat_completion"
 model = "reasoner"
@@ -828,12 +834,23 @@ model = "kimi-k2p5-fireworks"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
+[functions.basic_test.variants.fireworks-kimi]
+type = "chat_completion"
+model = "fireworks-kimi"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.flaky]
 type = "chat_completion"
 model = "flaky_basic_test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 retries = { num_retries = 5, max_delay_s = 0.1 }
+
+[functions.basic_test.variants.no_cost_config]
+type = "chat_completion"
+model = "dummy::good"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.basic_test.variants.err_in_stream]
 type = "chat_completion"
@@ -884,6 +901,13 @@ model = "claude-haiku-4-5-thinking"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 thinking_budget_tokens = 1024
+
+[functions.basic_test.variants.anthropic-sonnet-4-6-reasoning]
+type = "chat_completion"
+model = "claude-sonnet-4-6"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+reasoning_effort = "low"
 
 [functions.basic_test.variants.gcp-vertex-anthropic-thinking]
 type = "chat_completion"

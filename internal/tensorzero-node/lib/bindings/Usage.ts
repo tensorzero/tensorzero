@@ -3,4 +3,5 @@
 export type Usage = {
   input_tokens: number | null;
   output_tokens: number | null;
+  cost: number | null;
 };

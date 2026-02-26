@@ -1,3 +1,4 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -60,6 +61,40 @@ pub struct RawResponseEntry {
 pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
+    #[serde(default, with = "decimal_float_option")]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub cost: Option<Decimal>,
+}
+
+/// Custom serde module for `Option<Decimal>` as float.
+///
+/// Serializes identically to `rust_decimal::serde::float_option`.
+/// Deserializes via `Option<f64>` instead of `deserialize_option` so that
+/// serde's untagged-enum `ContentDeserializer` (which maps JSON `null` to
+/// `Content::Unit` → `visit_unit`) is handled correctly.  The upstream
+/// `OptionDecimalVisitor` only implements `visit_none`, not `visit_unit`,
+/// which causes failures inside `#[serde(untagged)]` enums.
+mod decimal_float_option {
+    use rust_decimal::Decimal;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    // Signature is required by serde's `with` attribute.
+    #[expect(clippy::ref_option)]
+    pub fn serialize<S>(value: &Option<Decimal>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        rust_decimal::serde::float_option::serialize(value, serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Decimal>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<f64>::deserialize(deserializer)?
+            .map(|f| Decimal::try_from(f).map_err(serde::de::Error::custom))
+            .transpose()
+    }
 }
 
 impl Usage {
@@ -67,6 +102,7 @@ impl Usage {
         Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            cost: Some(Decimal::ZERO),
         }
     }
 
@@ -105,6 +141,7 @@ where
             let Usage {
                 input_tokens: chunk_input_tokens,
                 output_tokens: chunk_output_tokens,
+                cost: chunk_cost,
             } = chunk_usage;
 
             acc.input_tokens = match (acc.input_tokens, chunk_input_tokens) {
@@ -145,6 +182,26 @@ where
                 }
             };
 
+            // Cost uses the same max semantics as tokens
+            acc.cost = match (acc.cost, chunk_cost) {
+                (_, None) => acc.cost,
+                (None, chunk_value) => chunk_value,
+                (Some(current_value), Some(chunk_value)) => {
+                    if current_value > chunk_value {
+                        tracing::warn!(
+                            "Unexpected non-cumulative `cost` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+                        );
+                        debug_assert!(false, "Unexpected non-cumulative `cost` in streaming response ({current_value} > {chunk_value}); using the higher value.");
+                    }
+
+                    if current_value < chunk_value {
+                        Some(chunk_value)
+                    } else {
+                        Some(current_value)
+                    }
+                }
+            };
+
             acc
         })
 }
@@ -165,6 +222,7 @@ where
         let Usage {
             input_tokens: mi_input_tokens,
             output_tokens: mi_output_tokens,
+            cost: mi_cost,
         } = mi_usage;
 
         Usage {
@@ -173,6 +231,10 @@ where
                 _ => None,
             },
             output_tokens: match (acc.output_tokens, mi_output_tokens) {
+                (Some(a), Some(b)) => Some(a + b),
+                _ => None,
+            },
+            cost: match (acc.cost, mi_cost) {
                 (Some(a), Some(b)) => Some(a + b),
                 _ => None,
             },
@@ -252,6 +314,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(100),
             output_tokens: Some(50),
+            cost: None,
         };
         let result = aggregate_usage_from_single_streaming_model_inference(vec![usage]);
         assert_eq!(
@@ -273,14 +336,17 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(10),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(25),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -303,14 +369,17 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
+                cost: None,
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -332,10 +401,12 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -355,10 +426,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: Some(50),
+                cost: None,
             },
         ];
         let result = aggregate_usage_from_single_streaming_model_inference(chunks);
@@ -383,10 +456,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(80),  // Smaller than previous (unexpected)
                 output_tokens: Some(30), // Smaller than previous (unexpected)
+                cost: None,
             },
         ];
         // This will panic due to debug_assert! when non-cumulative values are detected
@@ -415,6 +490,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(100),
             output_tokens: Some(50),
+            cost: None,
         };
         let result = aggregate_usage_across_model_inferences(vec![usage]);
         assert_eq!(
@@ -435,10 +511,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
+                cost: None,
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -460,10 +538,12 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                cost: None,
             },
             Usage {
                 input_tokens: None, // This should propagate None for input_tokens
                 output_tokens: Some(100),
+                cost: None,
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -484,10 +564,12 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: Some(50),
+                cost: None,
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: None,
+                cost: None,
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -507,10 +589,12 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                cost: None,
             },
         ];
         let result = aggregate_usage_across_model_inferences(usages);
@@ -531,11 +615,13 @@ mod tests {
             Usage {
                 input_tokens: Some(69),
                 output_tokens: Some(1),
+                cost: None,
             },
             // message_delta chunk: only output_tokens, no input_tokens
             Usage {
                 input_tokens: None,
                 output_tokens: Some(100),
+                cost: None,
             },
         ];
 
@@ -556,6 +642,95 @@ mod tests {
         assert!(
             !logs_contain("Unexpected non-cumulative"),
             "should NOT log a warning for Anthropic-style streaming where input_tokens is only in first chunk"
+        );
+    }
+
+    // Tests for cost in streaming aggregation
+
+    #[test]
+    fn test_aggregate_single_streaming_with_cost() {
+        let usage = Usage {
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            cost: Some(Decimal::new(18, 5)), // 0.00018
+        };
+        let result = aggregate_usage_from_single_streaming_model_inference(vec![usage]);
+        assert_eq!(
+            result.cost,
+            Some(Decimal::new(18, 5)),
+            "single chunk cost should be preserved as-is"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_single_streaming_cumulative_cost() {
+        let chunks = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(10),
+                cost: Some(Decimal::new(5, 5)), // 0.00005
+            },
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(25),
+                cost: Some(Decimal::new(12, 5)), // 0.00012
+            },
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(18, 5)), // 0.00018
+            },
+        ];
+        let result = aggregate_usage_from_single_streaming_model_inference(chunks);
+        assert_eq!(
+            result.cost,
+            Some(Decimal::new(18, 5)),
+            "cumulative cost should take the max value"
+        );
+    }
+
+    // Tests for cost in cross-inference aggregation
+
+    #[test]
+    fn test_aggregate_across_inferences_with_cost() {
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(18, 5)), // 0.00018
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                cost: Some(Decimal::new(27, 5)), // 0.00027
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost,
+            Some(Decimal::new(45, 5)),
+            "cost should be summed across inferences"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_across_inferences_cost_none_propagates() {
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                cost: Some(Decimal::new(18, 5)), // 0.00018
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                cost: None,
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.cost, None,
+            "None cost in any inference should propagate to result"
         );
     }
 }

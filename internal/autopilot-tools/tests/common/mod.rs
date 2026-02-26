@@ -128,6 +128,11 @@ mock! {
             ids: Vec<Uuid>,
         ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 
+        async fn delete_dataset(
+            &self,
+            dataset_name: String,
+        ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
         async fn list_inferences(
             &self,
             request: ListInferencesRequest,
@@ -189,6 +194,7 @@ pub fn create_mock_chat_response(text: &str) -> InferenceResponse {
         usage: Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            cost: None,
         },
         raw_usage: None,
         original_response: None,
@@ -300,6 +306,7 @@ pub fn create_mock_stored_chat_inference(
         inference_params: Some(Default::default()),
         processing_time_ms: Some(100),
         ttft_ms: Some(50),
+        snapshot_hash: None,
     })
 }
 

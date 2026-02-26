@@ -3,9 +3,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tensorzero_core::{
-    config::Config,
+    config::{Config, MetricConfig, UninitializedFunctionConfig, UninitializedToolConfig},
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
     function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson},
@@ -26,6 +26,59 @@ pub struct FunctionContext {
     /// Static tools from Config.tools that are referenced by the function
     pub static_tools: Option<HashMap<String, Arc<StaticToolConfig>>>,
     pub evaluation_config: Arc<EvaluationConfig>,
+}
+
+/// Serializable form of FunctionContext for durable checkpointing.
+/// Uses Uninitialized types which support both Serialize and Deserialize.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SerializableFunctionContext {
+    pub function_config: UninitializedFunctionConfig,
+    pub static_tools: Option<HashMap<String, UninitializedToolConfig>>,
+    pub evaluation_config: EvaluationConfig,
+}
+
+impl FunctionContext {
+    /// Convert to serializable form for durable checkpointing.
+    pub fn to_serializable(&self) -> SerializableFunctionContext {
+        SerializableFunctionContext {
+            function_config: self.function_config.as_uninitialized(),
+            static_tools: self.static_tools.as_ref().map(|tools| {
+                tools
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.as_uninitialized()))
+                    .collect()
+            }),
+            evaluation_config: (*self.evaluation_config).clone(),
+        }
+    }
+}
+
+impl SerializableFunctionContext {
+    /// Reconstruct full FunctionContext by loading/initializing all types.
+    pub fn load(
+        self,
+        function_name: &str,
+        metrics: &HashMap<String, MetricConfig>,
+    ) -> Result<FunctionContext, Error> {
+        let function_config = self.function_config.load(function_name, metrics)?;
+        let static_tools = self
+            .static_tools
+            .map(|tools| {
+                tools
+                    .into_iter()
+                    .map(|(k, v)| {
+                        let loaded = v.load(k.clone())?;
+                        Ok((k, Arc::new(loaded)))
+                    })
+                    .collect::<Result<HashMap<_, _>, Error>>()
+            })
+            .transpose()?;
+        Ok(FunctionContext {
+            function_config: Arc::new(function_config),
+            static_tools,
+            evaluation_config: Arc::new(self.evaluation_config),
+        })
+    }
 }
 
 /// Validates the GEPA configuration and checks that required resources exist

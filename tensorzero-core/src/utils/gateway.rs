@@ -26,6 +26,7 @@ use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::postgres::batching::PostgresBatchSender;
+use crate::db::rate_limiting::DisabledRateLimitQueries;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
 use crate::endpoints::openai_compatible::RouterExt;
@@ -33,7 +34,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
-use crate::rate_limiting::RateLimitingManager;
+use crate::rate_limiting::{RateLimitingConfig, RateLimitingManager};
 use autopilot_client::AutopilotClient;
 
 #[cfg(test)]
@@ -74,20 +75,33 @@ impl Drop for GatewayHandle {
         let drop_wrapper = self.drop_wrapper.take();
         let mut drop_self = || {
             self.app_state.shutdown_token.cancel();
-            let handle = self
-                .app_state
-                .clickhouse_connection_info
-                .batcher_join_handle();
-            // Drop the cache manager early to release any ClickHouse references
-            // held by the ClickHouse cache backend. Otherwise the batch writer can
-            // stay alive and block shutdown.
-            let old_cache_manager =
-                std::mem::replace(&mut self.app_state.cache_manager, CacheManager::disabled());
-            drop(old_cache_manager);
-            // Drop our `ClickHouseConnectionInfo`, so that we stop holding on to the `Arc<BatchSender>`
-            // This allows the batch writer task to exit (once all of the remaining `ClickhouseConnectionInfo`s are dropped)
-            self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
-            if let Some(handle) = handle {
+            let disabled_placeholder = self.app_state.disabled_for_shutdown_placeholder();
+            let mut app_state = std::mem::replace(&mut self.app_state, disabled_placeholder);
+
+            // Grab batch writer handles so we can wait on them later.
+            let clickhouse_handle = app_state.clickhouse_connection_info.batcher_join_handle();
+            let pg_handle = app_state.postgres_connection_info.batcher_join_handle();
+
+            // Return unused rate limit tokens while Postgres is still active.
+            if !app_state.rate_limiting_manager.is_empty() {
+                tracing::info!("Returning unused rate limit tokens to database");
+                if let Err(e) = app_state.rate_limiting_manager.shutdown() {
+                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
+                }
+                tracing::info!("Rate limit token return complete");
+            }
+
+            // Move the deferred task tracker out before dropping app state so we can
+            // still close/wait on it below.
+            let deferred_tasks =
+                std::mem::replace(&mut app_state.deferred_tasks, TaskTracker::new());
+
+            // Drop all remaining state before waiting on batch writers. This releases
+            // all sender/reference holders (cache backends, rate-limit backends, and any
+            // future fields added to `AppStateData`) without requiring manual `drop(...)`
+            // calls for each one.
+            drop(app_state);
+            if let Some(clickhouse_handle) = clickhouse_handle {
                 tracing::info!("Waiting for ClickHouse batch writer to finish");
                 // This could block forever if:
                 // * We spawn a long-lived `tokio::task` that holds on to a `ClickhouseConnectionInfo`,
@@ -102,18 +116,12 @@ impl Drop for GatewayHandle {
                 // We err on the side of hanging the server on shutdown, rather than potentially exiting while
                 // we still have batched writes in-flight (or about to be written via an active `ClickhouseConnectionInfo`).
                 tokio::task::block_in_place(|| {
-                    if let Err(e) = Handle::current().block_on(handle) {
+                    if let Err(e) = Handle::current().block_on(clickhouse_handle) {
                         tracing::error!("Error in batch writer: {e}");
                     }
                 });
                 tracing::info!("ClickHouse batch writer finished");
             }
-            // Drain the Postgres batch writer (same pattern as ClickHouse above)
-            let pg_handle = self
-                .app_state
-                .postgres_connection_info
-                .batcher_join_handle();
-            self.app_state.postgres_connection_info = PostgresConnectionInfo::new_disabled();
             if let Some(pg_handle) = pg_handle {
                 tracing::info!("Waiting for Postgres batch writer to finish");
                 tokio::task::block_in_place(|| {
@@ -123,26 +131,18 @@ impl Drop for GatewayHandle {
                 });
                 tracing::info!("Postgres batch writer finished");
             }
-            // Return unused rate limit tokens to the database
-            if !self.app_state.rate_limiting_manager.is_empty() {
-                tracing::info!("Returning unused rate limit tokens to database");
-                if let Err(e) = self.app_state.rate_limiting_manager.shutdown() {
-                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
-                }
-                tracing::info!("Rate limit token return complete");
-            }
 
-            self.app_state.deferred_tasks.close();
+            deferred_tasks.close();
             // The 'wait' future will resolve immediately if the pool is empty.
             // Closing the pool doesn't block more futures from being added, so checking
             // if it's empty doesn't introduce any new race conditions (it's still possible
             // for some existing tokio task to spawn something in this pool after 'wait' resolves).
             // This check makes it easier to write tests (since we don't need to use a multi-threaded runtime),
             // as well as reducing the number of log messages in the common case.
-            if !self.app_state.deferred_tasks.is_empty() {
+            if !deferred_tasks.is_empty() {
                 tokio::task::block_in_place(|| {
                     tracing::info!("Waiting for deferred tasks to finish");
-                    Handle::current().block_on(self.app_state.deferred_tasks.wait());
+                    Handle::current().block_on(deferred_tasks.wait());
                     tracing::info!("Deferred tasks finished");
                 });
             }
@@ -224,6 +224,7 @@ impl GatewayHandle {
     pub async fn new(
         config: UnwrittenConfig,
         available_tools: HashSet<String>,
+        tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
@@ -236,6 +237,7 @@ impl GatewayHandle {
             valkey_url,
             valkey_cache_url,
             available_tools,
+            tool_whitelist,
         ))
         .await
     }
@@ -247,6 +249,7 @@ impl GatewayHandle {
         valkey_url: Option<String>,
         valkey_cache_url: Option<String>,
         available_tools: HashSet<String>,
+        tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
@@ -268,6 +271,7 @@ impl GatewayHandle {
             http_client,
             None,
             available_tools,
+            tool_whitelist,
         )
         .await
     }
@@ -330,6 +334,7 @@ impl GatewayHandle {
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
+        tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
         // Validate that when observability is enabled, the correct connection info is set up.
         if config.gateway.observability.enabled == Some(true) {
@@ -408,10 +413,28 @@ impl GatewayHandle {
                 .build(),
         );
 
+        // Validate that all whitelisted tool names exist in available_tools
+        let unknown_whitelist_tools: Vec<&str> = tool_whitelist
+            .iter()
+            .filter(|name| !available_tools.contains(name.as_str()))
+            .map(|s| s.as_str())
+            .collect();
+        if !unknown_whitelist_tools.is_empty() {
+            return Err(ErrorDetails::AppState {
+                message: format!(
+                    "Unknown tool names in `autopilot.tool_whitelist`: {unknown_whitelist_tools:?}. \
+                     These tools do not exist and will never be auto-approved. \
+                     Check for typos in your configuration."
+                ),
+            }
+            .into());
+        }
+
         let autopilot_client = setup_autopilot_client(
             &postgres_connection_info,
             deployment_id.as_ref(),
             available_tools,
+            tool_whitelist,
         )
         .await?;
 
@@ -445,6 +468,32 @@ impl GatewayHandle {
 }
 
 impl AppStateData {
+    /// Returns a new AppStateData with all connections disabled. This is only used in
+    /// `GatewayHandle::drop` so we can wait for batch writer handles without worrying
+    /// about anything else in AppStateData holding a database connection.
+    fn disabled_for_shutdown_placeholder(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            http_client: self.http_client.clone(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::new_disabled(),
+            valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
+            cache_manager: CacheManager::disabled(),
+            deferred_tasks: TaskTracker::new(),
+            auth_cache: None,
+            config_snapshot_cache: None,
+            autopilot_client: None,
+            deployment_id: None,
+            rate_limiting_manager: Arc::new(RateLimitingManager::new(
+                Arc::new(RateLimitingConfig::default()),
+                Arc::new(DisabledRateLimitQueries),
+            )),
+            shutdown_token: CancellationToken::new(),
+            _private: (),
+        }
+    }
+
     pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
         DelegatingDatabaseConnection::new(
             self.clickhouse_connection_info.clone(),
@@ -563,7 +612,7 @@ pub async fn setup_clickhouse(
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
-            disable_automatic_migrations: config.gateway.observability.disable_automatic_migrations,
+            disable_automatic_migrations: config.clickhouse.disable_automatic_migrations,
         })
         .await?;
     }
@@ -708,6 +757,7 @@ async fn setup_autopilot_client(
     postgres_connection_info: &PostgresConnectionInfo,
     deployment_id: Option<&String>,
     available_tools: HashSet<String>,
+    tool_whitelist: HashSet<String>,
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
@@ -733,7 +783,10 @@ async fn setup_autopilot_client(
                 .api_key(api_key)
                 .spawn_pool(pool.clone())
                 .spawn_queue_name(queue_name)
-                .available_tools(available_tools);
+                .available_tools(available_tools)
+                .tool_whitelist(tool_whitelist)
+                .deployment_id(deployment_id.cloned().unwrap_or_default())
+                .tensorzero_version(crate::endpoints::status::TENSORZERO_VERSION.to_string());
 
             // Allow custom base URL for testing
             if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
@@ -873,6 +926,7 @@ pub async fn start_openai_compatible_gateway(
         valkey_url,
         None, // Embedded gateways use the same Valkey instance for rate limiting and caching
         HashSet::new(), // available_tools
+        HashSet::new(), // tool_whitelist
     ))
     .await?;
 
@@ -931,7 +985,7 @@ mod tests {
                 enabled: Some(false),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -970,7 +1024,7 @@ mod tests {
                 enabled: None,
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             fetch_and_encode_input_files_before_inference: false,
             unstable_error_json: false,
@@ -1005,7 +1059,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -1044,7 +1098,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -1082,7 +1136,7 @@ mod tests {
                 enabled: Some(true),
                 async_writes: false,
                 batch_writes: Default::default(),
-                disable_automatic_migrations: false,
+                ..Default::default()
             },
             bind_address: None,
             debug: false,
@@ -1235,6 +1289,7 @@ mod tests {
             http_client,
             None,
             HashSet::new(),
+            HashSet::new(),
         )
         .await;
         let err = result
@@ -1270,6 +1325,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
+            HashSet::new(),
             HashSet::new(),
         )
         .await;
@@ -1309,6 +1365,7 @@ mod tests {
             http_client,
             None,
             HashSet::new(),
+            HashSet::new(),
         )
         .await
         .expect("Gateway should start when observability is disabled");
@@ -1337,6 +1394,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
+            HashSet::new(),
             HashSet::new(),
         )
         .await
@@ -1369,6 +1427,7 @@ mod tests {
             http_client,
             None,
             HashSet::new(), // available_tools
+            HashSet::new(), // tool_whitelist
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");

@@ -68,4 +68,8 @@ export type ModelInference = {
    * Whether the inference was cached.
    */
   cached: boolean;
+  /**
+   * Cost of the inference.
+   */
+  cost: number | undefined;
 };

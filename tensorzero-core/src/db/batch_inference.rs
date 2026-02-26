@@ -1,5 +1,6 @@
 /// Definitions for batch inference-related database queries.
 use async_trait::async_trait;
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -21,6 +22,7 @@ pub struct CompletedBatchInferenceRow {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,
+    pub cost: Option<Decimal>,
 }
 
 #[async_trait]

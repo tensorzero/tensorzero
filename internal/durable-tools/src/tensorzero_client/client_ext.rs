@@ -142,6 +142,7 @@ impl TensorZeroClient for Client {
                     autopilot_client,
                     session_id,
                     full_request,
+                    &[],
                 )
                 .await
                 .map_err(|e| {
@@ -479,6 +480,15 @@ impl TensorZeroClient for Client {
         ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroClientError> {
         ClientExt::delete_datapoints(self, dataset_name, ids)
+            .await
+            .map_err(TensorZeroClientError::TensorZero)
+    }
+
+    async fn delete_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroClientError> {
+        ClientExt::delete_dataset(self, dataset_name)
             .await
             .map_err(TensorZeroClientError::TensorZero)
     }

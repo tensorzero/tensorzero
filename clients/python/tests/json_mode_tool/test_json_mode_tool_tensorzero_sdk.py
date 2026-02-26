@@ -7,9 +7,12 @@ tool calls to text responses, both in streaming and non-streaming modes.
 """
 
 import json
+import os
 
 import pytest
 from tensorzero import AsyncTensorZeroGateway, ChatInferenceResponse
+
+GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
 
 
 @pytest.mark.asyncio
@@ -23,7 +26,7 @@ async def test_chat_json_mode_tool_non_streaming():
     - JSON is valid and matches output_schema
     """
     client = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         verbose_errors=True,
         async_setup=False,
     )
@@ -83,7 +86,7 @@ async def test_chat_json_mode_tool_streaming():
     - Accumulated JSON is valid and matches output_schema
     """
     client = AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000",
+        gateway_url=GATEWAY_URL,
         verbose_errors=True,
         async_setup=False,
     )

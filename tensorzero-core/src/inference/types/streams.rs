@@ -1077,6 +1077,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_response: None,
@@ -1112,6 +1113,7 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
+                cost: None,
             },
             finish_reason: Some(FinishReason::Stop),
         };
@@ -1166,10 +1168,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            cost: None,
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
+            cost: None,
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1237,6 +1241,7 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                cost: None,
             },
             finish_reason: Some(FinishReason::Stop),
         };
@@ -1246,6 +1251,7 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                cost: None,
             }
         );
         match response {
@@ -1278,6 +1284,7 @@ mod tests {
         let model_inference_usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            cost: None,
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1374,6 +1381,7 @@ mod tests {
         let model_inference_usage = Usage {
             input_tokens: Some(15),
             output_tokens: Some(10),
+            cost: None,
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1514,10 +1522,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            cost: None,
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
+            cost: None,
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1585,6 +1595,7 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                cost: None,
             },
             finish_reason: Some(FinishReason::Stop),
         };
@@ -1594,6 +1605,7 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                cost: None,
             }
         );
         match response {
@@ -1642,10 +1654,12 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
+            cost: None,
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
+            cost: None,
         };
         let dynamic_output_schema = JSONSchema::compile_background(serde_json::json!({
             "type": "object",
@@ -1722,6 +1736,7 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                cost: None,
             },
             finish_reason: Some(FinishReason::ToolCall),
         };
@@ -1731,6 +1746,7 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
+                cost: None,
             }
         );
         match response {
@@ -1866,6 +1882,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_response: None,
@@ -1919,6 +1936,7 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
+                cost: None,
             },
             finish_reason: Some(FinishReason::Stop),
         };
@@ -1928,6 +1946,7 @@ mod tests {
             Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
+                cost: None,
             }
         );
         let chat_result = match result {
@@ -2028,6 +2047,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_chunk: "chunk2".to_string(),
@@ -2123,6 +2143,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_chunk: "chunk2".to_string(),
@@ -2209,6 +2230,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(5),
                     output_tokens: Some(10),
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_chunk: "chunk2".to_string(),
@@ -2299,6 +2321,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(15),
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_chunk: "chunk2".to_string(),
@@ -2372,6 +2395,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(5),
                 output_tokens: Some(5),
+                cost: None,
             }),
             raw_usage: None,
             raw_response: None,
@@ -2499,6 +2523,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(30),
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_response: None,
@@ -2583,6 +2608,7 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             }),
             raw_usage: None,
             raw_response: "raw response".to_string(),
@@ -2601,6 +2627,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));

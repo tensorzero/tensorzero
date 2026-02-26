@@ -1465,7 +1465,7 @@ where
     Ok(response.id)
 }
 
-fn serialize_text_content_vec<S>(
+pub(super) fn serialize_text_content_vec<S>(
     content: &Vec<OpenAIContentBlock<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
@@ -1483,7 +1483,7 @@ where
 
 // Signature dictated by Serde
 #[expect(clippy::ref_option)]
-fn serialize_optional_text_content_vec<S>(
+pub(super) fn serialize_optional_text_content_vec<S>(
     content: &Option<Vec<OpenAIContentBlock<'_>>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
@@ -2671,6 +2671,7 @@ impl From<OpenAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            cost: None,
         }
     }
 }
@@ -2694,6 +2695,7 @@ impl From<OpenAIEmbeddingUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: Some(0), // this is always zero for embeddings
+            cost: None,
         }
     }
 }
@@ -4368,6 +4370,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cost: None,
             }),
             "expected usage to include provider raw_usage entries"
         );

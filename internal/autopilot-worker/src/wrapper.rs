@@ -475,6 +475,12 @@ mod tests {
                 ids: Vec<Uuid>,
             ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
 
+            /// Delete an entire dataset.
+            async fn delete_dataset(
+                &self,
+                dataset_name: String,
+            ) -> Result<DeleteDatapointsResponse, TensorZeroClientError>;
+
             /// List inferences with filtering and pagination.
             async fn list_inferences(
                 &self,

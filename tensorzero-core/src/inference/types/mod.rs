@@ -68,6 +68,7 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
+use rust_decimal::Decimal;
 use schemars::JsonSchema;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -101,7 +102,8 @@ use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::usage::aggregate_usage_across_model_inferences;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
-    RateLimitedInputContent, RateLimitedRequest, get_estimated_tokens,
+    RateLimitedInputContent, RateLimitedRequest, RateLimitingConfig, decimal_cost_to_nano_cost,
+    get_estimated_tokens,
 };
 use crate::serde_util::{deserialize_optional_json_string, serialize_optional_json_string};
 use crate::tool::{
@@ -1137,6 +1139,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
     fn estimated_resource_usage(
         &self,
         resources: &[RateLimitResource],
+        rate_limiting_config: &RateLimitingConfig,
     ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let ModelInferenceRequest {
             inference_id: _,
@@ -1183,9 +1186,16 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             None
         };
 
+        let nano_cost = if resources.contains(&RateLimitResource::Cost) {
+            Some(rate_limiting_config.default_nano_cost)
+        } else {
+            None
+        };
+
         Ok(EstimatedRateLimitResourceUsage {
             model_inferences,
             tokens,
+            nano_cost,
         })
     }
 }
@@ -1262,14 +1272,17 @@ pub struct ProviderInferenceResponse {
 
 impl ProviderInferenceResponse {
     pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+        let nano_cost = self.usage.cost.map(decimal_cost_to_nano_cost);
         match self.usage.total_tokens() {
             Some(tokens) => Ok(RateLimitResourceUsage::Exact {
                 model_inferences: 1,
                 tokens: tokens as u64,
+                nano_cost,
             }),
             None => Ok(RateLimitResourceUsage::UnderEstimate {
                 model_inferences: 1,
                 tokens: 0,
+                nano_cost,
             }),
         }
     }
@@ -1377,10 +1390,7 @@ impl ModelInferenceResponseWithMetadata {
     /// So we need this function to compute the actual usage in order to send it in the HTTP response.
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
-            Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
-            }
+            Usage::zero()
         } else {
             self.usage
         }
@@ -1579,6 +1589,8 @@ pub struct StoredModelInference {
     pub model_provider_name: String,
     pub ttft_ms: Option<u32>,
     pub cached: bool,
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub cost: Option<Decimal>,
     pub finish_reason: Option<FinishReason>,
     pub snapshot_hash: Option<SnapshotHash>,
     /// Materialized column in ClickHouse - only present when reading from the database.
@@ -1668,6 +1680,7 @@ impl ModelInferenceResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
+                cost: None,
             },
             provider_latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
@@ -1744,6 +1757,12 @@ impl StoredModelInference {
             _ => None,
         };
 
+        let cost = if result.cached {
+            Some(Decimal::ZERO)
+        } else {
+            result.usage.cost
+        };
+
         let stored_input_messages = match result.input_messages {
             RequestMessagesOrBatch::Message(input_messages) => {
                 // In the the future, we might want to support writing 'partially broken' input messages to ClickHouse,
@@ -1772,6 +1791,7 @@ impl StoredModelInference {
             model_provider_name: result.model_provider_name.to_string(),
             model_name: result.model_name.to_string(),
             cached: result.cached,
+            cost,
             finish_reason: result.finish_reason,
             input_messages: Some(stored_input_messages),
             snapshot_hash: Some(snapshot_hash),
@@ -2321,6 +2341,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            cost: None,
         };
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
@@ -3158,6 +3179,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 false,
             ),
@@ -3165,6 +3187,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
+                    cost: None,
                 },
                 false,
             ),
@@ -3190,6 +3213,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 false,
             ),
@@ -3197,6 +3221,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    cost: None,
                 },
                 false,
             ),
@@ -3222,6 +3247,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 false,
             ),
@@ -3229,6 +3255,7 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: None,
+                    cost: None,
                 },
                 false,
             ),
@@ -3254,6 +3281,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    cost: None,
                 },
                 false,
             ),
@@ -3261,6 +3289,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    cost: None,
                 },
                 false,
             ),
@@ -3281,12 +3310,13 @@ mod tests {
         assert_eq!(usage_all_none.output_tokens, None);
 
         // Test Case 5: Mixed cached and non-cached with None values
-        // Cached results return Usage { input_tokens: Some(0), output_tokens: Some(0) }
+        // Cached results return Usage::zero()
         let model_responses_mixed = vec![
             create_model_response(
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cost: None,
                 },
                 true,
             ), // This will be treated as 0/0 due to cached=true
@@ -3294,6 +3324,7 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    cost: None,
                 },
                 false,
             ),
@@ -3368,6 +3399,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            cost: None,
         };
 
         // Create responses with different finish reasons and IDs

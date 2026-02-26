@@ -18,7 +18,9 @@ use tensorzero_core::config::snapshot::SnapshotHash;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the inference tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceToolParams {
     /// The function name to call. Exactly one of function_name or model_name required.
     #[serde(default)]
@@ -53,6 +55,16 @@ impl ToolMetadata for InferenceTool {
     type SideInfo = AutopilotSideInfo;
     type Output = InferenceResponse;
     type LlmParams = InferenceToolParams;
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::INFERENCE_TOOL_PARAMS
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::INFERENCE_RESPONSE
+    }
 
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("inference")

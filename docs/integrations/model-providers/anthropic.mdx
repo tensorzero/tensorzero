@@ -198,6 +198,61 @@ See the [API Reference](/gateway/api-reference/inference) for more information.
 
 </Tip>
 
+## Enable Anthropic's extended thinking
+
+TensorZero supports two modes of extended thinking for Anthropic models:
+
+### Adaptive thinking (`reasoning_effort`)
+
+Use `reasoning_effort` to enable adaptive thinking, where the model decides how much to think based on the task complexity.
+
+```toml title="config/tensorzero.toml"
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "claude_sonnet_4_6"
+reasoning_effort = "low"  # Accepted values depend on the Anthropic API (e.g. "low", "medium", "high")
+```
+
+You can also set `reasoning_effort` at inference time:
+
+```bash
+curl -X POST http://localhost:3000/inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "my_function_name",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is the capital of Japan?"
+        }
+      ]
+    },
+    "params": {
+      "chat_completion": {
+        "reasoning_effort": "low"
+      }
+    }
+  }'
+```
+
+### Manual thinking (`thinking_budget_tokens`)
+
+Use `thinking_budget_tokens` to set an explicit token budget for thinking.
+
+```toml title="config/tensorzero.toml"
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "claude_sonnet_4_6"
+thinking_budget_tokens = 10000
+```
+
+<Warning>
+
+`reasoning_effort` and `thinking_budget_tokens` are mutually exclusive. Using both will result in an error.
+
+</Warning>
+
 ## Use Anthropic models on third-party platforms
 
 ### Use Anthropic models on AWS Bedrock

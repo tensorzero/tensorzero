@@ -147,7 +147,8 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 any(inference_function_name) AS function_name,
                 any(variant_name) AS variant_name,
                 any(dataset_name) AS dataset_name,
-                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
+                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp,
+                if(isNull(any(inner_snapshot_hash)), NULL, lower(hex(any(inner_snapshot_hash)))) AS snapshot_hash
             FROM (
                 SELECT
                     maxIf(value, key = 'tensorzero::evaluation_run_id') AS evaluation_run_id,
@@ -155,7 +156,8 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     maxIf(value, key = 'tensorzero::dataset_name') AS dataset_name,
                     any(function_name) AS inference_function_name,
                     any(variant_name) AS variant_name,
-                    max(toUInt128(inference_id)) AS max_inference_id
+                    max(toUInt128(inference_id)) AS max_inference_id,
+                    any(snapshot_hash) AS inner_snapshot_hash
                 FROM TagInference
                 WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
                 GROUP BY inference_id
@@ -212,41 +214,49 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
     async fn search_evaluation_runs(
         &self,
         evaluation_name: &str,
-        function_name: &str,
+        function_name: Option<&str>,
         query: &str,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<EvaluationRunSearchResult>, Error> {
-        let sql_query = r"
+        let function_name_clause = if function_name.is_some() {
+            "AND function_name = {function_name:String}"
+        } else {
+            "AND NOT startsWith(function_name, 'tensorzero::')"
+        };
+
+        let sql_query = format!(
+            r"
             WITH
                 evaluation_inference_ids AS (
                     SELECT inference_id
                     FROM TagInference
                     WHERE key = 'tensorzero::evaluation_name'
-                    AND value = {evaluation_name:String}
+                    AND value = {{evaluation_name:String}}
                 )
             SELECT DISTINCT value as evaluation_run_id, variant_name
             FROM TagInference
             WHERE key = 'tensorzero::evaluation_run_id'
-                AND function_name = {function_name:String}
+                {function_name_clause}
                 AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
-                AND (positionCaseInsensitive(value, {query:String}) > 0 OR positionCaseInsensitive(variant_name, {query:String}) > 0)
+                AND (positionCaseInsensitive(value, {{query:String}}) > 0 OR positionCaseInsensitive(variant_name, {{query:String}}) > 0)
             ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
-            LIMIT {limit:UInt32}
-            OFFSET {offset:UInt32}
+            LIMIT {{limit:UInt32}}
+            OFFSET {{offset:UInt32}}
             FORMAT JSONEachRow
         "
-        .to_string();
+        );
 
         let evaluation_name_str = evaluation_name.to_string();
-        let function_name_str = function_name.to_string();
         let query_str = query.to_string();
         let limit_str = limit.to_string();
         let offset_str = offset.to_string();
 
         let mut params = HashMap::new();
         params.insert("evaluation_name", evaluation_name_str.as_str());
-        params.insert("function_name", function_name_str.as_str());
+        if let Some(function_name) = function_name {
+            params.insert("function_name", function_name);
+        }
         params.insert("query", query_str.as_str());
         params.insert("limit", limit_str.as_str());
         params.insert("offset", offset_str.as_str());
@@ -945,7 +955,7 @@ mod tests {
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
         let result = conn
-            .search_evaluation_runs("test_eval", "test_func", "variant", 100, 0)
+            .search_evaluation_runs("test_eval", Some("test_func"), "variant", 100, 0)
             .await
             .unwrap();
 
@@ -972,7 +982,7 @@ mod tests {
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
         let result = conn
-            .search_evaluation_runs("test_eval", "test_func", "nonexistent", 100, 0)
+            .search_evaluation_runs("test_eval", Some("test_func"), "nonexistent", 100, 0)
             .await
             .unwrap();
 

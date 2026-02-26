@@ -163,6 +163,9 @@
   --color-card-highlight-icon-bg: hsl(var(--card-highlight-icon-bg));
   --color-card-highlight-border: hsl(var(--card-highlight-border));
 
+  --spacing-page-top: 2rem;
+  --spacing-page-bottom: 5rem;
+
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
 

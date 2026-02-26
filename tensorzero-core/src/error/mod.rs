@@ -116,7 +116,8 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
     }
 }
 
-#[derive(Clone, Debug, Error, Serialize)]
+#[derive(Clone, Error, Serialize)]
+#[serde(transparent)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
 // We arc `ErrorDetails` per the `clippy::result_large_err` lint, as well as to make it cloneable
 pub struct Error {
@@ -124,6 +125,12 @@ pub struct Error {
     #[cfg(feature = "e2e_tests")]
     #[serde(skip)]
     backtrace: Option<Arc<Backtrace>>,
+}
+
+impl Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Error").field(&self.details).finish()
+    }
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -231,14 +238,19 @@ impl Error {
     /// and collects `RawResponseEntry` values from errors that have `raw_response` data.
     ///
     /// Returns `None` if no entries were collected.
-    pub fn extract_raw_response_entries(&self) -> Option<Vec<RawResponseEntry>> {
+    pub fn extract_raw_response(&self) -> Option<Vec<RawResponseEntry>> {
         let mut entries = Vec::new();
-        self.details.collect_raw_response_entries(&mut entries);
+        self.details.collect_raw_response(&mut entries);
         if entries.is_empty() {
             None
         } else {
             Some(entries)
         }
+    }
+
+    /// Extracts the raw chunk string from a mid-stream error, if available.
+    pub fn extract_raw_chunk(&self) -> Option<String> {
+        self.details.extract_raw_chunk()
     }
 
     /// Builds an HTTP error response, optionally including raw response entries from failed providers.
@@ -247,12 +259,12 @@ impl Error {
         openai_format: bool,
         include_raw_response: bool,
     ) -> Response {
-        let raw_response_entries = if include_raw_response {
-            self.extract_raw_response_entries()
+        let raw_response = if include_raw_response {
+            self.extract_raw_response()
         } else {
             None
         };
-        let body = self.build_response_body(openai_format, raw_response_entries);
+        let body = self.build_response_body(openai_format, raw_response);
         let mut response = (self.status_code(), Json(body)).into_response();
         response.extensions_mut().insert(self);
         response
@@ -286,11 +298,11 @@ impl Error {
     ///
     /// If `unstable_error_json` is enabled, includes structured error details as `error_json` and `tensorzero_error_json`.
     ///
-    /// If `raw_response_entries` is `Some`, includes the raw response entries in the body.
+    /// If `raw_response` is `Some`, includes the raw response entries in the body.
     pub fn build_response_body(
         &self,
         openai_format: bool,
-        raw_response_entries: Option<Vec<RawResponseEntry>>,
+        raw_response: Option<Vec<RawResponseEntry>>,
     ) -> Value {
         let message = self.to_string();
         let mut body = if openai_format {
@@ -308,7 +320,7 @@ impl Error {
                 body["error_json"] = error_json;
             }
         }
-        if let Some(entries) = raw_response_entries {
+        if let Some(entries) = raw_response {
             let entries_json =
                 serde_json::to_value(entries).unwrap_or_else(|e| json!(e.to_string()));
             if openai_format {
@@ -442,6 +454,9 @@ pub enum ErrorDetails {
         message: String,
     },
     Config {
+        message: String,
+    },
+    CostComputation {
         message: String,
     },
     ConfigSnapshotNotFound {
@@ -723,6 +738,12 @@ pub enum ErrorDetails {
     },
     Relay {
         message: String,
+        #[serde(skip)]
+        raw_response: Vec<RawResponseEntry>,
+        #[serde(skip)]
+        raw_chunk: Option<String>,
+        #[serde(serialize_with = "serialize_status")]
+        status_code: Option<StatusCode>,
     },
     RateLimitMissingMaxTokens,
     Serialization {
@@ -734,6 +755,10 @@ pub enum ErrorDetails {
     },
     StreamError {
         source: Box<Error>,
+        /// The raw SSE event data that produced this error, if available.
+        /// Used by relay to populate `raw_chunk` with the downstream's actual event payload.
+        #[serde(skip)]
+        raw_event: Option<String>,
     },
     ToolNotFound {
         name: String,
@@ -836,6 +861,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
+            ErrorDetails::CostComputation { .. } => tracing::Level::WARN,
             ErrorDetails::ConfigSnapshotNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::ConfigSnapshotHashMismatch { .. } => tracing::Level::ERROR,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
@@ -964,6 +990,7 @@ impl ErrorDetails {
                 .last()
                 .and_then(|error| error.underlying_status_code()),
             ErrorDetails::InferenceClient { status_code, .. } => *status_code,
+            ErrorDetails::Relay { status_code, .. } => *status_code,
             ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
                 .values()
                 .last()
@@ -1000,6 +1027,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::CostComputation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ConfigSnapshotNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ConfigSnapshotHashMismatch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1024,7 +1052,9 @@ impl ErrorDetails {
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::FatalStreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
-            ErrorDetails::Relay { .. } => StatusCode::BAD_GATEWAY,
+            ErrorDetails::Relay { status_code, .. } => {
+                status_code.unwrap_or(StatusCode::BAD_GATEWAY)
+            }
             ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -1152,26 +1182,26 @@ impl ErrorDetails {
     }
 
     /// Recursively collects `RawResponseEntry` values from inference errors in the error tree.
-    fn collect_raw_response_entries(&self, entries: &mut Vec<RawResponseEntry>) {
+    fn collect_raw_response(&self, entries: &mut Vec<RawResponseEntry>) {
         match self {
             ErrorDetails::AllRetriesFailed { errors } => {
                 for error in errors {
-                    error.details.collect_raw_response_entries(entries);
+                    error.details.collect_raw_response(entries);
                 }
             }
             ErrorDetails::AllVariantsFailed { errors } => {
                 for error in errors.values() {
-                    error.details.collect_raw_response_entries(entries);
+                    error.details.collect_raw_response(entries);
                 }
             }
             ErrorDetails::AllCandidatesFailed { candidate_errors } => {
                 for error in candidate_errors.values() {
-                    error.details.collect_raw_response_entries(entries);
+                    error.details.collect_raw_response(entries);
                 }
             }
             ErrorDetails::AllModelProvidersFailed { provider_errors } => {
                 for error in provider_errors.values() {
-                    error.details.collect_raw_response_entries(entries);
+                    error.details.collect_raw_response(entries);
                 }
             }
             ErrorDetails::InferenceClient {
@@ -1199,13 +1229,16 @@ impl ErrorDetails {
                     data: data.clone(),
                 });
             }
+            ErrorDetails::Relay { raw_response, .. } => {
+                entries.extend(raw_response.clone());
+            }
             _ => {}
         }
     }
 
     /// Extracts the raw response string from a mid-stream error.
     ///
-    /// Unlike `collect_raw_response_entries` which produces structured `RawResponseEntry` values,
+    /// Unlike `collect_raw_response` which produces structured `RawResponseEntry` values,
     /// this returns just the raw response string for use as `raw_chunk` in streaming error events.
     fn extract_raw_chunk(&self) -> Option<String> {
         match self {
@@ -1221,6 +1254,11 @@ impl ErrorDetails {
                 raw_response: Some(data),
                 ..
             } => Some(data.clone()),
+            ErrorDetails::Relay { raw_chunk, .. } => raw_chunk.clone(),
+            ErrorDetails::StreamError {
+                raw_event: Some(raw_event),
+                ..
+            } => Some(raw_event.clone()),
             _ => None,
         }
     }
@@ -1316,7 +1354,7 @@ impl std::fmt::Display for ErrorDetails {
                     "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration."
                 )
             }
-            ErrorDetails::Relay { message } => {
+            ErrorDetails::Relay { message, .. } => {
                 write!(f, "Error forwarding request in relay mode: {message}")
             }
             ErrorDetails::UnsupportedContentBlockType {
@@ -1390,6 +1428,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Config { message } => {
                 write!(f, "{message}")
+            }
+            ErrorDetails::CostComputation { message } => {
+                write!(f, "Cost computation error: {message}")
             }
             ErrorDetails::ConfigSnapshotNotFound { snapshot_hash } => {
                 write!(f, "Config snapshot not found for hash: {snapshot_hash}")
@@ -1871,7 +1912,7 @@ impl std::fmt::Display for ErrorDetails {
                     "Missing `max_tokens` for request subject to rate limiting rules."
                 )
             }
-            ErrorDetails::StreamError { source } => {
+            ErrorDetails::StreamError { source, .. } => {
                 write!(f, "Error in streaming response: {source}")
             }
             ErrorDetails::Serialization { message } => write!(f, "{message}"),
@@ -2091,7 +2132,7 @@ mod tests {
             raw_request: None,
             raw_response: Some(r#"{"error":{"message":"invalid"}}"#.to_string()),
         });
-        let entries = error.extract_raw_response_entries();
+        let entries = error.extract_raw_response();
         assert!(
             entries.is_some(),
             "should extract entries from InferenceClient with raw_response"
@@ -2133,7 +2174,7 @@ mod tests {
             }),
         );
         let error = Error::new(ErrorDetails::AllModelProvidersFailed { provider_errors });
-        let entries = error.extract_raw_response_entries();
+        let entries = error.extract_raw_response();
         assert!(
             entries.is_some(),
             "should extract entries even if only some providers have raw_response"
@@ -2180,7 +2221,7 @@ mod tests {
         let error = Error::new(ErrorDetails::AllVariantsFailed {
             errors: variant_errors,
         });
-        let entries = error.extract_raw_response_entries();
+        let entries = error.extract_raw_response();
         assert!(
             entries.is_some(),
             "should extract entries from nested AllVariantsFailed -> AllModelProvidersFailed"
@@ -2198,7 +2239,7 @@ mod tests {
         let error = Error::new(ErrorDetails::Config {
             message: "bad config".to_string(),
         });
-        let entries = error.extract_raw_response_entries();
+        let entries = error.extract_raw_response();
         assert!(entries.is_none(), "non-inference errors should return None");
     }
 
@@ -2212,7 +2253,7 @@ mod tests {
             raw_request: None,
             raw_response: None,
         });
-        let entries = error.extract_raw_response_entries();
+        let entries = error.extract_raw_response();
         assert!(
             entries.is_none(),
             "InferenceClient with raw_response: None should return None"
@@ -2286,7 +2327,7 @@ mod tests {
             raw_request: None,
             raw_response: Some("stream_error_data".to_string()),
         });
-        let entries = error.extract_raw_response_entries();
+        let entries = error.extract_raw_response();
         assert!(
             entries.is_some(),
             "should extract entries from FatalStreamError with raw_response"

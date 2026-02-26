@@ -10,6 +10,7 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write,
 };
 use crate::config::provider_types::ProviderTypesConfig;
+use crate::cost::{CostConfig, ResponseMode, compute_cost, load_unified_cost_config};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
@@ -23,7 +24,8 @@ use crate::providers::azure::AzureProvider;
 use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
-    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, get_estimated_tokens,
+    RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse, RateLimitingConfig,
+    decimal_cost_to_nano_cost, get_estimated_tokens,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -37,6 +39,7 @@ use crate::{
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
+use tensorzero_types::UninitializedUnifiedCostConfig;
 use tokio::time::error::Elapsed;
 use tracing::{Span, instrument};
 use tracing_futures::Instrument;
@@ -82,6 +85,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             provider_name: Arc::from(provider_type.to_string()),
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            cost: None,
         };
         Ok(EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
@@ -198,7 +202,7 @@ impl EmbeddingModelConfig {
                         // Collect raw response entries from failed providers before the cache hit
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                if let Some(entries) = error.extract_raw_response_entries() {
+                                if let Some(entries) = error.extract_raw_response() {
                                     cache_lookup.failed_raw_response.extend(entries);
                                 }
                             }
@@ -211,7 +215,16 @@ impl EmbeddingModelConfig {
                     .await;
 
                 match response {
-                    Ok(response) => {
+                    Ok(mut response) => {
+                        // Compute cost from raw response using the provider's cost config
+                        if let Some(cost_config) = &provider_config.cost {
+                            response.usage.cost = compute_cost(
+                                &response.raw_response,
+                                cost_config,
+                                ResponseMode::NonStreaming,
+                            )
+                            .ok();
+                        }
                         if clients.cache_options.enabled.write() && response.embeddings.len() == 1 {
                             let Some(first_embedding) = response.embeddings.first() else {
                                 return Err(ErrorDetails::InternalError{
@@ -243,7 +256,7 @@ impl EmbeddingModelConfig {
                         // Collect raw response entries from failed providers for fallback reporting
                         if clients.include_raw_response {
                             for error in provider_errors.values() {
-                                if let Some(entries) = error.extract_raw_response_entries() {
+                                if let Some(entries) = error.extract_raw_response() {
                                     embedding_response.failed_raw_response.extend(entries);
                                 }
                             }
@@ -344,6 +357,7 @@ impl RateLimitedRequest for EmbeddingRequest {
     fn estimated_resource_usage(
         &self,
         resources: &[RateLimitResource],
+        rate_limiting_config: &RateLimitingConfig,
     ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let EmbeddingRequest {
             input,
@@ -363,9 +377,16 @@ impl RateLimitedRequest for EmbeddingRequest {
             None
         };
 
+        let nano_cost = if resources.contains(&RateLimitResource::Cost) {
+            Some(rate_limiting_config.default_nano_cost)
+        } else {
+            None
+        };
+
         Ok(EstimatedRateLimitResourceUsage {
             model_inferences,
             tokens,
+            nano_cost,
         })
     }
 }
@@ -400,15 +421,18 @@ pub struct EmbeddingProviderResponse {
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
     fn resource_usage(&self) -> RateLimitResourceUsage {
+        let nano_cost = self.usage.cost.map(decimal_cost_to_nano_cost);
         if let Some(tokens) = self.usage.total_tokens() {
             RateLimitResourceUsage::Exact {
                 model_inferences: 1,
                 tokens: tokens as u64,
+                nano_cost,
             }
         } else {
             RateLimitResourceUsage::UnderEstimate {
                 model_inferences: 1,
                 tokens: 0,
+                nano_cost,
             }
         }
     }
@@ -447,6 +471,8 @@ impl EmbeddingModelResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
+
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
@@ -465,10 +491,7 @@ impl EmbeddingModelResponse {
     /// So we need this function to compute the actual usage in order to send it in the HTTP response.
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
-            Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
-            }
+            Usage::zero()
         } else {
             self.usage
         }
@@ -487,6 +510,7 @@ pub struct EmbeddingResponseWithMetadata {
     pub embedding_provider_name: Arc<str>,
     pub provider_type: Arc<str>,
     pub embedding_model_name: Arc<str>,
+    pub cached: bool,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub failed_raw_response: Vec<RawResponseEntry>,
 }
@@ -529,6 +553,7 @@ impl EmbeddingResponseWithMetadata {
             embedding_provider_name: embedding_response.embedding_provider_name,
             provider_type: embedding_response.provider_type,
             embedding_model_name,
+            cached: embedding_response.cached,
             raw_usage: embedding_response.raw_usage,
             failed_raw_response: embedding_response.failed_raw_response,
         }
@@ -562,7 +587,7 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             model_provider_name: response.embedding_provider_name.clone(),
             provider_type: response.provider_type,
             model_name: response.embedding_model_name,
-            cached: false,
+            cached: response.cached,
             finish_reason: None,
             raw_usage: response.raw_usage,
             relay_raw_response: None,
@@ -613,6 +638,9 @@ pub struct EmbeddingProviderInfo {
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
     pub extra_headers: Option<ExtraHeadersConfig>,
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    pub cost: Option<CostConfig>,
 }
 
 #[derive(Clone, Debug)]
@@ -700,6 +728,8 @@ pub struct UninitializedEmbeddingProviderConfig {
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     pub extra_headers: Option<ExtraHeadersConfig>,
+    #[serde(default)]
+    pub cost: Option<UninitializedUnifiedCostConfig>,
 }
 
 impl UninitializedEmbeddingProviderConfig {
@@ -719,6 +749,15 @@ impl UninitializedEmbeddingProviderConfig {
 
         let extra_body = self.extra_body;
         let extra_headers = self.extra_headers;
+        let cost = self
+            .cost
+            .map(load_unified_cost_config)
+            .transpose()
+            .map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("cost: {e}"),
+                })
+            })?;
 
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {
@@ -727,6 +766,7 @@ impl UninitializedEmbeddingProviderConfig {
                 provider_name,
                 extra_body,
                 extra_headers,
+                cost,
             },
             ProviderConfig::Azure(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Azure(provider),
@@ -734,6 +774,7 @@ impl UninitializedEmbeddingProviderConfig {
                 provider_name,
                 extra_body,
                 extra_headers,
+                cost,
             },
             ProviderConfig::OpenRouter(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::OpenRouter(provider),
@@ -741,6 +782,7 @@ impl UninitializedEmbeddingProviderConfig {
                 provider_name,
                 extra_body,
                 extra_headers,
+                cost,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => EmbeddingProviderInfo {
@@ -749,6 +791,7 @@ impl UninitializedEmbeddingProviderConfig {
                 provider_name,
                 extra_body,
                 extra_headers,
+                cost,
             },
             _ => {
                 return Err(Error::new(ErrorDetails::Config {
@@ -865,6 +908,7 @@ mod tests {
             provider_name: Arc::from("error".to_string()),
             extra_body: None,
             extra_headers: None,
+            cost: None,
         };
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -876,6 +920,7 @@ mod tests {
             provider_name: Arc::from("good".to_string()),
             extra_body: None,
             extra_headers: None,
+            cost: None,
         };
         let fallback_embedding_model = EmbeddingModelConfig {
             routing: vec!["error".to_string().into(), "good".to_string().into()],
@@ -955,6 +1000,7 @@ mod tests {
             timeout_ms: None,
             extra_body: Some(extra_body_config.clone()),
             extra_headers: None,
+            cost: None,
         };
 
         let provider_info = uninitialized_config
@@ -1001,6 +1047,7 @@ mod tests {
             timeout_ms: None,
             extra_body: None,
             extra_headers: Some(extra_headers_config.clone()),
+            cost: None,
         };
 
         let provider_info = uninitialized_config

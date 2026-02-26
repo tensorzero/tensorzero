@@ -92,6 +92,17 @@ curl --proto '=https' --tlsv1.2 -sSf --retry 3 --retry-delay 5 --retry-all-error
 curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://astral.sh/uv/0.9.27/install.sh | sh
 source $HOME/.local/bin/env
 curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
+# Install s5cmd for authenticated fixture downloads from R2
+ARCH=$(uname -m)
+if [ "$ARCH" = "x86_64" ]; then
+    S5CMD_ARCH="64bit"
+elif [ "$ARCH" = "aarch64" ]; then
+    S5CMD_ARCH="arm64"
+else
+    echo "Unsupported architecture: $ARCH" && exit 1
+fi
+curl -fsSL --retry 3 --retry-delay 5 --retry-all-errors "https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-${S5CMD_ARCH}.tar.gz" \
+    | tar xz -C /usr/local/bin s5cmd
 uv run ./ui/fixtures/download-large-fixtures.py
 uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh

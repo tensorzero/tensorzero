@@ -77,6 +77,7 @@ This is the inference request you'd make if you had called the model provider di
 | `model_provider_name` |                                           String                                            | Name of the model provider used for the inference          |
 | `input_tokens`        |                                      Nullable(UInt32)                                       |                                                            |
 | `output_tokens`       |                                      Nullable(UInt32)                                       |                                                            |
+| `cost`                |                                     Nullable(Decimal64)                                     | Cost in dollars                                            |
 | `response_time_ms`    |                                      Nullable(UInt32)                                       |                                                            |
 | `ttft_ms`             |                                      Nullable(UInt32)                                       | Only available in streaming inferences                     |
 | `timestamp`           |                                          DateTime                                           | Materialized from `id` (using `UUIDv7ToDateTime` function) |

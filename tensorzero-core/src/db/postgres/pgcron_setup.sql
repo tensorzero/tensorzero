@@ -76,6 +76,15 @@ BEGIN
             $$
         );
 
+        -- Incrementally refresh inference-by-function statistics every 5 minutes, with a 10 minute lookback window
+        PERFORM cron.schedule(
+            'tensorzero_refresh_inference_by_function_statistics_incremental',
+            '*/5 * * * *',
+            $$
+            SELECT tensorzero.refresh_inference_by_function_statistics_incremental(INTERVAL '10 minutes');
+            $$
+        );
+
         -- Ensure legacy materialized view refresh job is removed after migration to incremental histogram refresh.
         PERFORM cron.unschedule(jobid)
         FROM cron.job

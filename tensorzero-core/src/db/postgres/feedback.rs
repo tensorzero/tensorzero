@@ -81,11 +81,12 @@ fn build_feedback_by_variant_query(
         JOIN (",
         );
 
-        push_inference_subquery(&mut qb, function_name, namespace);
+        // No variant filtering in the subquery: it's applied after the join below
+        push_target_subquery(&mut qb, function_name, namespace, &[]);
 
         qb.push(
             r"
-        ) i ON f.target_id = i.id
+        ) i ON f.target_id = i.target_id
         WHERE 1=1",
         );
 
@@ -109,107 +110,116 @@ fn build_feedback_by_variant_query(
         qb.push_bind(limit as i64);
         qb.push(" GROUP BY variant_name");
     } else {
-        // No sample limit: build inferences CTE, then aggregate directly
+        // No sample limit: build targets CTE, then aggregate directly.
         qb.push(
             r"
     ),
-    inferences AS (",
+    targets AS (",
         );
 
-        push_inference_subquery(&mut qb, function_name, namespace);
+        push_target_subquery(&mut qb, function_name, namespace, variant_names);
 
         qb.push(
             r"
     )
     SELECT
-        i.variant_name,
+        t.variant_name,
         AVG(f.value)::REAL as mean,
         VAR_SAMP(f.value)::REAL as variance,
         COUNT(*)::BIGINT as count
     FROM feedback f
-    JOIN inferences i ON f.target_id = i.id
-    WHERE 1=1",
+    JOIN targets t ON f.target_id = t.target_id
+    GROUP BY t.variant_name",
         );
-
-        if !variant_names.is_empty() {
-            qb.push(" AND i.variant_name = ANY(");
-            qb.push_bind(variant_names);
-            qb.push(")");
-        }
-
-        qb.push(" GROUP BY i.variant_name");
     }
-
     qb
 }
 
-/// Pushes the inference subquery SQL (chat + json inferences, plus episode-level if namespace
-/// is set) into the QueryBuilder. Used both as a CTE body and as an inline subquery.
-fn push_inference_subquery(
+/// Pushes a target subquery that unions inference-level and episode-level targets.
+///
+/// Outputs `(target_id, variant_name)` rows from:
+/// 1. `chat_inferences` (id AS target_id)
+/// 2. `json_inferences` (id AS target_id)
+/// 3. Episode-level: groups inferences by episode_id, only keeping episodes with a single
+///    variant (matching ClickHouse's FeedbackByVariantStatistics materialized view).
+///    Filtered by `episode_id IN (SELECT target_id FROM feedback)` to avoid scanning all episodes.
+///
+/// When `namespace` is set, all queries are filtered by the namespace tag.
+/// When `variant_names` is non-empty, variant filtering is pushed into the subquery.
+fn push_target_subquery(
     qb: &mut QueryBuilder<sqlx::Postgres>,
     function_name: &str,
     namespace: Option<&str>,
+    variant_names: &[String],
 ) {
+    // Inference-level: chat
     qb.push(
         r"
-        SELECT id, variant_name
+        SELECT id AS target_id, variant_name
         FROM tensorzero.chat_inferences
         WHERE function_name = ",
     );
     qb.push_bind(function_name);
+    push_optional_namespace_filter(qb, namespace);
+    push_optional_variant_filter(qb, variant_names);
 
+    // Inference-level: json
+    qb.push(
+        r"
+        UNION ALL
+        SELECT id AS target_id, variant_name
+        FROM tensorzero.json_inferences
+        WHERE function_name = ",
+    );
+    qb.push_bind(function_name);
+    push_optional_namespace_filter(qb, namespace);
+    push_optional_variant_filter(qb, variant_names);
+
+    // Episode-level: group by episode, keep only single-variant episodes
+    qb.push(
+        r"
+        UNION ALL
+        SELECT episode_id AS target_id, MIN(variant_name) AS variant_name
+        FROM (
+            SELECT episode_id, variant_name
+            FROM tensorzero.chat_inferences WHERE function_name = ",
+    );
+    qb.push_bind(function_name);
+    push_optional_namespace_filter(qb, namespace);
+    qb.push(
+        r" AND episode_id IN (SELECT target_id FROM feedback)
+            UNION ALL
+            SELECT episode_id, variant_name
+            FROM tensorzero.json_inferences WHERE function_name = ",
+    );
+    qb.push_bind(function_name);
+    push_optional_namespace_filter(qb, namespace);
+    qb.push(
+        r" AND episode_id IN (SELECT target_id FROM feedback)
+        ) episode_inferences
+        GROUP BY episode_id
+        HAVING COUNT(DISTINCT variant_name) = 1",
+    );
+    if !variant_names.is_empty() {
+        qb.push(" AND MIN(variant_name) = ANY(");
+        qb.push_bind(variant_names);
+        qb.push(")");
+    }
+}
+
+fn push_optional_namespace_filter(qb: &mut QueryBuilder<sqlx::Postgres>, namespace: Option<&str>) {
     if let Some(ns) = namespace {
         qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
         qb.push_bind(ns);
         qb.push(")");
     }
+}
 
-    qb.push(
-        r"
-        UNION ALL
-        SELECT id, variant_name
-        FROM tensorzero.json_inferences
-        WHERE function_name = ",
-    );
-    qb.push_bind(function_name);
-
-    if let Some(ns) = namespace {
-        qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
-        qb.push_bind(ns);
+fn push_optional_variant_filter(qb: &mut QueryBuilder<sqlx::Postgres>, variant_names: &[String]) {
+    if !variant_names.is_empty() {
+        qb.push(" AND variant_name = ANY(");
+        qb.push_bind(variant_names);
         qb.push(")");
-
-        // Episode-level: only include episodes where all inferences belong to a single variant,
-        // matching ClickHouse's `WHERE length(unique_variants) = 1` in the materialized view.
-        qb.push(
-            r"
-        UNION ALL
-        SELECT episode_id AS id, MIN(variant_name) AS variant_name
-        FROM (
-            SELECT episode_id, variant_name
-            FROM tensorzero.chat_inferences
-            WHERE function_name = ",
-        );
-        qb.push_bind(function_name);
-        qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
-        qb.push_bind(ns);
-        qb.push(")");
-        qb.push(
-            r" AND episode_id IS NOT NULL
-            UNION ALL
-            SELECT episode_id, variant_name
-            FROM tensorzero.json_inferences
-            WHERE function_name = ",
-        );
-        qb.push_bind(function_name);
-        qb.push(r" AND tags @> jsonb_build_object('tensorzero::namespace', ");
-        qb.push_bind(ns);
-        qb.push(")");
-        qb.push(
-            r" AND episode_id IS NOT NULL
-        ) episode_inferences
-        GROUP BY episode_id
-        HAVING COUNT(DISTINCT variant_name) = 1",
-        );
     }
 }
 
@@ -226,15 +236,8 @@ fn build_cumulative_feedback_timeseries_query(
     interval_str: &str,
     max_periods: i32,
 ) -> QueryBuilder<sqlx::Postgres> {
-    let mut qb = QueryBuilder::new("WITH feedback_with_variant AS (SELECT date_trunc('");
-    qb.push(interval_str);
-    qb.push("', f.created_at) + INTERVAL '1 ");
-    qb.push(interval_str);
-    qb.push(
-        r"' AS period_end,
-            i.variant_name,
-            f.value
-        FROM (
+    let mut qb = QueryBuilder::new(
+        r"WITH feedback AS (
             SELECT target_id, value::INT::DOUBLE PRECISION as value, created_at
             FROM tensorzero.boolean_metric_feedback WHERE metric_name = ",
     );
@@ -248,27 +251,25 @@ fn build_cumulative_feedback_timeseries_query(
     qb.push_bind(metric_name);
     qb.push(
         r"
-        ) f
-        JOIN (
-            SELECT id, variant_name FROM tensorzero.chat_inferences WHERE function_name = ",
+        ),
+        feedback_with_variant AS (SELECT date_trunc('",
     );
-    qb.push_bind(function_name);
+    qb.push(interval_str);
+    qb.push("', f.created_at) + INTERVAL '1 ");
+    qb.push(interval_str);
     qb.push(
-        r"
-            UNION ALL
-            SELECT id, variant_name FROM tensorzero.json_inferences WHERE function_name = ",
+        r"' AS period_end,
+            i.variant_name,
+            f.value
+        FROM feedback f
+        JOIN (",
     );
-    qb.push_bind(function_name);
-    qb.push(") i ON f.target_id = i.id WHERE 1=1");
 
-    if !variant_names.is_empty() {
-        qb.push(" AND i.variant_name = ANY(");
-        qb.push_bind(variant_names);
-        qb.push(")");
-    }
+    push_target_subquery(&mut qb, function_name, None, variant_names);
 
     qb.push(
         r"
+        ) i ON f.target_id = i.target_id
     ),
     period_stats AS (
         SELECT
@@ -1567,23 +1568,34 @@ mod tests {
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
-            inferences AS (
-                SELECT id, variant_name
+            targets AS (
+                SELECT id AS target_id, variant_name
                 FROM tensorzero.chat_inferences
                 WHERE function_name = $3
                 UNION ALL
-                SELECT id, variant_name
+                SELECT id AS target_id, variant_name
                 FROM tensorzero.json_inferences
                 WHERE function_name = $4
+                UNION ALL
+                SELECT episode_id AS target_id, MIN(variant_name) AS variant_name
+                FROM (
+                    SELECT episode_id, variant_name
+                    FROM tensorzero.chat_inferences WHERE function_name = $5 AND episode_id IN (SELECT target_id FROM feedback)
+                    UNION ALL
+                    SELECT episode_id, variant_name
+                    FROM tensorzero.json_inferences WHERE function_name = $6 AND episode_id IN (SELECT target_id FROM feedback)
+                ) episode_inferences
+                GROUP BY episode_id
+                HAVING COUNT(DISTINCT variant_name) = 1
             )
             SELECT
-                i.variant_name,
+                t.variant_name,
                 AVG(f.value)::REAL as mean,
                 VAR_SAMP(f.value)::REAL as variance,
                 COUNT(*)::BIGINT as count
             FROM feedback f
-            JOIN inferences i ON f.target_id = i.id
-            WHERE 1=1 GROUP BY i.variant_name
+            JOIN targets t ON f.target_id = t.target_id
+            GROUP BY t.variant_name
             ",
         );
     }
@@ -1608,23 +1620,34 @@ mod tests {
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
-            inferences AS (
-                SELECT id, variant_name
+            targets AS (
+                SELECT id AS target_id, variant_name
                 FROM tensorzero.chat_inferences
-                WHERE function_name = $3
+                WHERE function_name = $3 AND variant_name = ANY($4)
                 UNION ALL
-                SELECT id, variant_name
+                SELECT id AS target_id, variant_name
                 FROM tensorzero.json_inferences
-                WHERE function_name = $4
+                WHERE function_name = $5 AND variant_name = ANY($6)
+                UNION ALL
+                SELECT episode_id AS target_id, MIN(variant_name) AS variant_name
+                FROM (
+                    SELECT episode_id, variant_name
+                    FROM tensorzero.chat_inferences WHERE function_name = $7 AND episode_id IN (SELECT target_id FROM feedback)
+                    UNION ALL
+                    SELECT episode_id, variant_name
+                    FROM tensorzero.json_inferences WHERE function_name = $8 AND episode_id IN (SELECT target_id FROM feedback)
+                ) episode_inferences
+                GROUP BY episode_id
+                HAVING COUNT(DISTINCT variant_name) = 1 AND MIN(variant_name) = ANY($9)
             )
             SELECT
-                i.variant_name,
+                t.variant_name,
                 AVG(f.value)::REAL as mean,
                 VAR_SAMP(f.value)::REAL as variance,
                 COUNT(*)::BIGINT as count
             FROM feedback f
-            JOIN inferences i ON f.target_id = i.id
-            WHERE 1=1 AND i.variant_name = ANY($5) GROUP BY i.variant_name
+            JOIN targets t ON f.target_id = t.target_id
+            GROUP BY t.variant_name
             ",
         );
     }
@@ -1653,36 +1676,34 @@ mod tests {
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
-            inferences AS (
-                SELECT id, variant_name
+            targets AS (
+                SELECT id AS target_id, variant_name
                 FROM tensorzero.chat_inferences
                 WHERE function_name = $3 AND tags @> jsonb_build_object('tensorzero::namespace', $4)
                 UNION ALL
-                SELECT id, variant_name
+                SELECT id AS target_id, variant_name
                 FROM tensorzero.json_inferences
                 WHERE function_name = $5 AND tags @> jsonb_build_object('tensorzero::namespace', $6)
                 UNION ALL
-                SELECT episode_id AS id, MIN(variant_name) AS variant_name
+                SELECT episode_id AS target_id, MIN(variant_name) AS variant_name
                 FROM (
                     SELECT episode_id, variant_name
-                    FROM tensorzero.chat_inferences
-                    WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IS NOT NULL
+                    FROM tensorzero.chat_inferences WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IN (SELECT target_id FROM feedback)
                     UNION ALL
                     SELECT episode_id, variant_name
-                    FROM tensorzero.json_inferences
-                    WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IS NOT NULL
+                    FROM tensorzero.json_inferences WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IN (SELECT target_id FROM feedback)
                 ) episode_inferences
                 GROUP BY episode_id
                 HAVING COUNT(DISTINCT variant_name) = 1
             )
             SELECT
-                i.variant_name,
+                t.variant_name,
                 AVG(f.value)::REAL as mean,
                 VAR_SAMP(f.value)::REAL as variance,
                 COUNT(*)::BIGINT as count
             FROM feedback f
-            JOIN inferences i ON f.target_id = i.id
-            WHERE 1=1 GROUP BY i.variant_name
+            JOIN targets t ON f.target_id = t.target_id
+            GROUP BY t.variant_name
             ",
         );
     }
@@ -1712,36 +1733,34 @@ mod tests {
                 FROM tensorzero.float_metric_feedback
                 WHERE metric_name = $2
             ),
-            inferences AS (
-                SELECT id, variant_name
+            targets AS (
+                SELECT id AS target_id, variant_name
                 FROM tensorzero.chat_inferences
-                WHERE function_name = $3 AND tags @> jsonb_build_object('tensorzero::namespace', $4)
+                WHERE function_name = $3 AND tags @> jsonb_build_object('tensorzero::namespace', $4) AND variant_name = ANY($5)
                 UNION ALL
-                SELECT id, variant_name
+                SELECT id AS target_id, variant_name
                 FROM tensorzero.json_inferences
-                WHERE function_name = $5 AND tags @> jsonb_build_object('tensorzero::namespace', $6)
+                WHERE function_name = $6 AND tags @> jsonb_build_object('tensorzero::namespace', $7) AND variant_name = ANY($8)
                 UNION ALL
-                SELECT episode_id AS id, MIN(variant_name) AS variant_name
+                SELECT episode_id AS target_id, MIN(variant_name) AS variant_name
                 FROM (
                     SELECT episode_id, variant_name
-                    FROM tensorzero.chat_inferences
-                    WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IS NOT NULL
+                    FROM tensorzero.chat_inferences WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IN (SELECT target_id FROM feedback)
                     UNION ALL
                     SELECT episode_id, variant_name
-                    FROM tensorzero.json_inferences
-                    WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IS NOT NULL
+                    FROM tensorzero.json_inferences WHERE function_name = $11 AND tags @> jsonb_build_object('tensorzero::namespace', $12) AND episode_id IN (SELECT target_id FROM feedback)
                 ) episode_inferences
                 GROUP BY episode_id
-                HAVING COUNT(DISTINCT variant_name) = 1
+                HAVING COUNT(DISTINCT variant_name) = 1 AND MIN(variant_name) = ANY($13)
             )
             SELECT
-                i.variant_name,
+                t.variant_name,
                 AVG(f.value)::REAL as mean,
                 VAR_SAMP(f.value)::REAL as variance,
                 COUNT(*)::BIGINT as count
             FROM feedback f
-            JOIN inferences i ON f.target_id = i.id
-            WHERE 1=1 AND i.variant_name = ANY($11) GROUP BY i.variant_name
+            JOIN targets t ON f.target_id = t.target_id
+            GROUP BY t.variant_name
             ",
         );
     }
@@ -1771,14 +1790,27 @@ mod tests {
                     ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.id DESC) as rn
                 FROM feedback f
                 JOIN (
-                    SELECT id, variant_name
+                    SELECT id AS target_id, variant_name
                     FROM tensorzero.chat_inferences
                     WHERE function_name = $3
                     UNION ALL
-                    SELECT id, variant_name
+                    SELECT id AS target_id, variant_name
                     FROM tensorzero.json_inferences
                     WHERE function_name = $4
-                ) i ON f.target_id = i.id
+                    UNION ALL
+                    SELECT episode_id AS target_id, MIN(variant_name) AS variant_name
+                    FROM (
+                        SELECT episode_id, variant_name
+                        FROM tensorzero.chat_inferences
+                        WHERE function_name = $5 AND episode_id IN (SELECT target_id FROM feedback)
+                        UNION ALL
+                        SELECT episode_id, variant_name
+                        FROM tensorzero.json_inferences
+                        WHERE function_name = $6 AND episode_id IN (SELECT target_id FROM feedback)
+                    ) episode_inferences
+                    GROUP BY episode_id
+                    HAVING COUNT(DISTINCT variant_name) = 1
+                ) i ON f.target_id = i.target_id
                 WHERE 1=1
             )
             SELECT
@@ -1787,7 +1819,7 @@ mod tests {
                 VAR_SAMP(value)::REAL as variance,
                 COUNT(*)::BIGINT as count
             FROM numbered
-            WHERE rn <= $5 GROUP BY variant_name
+            WHERE rn <= $7 GROUP BY variant_name
             ",
         );
     }
@@ -1824,27 +1856,27 @@ mod tests {
                     ROW_NUMBER() OVER (PARTITION BY i.variant_name ORDER BY f.id DESC) as rn
                 FROM feedback f
                 JOIN (
-                    SELECT id, variant_name
+                    SELECT id AS target_id, variant_name
                     FROM tensorzero.chat_inferences
                     WHERE function_name = $3 AND tags @> jsonb_build_object('tensorzero::namespace', $4)
                     UNION ALL
-                    SELECT id, variant_name
+                    SELECT id AS target_id, variant_name
                     FROM tensorzero.json_inferences
                     WHERE function_name = $5 AND tags @> jsonb_build_object('tensorzero::namespace', $6)
                     UNION ALL
-                    SELECT episode_id AS id, MIN(variant_name) AS variant_name
+                    SELECT episode_id AS target_id, MIN(variant_name) AS variant_name
                     FROM (
                         SELECT episode_id, variant_name
                         FROM tensorzero.chat_inferences
-                        WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IS NOT NULL
+                        WHERE function_name = $7 AND tags @> jsonb_build_object('tensorzero::namespace', $8) AND episode_id IN (SELECT target_id FROM feedback)
                         UNION ALL
                         SELECT episode_id, variant_name
                         FROM tensorzero.json_inferences
-                        WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IS NOT NULL
+                        WHERE function_name = $9 AND tags @> jsonb_build_object('tensorzero::namespace', $10) AND episode_id IN (SELECT target_id FROM feedback)
                     ) episode_inferences
                     GROUP BY episode_id
                     HAVING COUNT(DISTINCT variant_name) = 1
-                ) i ON f.target_id = i.id
+                ) i ON f.target_id = i.target_id
                 WHERE 1=1 AND i.variant_name = ANY($11)
             )
             SELECT
@@ -1991,20 +2023,33 @@ mod tests {
         assert_query_equals(
             sql,
             r"
-            WITH feedback_with_variant AS (SELECT date_trunc('day', f.created_at) + INTERVAL '1 day' AS period_end,
-                i.variant_name,
-                f.value
-            FROM (
+            WITH feedback AS (
                 SELECT target_id, value::INT::DOUBLE PRECISION as value, created_at
                 FROM tensorzero.boolean_metric_feedback WHERE metric_name = $1
                 UNION ALL
                 SELECT target_id, value, created_at
                 FROM tensorzero.float_metric_feedback WHERE metric_name = $2
-            ) f
+            ),
+            feedback_with_variant AS (SELECT date_trunc('day', f.created_at) + INTERVAL '1 day' AS period_end,
+                i.variant_name,
+                f.value
+            FROM feedback f
             JOIN (
-                SELECT id, variant_name FROM tensorzero.chat_inferences WHERE function_name = $3
+                SELECT id AS target_id, variant_name FROM tensorzero.chat_inferences WHERE function_name = $3
                 UNION ALL
-                SELECT id, variant_name FROM tensorzero.json_inferences WHERE function_name = $4) i ON f.target_id = i.id WHERE 1=1
+                SELECT id AS target_id, variant_name FROM tensorzero.json_inferences WHERE function_name = $4
+                UNION ALL
+                SELECT episode_id AS target_id, MIN(variant_name) AS variant_name
+                FROM (
+                    SELECT episode_id, variant_name
+                    FROM tensorzero.chat_inferences WHERE function_name = $5 AND episode_id IN (SELECT target_id FROM feedback)
+                    UNION ALL
+                    SELECT episode_id, variant_name
+                    FROM tensorzero.json_inferences WHERE function_name = $6 AND episode_id IN (SELECT target_id FROM feedback)
+                ) episode_inferences
+                GROUP BY episode_id
+                HAVING COUNT(DISTINCT variant_name) = 1
+            ) i ON f.target_id = i.target_id
             ),
             period_stats AS (
                 SELECT
@@ -2036,8 +2081,7 @@ mod tests {
                 CASE WHEN count > 1 THEN ((sum_sq - sum_val * sum_val / count) / (count - 1))::REAL END as variance,
                 count::BIGINT
             FROM cumulative_stats
-            WHERE period_end >= (SELECT max_end FROM max_period) - ($5 || ' day')::INTERVAL ORDER BY period_end, variant_name
-            ",
+            WHERE period_end >= (SELECT max_end FROM max_period) - ($7 || ' day')::INTERVAL ORDER BY period_end, variant_name",
         );
     }
 
@@ -2057,20 +2101,33 @@ mod tests {
         assert_query_equals(
             sql,
             r"
-            WITH feedback_with_variant AS (SELECT date_trunc('hour', f.created_at) + INTERVAL '1 hour' AS period_end,
-                i.variant_name,
-                f.value
-            FROM (
+            WITH feedback AS (
                 SELECT target_id, value::INT::DOUBLE PRECISION as value, created_at
                 FROM tensorzero.boolean_metric_feedback WHERE metric_name = $1
                 UNION ALL
                 SELECT target_id, value, created_at
                 FROM tensorzero.float_metric_feedback WHERE metric_name = $2
-            ) f
+            ),
+            feedback_with_variant AS (SELECT date_trunc('hour', f.created_at) + INTERVAL '1 hour' AS period_end,
+                i.variant_name,
+                f.value
+            FROM feedback f
             JOIN (
-                SELECT id, variant_name FROM tensorzero.chat_inferences WHERE function_name = $3
+                SELECT id AS target_id, variant_name FROM tensorzero.chat_inferences WHERE function_name = $3 AND variant_name = ANY($4)
                 UNION ALL
-                SELECT id, variant_name FROM tensorzero.json_inferences WHERE function_name = $4) i ON f.target_id = i.id WHERE 1=1 AND i.variant_name = ANY($5)
+                SELECT id AS target_id, variant_name FROM tensorzero.json_inferences WHERE function_name = $5 AND variant_name = ANY($6)
+                UNION ALL
+                SELECT episode_id AS target_id, MIN(variant_name) AS variant_name
+                FROM (
+                    SELECT episode_id, variant_name
+                    FROM tensorzero.chat_inferences WHERE function_name = $7 AND episode_id IN (SELECT target_id FROM feedback)
+                    UNION ALL
+                    SELECT episode_id, variant_name
+                    FROM tensorzero.json_inferences WHERE function_name = $8 AND episode_id IN (SELECT target_id FROM feedback)
+                ) episode_inferences
+                GROUP BY episode_id
+                HAVING COUNT(DISTINCT variant_name) = 1 AND MIN(variant_name) = ANY($9)
+            ) i ON f.target_id = i.target_id
             ),
             period_stats AS (
                 SELECT
@@ -2102,7 +2159,7 @@ mod tests {
                 CASE WHEN count > 1 THEN ((sum_sq - sum_val * sum_val / count) / (count - 1))::REAL END as variance,
                 count::BIGINT
             FROM cumulative_stats
-            WHERE period_end >= (SELECT max_end FROM max_period) - ($6 || ' hour')::INTERVAL ORDER BY period_end, variant_name
+            WHERE period_end >= (SELECT max_end FROM max_period) - ($10 || ' hour')::INTERVAL ORDER BY period_end, variant_name
             ",
         );
     }

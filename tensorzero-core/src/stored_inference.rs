@@ -264,6 +264,7 @@ impl StoredChatInference {
             inference_params: self.inference_params,
             processing_time_ms: self.processing_time_ms,
             ttft_ms: self.ttft_ms,
+            snapshot_hash: self.snapshot_hash,
         })
     }
 }
@@ -336,6 +337,9 @@ pub struct StoredChatInference {
     pub processing_time_ms: Option<u64>,
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub ttft_ms: Option<u64>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<String>,
 }
 
 impl std::fmt::Display for StoredChatInference {
@@ -363,6 +367,7 @@ impl StoredChatInferenceDatabase {
             inference_params: self.inference_params,
             processing_time_ms: self.processing_time_ms,
             ttft_ms: self.ttft_ms,
+            snapshot_hash: self.snapshot_hash,
         }
     }
 }
@@ -391,6 +396,8 @@ pub struct StoredChatInferenceDatabase {
     pub inference_params: Option<InferenceParams>,
     pub processing_time_ms: Option<u64>,
     pub ttft_ms: Option<u64>,
+    #[serde(default)]
+    pub snapshot_hash: Option<String>,
 }
 
 impl std::fmt::Display for StoredChatInferenceDatabase {
@@ -436,6 +443,9 @@ pub struct StoredJsonInference {
     pub processing_time_ms: Option<u64>,
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub ttft_ms: Option<u64>,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<String>,
 }
 
 impl std::fmt::Display for StoredJsonInference {
@@ -955,6 +965,7 @@ mod tests {
             inference_params: Some(InferenceParams::default()),
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         }
     }
 
@@ -995,6 +1006,7 @@ mod tests {
             inference_params: Some(InferenceParams::default()),
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         }
     }
 
@@ -1558,6 +1570,7 @@ mod tests {
             inference_params: None,
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         };
         let chat_db = StoredInferenceDatabase::Chat(chat_inference);
         assert!(
@@ -1584,6 +1597,7 @@ mod tests {
             inference_params: None,
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         };
         let json_db = StoredInferenceDatabase::Json(json_inference);
         assert!(
@@ -1833,6 +1847,7 @@ mod tests {
             inference_params: None,
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         });
 
         let info = chat_db.owned_simple_info();
@@ -1863,6 +1878,7 @@ mod tests {
             inference_params: None,
             processing_time_ms: None,
             ttft_ms: None,
+            snapshot_hash: None,
         });
 
         let info = json_db.owned_simple_info();

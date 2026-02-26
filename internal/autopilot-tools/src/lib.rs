@@ -70,6 +70,35 @@ pub async fn collect_tool_names() -> Result<HashSet<String>, String> {
     Ok(collector.into_names())
 }
 
+/// Returns the default set of tool names that are safe for automatic approval.
+///
+/// This includes all production tools except destructive ones
+/// (`delete_datapoints` and `update_datapoints`).
+pub fn default_whitelisted_tool_names() -> HashSet<String> {
+    [
+        "inference",
+        "feedback",
+        "create_datapoints",
+        "create_datapoints_from_inferences",
+        "list_datasets",
+        "list_datapoints",
+        "get_datapoints",
+        "launch_optimization_workflow",
+        "get_latest_feedback_by_metric",
+        "get_feedback_by_variant",
+        "run_evaluation",
+        "get_config",
+        "write_config",
+        "list_inferences",
+        "get_inferences",
+        "upload_dataset",
+        "list_episodes",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect()
+}
+
 /// Iterate over all tools with a visitor.
 ///
 /// This is the single source of truth for all tools. Both local execution

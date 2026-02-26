@@ -91,7 +91,7 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let thinking_block_providers = vec![
+    let reasoning_providers = vec![
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "fireworks-kimi-k2p5-reasoning".to_string(),
@@ -103,6 +103,13 @@ async fn get_providers() -> E2ETestProviders {
             supports_batch_inference: false,
             variant_name: "fireworks-kimi-k2p5".to_string(),
             model_name: "kimi-k2p5-fireworks".into(),
+            model_provider_name: "fireworks".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "fireworks-kimi".to_string(),
+            model_name: "fireworks-kimi".into(),
             model_provider_name: "fireworks".into(),
             credentials: HashMap::new(),
         },
@@ -137,8 +144,8 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: thinking_block_providers.clone(),
-        reasoning_usage_inference: thinking_block_providers.clone(),
+        reasoning_inference: reasoning_providers.clone(),
+        reasoning_usage_inference: reasoning_providers.clone(),
         cache_input_tokens_inference: providers.clone(),
         embeddings: vec![],
         inference_params_inference: providers.clone(),

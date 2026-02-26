@@ -688,7 +688,8 @@ If the following `stream_options` is provided...
   "usage": {
     "prompt_tokens": 123,
     "completion_tokens": 456,
-    "total_tokens": 579
+    "total_tokens": 579,
+    "tensorzero_cost": 0.0003
   }
   ...
 ```
@@ -891,6 +892,7 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
+- **`tensorzero_cost`**: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 #### `tensorzero_raw_response`
 
@@ -980,6 +982,7 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
+- **`tensorzero_cost`**: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 #### `tensorzero_raw_response`
 
@@ -1127,7 +1130,8 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1156,7 +1160,8 @@ Each JSON message has the following fields:
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1322,7 +1327,8 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1361,7 +1367,8 @@ Each JSON message has the following fields:
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1499,7 +1506,8 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1528,7 +1536,8 @@ Each JSON message has the following fields:
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
