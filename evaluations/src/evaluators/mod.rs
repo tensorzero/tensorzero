@@ -30,7 +30,10 @@ pub struct EvaluateInferenceParams {
     pub inference_response: Arc<InferenceResponse>,
     pub datapoint: Arc<Datapoint>,
     pub input: Arc<Input>,
+    /// Config for the evaluation.
+    // TODO(#6676): support running evaluations with a list of evaluators instead of a named evaluation.
     pub evaluation_config: Arc<EvaluationConfig>,
+    /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
     pub evaluation_name: Option<Arc<String>>,
     pub clients: Arc<Clients>,
     pub evaluation_run_id: Uuid,
@@ -111,7 +114,7 @@ pub(crate) async fn evaluate_inference(
                     inference_response: &inference_response,
                     clients: &clients,
                     datapoint: &datapoint,
-                    evaluation_name: evaluation_name.as_ref().map(|s| s.as_str()),
+                    evaluation_name: evaluation_name.as_deref().map(String::as_str),
                     evaluation_run_id,
                     input: &input,
                     inference_cache,
@@ -136,20 +139,18 @@ pub(crate) async fn evaluate_inference(
                                 .map(|(k, v)| (k.clone(), v.clone()))
                                 .collect();
                             tags.extend(result.tags());
-                            tags.extend([
-                                (
-                                    "tensorzero::evaluation_run_id".to_string(),
-                                    evaluation_run_id.to_string(),
-                                ),
-                                (
-                                    "tensorzero::datapoint_id".to_string(),
-                                    datapoint.id().to_string(),
-                                ),
-                                (
-                                    "tensorzero::evaluator_name".to_string(),
-                                    evaluator_name.to_string(),
-                                ),
-                            ]);
+                            tags.extend([(
+                                "tensorzero::evaluation_run_id".to_string(),
+                                evaluation_run_id.to_string(),
+                            ),(
+                                "tensorzero::datapoint_id".to_string(),
+                                datapoint.id().to_string(),
+                            ), (
+                                "tensorzero::evaluator_name".to_string(),
+                                evaluator_name.to_string(),
+                            )]);
+                            // TODO(#6676): now that we have human-readable evaluation names, stop writing it
+                            // (it will get out of sync).
                             if let Some(eval_name) = &evaluation_name {
                                 tags.insert(
                                     "tensorzero::evaluation_name".to_string(),
@@ -165,13 +166,14 @@ pub(crate) async fn evaluate_inference(
                             // Only send feedback when send_feedback is true
                             // Dynamic variants have send_feedback=false and skip feedback persistence
                             if send_feedback {
+                                let metric_name = get_evaluator_metric_name(
+                                    evaluation_name.as_deref().map(String::as_str),
+                                    &evaluator_name,
+                                );
                                 match clients
                                     .inference_executor
                                     .feedback(FeedbackParams {
-                                        metric_name: get_evaluator_metric_name(
-                                            evaluation_name.as_ref().map(|s| s.as_str()),
-                                            &evaluator_name,
-                                        ),
+                                        metric_name,
                                         value: value.clone(),
                                         inference_id: Some(inference_response.inference_id()),
                                         dryrun: Some(false),

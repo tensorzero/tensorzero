@@ -109,6 +109,9 @@ pub async fn run_llm_judge_evaluator(
         "tensorzero::evaluation_run_id".to_string(),
         evaluation_run_id.to_string(),
     )]);
+
+    // TODO(#6676): now that we have human-readable evaluation names, stop writing it
+    // (it will get out of sync).
     if let Some(eval_name) = evaluation_name {
         internal_tags.insert(
             "tensorzero::evaluation_name".to_string(),

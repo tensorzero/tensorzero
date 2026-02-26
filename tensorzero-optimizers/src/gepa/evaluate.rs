@@ -190,7 +190,7 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         db: params.db,
         evaluation_config: params.evaluation_config.clone(),
         function_configs,
-        evaluation_name: params.evaluation_name,
+        evaluation_name: Some(params.evaluation_name),
         evaluation_run_id,
         dataset_name: Some(params.dataset_name),
         datapoint_ids: None,

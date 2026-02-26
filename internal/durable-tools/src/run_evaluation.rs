@@ -220,7 +220,7 @@ pub async fn run_evaluation(
     let run_params = RunEvaluationWithAppStateParams {
         evaluation_config: (*evaluation_config).clone(),
         function_config,
-        evaluation_name: params.evaluation_name.clone(),
+        evaluation_name: Some(params.evaluation_name.clone()),
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: params.datapoint_ids.clone(),
         variant: EvaluationVariant::Name(params.variant_name.clone()),

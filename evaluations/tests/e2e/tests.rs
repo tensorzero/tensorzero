@@ -4,6 +4,8 @@
 )]
 
 mod common;
+mod test_top_level_evaluator;
+
 use clap::Parser;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
 use evaluations::stopping::MIN_DATAPOINTS;
@@ -574,7 +576,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
 
         evaluation_config,
         function_configs,
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         dataset_name: None,
         datapoint_ids: Some(vec![Uuid::now_v7()]),
@@ -1819,6 +1821,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1836,6 +1839,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "sad_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1853,6 +1857,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "zero",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1870,6 +1875,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "one",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1914,6 +1920,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2008,6 +2015,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2025,6 +2033,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "sad_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2042,6 +2051,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "zero",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2059,6 +2069,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "one",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2103,6 +2114,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2803,7 +2815,7 @@ async fn test_evaluation_with_dynamic_variant() {
         dataset_name: Some(dataset_name),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
@@ -2871,7 +2883,7 @@ async fn test_max_datapoints_parameter() {
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
@@ -2972,7 +2984,7 @@ async fn test_precision_targets_parameter() {
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 5,

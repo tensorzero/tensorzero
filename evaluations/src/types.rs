@@ -170,6 +170,7 @@ pub struct EvaluationCoreArgs {
     /// Database connection for dataset and evaluation queries
     pub db: Arc<dyn DelegatingDatabaseQueries>,
 
+    // TODO(#6676): support running evaluations with a list of evaluators instead of a named evaluation.
     /// The evaluation configuration (pre-resolved by caller)
     pub evaluation_config: Arc<EvaluationConfig>,
 
@@ -177,8 +178,8 @@ pub struct EvaluationCoreArgs {
     /// Maps function name to its minimal evaluation configuration
     pub function_configs: Arc<EvaluationFunctionConfigTable>,
 
-    /// Name of the evaluation (for tagging/logging purposes)
-    pub evaluation_name: String,
+    /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
+    pub evaluation_name: Option<String>,
 
     /// Unique identifier for this evaluation run
     pub evaluation_run_id: Uuid,
@@ -210,6 +211,7 @@ pub struct EvaluationCoreArgs {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunInfo {
     pub evaluation_run_id: Uuid,
+    pub evaluation_name: String,
     pub num_datapoints: usize,
 }
 
@@ -232,8 +234,8 @@ pub struct RunEvaluationWithAppStateParams {
     /// Function configuration for output schema validation
     pub function_config: tensorzero_core::evaluations::EvaluationFunctionConfig,
 
-    /// Name of the evaluation (for tagging/logging purposes)
-    pub evaluation_name: String,
+    /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
+    pub evaluation_name: Option<String>,
 
     /// Name of the dataset to run on.
     /// Either dataset_name or datapoint_ids must be provided, but not both.
