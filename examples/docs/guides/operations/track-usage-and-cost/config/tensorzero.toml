@@ -1,0 +1,11 @@
+[models.gpt-5]
+routing = ["openai"]
+
+[models.gpt-5.providers.openai]
+type = "openai"
+model_name = "gpt-5"
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 1.25, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 10.00, required = true },
+  { pointer = "/usage/prompt_tokens_details/cached_tokens", cost_per_million = -1.125 },  # $0.125 = $1.25 - $1.125
+]

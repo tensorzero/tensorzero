@@ -501,6 +501,8 @@ batch_cost = [
 ]
 ```
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 ### `cost`
 
 - **Type:** array of objects
@@ -525,6 +527,8 @@ The total cost is computed as the sum of `extracted_value * rate` across all ent
 Rates can be negative, which is useful when a provider double-counts cached tokens in its base token field (e.g. OpenAI includes cached tokens in `prompt_tokens`).
 In that case, use a negative rate to subtract the discount.
 Other providers (e.g. Anthropic) report cached tokens separately, so you sum them at their discounted rate instead.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 <Accordion title="Example: Token-based pricing (e.g. OpenAI)">
 
@@ -2249,6 +2253,8 @@ cost = [
   { pointer = "/usage/total_tokens", cost_per_million = 0.02, required = true },
 ]
 ```
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ### `extra_body`
 

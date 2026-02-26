@@ -990,6 +990,8 @@ The object has the following fields:
 - `output_tokens`: The number of output tokens used for the inference.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 ##### `raw_usage`
 
 - **Type:** array (optional, only when `include_raw_usage` is `true`)
@@ -1064,6 +1066,8 @@ The object has the following fields:
 - `output_tokens`: The number of output tokens used for the inference.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 ##### `raw_usage`
 
 - **Type:** array (optional, only when `include_raw_usage` is `true`)
@@ -1074,6 +1078,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_response`
 
@@ -1158,6 +1164,8 @@ The object has the following fields:
 - `output_tokens`: The number of output tokens used for the inference.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 ##### `raw_usage`
 
 - **Type:** array (optional, only when `include_raw_usage` is `true`)
@@ -1168,6 +1176,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 </Tab>
 <Tab title="Streaming">
@@ -1215,6 +1225,8 @@ The object has the following fields:
 - `output_tokens`: The number of output tokens used for the inference.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 ##### `raw_usage`
 
 - **Type:** array (optional, only when `include_raw_usage` is `true`)
@@ -1225,6 +1237,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_response`
 
