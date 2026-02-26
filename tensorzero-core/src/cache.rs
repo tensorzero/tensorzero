@@ -592,6 +592,12 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+    use crate::inference::types::extra_body::{
+        ExtraBodyConfig, ExtraBodyReplacement, ExtraBodyReplacementKind, FullExtraBodyConfig,
+    };
+    use crate::inference::types::extra_headers::{
+        ExtraHeader, ExtraHeaderKind, ExtraHeadersConfig, FullExtraHeadersConfig,
+    };
     use crate::inference::types::{
         ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage,
     };
@@ -1125,6 +1131,50 @@ mod tests {
         assert_ne!(
             baseline_key, key,
             "different fetch_and_encode_input_files_before_inference should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_extra_body() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.extra_body = FullExtraBodyConfig {
+            extra_body: Some(ExtraBodyConfig {
+                data: vec![ExtraBodyReplacement {
+                    pointer: "/custom_field".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(serde_json::json!("test")),
+                }],
+            }),
+            inference_extra_body: Default::default(),
+        };
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different extra_body should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_extra_headers() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: Some(ExtraHeadersConfig {
+                data: vec![ExtraHeader {
+                    name: "X-Custom-Header".to_string(),
+                    kind: ExtraHeaderKind::Value("test".to_string()),
+                }],
+            }),
+            inference_extra_headers: Default::default(),
+        };
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different extra_headers should change cache key"
         );
     }
 
