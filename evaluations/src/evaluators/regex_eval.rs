@@ -36,7 +36,10 @@ pub(super) fn run_regex_evaluator(
     // TODO(#6584): Precompile regexes instead of rebuilding on every inference for performance.
     let Some(text) = extract_text(inference_response) else {
         debug!("No text content found in inference response");
-        return Ok(Some(Value::Bool(false)));
+
+        // If there's no "must match", then "no output" should be treated as success.
+        let result = config.must_match.is_none();
+        return Ok(Some(Value::Bool(result)));
     };
 
     let must_match_ok = match &config.must_match {
@@ -336,7 +339,54 @@ mod tests {
         assert_eq!(
             result,
             Some(Value::Bool(false)),
-            "should return false when JSON response has no raw output"
+            "should return false when JSON response has no raw output but must_match is set"
+        );
+    }
+
+    // --- no text with no must_match ---
+
+    #[test]
+    fn test_no_text_no_must_match_succeeds() {
+        let response = make_json_response(None);
+        let config = RegexConfig {
+            must_match: None,
+            must_not_match: None,
+        };
+        let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
+        assert_eq!(
+            result,
+            Some(Value::Bool(true)),
+            "no output with no must_match should be treated as success"
+        );
+    }
+
+    #[test]
+    fn test_no_text_no_must_match_with_must_not_match_succeeds() {
+        let response = make_json_response(None);
+        let config = RegexConfig {
+            must_match: None,
+            must_not_match: Some("(?i)badword".to_string()),
+        };
+        let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
+        assert_eq!(
+            result,
+            Some(Value::Bool(true)),
+            "no output with only must_not_match should be treated as success"
+        );
+    }
+
+    #[test]
+    fn test_no_text_with_must_match_fails() {
+        let response = make_json_response(None);
+        let config = RegexConfig {
+            must_match: Some("required_pattern".to_string()),
+            must_not_match: Some("(?i)badword".to_string()),
+        };
+        let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
+        assert_eq!(
+            result,
+            Some(Value::Bool(false)),
+            "no output with must_match set should fail regardless of must_not_match"
         );
     }
 }
