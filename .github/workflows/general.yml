@@ -508,7 +508,7 @@ jobs:
       - name: Typecheck tensorzero-node package
         run: pnpm --filter=tensorzero-node run typecheck
 
-      - name: Run ESLint
+      - name: Run oxlint + ESLint
         run: pnpm --filter=tensorzero-ui run lint:check
 
       - name: Run oxfmt
