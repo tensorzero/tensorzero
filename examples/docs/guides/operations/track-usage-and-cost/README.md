@@ -4,7 +4,7 @@ This folder contains the code for the [Guides » Operations » Track usage and c
 
 ## Run the example
 
-1. Set the `OPENAI_API_KEY` environment variable
+1. Set the `OPENAI_API_KEY` environment variable.
 2. Launch TensorZero: `docker compose up`
 3. Install the dependencies: `uv sync`
 4. Run the script: `uv run openai_sdk.py`
