@@ -186,9 +186,8 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
     }
 
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
-        let query = "SELECT toUInt32(uniqExact(value)) as count
-                     FROM TagInference
-                     WHERE key = 'tensorzero::evaluation_run_id'
+        let query = "SELECT toUInt32(uniqExact(run_id_uint)) as count
+                     FROM InferenceEvaluationRuns
                      FORMAT JSONEachRow"
             .to_string();
 
@@ -203,29 +202,20 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
     ) -> Result<Vec<EvaluationRunInfoRow>, Error> {
         let query = r"
             SELECT
-                evaluation_run_id,
-                any(evaluation_name) AS evaluation_name,
-                any(inference_function_name) AS function_name,
-                any(variant_name) AS variant_name,
-                any(dataset_name) AS dataset_name,
-                formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp,
-                if(isNull(any(inner_snapshot_hash)), NULL, lower(hex(any(inner_snapshot_hash)))) AS snapshot_hash
-            FROM (
-                SELECT
-                    maxIf(value, key = 'tensorzero::evaluation_run_id') AS evaluation_run_id,
-                    maxIf(value, key = 'tensorzero::evaluation_name') AS evaluation_name,
-                    maxIf(value, key = 'tensorzero::dataset_name') AS dataset_name,
-                    any(function_name) AS inference_function_name,
-                    any(variant_name) AS variant_name,
-                    max(toUInt128(inference_id)) AS max_inference_id,
-                    any(snapshot_hash) AS inner_snapshot_hash
-                FROM TagInference
-                WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
-                GROUP BY inference_id
-            )
-            WHERE NOT startsWith(inference_function_name, 'tensorzero::')
-            GROUP BY evaluation_run_id
-            ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
+                uint_to_uuid(run_id_uint) as evaluation_run_id,
+                argMax(evaluation_name, updated_at) AS evaluation_name,
+                argMax(function_name, updated_at) AS function_name,
+                if(
+                    length(argMax(variant_names, updated_at)) > 0,
+                    argMax(variant_names, updated_at)[1],
+                    ''
+                ) AS variant_name,
+                argMax(dataset_name, updated_at) AS dataset_name,
+                formatDateTime(min(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp,
+                argMax(snapshot_hash, updated_at) AS snapshot_hash
+            FROM InferenceEvaluationRuns
+            GROUP BY run_id_uint
+            ORDER BY run_id_uint DESC
             LIMIT {limit:UInt32}
             OFFSET {offset:UInt32}
             FORMAT JSONEachRow
@@ -281,27 +271,37 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         offset: u32,
     ) -> Result<Vec<EvaluationRunSearchResult>, Error> {
         let function_name_clause = if function_name.is_some() {
-            "AND function_name = {function_name:String}"
+            "AND argMax(function_name, updated_at) = {function_name:String}"
         } else {
-            "AND NOT startsWith(function_name, 'tensorzero::')"
+            ""
         };
 
         let sql_query = format!(
             r"
-            WITH
-                evaluation_inference_ids AS (
-                    SELECT inference_id
-                    FROM TagInference
-                    WHERE key = 'tensorzero::evaluation_name'
-                    AND value = {{evaluation_name:String}}
-                )
-            SELECT DISTINCT value as evaluation_run_id, variant_name
-            FROM TagInference
-            WHERE key = 'tensorzero::evaluation_run_id'
+            SELECT
+                uint_to_uuid(run_id_uint) AS evaluation_run_id,
+                if(
+                    length(argMax(variant_names, updated_at)) > 0,
+                    argMax(variant_names, updated_at)[1],
+                    ''
+                ) AS variant_name
+            FROM InferenceEvaluationRuns
+            GROUP BY run_id_uint
+            HAVING
+                argMax(evaluation_name, updated_at) = {{evaluation_name:String}}
                 {function_name_clause}
-                AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
-                AND (positionCaseInsensitive(value, {{query:String}}) > 0 OR positionCaseInsensitive(variant_name, {{query:String}}) > 0)
-            ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
+                AND (
+                    positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {{query:String}}) > 0
+                    OR positionCaseInsensitive(
+                        if(
+                            length(argMax(variant_names, updated_at)) > 0,
+                            argMax(variant_names, updated_at)[1],
+                            ''
+                        ),
+                        {{query:String}}
+                    ) > 0
+                )
+            ORDER BY run_id_uint DESC
             LIMIT {{limit:UInt32}}
             OFFSET {{offset:UInt32}}
             FORMAT JSONEachRow
@@ -340,22 +340,21 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
 
         let sql_query = r"
             SELECT
-                any(run_tag.value) as evaluation_run_id,
-                any(run_tag.variant_name) as variant_name,
-                formatDateTime(
-                    max(UUIDv7ToDateTime(inference_id)),
-                    '%Y-%m-%dT%H:%i:%SZ'
-                ) as most_recent_inference_date
-            FROM
-                TagInference AS run_tag
-            WHERE
-                run_tag.key = 'tensorzero::evaluation_run_id'
-                AND run_tag.value IN ({evaluation_run_ids:Array(String)})
-                AND run_tag.function_name = {function_name:String}
-            GROUP BY
-                run_tag.value
+                uint_to_uuid(run_id_uint) as evaluation_run_id,
+                if(
+                    length(argMax(variant_names, updated_at)) > 0,
+                    argMax(variant_names, updated_at)[1],
+                    ''
+                ) as variant_name,
+                formatDateTime(min(created_at), '%Y-%m-%dT%H:%i:%SZ') as most_recent_inference_date
+            FROM InferenceEvaluationRuns
+            WHERE run_id_uint IN (
+                SELECT arrayJoin(arrayMap(x -> toUInt128(toUUID(x)), {evaluation_run_ids:Array(String)}))
+            )
+                AND function_name = {function_name:String}
+            GROUP BY run_id_uint
             ORDER BY
-                toUInt128(toUUID(evaluation_run_id)) DESC
+                run_id_uint DESC
             FORMAT JSONEachRow
         "
         .to_string();
@@ -707,9 +706,8 @@ mod tests {
             .withf(|query, params| {
                 assert_query_contains(
                     query,
-                    "SELECT toUInt32(uniqExact(value)) as count
-                     FROM TagInference
-                     WHERE key = 'tensorzero::evaluation_run_id'
+                    "SELECT toUInt32(uniqExact(run_id_uint)) as count
+                     FROM InferenceEvaluationRuns
                      FORMAT JSONEachRow",
                 );
                 assert_eq!(params.len(), 0, "Should have no parameters");
@@ -742,7 +740,7 @@ mod tests {
                 // Verify the query contains the expected structure
                 assert_query_contains(query, "SELECT");
                 assert_query_contains(query, "evaluation_run_id");
-                assert_query_contains(query, "FROM TagInference");
+                assert_query_contains(query, "FROM InferenceEvaluationRuns");
                 assert_query_contains(query, "LIMIT {limit:UInt32}");
                 assert_query_contains(query, "OFFSET {offset:UInt32}");
 
@@ -830,17 +828,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_list_evaluation_runs_filters_out_tensorzero_functions() {
+    async fn test_list_evaluation_runs_uses_run_table() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
 
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, _params| {
-                // Verify the query filters out tensorzero:: functions
-                assert_query_contains(
-                    query,
-                    "NOT startsWith(inference_function_name, 'tensorzero::')",
-                );
+                assert_query_contains(query, "FROM InferenceEvaluationRuns");
                 true
             })
             .returning(|_, _| {
@@ -988,23 +982,29 @@ mod tests {
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, params| {
-                assert_query_contains(query, "WITH
-                    evaluation_inference_ids AS (
-                        SELECT inference_id
-                        FROM TagInference
-                        WHERE key = 'tensorzero::evaluation_name'
-                        AND value = {evaluation_name:String}
-                    )
-                SELECT DISTINCT value as evaluation_run_id, variant_name
-                FROM TagInference
-                WHERE key = 'tensorzero::evaluation_run_id'
-                    AND function_name = {function_name:String}
-                    AND inference_id IN (SELECT inference_id FROM evaluation_inference_ids)
-                    AND (positionCaseInsensitive(value, {query:String}) > 0 OR positionCaseInsensitive(variant_name, {query:String}) > 0)
-                ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
-                LIMIT {limit:UInt32}
+                assert_query_contains(query, "FROM InferenceEvaluationRuns");
+                assert_query_contains(query, "HAVING");
+                assert_query_contains(query, "argMax(evaluation_name, updated_at) = {evaluation_name:String}");
+                assert_query_contains(query, "argMax(function_name, updated_at) = {function_name:String}");
+                assert_query_contains(query, "positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {query:String}) > 0");
+                assert_query_contains(query, "ORDER BY run_id_uint DESC");
+                assert_query_contains(
+                    query,
+                    "positionCaseInsensitive(
+                        if(
+                            length(argMax(variant_names, updated_at)) > 0,
+                            argMax(variant_names, updated_at)[1],
+                            ''
+                        ),
+                        {query:String}
+                    ) > 0",
+                );
+                assert_query_contains(
+                    query,
+                    "LIMIT {limit:UInt32}
                 OFFSET {offset:UInt32}
-                FORMAT JSONEachRow");
+                FORMAT JSONEachRow",
+                );
                 assert_eq!(params.get("evaluation_name"), Some(&"test_eval"));
                 assert_eq!(params.get("function_name"), Some(&"test_func"));
                 assert_eq!(params.get("query"), Some(&"variant"));
@@ -1066,24 +1066,18 @@ mod tests {
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, params| {
-                assert_query_contains(query, "SELECT
-                    any(run_tag.value) as evaluation_run_id,
-                    any(run_tag.variant_name) as variant_name,
-                    formatDateTime(
-                        max(UUIDv7ToDateTime(inference_id)),
-                        '%Y-%m-%dT%H:%i:%SZ'
-                    ) as most_recent_inference_date
-                FROM
-                    TagInference AS run_tag
-                WHERE
-                    run_tag.key = 'tensorzero::evaluation_run_id'
-                    AND run_tag.value IN ({evaluation_run_ids:Array(String)})
-                    AND run_tag.function_name = {function_name:String}
-                GROUP BY
-                    run_tag.value
-                ORDER BY
-                    toUInt128(toUUID(evaluation_run_id)) DESC
-                FORMAT JSONEachRow");
+                assert_query_contains(query, "FROM InferenceEvaluationRuns");
+                assert_query_contains(
+                    query,
+                    "WHERE run_id_uint IN (
+                SELECT arrayJoin(arrayMap(x -> toUInt128(toUUID(x)), {evaluation_run_ids:Array(String)}))
+            )
+                AND function_name = {function_name:String}",
+                );
+                assert_query_contains(query, "GROUP BY run_id_uint");
+                assert_query_contains(query, "ORDER BY");
+                assert_query_contains(query, "run_id_uint DESC");
+                assert_query_contains(query, "FORMAT JSONEachRow");
                 assert_eq!(params.get("function_name"), Some(&"test_func"));
                 assert_eq!(
                     params.get("evaluation_run_ids"),
