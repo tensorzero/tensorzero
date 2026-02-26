@@ -26,7 +26,6 @@ export function AutopilotUnavailableState() {
             <a
               href="https://www.tensorzero.com"
               target="_blank"
-              rel="noreferrer"
               className="hover:text-primary text-nowrap underline"
             >
               tensorzero.com
