@@ -24,8 +24,6 @@ pub struct EvaluationRunInfoRow {
     pub variant_name: String,
     pub dataset_name: String,
     pub last_inference_timestamp: DateTime<Utc>,
-    #[serde(default)]
-    pub snapshot_hash: Option<String>,
 }
 
 /// Database struct for deserializing evaluation run search results.

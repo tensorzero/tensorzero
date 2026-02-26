@@ -309,8 +309,7 @@ fn build_list_evaluation_runs_query(limit: u32, offset: u32) -> QueryBuilder<sql
             function_name,
             COALESCE(variant_names->>0, '') as variant_name,
             dataset_name,
-            created_at as last_inference_timestamp,
-            encode(snapshot_hash, 'hex') as snapshot_hash
+            created_at as last_inference_timestamp
         FROM tensorzero.inference_evaluation_runs
         ORDER BY run_id DESC
         LIMIT ",
@@ -732,8 +731,7 @@ mod tests {
                 function_name,
                 COALESCE(variant_names->>0, '') as variant_name,
                 dataset_name,
-                created_at as last_inference_timestamp,
-                encode(snapshot_hash, 'hex') as snapshot_hash
+                created_at as last_inference_timestamp
             FROM tensorzero.inference_evaluation_runs
             ORDER BY run_id DESC
             LIMIT $1 OFFSET $2

@@ -42,7 +42,6 @@ pub async fn list_evaluation_runs(
             function_name: run.function_name,
             variant_name: run.variant_name,
             last_inference_timestamp: run.last_inference_timestamp,
-            snapshot_hash: run.snapshot_hash,
         })
         .collect();
     Ok(ListEvaluationRunsResponse { runs })
@@ -65,7 +64,6 @@ mod tests {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             last_inference_timestamp: Utc::now(),
-            snapshot_hash: None,
         }
     }
 
@@ -184,7 +182,6 @@ mod tests {
                     function_name: "my_function".to_string(),
                     variant_name: "my_variant".to_string(),
                     last_inference_timestamp: timestamp,
-                    snapshot_hash: None,
                 };
                 Box::pin(async move { Ok(vec![run_info]) })
             });
