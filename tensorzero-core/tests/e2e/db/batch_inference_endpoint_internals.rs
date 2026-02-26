@@ -10,6 +10,7 @@ use std::sync::Arc;
 use serde_json::json;
 use tensorzero_core::config::Config;
 use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::batch_inference::BatchInferenceQueries;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::model_inferences::ModelInferenceQueries;
@@ -225,6 +226,7 @@ make_db_test!(test_get_batch_request_endpoint);
 
 async fn test_write_poll_batch_inference_endpoint(
     database: impl BatchInferenceQueries
+    + ConfigQueries
     + InferenceQueries
     + ModelInferenceQueries
     + TestDatabaseHelpers,
@@ -497,6 +499,7 @@ make_db_test!(test_get_batch_inferences_endpoint);
 
 async fn test_write_read_completed_batch_inference_chat(
     database: impl BatchInferenceQueries
+    + ConfigQueries
     + InferenceQueries
     + ModelInferenceQueries
     + TestDatabaseHelpers,
@@ -796,6 +799,7 @@ make_db_test!(test_write_read_completed_batch_inference_chat);
 
 async fn test_write_read_completed_batch_inference_json(
     database: impl BatchInferenceQueries
+    + ConfigQueries
     + InferenceQueries
     + ModelInferenceQueries
     + TestDatabaseHelpers,

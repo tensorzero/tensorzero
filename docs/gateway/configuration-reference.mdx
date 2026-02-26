@@ -460,6 +460,133 @@ routing = ["openai", "azure"]
 # ...
 ```
 
+### `batch_cost`
+
+- **Type:** array of objects
+- **Required:** no
+
+Configures how to extract cost information from batch inference provider responses.
+This is used for cost tracking of [batch inferences](/gateway/batch-inference).
+
+Many providers offer discounted pricing for batch inferences compared to real-time inferences.
+Use `batch_cost` to configure the batch-specific rates.
+If `batch_cost` is not configured, the gateway falls back to the regular `cost` configuration.
+
+Since batch inference responses are always non-streaming, `batch_cost` only supports a single `pointer` (not the `pointer_nonstreaming`/`pointer_streaming` split available in `cost`).
+
+Each entry has the following fields:
+
+- `pointer` (string) — a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) into the provider's batch response.
+- Rate (exactly one of the following):
+  - `cost_per_million` (number) — cost in dollars per million units of the extracted value.
+  - `cost_per_unit` (number) — cost in dollars per unit of the extracted value.
+- `required` (boolean, default: `false`) — if `true` and the field is missing from the response, the cost for the entire request is reported as `null`. If `false`, missing fields contribute $0 to the total.
+
+The total cost is computed as the sum of `extracted_value * rate` across all entries.
+
+```toml title="tensorzero.toml"
+[models.gpt-4o.providers.openai]
+type = "openai"
+model_name = "gpt-4o"
+# Real-time inference pricing
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 2.50, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 10.00, required = true },
+  { pointer = "/usage/prompt_tokens_details/cached_tokens", cost_per_million = -1.25 },
+]
+# Batch inference pricing (50% discount)
+batch_cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 1.25, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 5.00, required = true },
+]
+```
+
+### `cost`
+
+- **Type:** array of objects
+- **Required:** no
+
+Configures how to extract cost information from raw provider responses.
+This is used for cost tracking and [cost-based rate limiting](/operations/enforce-custom-rate-limits).
+
+Each entry in the array specifies a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) to a numeric field in the provider's response, a rate to convert that value to dollars, and whether the field is required.
+
+Each entry has the following fields:
+
+- Pointer (exactly one of the following):
+  - `pointer` — a single JSON Pointer used for both streaming and non-streaming responses.
+  - `pointer_nonstreaming` and `pointer_streaming` — separate JSON Pointers for non-streaming and streaming responses respectively. Both must be provided together.
+- Rate (exactly one of the following):
+  - `cost_per_million` (number) — cost in dollars per million units of the extracted value. This is the most common option for token-based pricing.
+  - `cost_per_unit` (number) — cost in dollars per unit of the extracted value. This is useful for features billed per unit (e.g. web search calls), or when the provider response contains a cost value directly (set to `1.0`).
+- `required` (boolean, default: `false`) — if `true` and the field is missing from the response, the cost for the entire request is reported as `null`. If `false`, missing fields contribute $0 to the total.
+
+The total cost is computed as the sum of `extracted_value * rate` across all entries.
+Rates can be negative, which is useful when a provider double-counts cached tokens in its base token field (e.g. OpenAI includes cached tokens in `prompt_tokens`).
+In that case, use a negative rate to subtract the discount.
+Other providers (e.g. Anthropic) report cached tokens separately, so you sum them at their discounted rate instead.
+
+<Accordion title="Example: Token-based pricing (e.g. OpenAI)">
+
+For providers that report token counts, configure cost entries with `cost_per_million`.
+Include optional fields for usage that may vary (e.g. cached input tokens).
+OpenAI includes cached tokens in `prompt_tokens`, so use a negative rate to subtract the discount.
+
+```toml title="tensorzero.toml"
+[models.gpt-4o.providers.openai]
+type = "openai"
+model_name = "gpt-4o"
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 2.50, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 10.00, required = true },
+  # OpenAI includes cached tokens in prompt_tokens but bills them at half price.
+  # Use a negative rate to subtract the difference.
+  { pointer = "/usage/prompt_tokens_details/cached_tokens", cost_per_million = -1.25 },
+]
+```
+
+</Accordion>
+
+<Accordion title="Example: Split pointers for streaming vs. non-streaming">
+
+Some providers report usage differently in streaming and non-streaming responses.
+Use `pointer_nonstreaming` and `pointer_streaming` to handle this:
+
+```toml title="tensorzero.toml"
+[models.my-model.providers.my-provider]
+type = "openai"
+model_name = "my-model"
+cost = [
+  { pointer_nonstreaming = "/usage/prompt_tokens", pointer_streaming = "/usage/prompt_tokens", cost_per_million = 3.00, required = true },
+  { pointer_nonstreaming = "/usage/completion_tokens", pointer_streaming = "/usage/completion_tokens", cost_per_million = 15.00, required = true },
+]
+```
+
+</Accordion>
+
+<Accordion title="Example: Per-unit pricing (e.g. web search)">
+
+For features billed per invocation (e.g. web search calls), use `cost_per_unit` to set the price per occurrence.
+This example configures Anthropic's web search tool at $10 per 1,000 searches ($0.01 per search):
+
+```toml title="tensorzero.toml"
+[models.claude-sonnet.providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-5-20250929"
+cost = [
+  { pointer = "/usage/input_tokens", cost_per_million = 3.00, required = true },
+  { pointer = "/usage/output_tokens", cost_per_million = 15.00, required = true },
+  # Anthropic reports cached tokens separately (not included in input_tokens),
+  # so add them at their discounted rates.
+  { pointer = "/usage/cache_read_input_tokens", cost_per_million = 0.30 },
+  { pointer = "/usage/cache_creation_input_tokens", cost_per_million = 3.75 },
+  # Web search: $10 per 1,000 searches = $0.01 per search
+  { pointer = "/usage/server_tool_use/web_search_requests", cost_per_unit = 0.01 },
+]
+```
+
+</Accordion>
+
 ### `discard_unknown_chunks`
 
 - **Type:** boolean
@@ -2092,6 +2219,35 @@ routing = ["openai", "alternative-provider"]
 
 [embedding_models.model-name.providers.alternative-provider]
 # ...
+```
+
+### `cost`
+
+- **Type:** array of objects
+- **Required:** no
+
+Configures how to extract cost information from raw embedding provider responses.
+This is used for cost tracking and [cost-based rate limiting](/operations/enforce-custom-rate-limits).
+
+Each entry in the array specifies a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) to a numeric field in the provider's response, a rate to convert that value to dollars, and whether the field is required.
+
+Each entry has the following fields:
+
+- `pointer` (string) — a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) into the provider's response.
+- Rate (exactly one of the following):
+  - `cost_per_million` (number) — cost in dollars per million units of the extracted value. This is the most common option for token-based pricing.
+  - `cost_per_unit` (number) — cost in dollars per unit of the extracted value. This is useful for features billed per unit, or when the provider response contains a cost value directly (set to `1.0`).
+- `required` (boolean, default: `false`) — if `true` and the field is missing from the response, the cost for the entire request is reported as `null`. If `false`, missing fields contribute $0 to the total.
+
+The total cost is computed as the sum of `extracted_value * rate` across all entries.
+
+```toml title="tensorzero.toml"
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+cost = [
+  { pointer = "/usage/total_tokens", cost_per_million = 0.02, required = true },
+]
 ```
 
 ### `extra_body`
@@ -4778,6 +4934,20 @@ Rate limits help you control usage, manage costs, and prevent abuse.
 
 See [Enforce Custom Rate Limits](/operations/enforce-custom-rate-limits/) for a comprehensive guide on rate limiting.
 
+### `default_cost`
+
+- **Type:** number (dollars)
+- **Required:** no (default: `1.00`)
+
+The default cost in dollars used to estimate each request's cost upfront when cost rate limiting is active.
+After a request completes, the gateway adjusts the consumed budget based on the actual cost reported by the provider.
+If your model providers don't report cost information, the default estimate is used without adjustment.
+
+```toml
+[rate_limiting]
+default_cost = 0.50
+```
+
 ### `enabled`
 
 - **Type:** boolean
@@ -4794,7 +4964,7 @@ enabled = true
 ### `[[rate_limiting.rules]]`
 
 Rate limiting rules are defined as an array of rule configurations.
-Each rule specifies rate limits for specific resources (model inferences, tokens), time windows, scopes, and priorities.
+Each rule specifies rate limits for specific resources (model inferences, tokens, cost), time windows, scopes, and priorities.
 
 #### Rate Limit Fields
 
@@ -4812,15 +4982,23 @@ You can set rate limits for different resources and time windows using the follo
 - `tokens_per_day`
 - `tokens_per_week`
 - `tokens_per_month`
+- `cost_per_second`
+- `cost_per_minute`
+- `cost_per_hour`
+- `cost_per_day`
+- `cost_per_week`
+- `cost_per_month`
 
 Each rate limit field can be specified in two formats:
 
-**Simple Format:** A single integer value that sets both the capacity and refill rate to the same value.
+**Simple Format:** A single value that sets both the capacity and refill rate to the same value.
+For `model_inferences` and `tokens`, this is an integer. For `cost`, this is a number in dollars.
 
 ```toml
 [[rate_limiting.rules]]
 model_inferences_per_minute = 100
 tokens_per_hour = 10000
+cost_per_day = 10.0
 ```
 
 **Bucket Format:** An object with explicit `capacity` and `refill_rate` fields for fine-grained control over the token bucket algorithm.
@@ -4828,6 +5006,7 @@ tokens_per_hour = 10000
 ```toml
 [[rate_limiting.rules]]
 tokens_per_minute = { capacity = 1000, refill_rate = 500 }
+cost_per_hour = { capacity = 5.0, refill_rate = 2.5 }
 ```
 
 <Note>

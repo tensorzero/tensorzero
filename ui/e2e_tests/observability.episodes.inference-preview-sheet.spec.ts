@@ -23,8 +23,12 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
     const sheet = page.locator('[role="dialog"]');
     await sheet.waitFor({ state: "visible" });
 
-    // Verify the sheet header shows "Inference" with a link
-    await expect(sheet.getByText("Inference")).toBeVisible();
+    // Verify the sheet header shows breadcrumb and title
+    await expect(
+      sheet
+        .getByRole("navigation", { name: "breadcrumb" })
+        .getByText("Inference"),
+    ).toBeVisible();
 
     // Wait for the inference data to load (BasicInfo should show the function name)
     await expect(
@@ -82,10 +86,10 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
     const sheet = page.locator('[role="dialog"]');
     await sheet.waitFor({ state: "visible" });
 
-    // Wait for the inference link to appear in the header
-    const inferenceLink = sheet.locator(
-      "a[href^='/observability/inferences/']",
-    );
+    // Wait for the inference link to appear in the header (scoped to heading to avoid matching the full-page icon link)
+    const inferenceLink = sheet
+      .getByRole("heading")
+      .locator("a[href^='/observability/inferences/']");
     await inferenceLink.waitFor({ state: "visible", timeout: 10000 });
 
     // Get the href to verify navigation later
@@ -130,10 +134,10 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
     const sheet = page.locator('[role="dialog"]');
     await sheet.waitFor({ state: "visible" });
 
-    // Wait for the sheet to show the first inference ID
-    const sheetInferenceLink = sheet.locator(
-      "a[href^='/observability/inferences/']",
-    );
+    // Wait for the sheet to show the first inference ID (scoped to heading to avoid matching the full-page icon link)
+    const sheetInferenceLink = sheet
+      .getByRole("heading")
+      .locator("a[href^='/observability/inferences/']");
     await expect(sheetInferenceLink).toHaveText(firstExpectedId!, {
       timeout: 10000,
     });

@@ -28,6 +28,10 @@ export function toInferenceUrl(inferenceId: string): string {
   return `/observability/inferences/${encodeURIComponent(inferenceId)}`;
 }
 
+export function toInferenceApiUrl(inferenceId: string): string {
+  return `/api/inference/${encodeURIComponent(inferenceId)}`;
+}
+
 // ============================================================================
 // Observability - Episodes
 // ============================================================================

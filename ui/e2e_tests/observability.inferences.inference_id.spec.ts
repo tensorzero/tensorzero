@@ -637,6 +637,61 @@ test("should handle model inference with null input and output tokens", async ({
   await expect(sheet.getByText("cartoon-style crab").first()).toBeVisible();
 });
 
+test("should display cost chip when cost data exists", async ({ page }) => {
+  // This inference has a model inference with cost = 0.0000348
+  await page.goto(
+    "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify the cost chip is visible in the BasicInfo usage section
+  await expect(
+    page.getByText("$0.0000348", { exact: true }).first(),
+  ).toBeVisible();
+
+  // Click on the model inference ID to open the detail sheet
+  await page.getByText("0196367a-8434-7bb3-8f53-3aab0e39ae22").click();
+
+  // Wait for the sheet/dialog to appear
+  const sheet = page.getByRole("dialog");
+  await sheet.waitFor({ state: "visible" });
+
+  // Verify cost chip is visible in the model inference sheet
+  await expect(sheet.getByText("$0.0000348", { exact: true })).toBeVisible();
+});
+
+test("should not display cost chip when cost data is missing", async ({
+  page,
+}) => {
+  // This inference has null input/output tokens and no cost field
+  await page.goto(
+    "/observability/inferences/01954435-76a5-7331-8a3a-16296a0ba5b6",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify the inference page loads
+  await expect(
+    page.getByText("01954435-76a5-7331-8a3a-16296a0ba5b6").first(),
+  ).toBeVisible();
+
+  // Verify no cost chip is displayed (no dollar sign in usage area)
+  await expect(page.getByText(/^\$\d/)).not.toBeVisible();
+
+  // Click on the model inference ID to open the detail sheet
+  await page.getByText("01954435-76ab-78b1-a76e-d5676b0dd2f9").click();
+
+  // Wait for the sheet/dialog to appear
+  const sheet = page.getByRole("dialog");
+  await sheet.waitFor({ state: "visible" });
+
+  // Verify no cost chip in the sheet either
+  await expect(sheet.getByText(/^\$\d/)).not.toBeVisible();
+});
+
 // TODO(#5691): Run all UI e2e tests against Postgres-backed gateway too.
 // These are commented out because these tests are only supported on Postgres
 // because we don't TTL inference data in ClickHouse.

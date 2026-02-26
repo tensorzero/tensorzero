@@ -83,11 +83,13 @@ impl UiConfig {
             tools,
             evaluations,
             gateway: _,
+            clickhouse: _,
             postgres: _,
             rate_limiting: _,
             object_storage: _,
             provider_types: _,
             optimizers: _,
+            autopilot: _,
         } = uninit_config;
 
         // Load functions (sync, no FS/network — file data embedded in ResolvedTomlPathData)

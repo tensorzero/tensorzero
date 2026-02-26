@@ -222,7 +222,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         let function_name_clause = if function_name.is_some() {
             "AND function_name = {function_name:String}"
         } else {
-            ""
+            "AND NOT startsWith(function_name, 'tensorzero::')"
         };
 
         let sql_query = format!(
@@ -248,15 +248,14 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         );
 
         let evaluation_name_str = evaluation_name.to_string();
-        let function_name_str = function_name.unwrap_or_default().to_string();
         let query_str = query.to_string();
         let limit_str = limit.to_string();
         let offset_str = offset.to_string();
 
         let mut params = HashMap::new();
         params.insert("evaluation_name", evaluation_name_str.as_str());
-        if function_name.is_some() {
-            params.insert("function_name", function_name_str.as_str());
+        if let Some(function_name) = function_name {
+            params.insert("function_name", function_name);
         }
         params.insert("query", query_str.as_str());
         params.insert("limit", limit_str.as_str());

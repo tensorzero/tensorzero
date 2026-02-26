@@ -6,18 +6,18 @@ set -euo pipefail
 # Runs cleanup phases in order (fastest first) and exits early
 # once the target free-space threshold is reached.
 
-TARGET_KB=$((25 * 1024 * 1024)) # 25 GB in KB
+TARGET_KB=$((35 * 1024 * 1024)) # 35 GB in KB
 
 check_and_maybe_exit() {
     local avail_kb
     avail_kb=$(df -k / | tail -1 | awk '{print $4}')
     local avail_gb=$((avail_kb / 1024 / 1024))
     if [ "$avail_kb" -ge "$TARGET_KB" ]; then
-        echo "=== Free space target reached: ${avail_gb} GB available (>= 25 GB) ==="
+        echo "=== Free space target reached: ${avail_gb} GB available (>= $((TARGET_KB / 1024 / 1024)) GB) ==="
         df -h /
         exit 0
     fi
-    echo "--- Free space: ${avail_gb} GB (target: 25 GB) ---"
+    echo "--- Free space: ${avail_gb} GB (target: $((TARGET_KB / 1024 / 1024)) GB) ---"
 }
 
 echo "=== Disk space before cleanup ==="

@@ -72,6 +72,28 @@ test.describe("Observability Models Page", () => {
     await expect(page.locator("[data-chart]").first()).toBeVisible();
   });
 
+  test("should allow selecting cost metric in usage chart", async ({
+    page,
+  }) => {
+    await page.goto("/observability/models");
+
+    // Wait for the usage section to load
+    await expect(page.getByText("Model Usage Over Time")).toBeVisible();
+
+    // Find the metric selector for usage (second dropdown in the usage section)
+    const metricSelector = page.locator('button[role="combobox"]').nth(1);
+    await expect(metricSelector).toBeVisible();
+
+    // Click to open dropdown and select Cost
+    await metricSelector.click();
+    await page.waitForSelector('[role="option"]');
+    await page.getByRole("option", { name: "Cost" }).click();
+
+    // Verify the chart still displays and description updates
+    await expect(page.getByText("Estimated cost by model")).toBeVisible();
+    await expect(page.locator("[data-chart]").first()).toBeVisible();
+  });
+
   test("should allow changing latency chart time granularity", async ({
     page,
   }) => {

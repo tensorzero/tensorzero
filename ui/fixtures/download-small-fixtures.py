@@ -111,7 +111,7 @@ def rename_fixtures():
 
 def download_fixtures_from_r2(retries: int = 3) -> None:
     """Download fixtures from R2 using s5cmd with retry logic."""
-    batch_commands = "\n".join(f"cp s3://tensorzero-fixtures/{f} {FIXTURES_DIR}/" for f in FIXTURES.keys())
+    batch_commands = "\n".join(f"sync s3://tensorzero-fixtures/{f} {FIXTURES_DIR}/" for f in FIXTURES.keys())
 
     cmd = [
         "s5cmd",

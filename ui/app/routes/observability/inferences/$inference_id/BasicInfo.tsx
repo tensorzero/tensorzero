@@ -17,8 +17,10 @@ import {
   InputIcon,
   Output,
   Cached,
+  Cost,
 } from "~/components/icons/Icons";
 import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
+import { formatCost } from "~/utils/cost";
 import { formatDateWithSeconds } from "~/utils/date";
 import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import { getFunctionTypeIcon } from "~/utils/icon";
@@ -133,6 +135,13 @@ export function BasicInfo({
             label={`${inferenceUsage?.output_tokens ?? ""} tok`}
             tooltip="Output Tokens"
           />
+          {inferenceUsage?.cost != null && (
+            <Chip
+              icon={<Cost className="text-fg-tertiary" />}
+              label={formatCost(inferenceUsage.cost)}
+              tooltip="Cost"
+            />
+          )}
           <Chip
             icon={<Timer className="text-fg-tertiary" />}
             label={`${inference.processing_time_ms} ms`}

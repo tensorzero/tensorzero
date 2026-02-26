@@ -370,6 +370,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                 timeouts: TimeoutsConfig::default(),
                 discard_unknown_chunks: false,
                 cost: None,
+                batch_cost: None,
             };
             OptimizationJobInfo::Completed {
                 output: OptimizerOutput::Model(UninitializedModelConfig {

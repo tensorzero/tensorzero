@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useState } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2, StopCircle } from "lucide-react";
+import { Button } from "~/components/ui/button";
 import type { Route } from "./+types/route";
 import type {
   EvaluationResultRow,
@@ -54,6 +55,7 @@ import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DatasetSelect } from "~/components/dataset/DatasetSelect";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
+import { useCancelEvaluation } from "./useCancelEvaluation";
 import { useReadOnly } from "~/context/read-only";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -213,21 +215,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     }
   }
 
-  const any_evaluation_is_running = Object.values(
-    selected_evaluation_run_ids_array,
-  ).some((evaluationRunId) => {
-    const runningEvaluation = getRunningEvaluation(evaluationRunId);
-    if (!runningEvaluation) {
-      return false;
-    }
-    if (runningEvaluation.completed) {
-      // If the evaluation completed more than 5 seconds ago, consider it done
-      if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
+  const running_evaluation_run_ids = selected_evaluation_run_ids_array.filter(
+    (evaluationRunId) => {
+      const runningEvaluation = getRunningEvaluation(evaluationRunId);
+      if (!runningEvaluation) {
         return false;
       }
-    }
-    return true;
-  });
+      if (runningEvaluation.cancelled) {
+        return false;
+      }
+      if (runningEvaluation.completed) {
+        // If the evaluation completed more than 5 seconds ago, consider it done
+        if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
+          return false;
+        }
+      }
+      return true;
+    },
+  );
 
   const errors: Record<string, EvaluationErrorDisplayInfo> =
     selected_evaluation_run_ids_array.reduce(
@@ -268,7 +273,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     offset,
     limit,
     evaluator_names,
-    any_evaluation_is_running,
+    running_evaluation_run_ids,
     errors,
     newFeedbackId,
     newJudgeDemonstrationId,
@@ -375,6 +380,8 @@ function ResultsContent({
   limit,
   selectedRows,
   setSelectedRows,
+  onCancel,
+  isCancelling,
 }: {
   evaluation_name: string;
   evaluationConfig: InferenceEvaluationConfig;
@@ -389,6 +396,8 @@ function ResultsContent({
   setSelectedRows: React.Dispatch<
     React.SetStateAction<Map<string, SelectedRowData>>
   >;
+  onCancel: () => void;
+  isCancelling: boolean;
 }) {
   const navigate = useNavigate();
   const {
@@ -415,11 +424,28 @@ function ResultsContent({
       <div className="flex items-center">
         <SectionHeader heading="Results" />
         <div
-          className="ml-4"
+          className="ml-4 flex items-center gap-4"
           data-testid="auto-refresh-wrapper"
           data-running={any_evaluation_is_running}
         >
           <AutoRefreshIndicator isActive={any_evaluation_is_running} />
+          {(any_evaluation_is_running || isCancelling) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCancel}
+              disabled={isCancelling}
+              slotLeft={
+                isCancelling ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <StopCircle className="h-3.5 w-3.5" />
+                )
+              }
+            >
+              {isCancelling ? "Stopping..." : "Stop"}
+            </Button>
+          )}
         </div>
       </div>
       <EvaluationTable
@@ -460,7 +486,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     offset,
     limit,
     evaluator_names,
-    any_evaluation_is_running,
+    running_evaluation_run_ids,
     errors,
     newFeedbackId,
     newJudgeDemonstrationId,
@@ -469,6 +495,10 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const isReadOnly = useReadOnly();
   const { toast } = useToast();
   const fetcher = useFetcher();
+  const { isCancelling, anyEvaluationIsRunning, handleCancelEvaluation } =
+    useCancelEvaluation({
+      runningEvaluationRunIds: running_evaluation_run_ids,
+    });
 
   const [selectedRows, setSelectedRows] = useState<
     Map<string, SelectedRowData>
@@ -477,7 +507,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
   const function_name = evaluation_config.function_name;
 
-  useAutoRefresh(any_evaluation_is_running);
+  useAutoRefresh(anyEvaluationIsRunning);
 
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
@@ -565,12 +595,14 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                   metricsConfig={metricsConfig}
                   data={resolvedData}
                   evaluator_names={evaluator_names}
-                  any_evaluation_is_running={any_evaluation_is_running}
+                  any_evaluation_is_running={anyEvaluationIsRunning}
                   has_selected_runs={has_selected_runs}
                   offset={offset}
                   limit={limit}
                   selectedRows={selectedRows}
                   setSelectedRows={setSelectedRows}
+                  onCancel={handleCancelEvaluation}
+                  isCancelling={isCancelling}
                 />
               )}
             </Await>

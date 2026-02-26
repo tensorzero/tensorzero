@@ -168,8 +168,8 @@ export async function loader() {
     return `${numVariants} variants`;
   });
 
-  const numEpisodesDesc = episodesPromise.then(
-    (result) => `${result.count.toLocaleString()} episodes`,
+  const numEpisodesDesc = episodesPromise.then((result) =>
+    result.count != null ? `${result.count.toLocaleString()} episodes` : "—",
   );
 
   const numDatasetsDesc = datasetMetadataPromise.then(
