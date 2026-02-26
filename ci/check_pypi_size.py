@@ -104,8 +104,7 @@ def main() -> None:
 
     if combined_size > max_size_bytes:
         print(
-            f"\nERROR: Combined size ({format_size(combined_size)}) exceeds "
-            f"limit ({format_size(max_size_bytes)})",
+            f"\nERROR: Combined size ({format_size(combined_size)}) exceeds limit ({format_size(max_size_bytes)})",
             file=sys.stderr,
         )
         sys.exit(1)
