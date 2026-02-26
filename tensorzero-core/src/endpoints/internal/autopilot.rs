@@ -423,6 +423,7 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::delegating_connection::PrimaryDatastore;
     use crate::db::postgres::PostgresConnectionInfo;
     use crate::db::valkey::ValkeyConnectionInfo;
     use crate::http::TensorzeroHttpClient;
@@ -444,7 +445,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
             CancellationToken::new(),
-            crate::db::delegating_connection::PrimaryDatastore::ClickHouse,
+            PrimaryDatastore::ClickHouse,
         )
         .unwrap()
     }
