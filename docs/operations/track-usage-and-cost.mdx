@@ -1,0 +1,123 @@
+---
+title: Track usage and cost
+description: Learn how to track token usage and cost for individual LLM inferences as well as aggregated statistics.
+---
+
+## Track token usage
+
+TensorZero automatically collects, normalizes, and reports token usage for every inference.
+
+The normalized figures follow the OpenAI behavior (e.g. output tokens include reasoning tokens).
+If you're using [Inference Caching](/gateway/guides/inference-caching), the gateway will report usage as 0 for cached inferences.
+
+If you need additional usage information from model providers (e.g. prompt caching), you can enable `include_raw_usage` in the inference request.
+In that case, the gateway will additionally report provider-specific usage fields without preprocessing.
+
+You can browse usage data for individual inferences as well as aggregated usage statistics per model provider in the TensorZero UI.
+
+## Track cost
+
+TensorZero can compute and report cost for LLM inferences with additional configuration.
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/operations/track-usage-and-cost) of this guide on GitHub.
+
+</Tip>
+
+### Configure cost tracking for model providers
+
+You can configure cost information by adding a `cost` section to the model provider configuration:
+
+```toml title="tensorzero.toml"
+[models.gpt-5.providers.openai]
+type = "openai"
+model_name = "gpt-5"
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 1.25, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 10.00, required = true },
+  { pointer = "/usage/prompt_tokens_details/cached_tokens", cost_per_million = -1.125 },  # $0.125 = $1.25 - $1.125
+]
+```
+
+<ParamField body="pointer" type="string (JSON Pointer)" required>
+
+The `pointer` is a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) into the provider's response.
+
+You can use both `pointer_nonstreaming` and `pointer_streaming` instead of `pointer` if the usage format is different for streaming inferences.
+
+</ParamField>
+
+<ParamField body="cost_per_million, cost_per_unit" type="float" required>
+
+You can specify cost using `cost_per_million` or `cost_per_unit`. The latter is useful for features like web search.
+You can set negative cost values. This is useful for subtracting discounts (e.g. prompt caching).
+
+</ParamField>
+
+<ParamField body="required" type="boolean">
+
+You can mark an entry as `required`. If a provider does not report that field, the gateway will report the cost for that inference as `null` and log a warning.
+
+</ParamField>
+
+See the [Configuration Reference](/gateway/configuration-reference/) for more details.
+
+<Warning>
+
+Make sure to understand how different model providers report usage data.
+For example, OpenAI includes cached tokens in `prompt_tokens`, but Anthropic doesn't include them in `input_tokens`.
+
+</Warning>
+
+<Note>
+
+Cost tracking is not available for short-hand models (e.g. `openai::gpt-5`).
+Instead, you must explicitly configure the model and the model provider in your configuration, as above.
+
+</Note>
+
+### Configure cost tracking for batch inference
+
+You can configure cost for batch inference with `batch_cost` alongside the `cost` field:
+
+```toml title="tensorzero.toml"
+[models.gpt-5.providers.openai]
+# ...
+batch_cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 0.625, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 5.00, required = true },
+  { pointer = "/usage/prompt_tokens_details/cached_tokens", cost_per_million = -0.5625 },  # $0.0625 = $0.625 - $0.5625
+]
+```
+
+### Configure cost tracking for embedding models
+
+You can also configure `cost` for embedding model providers:
+
+```toml title="tensorzero.toml"
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+cost = [
+  { pointer = "/usage/total_tokens", cost_per_million = 0.02, required = true },
+]
+```
+
+### Run an inference with cost tracking
+
+Once you've configured `cost` for a model provider, inference responses will include `cost` (TensorZero SDK) or `tensorzero_cost` (OpenAI SDK) in the `usage` object:
+
+```python
+ChatCompletion(
+    # ...
+    usage=CompletionUsage(
+        # ...
+        tensorzero_cost=0.0073075 # [!code ++]
+        # ...
+    ),
+    # ...
+)
+```
+
+You can also browse cost data for individual inferences as well as aggregated cost statistics per model provider in the TensorZero UI.

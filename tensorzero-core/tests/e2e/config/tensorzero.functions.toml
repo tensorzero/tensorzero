@@ -775,7 +775,7 @@ type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
 [functions.raw_response_variant_fallback.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["error_variant"]
 fallback_variants = ["good_variant"]
 
@@ -797,7 +797,7 @@ type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
 [functions.raw_response_variant_both_fail.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["error_variant_1"]
 fallback_variants = ["error_variant_2"]
 
@@ -822,7 +822,7 @@ type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
 [functions.raw_response_combined_fallback.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["error_variant_multi_provider"]
 fallback_variants = ["good_variant_with_fallback"]
 
@@ -879,7 +879,7 @@ type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
 [functions.raw_response_variant_fallback_mid_stream_error.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["error_variant"]
 fallback_variants = ["mid_stream_error_variant"]
 

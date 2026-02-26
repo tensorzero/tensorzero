@@ -28,7 +28,7 @@ export async function fetchExperimentationSectionData(params: {
   const client = getTensorZeroClient();
 
   const feedbackParams =
-    function_config.experimentation.base.type === "track_and_stop"
+    function_config.experimentation.base.type === "adaptive"
       ? {
           metric_name: function_config.experimentation.base.metric,
           variant_names:

@@ -9,4 +9,5 @@ import type { Role } from "./Role";
 export type EventPayloadMessage = {
   role: Role;
   content: Array<EventPayloadMessageContent>;
+  metadata: Record<string, never>;
 };
