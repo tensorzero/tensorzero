@@ -13,7 +13,7 @@ If you're using [Inference Caching](/gateway/guides/inference-caching), the gate
 If you need additional usage information from model providers (e.g. prompt caching), you can enable `include_raw_usage` in the inference request.
 In that case, the gateway will additionally report provider-specific usage fields without preprocessing.
 
-You can browse usage data for individual inferences as well as aggregated usage statistics in the TensorZero UI.
+You can browse usage data for individual inferences as well as aggregated usage statistics per model provider in the TensorZero UI.
 
 ## Track cost
 
@@ -44,7 +44,7 @@ cost = [
 
 The `pointer` is a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) into the provider's response.
 
-You can use `pointer_nonstreaming` and `pointer_streaming` instead of `pointer` if the usage format is different for streaming inferences.
+You can use both `pointer_nonstreaming` and `pointer_streaming` instead of `pointer` if the usage format is different for streaming inferences.
 
 </ParamField>
 
@@ -120,4 +120,4 @@ ChatCompletion(
 )
 ```
 
-You can also browse cost data for individual inferences as well as aggregated cost statistics in the TensorZero UI.
+You can also browse cost data for individual inferences as well as aggregated cost statistics per model provider in the TensorZero UI.
