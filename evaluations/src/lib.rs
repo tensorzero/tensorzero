@@ -74,9 +74,9 @@ pub(crate) fn merge_tags(
     for (key, value) in internal_tags {
         if merged.contains_key(&key) {
             return Err(anyhow!(
-                "Tag collision: external tag '{key}' conflicts with internal evaluation tag. \
-                Reserved tag prefixes include 'tensorzero::evaluation', 'tensorzero::datapoint', \
-                'tensorzero::dataset'"
+                "Tag collision: external tag `{key}` conflicts with internal evaluation tag. \
+                Reserved tag prefixes include `tensorzero::evaluation`, `tensorzero::datapoint`, \
+                `tensorzero::dataset`"
             ));
         }
         merged.insert(key, value);
@@ -98,7 +98,7 @@ fn evaluator_value_type(evaluator_config: &EvaluatorConfig) -> &'static str {
 }
 
 fn build_run_metrics_metadata(
-    evaluation_name: &str,
+    evaluation_name: Option<&str>,
     evaluators: &HashMap<String, EvaluatorConfig>,
 ) -> Vec<InferenceEvaluationRunMetricMetadata> {
     let mut metrics: Vec<InferenceEvaluationRunMetricMetadata> = evaluators
@@ -642,7 +642,7 @@ pub async fn run_evaluation_core_streaming(
             dataset_name: dataset_name.to_string(),
             variant_names,
             metrics: build_run_metrics_metadata(
-                &args.evaluation_name,
+                Some(&args.evaluation_name),
                 &inference_evaluation_config.evaluators,
             ),
             source,
@@ -860,7 +860,7 @@ struct InferDatapointParams<'a> {
     dataset_name: &'a str,
     datapoint: &'a Datapoint,
     input: &'a Input,
-    evaluation_name: &'a str,
+    evaluation_name: Option<&'a str>,
     function_config: &'a EvaluationFunctionConfig,
     inference_cache: CacheEnabledMode,
     external_tags: &'a HashMap<String, String>,
@@ -930,7 +930,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         }
     };
     // Create internal tags for this evaluation inference
-    let internal_tags = HashMap::from([
+    let mut internal_tags = HashMap::from([
         (
             "tensorzero::evaluation_run_id".to_string(),
             evaluation_run_id.to_string(),
@@ -940,14 +940,16 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
             datapoint.id().to_string(),
         ),
         (
-            "tensorzero::evaluation_name".to_string(),
-            evaluation_name.to_string(),
-        ),
-        (
             "tensorzero::dataset_name".to_string(),
             dataset_name.to_string(),
         ),
     ]);
+    if let Some(eval_name) = evaluation_name {
+        internal_tags.insert(
+            "tensorzero::evaluation_name".to_string(),
+            eval_name.to_string(),
+        );
+    }
 
     // Merge external and internal tags, erroring on collision
     let tags = merge_tags(external_tags, internal_tags)?;
@@ -1151,7 +1153,7 @@ pub async fn process_batch(
                         evaluation_run_id,
                         dataset_name: &dataset_name,
                         datapoint: &datapoint,
-                        evaluation_name: &evaluation_name,
+                        evaluation_name: Some(&evaluation_name),
                         function_config,
                         input: &input,
                         inference_cache,
@@ -1170,7 +1172,7 @@ pub async fn process_batch(
                         datapoint: datapoint.clone(),
                         input,
                         evaluation_config,
-                        evaluation_name,
+                        evaluation_name: Some(evaluation_name),
                         clients: clients.clone(),
                         evaluation_run_id,
                         inference_cache,
