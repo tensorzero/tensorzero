@@ -96,6 +96,8 @@ You can use TensorZero with any OpenAI SDK (Python, Node, Go, etc.) or OpenAI-co
 3. Run inference:
 
 ```python
+from openai import OpenAI
+
 # Point the client to the TensorZero Gateway
 client = OpenAI(base_url="http://localhost:3000/openai/v1")
 
