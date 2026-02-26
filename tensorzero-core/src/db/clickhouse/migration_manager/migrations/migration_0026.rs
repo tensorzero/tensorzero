@@ -9,7 +9,7 @@ use crate::error::{Error, ErrorDetails};
 /// `DynamicRunEpisodeByRunIdView` materialized view.
 /// It also adds the `DynamicEvaluationRunByProjectName` table and the
 /// `DynamicEvaluationRunByProjectNameView` materialized view.
-/// These support consumption of workflow evaluations (formerly "dynamic evaluations") indexed by run id and project name.
+/// These support consumption of workflow evaluations (formerly "workflow evaluations") indexed by run id and project name.
 /// The `DynamicRunEpisodeByRunId` table contains the same data as the
 /// `DynamicEvaluationRunEpisode` table with different indexing.
 /// The `DynamicEvaluationRunByProjectName` table contains the same data as the

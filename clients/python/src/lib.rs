@@ -934,9 +934,9 @@ impl TensorZeroGateway {
     /// Make a request to the /dynamic_evaluation_run endpoint.
     ///
     /// :param variants: A dictionary mapping function names to pinned variant names.
-    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
-    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
-    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
+    /// :param tags: A dictionary containing tags that should be applied to every inference in the workflow evaluation run.
+    /// :param project_name: (Optional) The name of the project to associate with the workflow evaluation run.
+    /// :param run_display_name: (Optional) The display name of the workflow evaluation run.
     /// :return: A `DynamicEvaluationRunResponse` object (alias for WorkflowEvaluationRunResponse).
     #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
     fn dynamic_evaluation_run(
@@ -987,9 +987,9 @@ impl TensorZeroGateway {
     /// DEPRECATED: Use workflow_evaluation_run_episode instead.
     /// Make a request to the /dynamic_evaluation_run_episode endpoint.
     ///
-    /// :param run_id: The run ID to use for the dynamic evaluation run.
-    /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
+    /// :param run_id: The run ID to use for the workflow evaluation run.
+    /// :param task_name: The name of the task to use for the workflow evaluation run.
+    /// :param tags: A dictionary of tags to add to the workflow evaluation run.
     /// :return: A `DynamicEvaluationRunEpisodeResponse` object (alias for WorkflowEvaluationRunEpisodeResponse).
     #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
     fn dynamic_evaluation_run_episode(
@@ -2028,9 +2028,9 @@ impl AsyncTensorZeroGateway {
     /// Make a request to the /dynamic_evaluation_run endpoint.
     ///
     /// :param variants: A dictionary mapping function names to pinned variant names.
-    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
-    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
-    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
+    /// :param tags: A dictionary containing tags that should be applied to every inference in the workflow evaluation run.
+    /// :param project_name: (Optional) The name of the project to associate with the workflow evaluation run.
+    /// :param run_display_name: (Optional) The display name of the workflow evaluation run.
     /// :return: A `DynamicEvaluationRunResponse` object (alias for WorkflowEvaluationRunResponse).
     #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
     fn dynamic_evaluation_run(
@@ -2083,9 +2083,9 @@ impl AsyncTensorZeroGateway {
     /// DEPRECATED: Use workflow_evaluation_run_episode instead.
     /// Make a request to the /dynamic_evaluation_run_episode endpoint.
     ///
-    /// :param run_id: The run ID to use for the dynamic evaluation run.
-    /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
+    /// :param run_id: The run ID to use for the workflow evaluation run.
+    /// :param task_name: The name of the task to use for the workflow evaluation run.
+    /// :param tags: A dictionary of tags to add to the workflow evaluation run.
     /// :return: A `DynamicEvaluationRunEpisodeResponse` object (alias for WorkflowEvaluationRunEpisodeResponse).
     #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
     fn dynamic_evaluation_run_episode<'a>(
