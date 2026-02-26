@@ -9,7 +9,7 @@
   - Run `cargo fmt`.
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
   - Run unit tests with `cargo test-unit-fast` which uses `nextest` under the hood.
-- When writing tests, key assertions should include a custom message stating the expected behavior.
+- When writing tests, key assertions/expectations should include a custom message stating the expected behavior.
 - In tests, prefer `.expect("descriptive message")` over `.unwrap()` for better failure diagnostics.
 - Use `#[expect(clippy::...)]` instead of `#[allow(clippy::...)]`.
 - Prefer early returns over nested `match`/`if` blocks. For example, use `let ... else { return Err(...) };` or `if !condition { return Err(...) }` to reduce nesting.
