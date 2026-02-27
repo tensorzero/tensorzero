@@ -422,7 +422,7 @@ function ResultsContent({
           disableNext={offset + limit >= total_datapoints}
         />
       ) : (
-        <div className="mt-4 text-center text-gray-500">
+        <div className="mt-4 text-center text-fg-tertiary">
           Select evaluation run IDs to view results
         </div>
       )}

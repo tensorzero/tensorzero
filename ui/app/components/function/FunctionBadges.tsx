@@ -4,11 +4,11 @@ import type { FunctionConfig } from "~/types/tensorzero";
 const getBadgeStyle = (type: string) => {
   switch (type) {
     case "chat":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
+      return "bg-blue-100 text-blue-800";
     case "json":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300";
+      return "bg-purple-100 text-purple-800";
     default:
-      return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
+      return "bg-bg-tertiary text-fg-primary";
   }
 };
 

@@ -59,7 +59,7 @@ function LightweightPlaceholder({
   return (
     <pre
       className={cn(
-        "min-h-9 overflow-auto rounded-sm bg-gray-50 p-2 font-mono text-xs whitespace-pre-wrap",
+        "min-h-9 overflow-auto rounded-sm bg-bg-secondary p-2 font-mono text-xs whitespace-pre-wrap",
         className,
       )}
       style={{ maxHeight }}

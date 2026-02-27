@@ -31,7 +31,7 @@ function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
           <Link
             to={link}
             aria-label={id}
-            className="block no-underline transition-colors duration-300 hover:text-gray-500"
+            className="block no-underline transition-colors duration-300 hover:text-fg-tertiary"
           >
             {content}
           </Link>
@@ -97,7 +97,7 @@ function TableItemFunction({
       >
         {functionIconConfig.icon}
       </span>
-      <span className="text-fg-primary inline-block truncate transition-colors duration-300 group-hover:text-gray-500">
+      <span className="text-fg-primary inline-block truncate transition-colors duration-300 group-hover:text-fg-tertiary">
         {functionName}
       </span>
     </>

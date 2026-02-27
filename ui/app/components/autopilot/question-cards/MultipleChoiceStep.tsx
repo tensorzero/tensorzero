@@ -34,16 +34,14 @@ export function MultipleChoiceStep({
               className={cn(
                 "group relative flex cursor-pointer flex-col items-start rounded-lg border px-3 py-2 text-left transition-all",
                 isSelected
-                  ? "border-purple-500 bg-purple-50 ring-1 ring-purple-500 ring-inset dark:border-purple-400 dark:bg-purple-950/40 dark:ring-purple-400"
-                  : "border-border bg-bg-secondary hover:border-purple-300 hover:bg-purple-50/50 dark:hover:border-purple-600 dark:hover:bg-purple-950/20",
+                  ? "border-purple-500 bg-purple-50 ring-1 ring-purple-500 ring-inset"
+                  : "border-border bg-bg-secondary hover:border-purple-300 hover:bg-purple-50/50",
               )}
             >
               <span
                 className={cn(
                   "text-sm font-medium",
-                  isSelected
-                    ? "text-purple-700 dark:text-purple-300"
-                    : "text-fg-primary",
+                  isSelected ? "text-purple-700" : "text-fg-primary",
                 )}
               >
                 {option.label}
@@ -51,9 +49,7 @@ export function MultipleChoiceStep({
               <span
                 className={cn(
                   "text-xs leading-snug",
-                  isSelected
-                    ? "text-purple-600 dark:text-purple-400"
-                    : "text-fg-muted",
+                  isSelected ? "text-purple-600" : "text-fg-muted",
                 )}
               >
                 {option.description}

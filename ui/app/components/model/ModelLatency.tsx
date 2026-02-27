@@ -189,7 +189,7 @@ export function LatencyQuantileChart({
           <Tooltip
             content={<CustomTooltipContent />}
             cursor={{
-              stroke: "#666666",
+              stroke: "hsl(var(--foreground-muted))",
               strokeDasharray: "3 3",
               strokeWidth: 2,
             }}

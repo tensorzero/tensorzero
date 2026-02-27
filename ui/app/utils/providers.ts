@@ -26,26 +26,22 @@ export function formatProvider(provider: ProviderConfig["type"]): {
     case "azure":
       return {
         name: "Azure",
-        className:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+        className: "bg-blue-100 text-blue-800",
       };
     case "deepseek":
       return {
         name: "DeepSeek",
-        className:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+        className: "bg-blue-100 text-blue-800",
       };
     case "dummy":
       return {
         name: "Dummy",
-        className:
-          "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
+        className: "bg-bg-tertiary text-fg-primary",
       };
     case "fireworks":
       return {
         name: "Fireworks",
-        className:
-          "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+        className: "bg-orange-100 text-orange-800",
       };
     case "gcp_vertex_anthropic":
       return {
@@ -75,32 +71,27 @@ export function formatProvider(provider: ProviderConfig["type"]): {
     case "mistral":
       return {
         name: "Mistral",
-        className:
-          "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+        className: "bg-purple-100 text-purple-800",
       };
     case "openai":
       return {
         name: "OpenAI",
-        className:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+        className: "bg-blue-100 text-blue-800",
       };
     case "openrouter":
       return {
         name: "OpenRouter",
-        className:
-          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+        className: "bg-blue-100 text-blue-800",
       };
     case "sglang":
       return {
         name: "SGLang",
-        className:
-          "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300",
+        className: "bg-emerald-100 text-emerald-800",
       };
     case "tgi":
       return {
         name: "TGI",
-        className:
-          "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300",
+        className: "bg-emerald-100 text-emerald-800",
       };
     case "together":
       return {

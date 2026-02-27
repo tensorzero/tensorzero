@@ -45,7 +45,7 @@ export default function FunctionVariantTable({
             variantName={info.getValue()}
             functionName={function_name}
           >
-            <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+            <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-fg-tertiary">
               {info.getValue()}
             </code>
           </VariantLink>

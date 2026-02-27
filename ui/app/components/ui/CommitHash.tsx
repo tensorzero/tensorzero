@@ -42,12 +42,12 @@ export function CommitHash({ tags }: CommitHashProps) {
               separator="@"
             />
           ) : (
-            <Code className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
+            <Code className="flex items-center gap-1 rounded bg-bg-tertiary px-2 py-0.5 font-mono text-xs">
               {shortHash}
             </Code>
           )
         ) : (
-          <Code className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
+          <Code className="flex items-center gap-1 rounded bg-bg-tertiary px-2 py-0.5 font-mono text-xs">
             {shortHash}
           </Code>
         )}

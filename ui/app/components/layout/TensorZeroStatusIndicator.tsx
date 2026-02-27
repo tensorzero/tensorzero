@@ -26,7 +26,7 @@ export default function TensorZeroStatusIndicator({
   }, [uiVersion, serverVersion]);
 
   const statusColor = useMemo(() => {
-    if (isLoading || status === undefined) return "bg-gray-300"; // Loading or initial state
+    if (isLoading || status === undefined) return "bg-bg-muted"; // Loading or initial state
     if (!status) return "bg-red-500"; // Could not connect (explicit null/failed state)
     if (!versionsMatch) return "bg-yellow-500"; // Version mismatch
     return "bg-green-500"; // Everything is good

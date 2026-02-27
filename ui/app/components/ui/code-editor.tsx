@@ -6,11 +6,12 @@ import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { StreamLanguage } from "@codemirror/language";
 import { jinja2 } from "@codemirror/legacy-modes/mode/jinja2";
-import { githubLightInit } from "@uiw/codemirror-theme-github";
+import { githubLightInit, githubDarkInit } from "@uiw/codemirror-theme-github";
 import { EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import { Button } from "./button";
 import { cn } from "~/utils/common";
+import { Theme, useTheme } from "~/context/theme";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -94,8 +95,17 @@ const CUSTOM_EDITOR_THEME = EditorView.theme({
   },
 });
 
-// Editor theme with monospace font
-const THEME_MONO = githubLightInit({
+// Editor themes with monospace font
+const THEME_MONO_LIGHT = githubLightInit({
+  settings: {
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--text-xs)",
+    gutterBorder: "transparent",
+    background: "transparent",
+  },
+});
+
+const THEME_MONO_DARK = githubDarkInit({
   settings: {
     fontFamily: "var(--font-mono)",
     fontSize: "var(--text-xs)",
@@ -313,7 +323,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const buttonClassName =
     "flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs";
 
-  const theme = THEME_MONO;
+  const { resolvedTheme } = useTheme();
+  const theme =
+    resolvedTheme === Theme.Dark ? THEME_MONO_DARK : THEME_MONO_LIGHT;
 
   // Use cached basicSetup (shared across all CodeEditor instances)
   const basicSetup = getBasicSetup(showLineNumbers, readOnly);
@@ -383,7 +395,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       </div>
 
       {/* `overflow-clip` so gutter does not render on top of focus ring */}
-      <div className="overflow-clip rounded-sm bg-gray-50 transition focus-within:ring-2 focus-within:ring-blue-500">
+      <div className="overflow-clip rounded-sm bg-bg-secondary transition focus-within:ring-2 focus-within:ring-ring">
         <CodeMirror
           value={internalValue}
           onChange={handleChange}

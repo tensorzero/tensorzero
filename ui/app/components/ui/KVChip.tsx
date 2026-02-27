@@ -19,7 +19,7 @@ export default function KVChip({
 }: KVChipProps) {
   return (
     <div className="flex flex-wrap gap-1" key={k} {...props}>
-      <div className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
+      <div className="flex items-center gap-1 rounded bg-bg-tertiary px-2 py-0.5 font-mono text-xs">
         {k_href ? (
           <Link to={k_href} className="text-blue-600 hover:underline">
             {k}
@@ -27,7 +27,7 @@ export default function KVChip({
         ) : (
           <span>{k}</span>
         )}
-        <span className="text-gray-400">{separator}</span>
+        <span className="text-fg-muted">{separator}</span>
         {v_href ? (
           <Link to={v_href} className="text-blue-600 hover:underline">
             {v}

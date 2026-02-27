@@ -29,8 +29,8 @@ const BASE_COLORS = [
 ];
 
 // Default fallback color
-const DEFAULT_COLOR = "bg-gray-300 hover:bg-gray-500";
-const DEFAULT_BASE_COLOR = "bg-gray-300";
+const DEFAULT_COLOR = "bg-bg-muted hover:bg-fg-muted";
+const DEFAULT_BASE_COLOR = "bg-bg-muted";
 
 // Create a context to share color assignment between components
 const ColorAssignerContext = createContext<{

@@ -312,7 +312,7 @@ function InferencesTableContent({ data }: { data: InferencesTableData }) {
 
   if (inferences.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+      <div className="rounded-lg border border-border p-4 text-center text-fg-tertiary">
         No inferences found
       </div>
     );

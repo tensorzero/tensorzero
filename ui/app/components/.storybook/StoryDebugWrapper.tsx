@@ -12,7 +12,7 @@ export function StoryDebugWrapper({
   return (
     <div className="w-[80vw] space-y-4">
       <div className="bg-orange-100 p-8">
-        <div className="bg-white p-4">{children}</div>
+        <div className="bg-bg-primary p-4">{children}</div>
       </div>
       <div className="bg-orange-100 p-8">
         <div className="mb-2 flex items-center justify-between">
@@ -23,7 +23,7 @@ export function StoryDebugWrapper({
             </span>
           </h3>
         </div>
-        <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
+        <pre className="mt-2 overflow-auto rounded bg-bg-primary p-2 text-xs">
           {debugData !== undefined
             ? JSON.stringify(debugData, null, 2)
             : "undefined"}

@@ -39,6 +39,7 @@ import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { AppProviders } from "./providers/app-providers";
 import { EntitySheet } from "./components/entity-sheet/EntitySheet";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
+import { themeInitScript } from "./context/theme";
 import {
   loadFeatureFlags,
   type FeatureFlags,
@@ -132,10 +133,11 @@ export async function loader(): Promise<LoaderData> {
 // Global Layout
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <Meta />
         <Links />
       </head>

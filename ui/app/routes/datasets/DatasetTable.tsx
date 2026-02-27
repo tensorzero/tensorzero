@@ -140,7 +140,7 @@ function DatasetTableContent({
             to={toDatasetUrl(info.getValue())}
             className="block no-underline"
           >
-            <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+            <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-fg-tertiary">
               {info.getValue()}
             </code>
           </Link>

@@ -35,9 +35,9 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="min-h-screen bg-gray-100 p-8">
-        <div className="mb-4 rounded bg-white p-4 shadow">
-          <p className="text-gray-600">
+      <div className="min-h-screen bg-bg-tertiary p-8">
+        <div className="mb-4 rounded bg-bg-primary p-4 shadow">
+          <p className="text-fg-secondary">
             Background content to show overlay effect
           </p>
         </div>
