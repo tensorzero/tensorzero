@@ -7,7 +7,7 @@ rust-version.workspace = true
 
 [features]
 e2e_tests = ["autopilot-tools/e2e_tests"]
-ts-bindings = ["durable-tools/ts-bindings", "dep:tensorzero-ts-types"]
+ts-bindings = ["durable-tools/ts-bindings", "autopilot-tools/ts-bindings", "dep:tensorzero-ts-types"]
 
 [dependencies]
 # Internal crates

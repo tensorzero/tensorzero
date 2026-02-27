@@ -47,10 +47,7 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("LIST_EPISODES_TOOL_PARAMS", "ListEpisodesToolParams"),
     ("LIST_INFERENCES_TOOL_PARAMS", "ListInferencesToolParams"),
     ("RUN_EVALUATION_TOOL_PARAMS", "RunEvaluationToolParams"),
-    (
-        "UPLOAD_DATASET_TOOL_PARAMS",
-        "UploadDatasetToolParams",
-    ),
+    ("UPLOAD_DATASET_TOOL_PARAMS", "UploadDatasetToolParams"),
     (
         "UPDATE_DATAPOINTS_TOOL_PARAMS",
         "UpdateDatapointsToolParams",
@@ -75,10 +72,7 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("LIST_EPISODES_RESPONSE", "ListEpisodesResponse"),
     ("RUN_EVALUATION_RESPONSE", "RunEvaluationResponse"),
     ("UPDATE_DATAPOINTS_RESPONSE", "UpdateDatapointsResponse"),
-    (
-        "UPLOAD_DATASET_TOOL_OUTPUT",
-        "UploadDatasetToolOutput",
-    ),
+    ("UPLOAD_DATASET_TOOL_OUTPUT", "UploadDatasetToolOutput"),
     ("WRITE_CONFIG_RESPONSE", "WriteConfigResponse"),
     ("GET_CONFIG_RESPONSE", "GetConfigResponse"),
     ("FEEDBACK_BY_VARIANT", "FeedbackByVariant"),
