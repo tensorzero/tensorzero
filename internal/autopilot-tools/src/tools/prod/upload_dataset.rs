@@ -223,7 +223,7 @@ impl TaskTool for UploadDatasetTool {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Step 1: Get S3 credentials
         let credentials: S3UploadResponse = ctx

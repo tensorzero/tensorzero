@@ -113,7 +113,7 @@
 //!     async fn execute(
 //!         llm_params: <Self as ToolMetadata>::LlmParams,
 //!         _side_info: <Self as ToolMetadata>::SideInfo,
-//!         ctx: &mut ToolContext<'_>,
+//!         ctx: &mut ToolContext,
 //!     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 //!         // Call the search tool
 //!         let _search = ctx

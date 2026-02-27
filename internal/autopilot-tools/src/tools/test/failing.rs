@@ -46,7 +46,7 @@ impl TaskTool for FailingTool {
         &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         Err(AutopilotToolError::test_error(llm_params.error_message).into())
     }

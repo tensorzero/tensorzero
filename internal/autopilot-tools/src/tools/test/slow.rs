@@ -62,7 +62,7 @@ impl TaskTool for SlowTool {
         &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         let start = Instant::now();
         tokio::time::sleep(tokio::time::Duration::from_millis(llm_params.delay_ms)).await;

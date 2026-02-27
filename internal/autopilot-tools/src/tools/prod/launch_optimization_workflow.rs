@@ -437,7 +437,7 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Step 1: Launch the optimization workflow
         let job_handle: OptimizationJobHandle = ctx

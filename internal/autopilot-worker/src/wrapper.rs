@@ -90,7 +90,7 @@ where
         &self,
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> DurableToolResult<Self::Output> {
         let session_id = side_info.session_id;
         let tool_call_event_id = side_info.tool_call_event_id;
@@ -226,7 +226,7 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
         &self,
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> DurableToolResult<Self::Output> {
         let tool_name = self.inner.name().to_string();
         let tool_call_event_id = side_info.tool_call_event_id;
@@ -563,7 +563,7 @@ mod tests {
             &self,
             llm_params: Self::LlmParams,
             _side_info: Self::SideInfo,
-            _ctx: &mut ToolContext<'_>,
+            _ctx: &mut ToolContext,
         ) -> DurableToolResult<Self::Output> {
             Ok(TestTaskToolOutput {
                 result: format!("Processed: {}", llm_params.message),

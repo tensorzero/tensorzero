@@ -157,7 +157,7 @@ impl TaskTool for EchoTaskTool {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         Ok(EchoOutput {
             echoed: llm_params.message,
@@ -281,7 +281,7 @@ impl TaskTool for InferenceTaskTool {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         let input = Input {
             system: None,
@@ -545,7 +545,7 @@ impl TaskTool for MultiCallTaskTool {
         &self,
         _llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         // Call the same SimpleTool three times with different params
         ctx.call_tool(
