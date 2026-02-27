@@ -134,7 +134,6 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::azure::)'
-test-group = 'e2e_groq'
 # We have a low rate limit on Azure, so we often need to retry several times
 retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
 
