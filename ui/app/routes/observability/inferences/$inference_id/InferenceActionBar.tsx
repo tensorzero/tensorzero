@@ -1,16 +1,20 @@
 import { Suspense, useMemo } from "react";
 import { Await } from "react-router";
+import { ClipboardIcon, CheckCheckIcon } from "lucide-react";
 import type { StoredInference, Input } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
+import { useCopy } from "~/hooks/use-copy";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import { ActionBar } from "~/components/layout/ActionBar";
+import { Button, ButtonIcon } from "~/components/ui/button";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
+import { serializeConversation } from "~/utils/conversation-serializer";
 import type { ModelInferencesData } from "./inference-data.server";
 
 interface InferenceActionBarProps {
@@ -54,6 +58,11 @@ export function InferenceActionBar({
       />
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}
+      />
+      <CopyConversationButtonStreaming
+        key={`copy-${locationKey}`}
+        inference={inference}
+        inputPromise={inputPromise}
       />
     </ActionBar>
   );
@@ -144,5 +153,50 @@ function TryWithVariantActionStreaming({
         }}
       </Await>
     </Suspense>
+  );
+}
+
+function CopyConversationButtonStreaming({
+  inference,
+  inputPromise,
+}: {
+  inference: StoredInference;
+  inputPromise: Promise<Input | undefined>;
+}) {
+  return (
+    <Suspense fallback={<Skeleton className="h-8 w-36" />}>
+      <Await resolve={inputPromise} errorElement={<ActionBarAsyncError />}>
+        {(input) => (
+          <CopyConversationButton inference={inference} input={input} />
+        )}
+      </Await>
+    </Suspense>
+  );
+}
+
+function CopyConversationButton({
+  inference,
+  input,
+}: {
+  inference: StoredInference;
+  input: Input | undefined;
+}) {
+  const { copy, didCopy, isCopyAvailable } = useCopy();
+
+  if (!isCopyAvailable) return null;
+
+  const handleCopy = () => {
+    const serialized = serializeConversation(input, inference);
+    copy(serialized);
+  };
+
+  return (
+    <Button variant="outline" size="sm" className="w-fit" onClick={handleCopy}>
+      <ButtonIcon
+        as={didCopy ? CheckCheckIcon : ClipboardIcon}
+        variant="tertiary"
+      />
+      {didCopy ? "Copied" : "Copy Messages"}
+    </Button>
   );
 }
