@@ -609,6 +609,7 @@ dependencies = [
  "tensorzero-core",
  "tensorzero-derive",
  "tensorzero-optimizers",
+ "tensorzero-ts-types",
  "tokio",
  "tokio-util",
  "tracing",

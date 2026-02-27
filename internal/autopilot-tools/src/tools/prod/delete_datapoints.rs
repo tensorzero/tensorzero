@@ -40,8 +40,18 @@ impl ToolMetadata for DeleteDatapointsTool {
     }
 
     #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "DeleteDatapointsToolParams".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::DELETE_DATAPOINTS_RESPONSE
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "DeleteDatapointsResponse".to_string()
     }
 
     fn name(&self) -> Cow<'static, str> {
