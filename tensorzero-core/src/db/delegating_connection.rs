@@ -144,7 +144,8 @@ impl PrimaryDatastore {
                 }
                 Ok(resolved)
             }
-            Some(false) => Ok(resolved),
+            // TODO(#6469): audit uses of database operations when observability is disabled.
+            Some(false) => Ok(Self::Disabled),
         }
     }
 
