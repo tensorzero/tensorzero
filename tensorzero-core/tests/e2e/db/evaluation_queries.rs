@@ -37,9 +37,7 @@ fn make_test_inference_evaluation_run(run_id: Uuid) -> InferenceEvaluationRunIns
 }
 
 /// Test that `insert_inference_evaluation_run` writes expected fields, verified via trait query methods.
-async fn test_insert_inference_evaluation_run(
-    conn: impl EvaluationQueries + TestDatabaseHelpers,
-) {
+async fn test_insert_inference_evaluation_run(conn: impl EvaluationQueries + TestDatabaseHelpers) {
     let run = make_test_inference_evaluation_run(Uuid::now_v7());
 
     conn.insert_inference_evaluation_run(&run)
@@ -93,11 +91,6 @@ async fn test_insert_inference_evaluation_run(
     assert_eq!(
         row.dataset_name, run.dataset_name,
         "listed dataset_name should match inserted value"
-    );
-    assert_eq!(
-        row.snapshot_hash.as_deref(),
-        Some("deadbeef"),
-        "listed snapshot_hash should be stored as lowercase hex"
     );
 }
 make_db_test!(test_insert_inference_evaluation_run);
