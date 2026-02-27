@@ -119,7 +119,7 @@ export function GlobalToastProvider({
         logger(props);
         return emitToast({
           icon: Check,
-          iconClassName: "text-green-500 dark:text-green-400",
+          iconClassName: "text-green-500",
           ...toastProps,
           variant: "success",
         });
@@ -134,7 +134,7 @@ export function GlobalToastProvider({
         logger(props, "error");
         return emitToast({
           icon: AlertTriangle,
-          iconClassName: "text-red-500 dark:text-red-400",
+          iconClassName: "text-red-500",
           ...toastProps,
           variant: "destructive",
         });

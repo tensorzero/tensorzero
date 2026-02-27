@@ -93,8 +93,8 @@ export function GenerateApiKeyModal({
                   <p className="text-muted-foreground text-sm">{description}</p>
                 </div>
               )}
-              <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-950">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+              <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3">
+                <p className="text-sm text-yellow-800">
                   Make sure to copy your API key now. For security reasons, you
                   won't be able to see it again.
                 </p>
@@ -124,10 +124,8 @@ export function GenerateApiKeyModal({
                 </p>
               </div>
               {error && (
-                <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
-                  <p className="text-sm text-red-800 dark:text-red-200">
-                    {error}
-                  </p>
+                <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                  <p className="text-sm text-red-800">{error}</p>
                 </div>
               )}
             </fetcher.Form>

@@ -35,7 +35,7 @@ function CountErrorTooltip({ variant }: { variant: CountVariantType }) {
       <TooltipTrigger asChild>
         <span
           className={cn(
-            "cursor-help font-medium text-red-500 dark:text-red-400",
+            "cursor-help font-medium text-red-500",
             variant === CountVariant.Page ? "text-2xl" : "text-xl",
           )}
         >

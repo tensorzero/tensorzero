@@ -26,8 +26,7 @@ export function StepTab({
       className={cn(
         "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full py-1 pr-2.5 pl-1 text-xs font-medium transition-all disabled:cursor-default disabled:opacity-50",
         state === "active" && "bg-purple-200/70 text-purple-800",
-        state === "completed" &&
-          "text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/50",
+        state === "completed" && "text-green-700 hover:bg-green-50",
         state === "skipped" && "text-fg-muted hover:bg-bg-tertiary",
         state === "upcoming" && "text-fg-muted hover:bg-purple-100/50",
       )}
@@ -35,7 +34,7 @@ export function StepTab({
       aria-current={state === "active" ? "step" : undefined}
     >
       {state === "completed" ? (
-        <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+        <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-green-100">
           <Check className="h-2.5 w-2.5" />
         </span>
       ) : state === "skipped" ? (

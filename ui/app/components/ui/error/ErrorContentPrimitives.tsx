@@ -63,7 +63,7 @@ export function ErrorContentHeader({
   return (
     <CardHeader>
       <div className="flex items-center gap-4">
-        <Icon className="h-6 w-6 shrink-0 text-red-500 dark:text-red-400" />
+        <Icon className="h-6 w-6 shrink-0 text-red-500" />
         <div className="min-w-0 flex-1">
           <CardTitle className="text-foreground font-medium">{title}</CardTitle>
           <p className="text-muted-foreground mt-1.5 text-sm break-words">
@@ -167,7 +167,7 @@ export function ErrorNotice({
       <Icon
         className={cn(
           "mb-4 h-10 w-10",
-          muted ? "text-muted-foreground" : "text-red-500 dark:text-red-400",
+          muted ? "text-muted-foreground" : "text-red-500",
         )}
       />
       <h2 className="text-foreground text-xl font-medium">{title}</h2>
@@ -280,7 +280,7 @@ export function InlineAsyncError({
   const message = getErrorMessage({ error, fallback: defaultMessage });
 
   return (
-    <div className="inline-flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+    <div className="inline-flex items-center gap-2 text-sm text-red-600">
       <AlertCircle className="h-4 w-4 flex-shrink-0" />
       <span>{message}</span>
     </div>
@@ -312,7 +312,7 @@ export function ActionBarAsyncError({
   const message = getErrorMessage({ error, fallback: defaultMessage });
 
   return (
-    <div className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+    <div className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-sm text-red-700">
       <AlertCircle className="h-4 w-4 flex-shrink-0" />
       <span>{message}</span>
     </div>

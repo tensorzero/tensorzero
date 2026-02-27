@@ -11,9 +11,9 @@ const getBadgeStyle = (
     case "type":
       switch (value) {
         case "boolean":
-          return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300";
+          return "bg-amber-100 text-amber-800";
         case "float":
-          return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300";
+          return "bg-cyan-100 text-cyan-800";
         case "demonstration":
           return "bg-purple-100 text-purple-800";
         case undefined:
@@ -25,13 +25,13 @@ const getBadgeStyle = (
     case "optimize":
       if (!value) return "";
       return value === "max"
-        ? "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900 dark:text-fuchsia-300"
-        : "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300";
+        ? "bg-fuchsia-100 text-fuchsia-800"
+        : "bg-sky-100 text-sky-800";
 
     case "level":
       return value === "episode"
-        ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300"
-        : "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300";
+        ? "bg-indigo-100 text-indigo-800"
+        : "bg-teal-100 text-teal-800";
 
     default:
       return "";

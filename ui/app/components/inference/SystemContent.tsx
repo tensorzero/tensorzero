@@ -56,7 +56,7 @@ export function SystemContent({
             value={displayValue}
             onChange={handleChange}
             className={`min-h-32 font-mono text-sm ${
-              jsonError ? "border-red-500 dark:border-red-500" : "border-border"
+              jsonError ? "border-red-500" : "border-border"
             }`}
             placeholder="System instructions..."
           />
