@@ -77,7 +77,7 @@ function EvaluationRunRow({
         </VariantLink>
       </TableCell>
       <TableCell>
-        <TableItemTime timestamp={evaluationRun.last_inference_timestamp} />
+        <TableItemTime timestamp={evaluationRun.created_at} />
       </TableCell>
     </TableRow>
   );

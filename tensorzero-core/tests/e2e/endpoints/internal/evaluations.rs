@@ -60,7 +60,7 @@ async fn test_get_evaluation_run_infos_endpoint() {
         Uuid::parse_str(evaluation_run_id1).unwrap()
     );
     assert_eq!(first.variant_name, "gpt4o_mini_initial_prompt");
-    assert!(!first.most_recent_inference_date.is_empty());
+    assert!(!first.created_at.is_empty());
 
     let second = &response.run_infos[1];
     assert_eq!(
@@ -190,7 +190,7 @@ async fn test_get_evaluation_run_infos_for_datapoint_json_function() {
         Uuid::parse_str("0196368e-53a8-7e82-a88d-db7086926d81").unwrap()
     );
     assert_eq!(run_info.variant_name, "gpt4o_initial_prompt");
-    assert!(!run_info.most_recent_inference_date.is_empty());
+    assert!(!run_info.created_at.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread")]

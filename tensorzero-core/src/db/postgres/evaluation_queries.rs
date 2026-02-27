@@ -309,7 +309,7 @@ fn build_list_evaluation_runs_query(limit: u32, offset: u32) -> QueryBuilder<sql
             function_name,
             COALESCE(variant_names->>0, '') as variant_name,
             dataset_name,
-            created_at as last_inference_timestamp,
+            created_at,
             encode(snapshot_hash, 'hex') as snapshot_hash
         FROM tensorzero.inference_evaluation_runs
         ORDER BY run_id DESC
@@ -385,13 +385,11 @@ fn build_search_evaluation_runs_query(
     }
     qb.push(
         r"
-        AND (run_id::TEXT ILIKE ",
+        AND COALESCE(variant_names->>0, '') ILIKE ",
     );
     qb.push_bind(format!("%{query}%"));
-    qb.push(" OR COALESCE(variant_names->>0, '') ILIKE ");
-    qb.push_bind(format!("%{query}%"));
     qb.push(
-        r")
+        r"
         ORDER BY run_id DESC
         LIMIT ",
     );
@@ -411,7 +409,7 @@ fn build_get_evaluation_run_infos_query(
         SELECT
             run_id as evaluation_run_id,
             COALESCE(variant_names->>0, '') as variant_name,
-            created_at as most_recent_inference_date
+            created_at
         FROM tensorzero.inference_evaluation_runs
         WHERE run_id = ANY(",
     );
@@ -431,7 +429,7 @@ fn build_get_evaluation_run_infos_for_datapoint_query(
     let inference_table = function_type.postgres_table_name();
 
     let mut qb = QueryBuilder::new(
-        "SELECT (tags->>'tensorzero::evaluation_run_id')::UUID as evaluation_run_id, (ARRAY_AGG(variant_name))[1] as variant_name, MAX(created_at) as most_recent_inference_date FROM ",
+        "SELECT (tags->>'tensorzero::evaluation_run_id')::UUID as evaluation_run_id, (ARRAY_AGG(variant_name))[1] as variant_name, MAX(created_at) as created_at FROM ",
     );
     qb.push(inference_table);
     qb.push(" WHERE tags->>'tensorzero::datapoint_id' = ");
@@ -732,7 +730,7 @@ mod tests {
                 function_name,
                 COALESCE(variant_names->>0, '') as variant_name,
                 dataset_name,
-                created_at as last_inference_timestamp,
+                created_at,
                 encode(snapshot_hash, 'hex') as snapshot_hash
             FROM tensorzero.inference_evaluation_runs
             ORDER BY run_id DESC
@@ -761,9 +759,9 @@ mod tests {
                 COALESCE(variant_names->>0, '') AS variant_name
             FROM tensorzero.inference_evaluation_runs
             WHERE evaluation_name = $1 AND function_name = $2
-            AND (run_id::TEXT ILIKE $3 OR COALESCE(variant_names->>0, '') ILIKE $4)
+            AND COALESCE(variant_names->>0, '') ILIKE $3
             ORDER BY run_id DESC
-            LIMIT $5 OFFSET $6
+            LIMIT $4 OFFSET $5
             ",
         );
     }
@@ -782,9 +780,9 @@ mod tests {
                 COALESCE(variant_names->>0, '') AS variant_name
             FROM tensorzero.inference_evaluation_runs
             WHERE evaluation_name = $1
-            AND (run_id::TEXT ILIKE $2 OR COALESCE(variant_names->>0, '') ILIKE $3)
+            AND COALESCE(variant_names->>0, '') ILIKE $2
             ORDER BY run_id DESC
-            LIMIT $4 OFFSET $5
+            LIMIT $3 OFFSET $4
             ",
         );
     }
@@ -802,7 +800,7 @@ mod tests {
             SELECT
                 run_id as evaluation_run_id,
                 COALESCE(variant_names->>0, '') as variant_name,
-                created_at as most_recent_inference_date
+                created_at
             FROM tensorzero.inference_evaluation_runs
             WHERE run_id = ANY($1) AND function_name = $2 ORDER BY run_id DESC
             ",
@@ -825,7 +823,7 @@ mod tests {
             r"
             SELECT (tags->>'tensorzero::evaluation_run_id')::UUID as evaluation_run_id,
                 (ARRAY_AGG(variant_name))[1] as variant_name,
-                MAX(created_at) as most_recent_inference_date
+                MAX(created_at) as created_at
             FROM tensorzero.chat_inferences
             WHERE tags->>'tensorzero::datapoint_id' = $1
             AND function_name = $2

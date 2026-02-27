@@ -6,5 +6,5 @@
 export type EvaluationRunInfoById = {
   evaluation_run_id: string;
   variant_name: string;
-  most_recent_inference_date: string;
+  created_at: string;
 };
