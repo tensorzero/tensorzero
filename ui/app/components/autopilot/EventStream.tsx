@@ -35,6 +35,7 @@ import type {
   GatewayEventPayload,
   TopKEvaluationVisualization,
   UserQuestionAnswer,
+  VariantPerformancesVisualization,
   VisualizationType,
 } from "~/types/tensorzero";
 import { formatResponse } from "~/components/autopilot/question-cards/formatResponse";
@@ -42,6 +43,7 @@ import { hasAnsweredResponse } from "~/components/autopilot/question-cards/respo
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
+import VariantPerformancesViz from "./VariantPerformancesViz";
 
 /**
  * Max height for expandable tool content (tool call arguments, tool results, errors).
@@ -182,6 +184,9 @@ function getVisualizationTitle(visualization: VisualizationType): string {
     if (visualization.type === "top_k_evaluation") {
       return "Top-K Evaluation Results";
     }
+    if (visualization.type === "variant_performances") {
+      return "Variant Performance";
+    }
     // Unknown visualization type with a type field
     return `Visualization (${String(visualization.type)})`;
   }
@@ -200,13 +205,23 @@ function VisualizationRenderer({
   if (
     typeof visualization === "object" &&
     visualization !== null &&
-    "type" in visualization &&
-    visualization.type === "top_k_evaluation"
+    "type" in visualization
   ) {
-    // Type assertion needed because TypeScript can't narrow through the untagged union
-    return (
-      <TopKEvaluationViz data={visualization as TopKEvaluationVisualization} />
-    );
+    if (visualization.type === "top_k_evaluation") {
+      // Type assertion needed because TypeScript can't narrow through the untagged union
+      return (
+        <TopKEvaluationViz
+          data={visualization as TopKEvaluationVisualization}
+        />
+      );
+    }
+    if (visualization.type === "variant_performances") {
+      return (
+        <VariantPerformancesViz
+          data={visualization as VariantPerformancesVisualization}
+        />
+      );
+    }
   }
 
   // Unknown or malformed visualization - show raw JSON with a warning

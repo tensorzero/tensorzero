@@ -535,6 +535,45 @@ pub struct TopKEvaluationVisualization {
     pub summary_text: Option<String>,
 }
 
+/// A row of variant performance data for a single (variant, time_period) combination.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct VariantPerformancesVisualizationRow {
+    /// Start datetime of the period in RFC 3339 format.
+    pub period_start: DateTime<Utc>,
+    /// The variant name.
+    pub variant_name: String,
+    /// Number of data points in this (variant, period) combination.
+    pub count: u32,
+    /// Average metric value.
+    pub avg_metric: f64,
+    /// Sample standard deviation (null if count < 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub stdev: Option<f64>,
+    /// 95% confidence interval error margin (1.96 * stdev / sqrt(count)).
+    /// Null if count < 2 (when stdev is null).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub ci_error: Option<f64>,
+}
+
+/// Visualization of variant performance over time from feedback metrics.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct VariantPerformancesVisualization {
+    /// The function name these metrics are for.
+    pub function_name: String,
+    /// The metric name being visualized.
+    pub metric_name: String,
+    /// The time granularity used for bucketing (e.g. "week", "month").
+    pub time_granularity: String,
+    /// Performance statistics for each (variant, time_period) combination.
+    pub performances: Vec<VariantPerformancesVisualizationRow>,
+}
+
 /// Types of visualizations that can be displayed.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -546,6 +585,8 @@ pub struct TopKEvaluationVisualization {
 pub enum VisualizationType {
     /// Top-k evaluation results showing variant performance comparisons.
     TopKEvaluation(TopKEvaluationVisualization),
+    /// Variant performance over time from feedback metrics.
+    VariantPerformances(VariantPerformancesVisualization),
     /// Unknown visualization type for forward compatibility.
     /// Old clients can gracefully handle new visualization types they don't recognize.
     #[serde(untagged)]
