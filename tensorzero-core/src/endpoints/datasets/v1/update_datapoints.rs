@@ -507,7 +507,7 @@ pub async fn update_datapoints_metadata(
 mod tests {
     use super::*;
     use crate::config::{Config, ObjectStoreInfo, SchemaData};
-    use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::db::clickhouse::clickhouse_client::{ClickHouseClientType, MockClickHouseClient};
     use crate::db::stored_datapoint::StoredChatInferenceDatapoint;
     use crate::endpoints::datasets::v1::types::{
         DatapointMetadataUpdate, JsonDatapointOutputUpdate,
@@ -792,6 +792,9 @@ mod tests {
         fn create_test_app_state() -> AppStateData {
             let mut mock_client = MockClickHouseClient::new();
             mock_client.expect_batcher_join_handle().returning(|| None);
+            mock_client
+                .expect_client_type()
+                .returning(|| ClickHouseClientType::Production);
 
             let mut config = Config::default();
 

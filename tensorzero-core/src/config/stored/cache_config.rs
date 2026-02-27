@@ -5,9 +5,6 @@ use crate::config::gateway::{
 };
 
 /// Stored version of `ModelInferenceCacheConfig`.
-///
-/// Omits `deny_unknown_fields` so that snapshots from newer gateways
-/// (with additional fields) don't break deserialization in rolled-back gateways.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct StoredCacheConfig {
     #[serde(default)]

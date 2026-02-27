@@ -61,7 +61,6 @@ impl CacheManager {
             return Ok(Self::disabled());
         }
 
-        let explicitly_enabled = cache_config.enabled == Some(true);
         let clickhouse_available =
             clickhouse_connection_info.client_type() != ClickHouseClientType::Disabled;
         let valkey_available =
@@ -69,6 +68,7 @@ impl CacheManager {
 
         match cache_config.backend {
             InferenceCacheBackend::Auto => {
+                let explicitly_enabled = cache_config.enabled == Some(true);
                 if primary_datastore == PrimaryDatastore::ClickHouse {
                     if !clickhouse_available && explicitly_enabled {
                         return Err(ErrorDetails::AppState {
