@@ -4,6 +4,7 @@ import type { Preview } from "@storybook/react-vite";
 import { withRouter } from "storybook-addon-remix-react-router";
 import { TooltipProvider } from "../app/components/ui/tooltip";
 import { MockEntitySheetProvider } from "../app/context/entity-sheet";
+import { Theme, ThemeProvider, useTheme } from "../app/context/theme";
 
 import "../app/tailwind.css";
 
@@ -25,20 +26,24 @@ const entitySheetProviderDecorator: Decorator = (Story) => (
   </MockEntitySheetProvider>
 );
 
+/** Syncs the Storybook toolbar theme global → ThemeProvider context. */
+function ThemeSync({ theme }: { theme: string }) {
+  const { setTheme } = useTheme();
+  useEffect(() => {
+    setTheme(theme === "dark" ? Theme.Dark : Theme.Light);
+  }, [theme, setTheme]);
+  return null;
+}
+
 const themeDecorator: Decorator = (Story, context) => {
   const theme = context.globals["theme"] ?? "light";
-  const isDark = theme === "dark";
 
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle("dark", isDark);
-    root.style.colorScheme = isDark ? "dark" : "light";
-    document.body.style.backgroundColor = isDark
-      ? "hsl(0 0% 9%)"
-      : "hsl(0 0% 100%)";
-  }, [isDark]);
-
-  return <Story />;
+  return (
+    <ThemeProvider>
+      <ThemeSync theme={theme} />
+      <Story />
+    </ThemeProvider>
+  );
 };
 
 const preview: Preview = {
