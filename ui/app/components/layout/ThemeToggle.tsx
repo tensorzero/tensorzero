@@ -15,7 +15,7 @@ import {
 const THEME_OPTIONS = [
   { value: Theme.Light, label: "Light", icon: Sun },
   { value: Theme.Dark, label: "Dark", icon: Moon },
-  { value: Theme.System, label: "Auto", icon: Monitor },
+  { value: Theme.System, label: "System", icon: Monitor },
 ] as const;
 
 export function ThemeToggle() {
