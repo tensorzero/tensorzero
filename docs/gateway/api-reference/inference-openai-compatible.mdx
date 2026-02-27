@@ -894,6 +894,8 @@ Contains token usage information for the request and response, with the followin
 - **`total_tokens`**: Total number of tokens used (integer)
 - **`tensorzero_cost`**: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 #### `tensorzero_raw_response`
 
 - **Type:** array (optional, only when `tensorzero::include_raw_response` is `true`)
@@ -984,6 +986,8 @@ Contains token usage information for the request and response, with the followin
 - **`total_tokens`**: Total number of tokens used (integer)
 - **`tensorzero_cost`**: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 #### `tensorzero_raw_response`
 
 - **Type:** array (optional, only when `tensorzero::include_raw_response` is `true`)
@@ -1012,6 +1016,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 </Tab>
 </Tabs>

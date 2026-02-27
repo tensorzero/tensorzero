@@ -134,10 +134,10 @@ async fn test_workflow_evaluation() {
         // Verify tags are correctly applied with the following precedence:
         // 1. Tags from the inference request (highest priority)
         // 2. Tags from the episode creation
-        // 3. Tags from the dynamic evaluation run (lowest priority)
+        // 3. Tags from the workflow evaluation run (lowest priority)
         // When tags have the same key, the higher priority source overwrites the lower priority one.
         // In this case:
-        // - "foo" comes from the dynamic evaluation run
+        // - "foo" comes from the workflow evaluation run
         // - "baz" comes from the episode creation
         // - "zoo" is in both episode creation and inference request, so inference request wins
         // - "bop" comes from the inference request
@@ -239,7 +239,7 @@ async fn test_workflow_evaluation() {
             "DynamicEvaluationRunEpisodeByRunId should have snapshot_hash"
         );
 
-        // Send feedback for the dynamic evaluation run episode
+        // Send feedback for the workflow evaluation run episode
         let feedback_params = FeedbackParams {
             episode_id: Some(episode_id),
             metric_name: "goal_achieved".to_string(),
@@ -347,7 +347,7 @@ async fn test_workflow_evaluation_other_function() {
     assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
 }
 
-/// Test that the variant does not fall back in a dynamic evaluation run
+/// Test that the variant does not fall back in a workflow evaluation run
 /// This should error
 #[tokio::test(flavor = "multi_thread")]
 async fn test_workflow_evaluation_variant_error() {
@@ -472,7 +472,7 @@ async fn test_workflow_evaluation_override_variant_tags() {
         .unwrap();
 
     println!("ClickHouse - ChatInference: {result:#?}");
-    // Test that inference time settings override the dynamic evaluation run settings
+    // Test that inference time settings override the workflow evaluation run settings
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test2");
     let tags = result.get("tags").unwrap().as_object().unwrap();

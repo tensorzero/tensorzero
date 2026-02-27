@@ -94,6 +94,7 @@ pub struct ModelTestProvider {
 pub struct EmbeddingTestProvider {
     pub model_name: String,
     pub dimensions: usize,
+    pub model_provider_name: String,
 }
 
 /// Enforce that every provider implements a common set of tests.
