@@ -16,6 +16,7 @@ import { useConfig } from "~/context/config";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { cn } from "~/utils/common";
 import { Badge } from "../ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useMemo } from "react";
 
 /**
@@ -114,14 +115,25 @@ export default function FeedbackTable({
                   <TableItemShortUuid id={item.id} />
                 </TableCell>
 
-                <TableCell className="flex items-center gap-2">
-                  <span className="font-mono">{getMetricName(item)}</span>
-                  {metrics[getMetricName(item)] && (
-                    <FeedbackBadges
-                      metric={metrics[getMetricName(item)]!}
-                      row={item}
-                    />
-                  )}
+                <TableCell className="max-w-[300px]">
+                  <div className="flex items-center gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help truncate font-mono">
+                          {getMetricName(item)}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <span className="font-mono">{getMetricName(item)}</span>
+                      </TooltipContent>
+                    </Tooltip>
+                    {metrics[getMetricName(item)] && (
+                      <FeedbackBadges
+                        metric={metrics[getMetricName(item)]!}
+                        row={item}
+                      />
+                    )}
+                  </div>
                 </TableCell>
 
                 {anyOverwrites && (
