@@ -966,7 +966,7 @@ impl Client {
     }
 
     /// Assigns feedback for a TensorZero inference.
-    /// See https://www.tensorzero.com/docs/gateway/api-reference#post-feedback
+    /// See https://www.tensorzero.com/docs/gateway/api-reference
     pub async fn feedback(
         &self,
         params: FeedbackParams,

@@ -43,7 +43,7 @@ Each function tool is an object with the following fields:
 - `parameters` (object, required): A JSON Schema defining the tool's parameters
 - `strict` (boolean, optional): Whether to enforce strict schema validation (defaults to `false`)
 
-See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) for more details.
+See [Configuration Reference](/gateway/configuration-reference/#tools-tool_name) for more details.
 
 ##### OpenAI Custom Tools
 
@@ -179,7 +179,7 @@ For example, if you set `max_age_s=3600`, the gateway will only use cache entrie
 - **Required:** no (default: no credentials)
 
 Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
-See the [configuration reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See the [configuration reference](/gateway/configuration-reference/#models-model_name-providers-provider_name) for more details.
 The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
 The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
 
@@ -732,7 +732,7 @@ Currently, we support the following:
   - `top_p`
   - `verbosity`
 
-See [Configuration Reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for more details on the parameters, and Examples below for usage.
+See [Configuration Reference](/gateway/configuration-reference/#functions-function_name-variants-variant_name) for more details on the parameters, and Examples below for usage.
 
 <Accordion title="Example">
 
@@ -770,7 +770,7 @@ Each object in the array has the following fields:
 - `tool` (object, required): The provider-specific tool configuration as defined by the provider's API
 
 This field allows for dynamic provider tool use at runtime.
-You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference/#provider_tools)).
+You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference)).
 Only use this field if dynamic provider tool configuration is necessary for your use case.
 
 <Accordion title="Example: OpenAI Web Search (Unscoped)">
