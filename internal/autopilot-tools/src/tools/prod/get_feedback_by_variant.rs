@@ -62,7 +62,7 @@ impl ToolMetadata for GetFeedbackByVariantTool {
 
     #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
-        "FeedbackByVariant".to_string()
+        "FeedbackByVariant[]".to_string()
     }
 
     fn name(&self) -> Cow<'static, str> {
