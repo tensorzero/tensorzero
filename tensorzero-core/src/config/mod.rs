@@ -1811,7 +1811,7 @@ impl UninitializedConfig {
     /// This does NOT migrate values from old fields to new ones. Value migration
     /// is handled by `From<Stored*Config>` impls (for stored snapshots) and by
     /// the consumer (for TOML configs).
-    pub(crate) fn resolve_deprecations(&mut self) -> Result<(), Error> {
+    pub(crate) fn warn_on_deprecations(&mut self) -> Result<(), Error> {
         self.resolve_clickhouse_config_deprecation()
     }
 
@@ -1919,7 +1919,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
                 })
             })?;
         let mut config: UninitializedConfig = toml_config.try_into()?;
-        config.resolve_deprecations()?;
+        config.warn_on_deprecations()?;
         Ok(config)
     }
 }

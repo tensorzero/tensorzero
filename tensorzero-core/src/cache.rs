@@ -43,58 +43,84 @@ impl CacheManager {
     ///
     /// Respects `cache_config.enabled`:
     /// - `Some(false)` → disabled (no-op)
-    /// - `None` or `Some(true)` → resolve backend from `cache_config.backend`
+    /// - `Some(true)` → resolve backend, error if unavailable
+    /// - `None` → resolve backend (see below)
     ///
     /// Backend resolution (`cache_config.backend`):
     /// - `Auto` + ClickHouse primary → ClickHouse
     /// - `Auto` + Postgres primary → Valkey (disabled if unavailable)
-    /// - `ClickHouse` → ClickHouse
-    /// - `Valkey` → Valkey (disabled if unavailable)
-    ///
-    /// Note: startup validation (fail if `enabled=true` but no backend) is done
-    /// in `gateway.rs` before this method is called.
+    /// - `ClickHouse` → ClickHouse (error if unavailable)
+    /// - `Valkey` → Valkey (error if unavailable)
     pub fn new_from_connections(
         valkey_connection_info: &ValkeyConnectionInfo,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         cache_config: &ModelInferenceCacheConfig,
         primary_datastore: PrimaryDatastore,
-    ) -> Self {
+    ) -> Result<Self, Error> {
         if cache_config.enabled == Some(false) {
-            return Self::disabled();
+            return Ok(Self::disabled());
         }
+
+        let explicitly_enabled = cache_config.enabled == Some(true);
+        let clickhouse_available =
+            clickhouse_connection_info.client_type() != ClickHouseClientType::Disabled;
+        let valkey_available =
+            matches!(valkey_connection_info, ValkeyConnectionInfo::Enabled { .. });
 
         match cache_config.backend {
             InferenceCacheBackend::Auto => {
                 if primary_datastore == PrimaryDatastore::ClickHouse {
-                    return Self::new(Arc::new(clickhouse_connection_info.clone()));
+                    if !clickhouse_available && explicitly_enabled {
+                        return Err(ErrorDetails::AppState {
+                            message: format!(
+                                "`cache.enabled` is `true` but the cache backend (`{:?}`) is not available. \
+                                 Ensure the required connection URL is set, or set `cache.enabled` to `false`.",
+                                cache_config.backend,
+                            ),
+                        }
+                        .into());
+                    }
+                    return Ok(Self::new(Arc::new(clickhouse_connection_info.clone())));
                 }
-                // Postgres primary, prefer Valkey; disabled otherwise.
+                // Postgres primary: check if any backend is available
+                if explicitly_enabled && !valkey_available && !clickhouse_available {
+                    return Err(ErrorDetails::AppState {
+                        message: format!(
+                            "`cache.enabled` is `true` but the cache backend (`{:?}`) is not available. \
+                             Ensure the required connection URL is set, or set `cache.enabled` to `false`.",
+                            cache_config.backend,
+                        ),
+                    }
+                    .into());
+                }
                 match valkey_connection_info {
-                    ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
+                    ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
                         ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
-                    )),
-                    ValkeyConnectionInfo::Disabled => Self::disabled(),
+                    ))),
+                    ValkeyConnectionInfo::Disabled => Ok(Self::disabled()),
                 }
             }
             InferenceCacheBackend::ClickHouse => {
-                if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
-                    tracing::warn!(
-                        "`cache.backend` is set to `clickhouse` but ClickHouse is not available; caching is disabled."
-                    );
-                    return Self::disabled();
+                if !clickhouse_available {
+                    return Err(ErrorDetails::AppState {
+                        message: "`cache.backend` is set to `clickhouse` but ClickHouse is not available. \
+                                  Ensure the required connection URL is set, or remove the `cache.backend` setting."
+                            .to_string(),
+                    }
+                    .into());
                 }
-                Self::new(Arc::new(clickhouse_connection_info.clone()))
+                Ok(Self::new(Arc::new(clickhouse_connection_info.clone())))
             }
             InferenceCacheBackend::Valkey => match valkey_connection_info {
-                ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
+                ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
                     ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
-                )),
-                ValkeyConnectionInfo::Disabled => {
-                    tracing::warn!(
-                        "`cache.backend` is set to `valkey` but Valkey is not available; caching is disabled."
-                    );
-                    Self::disabled()
+                ))),
+                ValkeyConnectionInfo::Disabled => Err(ErrorDetails::AppState {
+                    message: "`cache.backend` is set to `valkey` but Valkey is not available. \
+                              Ensure the required connection URL is set, or remove the `cache.backend` setting."
+                        .to_string(),
                 }
+                .into()),
             },
         }
     }
