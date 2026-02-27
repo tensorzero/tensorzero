@@ -1,6 +1,6 @@
 use super::check_table_exists;
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
+use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
@@ -39,6 +39,13 @@ impl Migration for Migration0049<'_> {
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
+            GetMaybeReplicatedTableEngineNameArgs {
+                table_engine_name: "ReplacingMergeTree",
+                table_name: "InferenceEvaluationRuns",
+                engine_args: &["updated_at"],
+            },
+        );
         self.clickhouse
             .run_query_synchronous_no_params(format!(
                 r"
@@ -56,7 +63,7 @@ impl Migration for Migration0049<'_> {
                     created_at DateTime64(3, 'UTC'),
                     updated_at DateTime64(3, 'UTC')
                 )
-                ENGINE = ReplacingMergeTree(updated_at)
+                ENGINE = {table_engine_name}
                 ORDER BY (run_id_uint)
                 "
             ))
