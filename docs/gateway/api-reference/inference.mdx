@@ -683,6 +683,22 @@ Be careful about the different prefixes: `model_name="gpt-4o"` will use the `[mo
 
 </Warning>
 
+#### `namespace`
+
+- **Type:** string
+- **Required:** no
+
+Selects a namespace-specific experimentation config for this request.
+If the function has a matching namespace config, it will be used instead of the base experimentation config.
+If no matching config exists, the base config is used as a fallback.
+
+The namespace is also validated against namespaced models: if the selected variant uses a model scoped to a different namespace, the request will fail.
+
+The value must be a non-empty string.
+It is stored as the `tensorzero::namespace` tag on the inference record.
+
+See [Namespaces](/experimentation/namespaces) for a full guide.
+
 #### `output_schema`
 
 - **Type:** object (valid JSON Schema)

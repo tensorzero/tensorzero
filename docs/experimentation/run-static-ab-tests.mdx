@@ -121,3 +121,10 @@ fallback_variants = ["grok_4"] // [!code ++]
 The gateway will first sample among the `candidate_variants`.
 If all candidates fail, the gateway attempts each variant in `fallback_variants` in order.
 See [Retries & Fallbacks](/gateway/guides/retries-fallbacks) for more information.
+
+<Tip>
+
+You can configure different experimentation configs per namespace (e.g. per tenant or platform).
+See [Namespaces](/experimentation/namespaces) for more details.
+
+</Tip>

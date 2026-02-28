@@ -1,0 +1,147 @@
+---
+title: Namespaces
+description: Customize experimentation and model routing per tenant, platform, or any other context.
+---
+
+Namespaces let you scope experimentation and model usage to specific contexts — such as a tenant, platform, or customer.
+They support two key use cases:
+
+1. **Per-namespace experimentation** — run different A/B tests or variant configurations for different namespaces on the same function.
+2. **Namespaced models** — restrict a model (e.g. a per-customer fine-tune) so it can only be used when the matching namespace is provided at inference time.
+
+## Namespace-Specific Experimentation
+
+By default, a function's experimentation config applies to all inference requests.
+With namespaces, you can override this config for specific groups of users or contexts.
+
+For example, imagine a multi-platform SaaS where you want to A/B test variants on the web but serve a fixed variant on mobile:
+
+```toml title="tensorzero.toml"
+[functions.draft_email]
+type = "chat"
+
+[functions.draft_email.variants.gpt_5_mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+
+[functions.draft_email.variants.claude_haiku_4_5]
+type = "chat_completion"
+model = "anthropic::claude-haiku-4-5"
+
+# Base config: used when no namespace is provided
+[functions.draft_email.experimentation]
+type = "static"
+candidate_variants = ["gpt_5_mini", "claude_haiku_4_5"]
+
+# Mobile: always use gpt_5_mini
+[functions.draft_email.experimentation.namespaces.mobile]
+type = "static"
+candidate_variants = {"gpt_5_mini" = 1.0}
+
+# Web: A/B test between both variants
+[functions.draft_email.experimentation.namespaces.web]
+type = "static"
+candidate_variants = ["gpt_5_mini", "claude_haiku_4_5"]
+```
+
+To use a namespace, pass it at inference time.
+Using the OpenAI-compatible API with the Python client:
+
+```python
+response = client.chat.completions.create(
+    model="tensorzero::function_name=draft_email",
+    messages=[...],
+    extra_body={
+        "tensorzero::namespace": "mobile",
+    },
+)
+```
+
+If a request provides a namespace that doesn't have a specific config (e.g. `"desktop"`), the base experimentation config is used.
+Unknown namespaces do not cause errors — they simply fall back to the base config.
+
+## Adaptive A/B Testing per Namespace
+
+Namespace-specific experimentation configs can use any experimentation type, including `adaptive`.
+This lets you run independent adaptive A/B tests for different namespaces:
+
+```toml title="tensorzero.toml"
+[functions.draft_email.experimentation]
+type = "static"
+candidate_variants = {"gpt_5_mini" = 1.0}
+
+[functions.draft_email.experimentation.namespaces.web]
+type = "adaptive"
+candidate_variants = ["gpt_5_mini", "claude_haiku_4_5"]
+metric = "user_rating"
+```
+
+In this example, mobile users (falling back to the base config) always get `gpt_5_mini`, while web users are part of an adaptive experiment.
+Feedback is automatically filtered per namespace for adaptive experiments.
+
+## Namespaced Models
+
+Namespaces can also restrict which models are available in a given context.
+This is useful when you have per-customer fine-tuned models that should only be served to the correct customer.
+
+```toml title="tensorzero.toml"
+# A fine-tuned model scoped to customer_a
+[models.customer_a_ft]
+routing = ["fireworks"]
+namespace = "customer_a"
+
+[models.customer_a_ft.providers.fireworks]
+type = "fireworks"
+model_name = "accounts/customer-a/models/ft-v1"
+
+# A general model available to all namespaces
+[models.gpt_5_mini]
+routing = ["openai"]
+
+[models.gpt_5_mini.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+
+[functions.draft_email]
+type = "chat"
+
+[functions.draft_email.variants.general]
+type = "chat_completion"
+model = "gpt_5_mini"
+
+[functions.draft_email.variants.customer_a_ft]
+type = "chat_completion"
+model = "customer_a_ft"
+
+# Base: only serve the general variant
+[functions.draft_email.experimentation]
+type = "static"
+candidate_variants = {"general" = 1.0}
+
+# customer_a: serve their fine-tuned model
+[functions.draft_email.experimentation.namespaces.customer_a]
+type = "static"
+candidate_variants = {"customer_a_ft" = 1.0}
+```
+
+<Warning>
+
+TensorZero validates namespaced model usage at both config time and inference time:
+
+- A variant that uses a namespaced model **cannot appear in the base experimentation config**. The gateway will return an error at startup.
+- A variant that uses a namespaced model **cannot appear in a different namespace's experimentation config**. The gateway will return an error at startup.
+- At inference time, if a variant references a namespaced model but the request namespace doesn't match, **the request will fail with an error**.
+
+</Warning>
+
+## How Namespace is Stored
+
+When you provide a namespace at inference time, it is automatically stored as the `tensorzero::namespace` tag on the inference record.
+This means you can filter and query inferences by namespace in the TensorZero UI and directly in the database.
+
+## Learn More
+
+- [Configuration Reference](/gateway/configuration-reference) — full reference for namespace fields on models and experimentation configs
+- [Inference API Reference](/gateway/api-reference/inference) — how to pass the `namespace` parameter
+- [Run Static A/B Tests](/experimentation/run-static-ab-tests) — guide to static experimentation
+- [Run Adaptive A/B Tests](/experimentation/run-adaptive-ab-tests) — guide to adaptive experimentation
