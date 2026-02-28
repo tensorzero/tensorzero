@@ -55,7 +55,7 @@ pub use file::{
 };
 // Re-export content types from tensorzero-types
 pub use tensorzero_types::{
-    Arguments, RawText, System, Template, Text, Thought, ThoughtSummaryBlock, Unknown,
+    Arguments, FunctionType, RawText, System, Template, Text, Thought, ThoughtSummaryBlock, Unknown,
 };
 // Re-export message types from tensorzero-types
 use futures::FutureExt;
@@ -1061,26 +1061,6 @@ impl std::fmt::Display for RequestMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, sqlx::Type)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "text", rename_all = "snake_case")]
-pub enum FunctionType {
-    #[default]
-    Chat,
-    Json,
-}
-
-impl FunctionType {
-    pub fn inference_table_name(&self) -> &'static str {
-        match self {
-            FunctionType::Chat => "ChatInference",
-            FunctionType::Json => "JsonInference",
-        }
     }
 }
 

@@ -3,13 +3,29 @@
 use std::path::PathBuf;
 
 use crate::config::{Config, ConfigFileGlob};
+use crate::db::delegating_connection::PrimaryDatastore;
 
-/// Returns the path to the E2E test configuration file.
-/// The path is relative to the tensorzero-core crate root.
-pub fn get_e2e_config_path() -> PathBuf {
+/// Returns the glob path for the E2E test configuration files.
+///
+/// For ClickHouse primary: matches `tensorzero.*.toml` only.
+/// For Postgres primary: also includes `pg.*.toml` which sets `observability.backend = "postgres"`.
+pub fn get_e2e_config_path_for_datastore(primary: PrimaryDatastore) -> PathBuf {
     let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/config/tensorzero.*.toml");
+    match primary {
+        PrimaryDatastore::ClickHouse | PrimaryDatastore::Disabled => {
+            config_path.push("tests/e2e/config/tensorzero.*.toml");
+        }
+        PrimaryDatastore::Postgres => {
+            config_path.push("tests/e2e/config/{tensorzero,postgres}.*.toml");
+        }
+    }
     config_path
+}
+
+/// Returns the glob path for the E2E test configuration files,
+/// automatically selecting the primary datastore from `TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND` env var.
+pub fn get_e2e_config_path() -> PathBuf {
+    get_e2e_config_path_for_datastore(PrimaryDatastore::from_test_env())
 }
 
 /// Loads the E2E test configuration.

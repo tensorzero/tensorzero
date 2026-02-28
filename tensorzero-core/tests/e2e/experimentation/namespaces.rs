@@ -95,14 +95,15 @@ type = "chat_completion"
 model = "test_model"
 
 [functions.test_function.experimentation]
-type = "uniform"
+type = "static"
+candidate_variants = ["variant_a", "variant_b", "variant_c"]
 
 [functions.test_function.experimentation.namespaces.mobile]
-type = "static_weights"
+type = "static"
 candidate_variants = {"variant_a" = 1.0}
 
 [functions.test_function.experimentation.namespaces.web]
-type = "static_weights"
+type = "static"
 candidate_variants = {"variant_b" = 1.0}
 "#
     .to_string()
@@ -291,9 +292,6 @@ type = "chat"
 [functions.test_fn.variants.variant_a]
 type = "chat_completion"
 model = "namespaced_model"
-
-[functions.test_fn.experimentation]
-type = "uniform"
 "#;
 
     let err = expect_config_error(config).await;
@@ -334,15 +332,15 @@ type = "chat_completion"
 model = "regular_model"
 
 [functions.test_fn.experimentation]
-type = "static_weights"
+type = "static"
 candidate_variants = {"variant_b" = 1.0}
 
 [functions.test_fn.experimentation.namespaces.web]
-type = "static_weights"
+type = "static"
 candidate_variants = {"variant_a" = 1.0}
 
 [functions.test_fn.experimentation.namespaces.mobile]
-type = "static_weights"
+type = "static"
 candidate_variants = {"variant_a" = 1.0}
 "#;
 
@@ -411,11 +409,11 @@ type = "chat_completion"
 model = "regular_model"
 
 [functions.test_function.experimentation]
-type = "static_weights"
+type = "static"
 candidate_variants = {"variant_b" = 1.0}
 
 [functions.test_function.experimentation.namespaces.mobile]
-type = "static_weights"
+type = "static"
 candidate_variants = {"variant_a" = 1.0}
 "#;
 
@@ -480,17 +478,17 @@ candidates = ["mobile_candidate"]
 model = "web_model"
 
 [functions.test_fn.experimentation]
-type = "static_weights"
+type = "static"
 candidate_variants = {"regular_variant" = 1.0}
 
 # mobile_candidate only in mobile namespace (correct)
 [functions.test_fn.experimentation.namespaces.mobile]
-type = "static_weights"
+type = "static"
 candidate_variants = {"mobile_candidate" = 1.0}
 
 # bon_variant in web namespace — should fail because it indirectly uses mobile_model
 [functions.test_fn.experimentation.namespaces.web]
-type = "static_weights"
+type = "static"
 candidate_variants = {"bon_variant" = 1.0}
 "#;
 
@@ -551,17 +549,17 @@ candidates = ["mobile_candidate"]
 model = "web_model"
 
 [functions.test_fn.experimentation]
-type = "static_weights"
+type = "static"
 candidate_variants = {"regular_variant" = 1.0}
 
 # mobile_candidate only in mobile namespace (correct)
 [functions.test_fn.experimentation.namespaces.mobile]
-type = "static_weights"
+type = "static"
 candidate_variants = {"mobile_candidate" = 1.0}
 
 # mon_variant in web namespace — should fail because it indirectly uses mobile_model
 [functions.test_fn.experimentation.namespaces.web]
-type = "static_weights"
+type = "static"
 candidate_variants = {"mon_variant" = 1.0}
 "#;
 
@@ -609,11 +607,11 @@ type = "chat_completion"
 model = "regular_model"
 
 [functions.test_function.experimentation]
-type = "static_weights"
+type = "static"
 candidate_variants = {"regular_variant" = 1.0}
 
 [functions.test_function.experimentation.namespaces.mobile]
-type = "static_weights"
+type = "static"
 candidate_variants = {"mobile_variant" = 1.0}
 "#
     .to_string()
@@ -937,10 +935,11 @@ type = "chat_completion"
 model = "test_model"
 
 [functions.test_function.experimentation]
-type = "uniform"
+type = "static"
+candidate_variants = ["variant_a", "variant_b"]
 
 [functions.test_function.experimentation.namespaces.mobile]
-type = "track_and_stop"
+type = "adaptive"
 metric = "test_metric"
 candidate_variants = ["variant_a", "variant_b"]
 min_samples_per_variant = 10
@@ -1171,16 +1170,11 @@ async fn test_namespace_feedback_query_filters_correctly_clickhouse() {
 /// Test that the namespace-filtered `get_feedback_by_variant` query correctly
 /// returns only feedback for inferences tagged with the specified namespace (Postgres).
 ///
-/// Sets `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=true` so the embedded gateway writes to Postgres.
+/// Uses `observability.backend = "postgres"` so the embedded gateway writes to Postgres.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_namespace_feedback_query_filters_correctly_postgres() {
-    // Must be set before the first flag access (OnceLock caches on first read)
-    tensorzero_unsafe_helpers::set_env_var_tests_only(
-        "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE",
-        "true",
-    );
-
-    let config = make_namespace_track_and_stop_config();
+    let mut config = make_namespace_track_and_stop_config();
+    config.push_str("\n[gateway.observability]\nbackend = \"postgres\"\n");
     let (client, clickhouse, postgres, _guard) =
         Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
 

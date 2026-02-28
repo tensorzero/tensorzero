@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::db::datasets::DatasetQueries;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -53,10 +52,7 @@ pub async fn get_datapoint_count_handler(
     Path(dataset_name): Path<String>,
     Query(params): Query<GetDatapointCountQueryParams>,
 ) -> Result<Json<GetDatapointCountResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response =
         get_datapoint_count(&database, &dataset_name, params.function_name.as_deref()).await?;
 

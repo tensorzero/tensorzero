@@ -114,6 +114,7 @@ test-postgres-inference-load = [
 
 build-e2e = "build --bin gateway --features e2e_tests"
 run-e2e = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/config/tensorzero.*.toml"
+run-e2e-postgres = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/config/{tensorzero,postgres}.*.toml"
 migrate-postgres = "run --bin gateway --features e2e_tests -- --run-postgres-migrations"
 watch-e2e = "watch -x run-e2e"
 

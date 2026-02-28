@@ -8,9 +8,9 @@ use uuid::Uuid;
 use crate::db::evaluation_queries::{
     EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
     EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
-    RawEvaluationResultRow,
+    InferenceEvaluationRunInsert, RawEvaluationResultRow,
 };
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
 use crate::statistics_util::{wald_confint, wilson_confint};
 
@@ -58,6 +58,64 @@ impl RawEvaluationStatisticsRow {
 
 #[async_trait]
 impl EvaluationQueries for PostgresConnectionInfo {
+    async fn insert_inference_evaluation_run(
+        &self,
+        run: &InferenceEvaluationRunInsert,
+    ) -> Result<(), Error> {
+        let pool = self.get_pool_result()?;
+
+        let variant_names_json = serde_json::to_value(&run.variant_names).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize `variant_names`: {e}"),
+            })
+        })?;
+        let metrics_json = serde_json::to_value(&run.metrics).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize `metrics`: {e}"),
+            })
+        })?;
+
+        sqlx::query(
+            r"
+            INSERT INTO tensorzero.inference_evaluation_runs (
+                run_id,
+                evaluation_name,
+                function_name,
+                function_type,
+                dataset_name,
+                variant_names,
+                metrics,
+                source,
+                snapshot_hash
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (run_id) DO UPDATE SET
+                evaluation_name = EXCLUDED.evaluation_name,
+                function_name = EXCLUDED.function_name,
+                function_type = EXCLUDED.function_type,
+                dataset_name = EXCLUDED.dataset_name,
+                variant_names = EXCLUDED.variant_names,
+                metrics = EXCLUDED.metrics,
+                source = EXCLUDED.source,
+                snapshot_hash = EXCLUDED.snapshot_hash,
+                updated_at = NOW()
+            ",
+        )
+        .bind(run.run_id)
+        .bind(run.evaluation_name.as_str())
+        .bind(run.function_name.as_str())
+        .bind(run.function_type.as_str())
+        .bind(run.dataset_name.as_str())
+        .bind(variant_names_json)
+        .bind(metrics_json)
+        .bind(run.source.to_string())
+        .bind(run.snapshot_hash.clone())
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
         let pool = self.get_pool_result()?;
         // Count distinct evaluation_run_ids per table and sum.

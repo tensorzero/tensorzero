@@ -12,9 +12,11 @@ use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig, get_evalua
 mod exact_match;
 use exact_match::run_exact_match_evaluator;
 pub mod llm_judge;
+mod regex_eval;
 mod tool_use;
 use futures::stream::{FuturesUnordered, StreamExt};
 use llm_judge::{LLMJudgeEvaluationResult, RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
+use regex_eval::run_regex_evaluator;
 use tool_use::run_tool_use_evaluator;
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
@@ -285,6 +287,12 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
             debug!(result = ?result, "Tool use evaluator completed");
             EvaluatorResult::ToolUse(result)
         }
+        EvaluatorConfig::Regex(regex_config) => {
+            debug!("Running regex evaluator");
+            let result = run_regex_evaluator(inference_response, regex_config)?;
+            debug!(result = ?result, "Regex evaluator completed");
+            EvaluatorResult::Regex(result)
+        }
     })
 }
 
@@ -293,31 +301,40 @@ pub enum EvaluatorResult {
     ExactMatch(Option<Value>),
     LLMJudge(Option<LLMJudgeEvaluationResult>),
     ToolUse(Option<Value>),
+    Regex(Option<Value>),
 }
 
 impl<'a> EvaluatorResult {
     pub fn value(&'a self) -> Option<&'a Value> {
         match self {
-            EvaluatorResult::ExactMatch(value) | EvaluatorResult::ToolUse(value) => value.as_ref(),
+            EvaluatorResult::ExactMatch(value)
+            | EvaluatorResult::ToolUse(value)
+            | EvaluatorResult::Regex(value) => value.as_ref(),
             EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.value),
         }
     }
 
     pub fn evaluator_inference_id(&'a self) -> Option<&'a Uuid> {
         match self {
-            EvaluatorResult::ExactMatch(_) | EvaluatorResult::ToolUse(_) => None,
+            EvaluatorResult::ExactMatch(_)
+            | EvaluatorResult::ToolUse(_)
+            | EvaluatorResult::Regex(_) => None,
             EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.evaluator_inference_id),
         }
     }
     pub fn value_owned(self) -> Option<Value> {
         match self {
-            EvaluatorResult::ExactMatch(value) | EvaluatorResult::ToolUse(value) => value,
+            EvaluatorResult::ExactMatch(value)
+            | EvaluatorResult::ToolUse(value)
+            | EvaluatorResult::Regex(value) => value,
             EvaluatorResult::LLMJudge(value) => value.map(|v| v.value),
         }
     }
     pub fn tags(&'a self) -> HashMap<String, String> {
         match self {
-            EvaluatorResult::ExactMatch(_) | EvaluatorResult::ToolUse(_) => HashMap::new(),
+            EvaluatorResult::ExactMatch(_)
+            | EvaluatorResult::ToolUse(_)
+            | EvaluatorResult::Regex(_) => HashMap::new(),
             EvaluatorResult::LLMJudge(value) => value
                 .as_ref()
                 .map(LLMJudgeEvaluationResult::tags)

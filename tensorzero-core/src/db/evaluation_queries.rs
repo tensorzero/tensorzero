@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use mockall::automock;
 use uuid::Uuid;
 
+use crate::config::MetricConfigOptimize;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput, StoredInput};
@@ -32,6 +33,48 @@ pub struct EvaluationRunInfoRow {
 pub struct EvaluationRunSearchResult {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
+}
+
+/// Metric metadata stored on an inference evaluation run.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InferenceEvaluationRunMetricMetadata {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_name: Option<String>,
+    /// `boolean` or `float`
+    pub value_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optimize: Option<MetricConfigOptimize>,
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceEvaluationRunSource {
+    DatasetName,
+    DatapointIds,
+}
+
+impl std::fmt::Display for InferenceEvaluationRunSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            InferenceEvaluationRunSource::DatasetName => "dataset_name",
+            InferenceEvaluationRunSource::DatapointIds => "datapoint_ids",
+        };
+        write!(f, "{s}")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InferenceEvaluationRunInsert {
+    pub run_id: Uuid,
+    pub evaluation_name: String,
+    pub function_name: String,
+    pub function_type: FunctionConfigType,
+    pub dataset_name: String,
+    pub variant_names: Vec<String>,
+    pub metrics: Vec<InferenceEvaluationRunMetricMetadata>,
+    pub source: InferenceEvaluationRunSource,
+    pub snapshot_hash: Option<Vec<u8>>,
 }
 
 /// Database struct for deserializing evaluation run info by IDs.
@@ -293,6 +336,12 @@ impl RawEvaluationResultRow {
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait EvaluationQueries {
+    /// Inserts or updates run-level metadata for an inference evaluation run.
+    async fn insert_inference_evaluation_run(
+        &self,
+        run: &InferenceEvaluationRunInsert,
+    ) -> Result<(), Error>;
+
     /// Counts the total number of unique evaluation runs across all functions.
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error>;
 

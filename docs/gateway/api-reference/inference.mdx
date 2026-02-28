@@ -43,7 +43,7 @@ Each function tool is an object with the following fields:
 - `parameters` (object, required): A JSON Schema defining the tool's parameters
 - `strict` (boolean, optional): Whether to enforce strict schema validation (defaults to `false`)
 
-See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) for more details.
+See [Configuration Reference](/gateway/configuration-reference/#tools-tool_name) for more details.
 
 ##### OpenAI Custom Tools
 
@@ -179,7 +179,7 @@ For example, if you set `max_age_s=3600`, the gateway will only use cache entrie
 - **Required:** no (default: no credentials)
 
 Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
-See the [configuration reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See the [configuration reference](/gateway/configuration-reference/#models-model_name-providers-provider_name) for more details.
 The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
 The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
 
@@ -732,7 +732,7 @@ Currently, we support the following:
   - `top_p`
   - `verbosity`
 
-See [Configuration Reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for more details on the parameters, and Examples below for usage.
+See [Configuration Reference](/gateway/configuration-reference/#functions-function_name-variants-variant_name) for more details on the parameters, and Examples below for usage.
 
 <Accordion title="Example">
 
@@ -770,7 +770,7 @@ Each object in the array has the following fields:
 - `tool` (object, required): The provider-specific tool configuration as defined by the provider's API
 
 This field allows for dynamic provider tool use at runtime.
-You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference/#provider_tools)).
+You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference)).
 Only use this field if dynamic provider tool configuration is necessary for your use case.
 
 <Accordion title="Example: OpenAI Web Search (Unscoped)">
@@ -990,6 +990,8 @@ The object has the following fields:
 - `output_tokens`: The number of output tokens used for the inference.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 ##### `raw_usage`
 
 - **Type:** array (optional, only when `include_raw_usage` is `true`)
@@ -1064,6 +1066,8 @@ The object has the following fields:
 - `output_tokens`: The number of output tokens used for the inference.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 ##### `raw_usage`
 
 - **Type:** array (optional, only when `include_raw_usage` is `true`)
@@ -1074,6 +1078,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_response`
 
@@ -1158,6 +1164,8 @@ The object has the following fields:
 - `output_tokens`: The number of output tokens used for the inference.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 ##### `raw_usage`
 
 - **Type:** array (optional, only when `include_raw_usage` is `true`)
@@ -1168,6 +1176,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 </Tab>
 <Tab title="Streaming">
@@ -1215,6 +1225,8 @@ The object has the following fields:
 - `output_tokens`: The number of output tokens used for the inference.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 ##### `raw_usage`
 
 - **Type:** array (optional, only when `include_raw_usage` is `true`)
@@ -1225,6 +1237,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_response`
 

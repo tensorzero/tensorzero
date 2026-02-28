@@ -5,12 +5,14 @@ use std::collections::HashMap;
 use crate::{Client, ClientBuilder, ClientBuilderMode, PostgresConfig};
 use tempfile::NamedTempFile;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
-use tensorzero_core::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
+use tensorzero_core::db::delegating_connection::PrimaryDatastore;
 use url::Url;
 use uuid::Uuid;
 
 // Re-export e2e test helpers from tensorzero-core
-pub use tensorzero_core::test_helpers::{get_e2e_config, get_e2e_config_path};
+pub use tensorzero_core::test_helpers::{
+    get_e2e_config, get_e2e_config_path, get_e2e_config_path_for_datastore,
+};
 
 pub async fn make_http_gateway() -> Client {
     ClientBuilder::new(ClientBuilderMode::HTTPGateway {
@@ -22,9 +24,9 @@ pub async fn make_http_gateway() -> Client {
 }
 
 pub async fn make_embedded_gateway() -> Client {
-    let postgres_config = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+    let postgres_config = if PrimaryDatastore::from_test_env() == PrimaryDatastore::Postgres {
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-            .expect("TENSORZERO_POSTGRES_URL must be set when Postgres flags are enabled");
+            .expect("TENSORZERO_POSTGRES_URL must be set when primary datastore is Postgres");
         Some(PostgresConfig::Url(postgres_url))
     } else {
         None
@@ -223,10 +225,10 @@ pub async fn make_embedded_gateway_e2e_with_unique_db(db_prefix: &str) -> Client
 
 /// Creates an embedded gateway using the e2e config with a unique ClickHouse database,
 /// plus Postgres and Valkey connections from env vars.
-/// Use this when testing with `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=true` (e.g. Valkey cache backend).
+/// Uses Postgres as the primary datastore (config includes `observability.backend = "postgres"`).
 pub async fn make_embedded_gateway_e2e_with_unique_db_all_backends(db_prefix: &str) -> Client {
     let clickhouse_url = create_unique_clickhouse_url(db_prefix);
-    let config_path = get_e2e_config_path();
+    let config_path = get_e2e_config_path_for_datastore(PrimaryDatastore::Postgres);
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .expect("TENSORZERO_POSTGRES_URL must be set for all-backends tests");
     let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();

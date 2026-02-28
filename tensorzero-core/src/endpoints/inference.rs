@@ -32,7 +32,7 @@ use crate::config::{
 };
 use crate::cost::{CostConfig, compute_cost_from_streaming_chunks};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::delegating_connection::{DelegatingDatabaseConnection, PrimaryDatastore};
 use crate::db::inferences::InferenceQueries;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
@@ -212,6 +212,7 @@ pub async fn inference_handler(
         cache_manager,
         deferred_tasks,
         rate_limiting_manager,
+        primary_datastore,
         ..
     }): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
@@ -240,6 +241,7 @@ pub async fn inference_handler(
         cache_manager,
         deferred_tasks,
         rate_limiting_manager,
+        primary_datastore,
         params,
         api_key_ext,
     ))
@@ -323,6 +325,7 @@ pub async fn inference(
     cache_manager: CacheManager,
     deferred_tasks: TaskTracker,
     rate_limiting_manager: Arc<RateLimitingManager>,
+    primary_datastore: PrimaryDatastore,
     mut params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<InferenceOutputData, Error> {
@@ -375,6 +378,7 @@ pub async fn inference(
     let db = DelegatingDatabaseConnection::new(
         clickhouse_connection_info.clone(),
         postgres_connection_info.clone(),
+        primary_datastore,
     );
     validate_inference_episode_id_and_apply_workflow_evaluation_run(
         episode_id,
@@ -549,6 +553,7 @@ pub async fn inference(
             config: &config,
             clickhouse_connection_info: &clickhouse_connection_info,
             postgres_connection_info: &postgres_connection_info,
+            primary_datastore,
             tags: &params.tags,
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
@@ -610,6 +615,7 @@ pub async fn inference(
             config: &config,
             clickhouse_connection_info: &clickhouse_connection_info,
             postgres_connection_info: &postgres_connection_info,
+            primary_datastore,
             tags: &params.tags,
             extra_body: &params.extra_body,
             extra_headers: &params.extra_headers,
@@ -772,6 +778,7 @@ struct InferVariantArgs<'a> {
     config: &'a Arc<Config>,
     clickhouse_connection_info: &'a ClickHouseConnectionInfo,
     postgres_connection_info: &'a PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
     tags: &'a HashMap<String, String>,
     extra_body: &'a UnfilteredInferenceExtraBody,
     extra_headers: &'a UnfilteredInferenceExtraHeaders,
@@ -802,6 +809,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         config,
         clickhouse_connection_info,
         postgres_connection_info,
+        primary_datastore,
         tags,
         extra_body,
         extra_headers,
@@ -896,6 +904,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             stream,
             clickhouse_connection_info.clone(),
             postgres_connection_info.clone(),
+            primary_datastore,
             deferred_tasks.clone(),
         );
 
@@ -949,6 +958,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 let database = DelegatingDatabaseConnection::new(
                     clickhouse_connection_info,
                     postgres_connection_info,
+                    primary_datastore,
                 );
                 let _: () = write_inference(
                     &database,
@@ -1211,6 +1221,7 @@ fn create_failed_raw_response_chunk(
 /// NB: After this function, the stream is then further processed by:
 /// - TensorZero Inference API: `prepare_serialized_events`
 /// - OpenAI-Compatible Inference API: `prepare_serialized_openai_compatible_events`
+#[expect(clippy::too_many_arguments)]
 fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config>,
@@ -1218,6 +1229,7 @@ fn create_stream(
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
     deferred_tasks: TaskTracker,
 ) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     // Capture the parent span (function_inference) so we can use it as the parent
@@ -1454,6 +1466,7 @@ fn create_stream(
                                 let database = DelegatingDatabaseConnection::new(
                                     clickhouse_connection_info.clone(),
                                     postgres_connection_info.clone(),
+                                    primary_datastore,
                                 );
                                 write_inference(
                                     &database,
@@ -3263,6 +3276,7 @@ mod tests {
             input_stream,
             clickhouse,
             PostgresConnectionInfo::new_disabled(),
+            PrimaryDatastore::ClickHouse,
             deferred_tasks,
         ));
 
@@ -3363,6 +3377,7 @@ mod tests {
             input_stream,
             clickhouse,
             PostgresConnectionInfo::new_disabled(),
+            PrimaryDatastore::ClickHouse,
             deferred_tasks,
         ));
 
@@ -3446,6 +3461,7 @@ mod tests {
             input_stream,
             clickhouse,
             PostgresConnectionInfo::new_disabled(),
+            PrimaryDatastore::ClickHouse,
             deferred_tasks,
         ));
 

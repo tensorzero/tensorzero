@@ -93,6 +93,13 @@ pub enum FunctionConfigType {
 }
 
 impl FunctionConfigType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "chat",
+            FunctionConfigType::Json => "json",
+        }
+    }
+
     /// Returns the ClickHouse table name for the given function type.
     pub fn table_name(&self) -> &'static str {
         match self {
@@ -2822,8 +2829,8 @@ mod tests {
         let config = make_chat_function_config(ExperimentationConfigWithNamespaces::default());
         let exp = config.experimentation_for_namespace(None);
         assert!(
-            matches!(exp, ExperimentationConfig::Uniform(_)),
-            "None namespace should return the base (default uniform) config"
+            matches!(exp, ExperimentationConfig::Default),
+            "None namespace should return the base (default) config"
         );
     }
 
@@ -2832,12 +2839,12 @@ mod tests {
         let mut namespaces = HashMap::new();
         namespaces.insert(
             "mobile".to_string(),
-            ExperimentationConfig::StaticWeights(
-                serde_json::from_value(serde_json::json!({
-                    "candidate_variants": {"v1": 1.0}
-                }))
-                .unwrap(),
-            ),
+            ExperimentationConfig::Static(crate::experimentation::StaticExperimentationConfig {
+                candidate_variants: crate::experimentation::WeightedVariants::from_map(
+                    std::collections::BTreeMap::from([("v1".to_string(), 1.0)]),
+                ),
+                fallback_variants: vec![],
+            }),
         );
         let config = make_chat_function_config(ExperimentationConfigWithNamespaces {
             base: ExperimentationConfig::default(),
@@ -2846,7 +2853,7 @@ mod tests {
         let ns = Namespace::new("mobile").unwrap();
         let exp = config.experimentation_for_namespace(Some(&ns));
         assert!(
-            matches!(exp, ExperimentationConfig::StaticWeights(_)),
+            matches!(exp, ExperimentationConfig::Static(_)),
             "Known namespace should return the namespace-specific config"
         );
     }
@@ -2857,7 +2864,7 @@ mod tests {
         let ns = Namespace::new("nonexistent").unwrap();
         let exp = config.experimentation_for_namespace(Some(&ns));
         assert!(
-            matches!(exp, ExperimentationConfig::Uniform(_)),
+            matches!(exp, ExperimentationConfig::Default),
             "Unknown namespace should fall back to the base config"
         );
     }

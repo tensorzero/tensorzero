@@ -105,7 +105,7 @@ export default function CurationMetricSelector<
       );
     }
     // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue]);
 
   const validMetrics = useMemo(() => {
@@ -125,7 +125,7 @@ export default function CurationMetricSelector<
   // Inform parent when the internal metrics fetcher loading state changes
   useEffect(() => {
     onMetricsLoadingChange?.(metricsLoading);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [metricsLoading]);
 
   // Reset metric value if the selected function does not have the previously selected metric
@@ -141,7 +141,7 @@ export default function CurationMetricSelector<
       setValue(name, null as PathValue<T, Path<T>>);
     }
     // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [functionValue, validMetrics, getValues, setValue]);
 
   return (

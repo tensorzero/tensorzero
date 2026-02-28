@@ -85,7 +85,7 @@ pub async fn test_bulk_embedding_with_provider(provider: EmbeddingTestProvider) 
 pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTestProvider) {
     // Some providers don't support the dimensions parameter
     if provider.model_name == "gemini_embedding_001_openrouter"
-        || provider.model_name == "gte-modernbert-base-together"
+        || provider.model_name == "multilingual-e5-together"
     {
         return;
     }
@@ -331,7 +331,7 @@ pub async fn test_basic_embedding_timeout() {
 pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider) {
     let input_text = format!(
         "This is a cache test for embeddings (test_embedding_cache_with_provider) - {}",
-        rand::random::<u32>()
+        provider.model_provider_name
     );
 
     // First request with cache enabled to populate cache
@@ -339,7 +339,9 @@ pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider)
         "input": input_text,
         "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::cache_options": {
-            "enabled": "on",
+            // Across retries, we always require the first request to bypass cache read
+            // (but it will be caught by provider proxy cache).
+            "enabled": "write_only",
             "max_age_s": 60
         }
     });
@@ -406,7 +408,7 @@ pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider)
 pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestProvider) {
     let input_text = format!(
         "This is a cache options test for embeddings (test_embedding_cache_options_with_provider) - {}",
-        rand::random::<u32>()
+        provider.model_provider_name
     );
 
     // First, make a request that will be cached
@@ -414,7 +416,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
         "input": input_text,
         "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
         "tensorzero::cache_options": {
-            "enabled": "on",
+            "enabled": "write_only",
         }
     });
     let response_initial = Client::new()

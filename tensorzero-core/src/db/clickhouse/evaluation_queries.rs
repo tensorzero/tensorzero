@@ -15,8 +15,9 @@ use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::db::evaluation_queries::EvaluationStatisticsRow;
 use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
+use crate::db::evaluation_queries::InferenceEvaluationRunInsert;
 use crate::db::evaluation_queries::RawEvaluationResultRow;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
 use crate::statistics_util::{wald_confint, wilson_confint};
 
@@ -124,6 +125,66 @@ fn get_evaluation_result_datapoint_id_subquery(
 
 #[async_trait]
 impl EvaluationQueries for ClickHouseConnectionInfo {
+    async fn insert_inference_evaluation_run(
+        &self,
+        run: &InferenceEvaluationRunInsert,
+    ) -> Result<(), Error> {
+        let query = r"
+            INSERT INTO InferenceEvaluationRuns (
+                run_id_uint,
+                evaluation_name,
+                function_name,
+                function_type,
+                dataset_name,
+                variant_names,
+                metrics,
+                source,
+                snapshot_hash,
+                created_at,
+                updated_at
+            ) VALUES (
+                toUInt128({run_id:UUID}),
+                {evaluation_name:String},
+                {function_name:String},
+                {function_type:String},
+                {dataset_name:String},
+                {variant_names:Array(String)},
+                {metrics:String},
+                {source:String},
+                {snapshot_hash:Nullable(String)},
+                now64(3),
+                now64(3)
+            )
+        ";
+
+        let metrics = serde_json::to_string(&run.metrics).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize `metrics`: {e}"),
+            })
+        })?;
+
+        let run_id_str = run.run_id.to_string();
+        let variant_names = to_array_literal(&run.variant_names);
+        let function_type = run.function_type.as_str();
+        let source = run.source.to_string();
+        let snapshot_hash = run.snapshot_hash.as_ref().map(hex::encode);
+
+        let mut params = HashMap::new();
+        params.insert("run_id", run_id_str.as_str());
+        params.insert("evaluation_name", run.evaluation_name.as_str());
+        params.insert("function_name", run.function_name.as_str());
+        params.insert("function_type", function_type);
+        params.insert("dataset_name", run.dataset_name.as_str());
+        params.insert("variant_names", variant_names.as_str());
+        params.insert("metrics", metrics.as_str());
+        params.insert("source", source.as_str());
+        params.insert("snapshot_hash", snapshot_hash.as_deref().unwrap_or("\\N"));
+
+        self.run_query_synchronous(query.to_string(), &params)
+            .await?;
+        Ok(())
+    }
+
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
         let query = "SELECT toUInt32(uniqExact(value)) as count
                      FROM TagInference
@@ -610,6 +671,15 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             parse_json_rows(response.response.as_str())?;
         Ok(rows.into_iter().next())
     }
+}
+
+fn to_array_literal(values: &[String]) -> String {
+    let escaped = values
+        .iter()
+        .map(|value| format!("'{}'", escape_string_for_clickhouse_literal(value)))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{escaped}]")
 }
 
 #[cfg(test)]

@@ -9,10 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     config::Config,
-    db::{
-        delegating_connection::DelegatingDatabaseConnection,
-        workflow_evaluation_queries::WorkflowEvaluationQueries,
-    },
+    db::workflow_evaluation_queries::WorkflowEvaluationQueries,
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
     utils::{
@@ -52,26 +49,20 @@ pub async fn workflow_evaluation_run_handler(
 
 /// Creates a new workflow evaluation run.
 pub async fn workflow_evaluation_run(
-    AppStateData {
-        config,
-        clickhouse_connection_info,
-        postgres_connection_info,
-        ..
-    }: AppStateData,
+    app_state: AppStateData,
     params: WorkflowEvaluationRunParams,
 ) -> Result<WorkflowEvaluationRunResponse, Error> {
     validate_tags(&params.tags, params.internal)?;
-    validate_variant_pins(&params.variants, &config)?;
+    validate_variant_pins(&params.variants, &app_state.config)?;
     let run_id = Uuid::now_v7();
-    let db =
-        DelegatingDatabaseConnection::new(clickhouse_connection_info, postgres_connection_info);
+    let db = app_state.get_delegating_database();
     db.insert_workflow_evaluation_run(
         run_id,
         &params.variants,
         &params.tags,
         params.project_name.as_deref(),
         params.display_name.as_deref(),
-        &config.hash,
+        &app_state.config.hash,
     )
     .await?;
     Ok(WorkflowEvaluationRunResponse { run_id })
@@ -107,12 +98,7 @@ pub async fn workflow_evaluation_run_episode_handler(
 }
 
 pub async fn workflow_evaluation_run_episode(
-    AppStateData {
-        clickhouse_connection_info,
-        postgres_connection_info,
-        config,
-        ..
-    }: AppStateData,
+    app_state: AppStateData,
     run_id: Uuid,
     params: WorkflowEvaluationRunEpisodeParams,
 ) -> Result<WorkflowEvaluationRunEpisodeResponse, Error> {
@@ -140,14 +126,13 @@ pub async fn workflow_evaluation_run_episode(
         "tensorzero::workflow_evaluation_run_id".to_string(),
         run_id_str,
     );
-    let db =
-        DelegatingDatabaseConnection::new(clickhouse_connection_info, postgres_connection_info);
+    let db = app_state.get_delegating_database();
     db.insert_workflow_evaluation_run_episode(
         run_id,
         episode_id,
         params.task_name.as_deref(),
         &tags,
-        &config.hash,
+        &app_state.config.hash,
     )
     .await?;
     Ok(WorkflowEvaluationRunEpisodeResponse { episode_id })

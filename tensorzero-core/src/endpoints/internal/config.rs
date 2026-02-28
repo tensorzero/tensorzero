@@ -13,7 +13,6 @@ use tracing::instrument;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, RuntimeOverlay, UninitializedConfig};
 use crate::db::ConfigQueries;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -54,10 +53,7 @@ pub async fn get_live_config_handler(
     State(app_state): AppState,
 ) -> Result<Json<GetConfigResponse>, Error> {
     let hash = app_state.config.hash.clone();
-    let db = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let db = app_state.get_delegating_database();
     let snapshot = db.get_config_snapshot(hash).await?;
 
     Ok(Json(GetConfigResponse::from_snapshot(snapshot)?))
@@ -78,10 +74,7 @@ pub async fn get_config_by_hash_handler(
         })
     })?;
 
-    let db = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let db = app_state.get_delegating_database();
     let snapshot = db.get_config_snapshot(snapshot_hash).await?;
 
     Ok(Json(GetConfigResponse::from_snapshot(snapshot)?))
@@ -138,10 +131,7 @@ pub async fn write_config_handler(
     let runtime_overlay = RuntimeOverlay::from_config(&app_state.config);
     Config::load_from_snapshot(snapshot.clone(), runtime_overlay, false).await?;
 
-    let db = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let db = app_state.get_delegating_database();
     db.write_config_snapshot(&snapshot).await?;
 
     Ok(Json(WriteConfigResponse { hash }))

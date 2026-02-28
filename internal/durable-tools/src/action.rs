@@ -131,6 +131,7 @@ pub async fn action(
                 app_state.cache_manager.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.rate_limiting_manager.clone(),
+                app_state.primary_datastore,
                 (*inference_params).try_into()?,
                 None, // No API key for internal endpoint
             ))
@@ -157,6 +158,7 @@ pub async fn action(
                 app_state.valkey_cache_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.shutdown_token.clone(),
+                app_state.primary_datastore,
             )?;
 
             let response = feedback(snapshot_app_state, *feedback_params, None).await?;
@@ -173,6 +175,7 @@ pub async fn action(
                 app_state.valkey_cache_connection_info.clone(),
                 app_state.deferred_tasks.clone(),
                 app_state.shutdown_token.clone(),
+                app_state.primary_datastore,
             )?;
 
             // Run the evaluation using the shared helper
