@@ -108,7 +108,7 @@ fn parse_named_non_negative_float(input: &str, value_label: &str) -> Result<(Str
     let evaluator_name = parts[0].to_string();
     let value = parts[1]
         .parse::<f32>()
-        .map_err(|e| format!("Invalid {value_label} value `{}`: {e}", parts[1]))?;
+        .map_err(|e| format!("Invalid `{value_label}` value `{}`: {e}", parts[1]))?;
 
     if value < 0.0 {
         return Err(format!(

@@ -308,37 +308,37 @@ pub async fn run_evaluation(
         progress_bar.finish_with_message("Done");
     }
 
-    if evaluation_stats.output_format == OutputFormat::Pretty {
-        let EvaluationConfig::Inference(inference_evaluation_config) = &*result.evaluation_config;
-        let stats = evaluation_stats.compute_stats(&inference_evaluation_config.evaluators);
+    let EvaluationConfig::Inference(inference_evaluation_config) = &*result.evaluation_config;
+    let stats = evaluation_stats.compute_stats(&inference_evaluation_config.evaluators);
 
+    if evaluation_stats.output_format == OutputFormat::Pretty {
         // Print all stats
         for (evaluator_name, evaluator_stats) in &stats {
             writeln!(writer, "{evaluator_name}: {evaluator_stats}")?;
         }
+    }
 
-        // Check cutoffs and handle failures
-        let effective_cutoffs =
-            resolve_effective_cutoffs(&inference_evaluation_config.evaluators, &cli_cutoffs)?;
-        let failures = check_evaluator_cutoffs(
-            &stats,
-            &inference_evaluation_config.evaluators,
-            &effective_cutoffs,
-        )?;
+    // Check cutoffs and handle failures
+    let effective_cutoffs =
+        resolve_effective_cutoffs(&inference_evaluation_config.evaluators, &cli_cutoffs)?;
+    let failures = check_evaluator_cutoffs(
+        &stats,
+        &inference_evaluation_config.evaluators,
+        &effective_cutoffs,
+    )?;
 
-        // Print failure messages
+    if !failures.is_empty() {
         for (name, cutoff, actual) in &failures {
-            writeln!(
-                writer,
-                "Failed cutoff for evaluator {name} ({cutoff:.2}, got {actual:.2})"
-            )?;
+            tracing::warn!(
+                evaluator = %name,
+                cutoff = cutoff,
+                actual = actual,
+                "Failed cutoff for evaluator `{name}` ({cutoff:.2}, got {actual:.2})"
+            );
         }
 
-        // If there are failures, return an error with all failures listed
-        if !failures.is_empty() {
-            let failure_messages = format_cutoff_failures(&failures);
-            bail!("Failed cutoffs for evaluators: {failure_messages}");
-        }
+        let failure_messages = format_cutoff_failures(&failures);
+        bail!("Failed cutoffs for evaluators: {failure_messages}");
     }
 
     // Since we construct our own `ClickHouseConnectionInfo` outside of our `TensorZeroClient`,
@@ -785,7 +785,15 @@ pub fn resolve_effective_cutoffs(
                 );
                 effective_cutoffs.insert(evaluator_name.clone(), cli_value);
             }
-            (Some(cutoff), None) | (None, Some(cutoff)) => {
+            (Some(config_value), None) => {
+                tracing::warn!(
+                    evaluator_name = %evaluator_name,
+                    config_cutoff = config_value,
+                    "Evaluator config `cutoff` is deprecated; please remove `cutoff` from config and pass `--cutoffs` on the CLI instead."
+                );
+                effective_cutoffs.insert(evaluator_name.clone(), config_value);
+            }
+            (None, Some(cutoff)) => {
                 effective_cutoffs.insert(evaluator_name.clone(), cutoff);
             }
             (None, None) => {}
