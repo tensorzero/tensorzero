@@ -708,8 +708,8 @@ test("should copy messages to clipboard as JSON", async ({ page }) => {
   await expect(copyButton).toBeVisible({ timeout: 10000 });
   await copyButton.click();
 
-  // Select "Copy JSON" from the dropdown
-  await page.getByRole("menuitem", { name: "Copy JSON" }).click();
+  // Select "JSON" from the dropdown
+  await page.getByRole("menuitem", { name: "JSON" }).click();
 
   // Verify the success toast appears
   await expect(
@@ -737,8 +737,8 @@ test("should copy messages to clipboard as Markdown", async ({ page }) => {
   await expect(copyButton).toBeVisible({ timeout: 10000 });
   await copyButton.click();
 
-  // Select "Copy Markdown" from the dropdown
-  await page.getByRole("menuitem", { name: "Copy Markdown" }).click();
+  // Select "Markdown" from the dropdown
+  await page.getByRole("menuitem", { name: "Markdown" }).click();
 
   // Verify the success toast appears
   await expect(

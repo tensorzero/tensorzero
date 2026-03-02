@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ClipboardIcon } from "lucide-react";
+import { BracesIcon, ClipboardIcon, FileTextIcon } from "lucide-react";
 import type { Input, StoredInference } from "~/types/tensorzero";
 import { useCopy } from "~/hooks/use-copy";
 import { useToast } from "~/hooks/use-toast";
@@ -44,9 +44,13 @@ export function CopyMessagesButton({ input, output }: CopyMessagesButtonProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        <DropdownMenuItem onClick={handleCopyJson}>Copy JSON</DropdownMenuItem>
+        <DropdownMenuItem onClick={handleCopyJson}>
+          <BracesIcon />
+          JSON
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleCopyMarkdown}>
-          Copy Markdown
+          <FileTextIcon />
+          Markdown
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
