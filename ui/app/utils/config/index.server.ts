@@ -175,6 +175,25 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
 }
 
 // ============================================================================
+// Snapshot-aware config resolution from request
+// ============================================================================
+
+/**
+ * Reads `?snapshot_hash` from the request URL and resolves the appropriate
+ * config. Returns both the config and the hash so loaders can thread the
+ * hash into their response for the SnapshotHashProvider.
+ */
+export async function getConfigFromRequest(
+  request: Request,
+): Promise<{ config: UiConfig; snapshotHash: string | null }> {
+  const snapshotHash = new URL(request.url).searchParams.get("snapshot_hash");
+  const config = snapshotHash
+    ? await getConfigForSnapshot(snapshotHash)
+    : await getConfig();
+  return { config, snapshotHash };
+}
+
+// ============================================================================
 // Snapshot config fetching
 // ============================================================================
 

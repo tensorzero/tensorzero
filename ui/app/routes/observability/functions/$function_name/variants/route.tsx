@@ -17,13 +17,12 @@ import VariantTemplate from "./VariantTemplate";
 import PageButtons from "~/components/utils/PageButtons";
 import VariantInferenceTable from "./VariantInferenceTable";
 import {
-  getConfig,
-  getConfigForSnapshot,
+  getConfigFromRequest,
   getFunctionConfig,
 } from "~/utils/config/index.server";
 import { countInferencesForVariant } from "~/utils/clickhouse/inference.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import type { TimeWindow } from "~/types/tensorzero";
+import type { TimeWindow, UiConfig } from "~/types/tensorzero";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import type { Route } from "./+types/route";
@@ -78,7 +77,7 @@ async function fetchVariantPerformance(
   variant_name: string,
   metric_name: string | undefined,
   time_granularity: string,
-  config: Awaited<ReturnType<typeof getConfig>>,
+  config: UiConfig,
 ): Promise<VariantPerformanceData> {
   if (!metric_name || !config.metrics[metric_name]) {
     return undefined;
@@ -131,11 +130,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     return redirect("/observability/functions");
   }
 
+  const { config, snapshotHash } = await getConfigFromRequest(request);
   const url = new URL(request.url);
-  const snapshotHash = url.searchParams.get("snapshot_hash");
-  const config = snapshotHash
-    ? await getConfigForSnapshot(snapshotHash)
-    : await getConfig();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;

@@ -4,8 +4,7 @@ import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
 import { SnapshotHashProvider } from "~/context/snapshot";
 import {
-  getConfig,
-  getConfigForSnapshot,
+  getConfigFromRequest,
   getFunctionConfig,
 } from "~/utils/config/index.server";
 import BasicInfo from "./FunctionBasicInfo";
@@ -68,11 +67,8 @@ function FunctionDetailPageHeader({
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
+  const { config, snapshotHash } = await getConfigFromRequest(request);
   const url = new URL(request.url);
-  const snapshotHash = url.searchParams.get("snapshot_hash");
-  const config = snapshotHash
-    ? await getConfigForSnapshot(snapshotHash)
-    : await getConfig();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;
