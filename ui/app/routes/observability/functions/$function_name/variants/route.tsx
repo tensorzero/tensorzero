@@ -11,6 +11,7 @@ import {
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import { AlertCircle } from "lucide-react";
 import { Suspense, useMemo } from "react";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import { SnapshotHashProvider, useSnapshotHash } from "~/context/snapshot";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
@@ -514,6 +515,8 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
           functionName={function_name}
           variantName={variant_name}
         />
+
+        <SnapshotBanner />
 
         <SectionsGroup>
           <SectionLayout>

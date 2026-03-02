@@ -2,6 +2,7 @@ import type { Route } from "./+types/route";
 import { data, useLocation } from "react-router";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import { SnapshotHashProvider } from "~/context/snapshot";
 import {
   getConfigFromRequest,
@@ -148,6 +149,8 @@ export default function FunctionDetailPage({
           functionName={function_name}
           functionConfig={function_config}
         />
+
+        <SnapshotBanner />
 
         <SectionsGroup>
           <VariantsSection
