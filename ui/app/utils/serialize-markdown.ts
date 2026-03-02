@@ -3,6 +3,7 @@ import type {
   StoredInference,
   InputMessageContent,
   ContentBlockChatOutput,
+  JsonValue,
 } from "~/types/tensorzero";
 
 /**
@@ -30,7 +31,7 @@ export function serializeConversationMarkdown(
       const systemText =
         typeof input.system === "string"
           ? input.system
-          : JSON.stringify(input.system, null, 2);
+          : serializeArguments(input.system);
       sections.push(`## system\n\n${systemText}`);
     }
 
@@ -61,19 +62,19 @@ function serializeInputContent(block: InputMessageContent): string {
     case "thought":
       return block.text ?? "";
     case "template":
-      return JSON.stringify(block.arguments, null, 2);
+      return serializeArguments(block.arguments);
     case "tool_call": {
       const args =
         "raw_arguments" in block ? block.raw_arguments : block.arguments;
       const name = "raw_name" in block ? block.raw_name : block.name;
-      return `**Tool call: ${name}**\n\`\`\`json\n${typeof args === "string" ? args : JSON.stringify(args, null, 2)}\n\`\`\``;
+      return `**Tool call: ${name}**\n${jsonFence(typeof args === "string" ? args : JSON.stringify(args, null, 2))}`;
     }
     case "tool_result":
       return `**Tool result: ${block.name}**\n\`\`\`\n${block.result}\n\`\`\``;
     case "file":
       return `[file: ${block.file_type}]`;
     case "unknown":
-      return JSON.stringify(block.data, null, 2);
+      return jsonFence(JSON.stringify(block.data, null, 2));
     default: {
       const _exhaustiveCheck: never = block;
       return _exhaustiveCheck;
@@ -86,10 +87,10 @@ function serializeOutput(output: StoredInference["output"]): string {
     return "";
   }
 
-  // JSON inference output — wrap in code fence for readability
+  // JSON inference output
   if ("raw" in output) {
     const json = output.raw ?? JSON.stringify(output.parsed, null, 2);
-    return `\`\`\`json\n${json}\n\`\`\``;
+    return jsonFence(json);
   }
 
   // Chat inference output (array of content blocks)
@@ -103,13 +104,45 @@ function serializeChatOutputBlock(block: ContentBlockChatOutput): string {
     case "thought":
       return block.text ?? "";
     case "tool_call": {
-      return `**Tool call: ${block.raw_name}**\n\`\`\`json\n${block.raw_arguments}\n\`\`\``;
+      return `**Tool call: ${block.raw_name}**\n${jsonFence(block.raw_arguments)}`;
     }
     case "unknown":
-      return JSON.stringify(block.data, null, 2);
+      return jsonFence(JSON.stringify(block.data, null, 2));
     default: {
       const _exhaustiveCheck: never = block;
       return _exhaustiveCheck;
     }
   }
+}
+
+/**
+ * Renders a template Arguments map as readable key-value pairs.
+ * Simple scalar values render as `**key**: value`.
+ * Complex values (objects/arrays) render as `**key**:\n```json\n...\n````.
+ */
+function serializeArguments(args: Record<string, JsonValue>): string {
+  const entries = Object.entries(args);
+  if (entries.length === 0) return "";
+  return entries
+    .map(([key, value]) => serializeKeyValue(key, value))
+    .join("\n");
+}
+
+function serializeKeyValue(key: string, value: JsonValue): string {
+  if (value === null || value === undefined) {
+    return `**${key}**: null`;
+  }
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return `**${key}**: ${value}`;
+  }
+  // Arrays and objects get a code fence
+  return `**${key}**:\n${jsonFence(JSON.stringify(value, null, 2))}`;
+}
+
+function jsonFence(content: string): string {
+  return `\`\`\`json\n${content}\n\`\`\``;
 }
