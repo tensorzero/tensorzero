@@ -8,7 +8,6 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -86,10 +85,7 @@ pub async fn update_datapoints(
         object_store_info: &app_state.config.object_store_info,
     };
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
 
     // Fetch all datapoints in a single batch query
     let datapoint_ids: Vec<Uuid> = request
@@ -402,10 +398,7 @@ pub async fn update_datapoints_metadata_handler(
     Path(path_params): Path<UpdateDatapointsMetadataPathParams>,
     StructuredJson(request): StructuredJson<UpdateDatapointsMetadataRequest>,
 ) -> Result<Json<UpdateDatapointsResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
 
     let response =
         update_datapoints_metadata(&database, &path_params.dataset_name, request).await?;

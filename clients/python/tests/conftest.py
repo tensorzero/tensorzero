@@ -48,6 +48,12 @@ TEST_CONFIG_FILE = os.path.join(
     "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
+# Config glob that also includes pg.gateway.toml (sets observability.backend = "postgres")
+TEST_CONFIG_FILE_POSTGRES = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "../../../tensorzero-core/tests/e2e/config/{tensorzero,postgres}.*.toml",
+)
+
 GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
 CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
 POSTGRES_URL = "postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests"
@@ -69,21 +75,12 @@ def embedded_sync_client():
 
 @pytest.fixture
 def embedded_sync_client_using_postgres():
-    original_flag = os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE", None)
-
-    os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"] = "1"
-
     with TensorZeroGateway.build_embedded(
-        config_file=TEST_CONFIG_FILE,
+        config_file=TEST_CONFIG_FILE_POSTGRES,
         clickhouse_url=CLICKHOUSE_URL,
         postgres_url=POSTGRES_URL,
     ) as client:
         yield client
-
-    # Reset flag
-    os.environ.pop("TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE", None)
-    if original_flag:
-        os.environ["TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"] = original_flag
 
 
 @pytest_asyncio.fixture

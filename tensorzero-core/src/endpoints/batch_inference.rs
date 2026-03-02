@@ -136,6 +136,7 @@ pub async fn start_batch_inference(
         cache_manager,
         deferred_tasks,
         rate_limiting_manager,
+        primary_datastore,
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
@@ -158,6 +159,7 @@ pub async fn start_batch_inference(
     let database = DelegatingDatabaseConnection::new(
         clickhouse_connection_info.clone(),
         postgres_connection_info.clone(),
+        primary_datastore,
     );
 
     // Get the function config or return an error if it doesn't exist
@@ -512,6 +514,7 @@ pub async fn poll_batch_inference_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        primary_datastore,
         ..
     }): AppState,
     Path(path_params): Path<PollPathParams>,
@@ -530,8 +533,11 @@ pub async fn poll_batch_inference_handler(
         }));
     }
 
-    let database =
-        DelegatingDatabaseConnection::new(clickhouse_connection_info, postgres_connection_info);
+    let database = DelegatingDatabaseConnection::new(
+        clickhouse_connection_info,
+        postgres_connection_info,
+        primary_datastore,
+    );
 
     let batch_request = get_batch_request(&database, &path_params).await?;
     match batch_request.status {

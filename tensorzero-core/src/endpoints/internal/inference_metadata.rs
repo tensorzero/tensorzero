@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::{
     DEFAULT_INFERENCE_QUERY_LIMIT, InferenceMetadata, InferenceQueries,
     ListInferenceMetadataParams, PaginationParams,
@@ -65,10 +64,7 @@ pub async fn get_inference_metadata_handler(
         episode_id: params.episode_id,
     };
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let inference_metadata = database.list_inference_metadata(&list_params).await?;
 
     Ok(Json(ListInferenceMetadataResponse { inference_metadata }))

@@ -609,6 +609,7 @@ dependencies = [
  "tensorzero-core",
  "tensorzero-derive",
  "tensorzero-optimizers",
+ "tensorzero-ts-types",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2375,6 +2376,7 @@ dependencies = [
  "clap",
  "futures",
  "indicatif",
+ "regex",
  "serde",
  "serde_json",
  "tensorzero-core",
@@ -7098,11 +7100,13 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_path_to_error",
+ "sqlx",
  "tensorzero-derive",
  "thiserror 2.0.18",
  "tracing",
  "ts-rs",
  "url",
+ "uuid",
 ]
 
 [[package]]

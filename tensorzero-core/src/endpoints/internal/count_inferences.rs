@@ -8,7 +8,6 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::{DemonstrationFeedbackFilter, InferenceFilter};
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::{CountInferencesParams, InferenceOutputSource, InferenceQueries};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -99,10 +98,7 @@ pub async fn count_inferences_handler(
     State(app_state): AppState,
     Json(request): Json<CountInferencesRequest>,
 ) -> Result<Json<CountInferencesResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response = count_inferences(&database, &app_state.config, &request).await?;
     Ok(Json(response))
 }

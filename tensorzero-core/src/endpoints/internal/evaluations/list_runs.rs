@@ -5,7 +5,6 @@ use axum::extract::{Query, State};
 use tracing::instrument;
 
 use super::types::{ListEvaluationRunsParams, ListEvaluationRunsResponse};
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::endpoints::internal::evaluations::types::EvaluationRunInfo;
 use crate::error::Error;
@@ -20,10 +19,7 @@ pub async fn list_evaluation_runs_handler(
     State(app_state): AppState,
     Query(params): Query<ListEvaluationRunsParams>,
 ) -> Result<Json<ListEvaluationRunsResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let list_evaluation_runs_response =
         list_evaluation_runs(&database, params.limit, params.offset).await?;
 

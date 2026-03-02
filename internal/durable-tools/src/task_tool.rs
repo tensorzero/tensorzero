@@ -67,7 +67,7 @@ use crate::tool_metadata::ToolMetadata;
 ///         &self,
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         _side_info: <Self as ToolMetadata>::SideInfo,
-///         ctx: &mut ToolContext<'_>,
+///         ctx: &mut ToolContext,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Call other tools
 ///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null)).await?;
@@ -129,7 +129,7 @@ use crate::tool_metadata::ToolMetadata;
 ///         &self,
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         side_info: <Self as ToolMetadata>::SideInfo,
-///         ctx: &mut ToolContext<'_>,
+///         ctx: &mut ToolContext,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Use llm_params.query (from LLM)
 ///         // Use side_info.api_token (hidden from LLM)
@@ -155,7 +155,7 @@ pub trait TaskTool: ToolMetadata {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_, Self::ExtraState>,
+        ctx: &mut ToolContext<Self::ExtraState>,
     ) -> ToolExecResult<<Self as ToolMetadata>::Output>;
 }
 
@@ -186,10 +186,10 @@ impl<T: TaskTool> Task<ToolAppState<T::ExtraState>> for TaskToolAdapter<T> {
     async fn run(
         &self,
         wrapped: Self::Params,
-        mut task_ctx: TaskContext<ToolAppState<T::ExtraState>>,
+        task_ctx: TaskContext<ToolAppState<T::ExtraState>>,
         app_ctx: ToolAppState<T::ExtraState>,
     ) -> TaskResult<Self::Output> {
-        let mut tool_ctx = ToolContext::new(&mut task_ctx, &app_ctx, wrapped.episode_id);
+        let mut tool_ctx = ToolContext::new(task_ctx, app_ctx, wrapped.episode_id);
         self.0
             .execute(wrapped.llm_params, wrapped.side_info, &mut tool_ctx)
             .await

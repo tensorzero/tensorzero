@@ -31,12 +31,12 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::delegating_connection::{DelegatingDatabaseConnection, PrimaryDatastore};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::{DeploymentIdQueries, HowdyQueries};
 use crate::{config::Config, utils::spawn_ignoring_shutdown};
-use crate::{db::clickhouse::ClickHouseConnectionInfo, feature_flags};
 
 lazy_static! {
     /// The URL to send usage data to.
@@ -51,6 +51,7 @@ pub fn setup_howdy(
     config: &Config,
     clickhouse: ClickHouseConnectionInfo,
     postgres: PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
     token: CancellationToken,
 ) {
     if config.gateway.disable_pseudonymous_usage_analytics
@@ -65,18 +66,20 @@ pub fn setup_howdy(
     if clickhouse_disabled {
         return;
     }
-    spawn_ignoring_shutdown(howdy_loop(clickhouse, postgres, token));
+    spawn_ignoring_shutdown(howdy_loop(clickhouse, postgres, primary_datastore, token));
 }
 
 /// Loops and sends usage data to the Howdy service every 6 hours.
 pub async fn howdy_loop(
     clickhouse: ClickHouseConnectionInfo,
     postgres: PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
     token: CancellationToken,
 ) {
-    let db = DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone());
+    let db =
+        DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone(), primary_datastore);
     let client = Client::new();
-    let deployment_id = match get_deployment_id(&clickhouse, &postgres).await {
+    let deployment_id = match get_deployment_id(&clickhouse, &postgres, primary_datastore).await {
         Ok(deployment_id) => deployment_id,
         Err(()) => {
             return;
@@ -121,8 +124,9 @@ async fn send_howdy(
 async fn synchronize_deployment_id(
     clickhouse: &ClickHouseConnectionInfo,
     postgres: &PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
 ) -> Result<(), ()> {
-    if !feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+    if primary_datastore != PrimaryDatastore::Postgres {
         return Ok(());
     }
     if clickhouse.client_type() != ClickHouseClientType::Production {
@@ -148,11 +152,12 @@ async fn synchronize_deployment_id(
 pub async fn get_deployment_id(
     clickhouse: &ClickHouseConnectionInfo,
     postgres: &PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
 ) -> Result<String, ()> {
     // Make sure deployment ID is consistent between ClickHouse and Postgres
-    synchronize_deployment_id(clickhouse, postgres).await?;
+    synchronize_deployment_id(clickhouse, postgres, primary_datastore).await?;
 
-    DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone())
+    DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone(), primary_datastore)
         .get_deployment_id()
         .await
         .map_err(|e| {

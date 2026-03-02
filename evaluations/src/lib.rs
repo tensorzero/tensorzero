@@ -13,7 +13,11 @@ pub use stats::{
     EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate, EvaluatorStats,
     PerEvaluatorStats,
 };
-use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::delegating_connection::{DelegatingDatabaseConnection, PrimaryDatastore};
+use tensorzero_core::db::evaluation_queries::{
+    InferenceEvaluationRunInsert, InferenceEvaluationRunMetricMetadata,
+    InferenceEvaluationRunSource,
+};
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::postgres::batching::PostgresBatchSender;
 pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
@@ -33,7 +37,8 @@ use tensorzero_core::endpoints::datasets::v1::{
     get_datapoints, list_datapoints,
     types::{GetDatapointsRequest, ListDatapointsRequest},
 };
-use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig, get_evaluator_metric_name};
+use tensorzero_core::function::FunctionConfigType;
 use tensorzero_core::inference::types::InputExt;
 use tensorzero_core::utils::gateway::setup_postgres;
 use tensorzero_core::utils::spawn_ignoring_shutdown;
@@ -82,6 +87,33 @@ pub(crate) fn merge_tags(
 pub struct Clients {
     pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
     pub db: Arc<dyn DelegatingDatabaseQueries>,
+}
+
+fn evaluator_value_type(evaluator_config: &EvaluatorConfig) -> &'static str {
+    if evaluator_config.is_bernoulli() {
+        "boolean"
+    } else {
+        "float"
+    }
+}
+
+fn build_run_metrics_metadata(
+    evaluation_name: &str,
+    evaluators: &HashMap<String, EvaluatorConfig>,
+) -> Vec<InferenceEvaluationRunMetricMetadata> {
+    let mut metrics: Vec<InferenceEvaluationRunMetricMetadata> = evaluators
+        .iter()
+        .map(
+            |(evaluator_name, evaluator_config)| InferenceEvaluationRunMetricMetadata {
+                name: get_evaluator_metric_name(evaluation_name, evaluator_name),
+                evaluator_name: Some(evaluator_name.clone()),
+                value_type: evaluator_value_type(evaluator_config).to_string(),
+                optimize: Some(evaluator_config.optimize()),
+            },
+        )
+        .collect();
+    metrics.sort_by(|a, b| a.name.cmp(&b.name));
+    metrics
 }
 
 /// High-level wrapper function for running evaluations called from the CLI.
@@ -184,8 +216,13 @@ pub async fn run_evaluation(
     debug!("Configuration loaded successfully");
 
     let postgres_connection = setup_postgres(&config, postgres_url.as_deref()).await?;
-    let database =
-        DelegatingDatabaseConnection::new(clickhouse_client.clone(), postgres_connection.clone());
+    // TODO(#5691): Allow running evaluations with Postgres as the observability backend.
+    let primary_datastore = PrimaryDatastore::ClickHouse;
+    let database = DelegatingDatabaseConnection::new(
+        clickhouse_client.clone(),
+        postgres_connection.clone(),
+        primary_datastore,
+    );
 
     // Look up evaluation config from the loaded config
     let evaluation_config = config
@@ -361,9 +398,12 @@ pub async fn run_evaluation_with_app_state(
         Some(pool) => PostgresConnectionInfo::new_with_pool(pool.clone()),
         None => PostgresConnectionInfo::new_disabled(),
     };
-    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(
-        DelegatingDatabaseConnection::new(clickhouse_client, postgres_client),
-    );
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+        Arc::new(DelegatingDatabaseConnection::new(
+            clickhouse_client,
+            postgres_client,
+            app_state.primary_datastore,
+        ));
 
     // Create AppStateInferenceExecutor to call handlers directly without HTTP overhead
     let inference_executor = Arc::new(AppStateInferenceExecutor::new(app_state));
@@ -492,6 +532,28 @@ pub async fn run_evaluation_core_streaming(
     debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
 
     let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
+    let Some(function_config) = args
+        .function_configs
+        .get(&inference_evaluation_config.function_name)
+    else {
+        bail!(
+            "Function config for `{}` not found",
+            inference_evaluation_config.function_name
+        );
+    };
+    let function_type = match function_config {
+        EvaluationFunctionConfig::Chat => FunctionConfigType::Chat,
+        EvaluationFunctionConfig::Json { .. } => FunctionConfigType::Json,
+    };
+    let source = if args.dataset_name.is_some() {
+        InferenceEvaluationRunSource::DatasetName
+    } else {
+        InferenceEvaluationRunSource::DatapointIds
+    };
+    let variant_names = match &args.variant {
+        EvaluationVariant::Name(name) => vec![name.clone()],
+        EvaluationVariant::Info(_) => vec![],
+    };
 
     info!(
         function_name = %inference_evaluation_config.function_name,
@@ -559,6 +621,24 @@ pub async fn run_evaluation_core_streaming(
             first.to_string()
         }
     });
+    clients
+        .db
+        .insert_inference_evaluation_run(&InferenceEvaluationRunInsert {
+            run_id: args.evaluation_run_id,
+            evaluation_name: args.evaluation_name.clone(),
+            function_name: inference_evaluation_config.function_name.clone(),
+            function_type,
+            dataset_name: dataset_name.to_string(),
+            variant_names,
+            metrics: build_run_metrics_metadata(
+                &args.evaluation_name,
+                &inference_evaluation_config.evaluators,
+            ),
+            source,
+            snapshot_hash: None,
+        })
+        .await?;
+
     let variant = Arc::new(args.variant);
     let variants = [variant]; // Single-element array for process_batch
     let evaluation_name = Arc::new(args.evaluation_name);
