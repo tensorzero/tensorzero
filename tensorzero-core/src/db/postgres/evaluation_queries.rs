@@ -762,9 +762,9 @@ mod tests {
                 COALESCE(variant_names->>0, '') AS variant_name
             FROM tensorzero.inference_evaluation_runs
             WHERE evaluation_name = $1 AND function_name = $2
-            AND COALESCE(variant_names->>0, '') ILIKE $3
+            AND (run_id::TEXT ILIKE $3 OR COALESCE(variant_names->>0, '') ILIKE $4)
             ORDER BY run_id DESC
-            LIMIT $4 OFFSET $5
+            LIMIT $5 OFFSET $6
             ",
         );
     }
@@ -783,9 +783,9 @@ mod tests {
                 COALESCE(variant_names->>0, '') AS variant_name
             FROM tensorzero.inference_evaluation_runs
             WHERE evaluation_name = $1
-            AND COALESCE(variant_names->>0, '') ILIKE $2
+            AND (run_id::TEXT ILIKE $2 OR COALESCE(variant_names->>0, '') ILIKE $3)
             ORDER BY run_id DESC
-            LIMIT $3 OFFSET $4
+            LIMIT $4 OFFSET $5
             ",
         );
     }
