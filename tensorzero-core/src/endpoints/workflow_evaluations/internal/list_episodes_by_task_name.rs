@@ -7,7 +7,6 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use super::types::ListWorkflowEvaluationRunEpisodesByTaskNameResponse;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::workflow_evaluation_queries::{
     GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow, WorkflowEvaluationQueries,
 };
@@ -47,10 +46,7 @@ pub async fn list_workflow_evaluation_run_episodes_by_task_name_handler(
         })
         .unwrap_or_default();
 
-    let db = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info,
-        app_state.postgres_connection_info,
-    );
+    let db = app_state.get_delegating_database();
     let response = list_workflow_evaluation_run_episodes_by_task_name(
         &db,
         &run_ids,

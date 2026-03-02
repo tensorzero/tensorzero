@@ -4,7 +4,6 @@ use serde::Deserialize;
 use tracing::instrument;
 
 use crate::db::datasets::DatasetQueries;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -23,10 +22,7 @@ pub async fn delete_datapoints_handler(
     Path(path_params): Path<DeleteDatapointsPathParams>,
     StructuredJson(request): StructuredJson<DeleteDatapointsRequest>,
 ) -> Result<Json<DeleteDatapointsResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response = delete_datapoints(&database, &path_params.dataset_name, request).await?;
     Ok(Json(response))
 }
@@ -37,10 +33,7 @@ pub async fn delete_dataset_handler(
     State(app_state): AppState,
     Path(path_params): Path<DeleteDatapointsPathParams>,
 ) -> Result<Json<DeleteDatapointsResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response = delete_dataset(&database, &path_params.dataset_name).await?;
     Ok(Json(response))
 }

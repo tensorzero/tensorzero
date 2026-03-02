@@ -29,6 +29,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("GET_CONFIG_TOOL_PARAMS", "GetConfigToolParams"),
     ("GET_DATAPOINTS_TOOL_PARAMS", "GetDatapointsToolParams"),
     (
+        "GET_FEEDBACK_BY_TARGET_ID_TOOL_PARAMS",
+        "GetFeedbackByTargetIdToolParams",
+    ),
+    (
         "GET_FEEDBACK_BY_VARIANT_TOOL_PARAMS",
         "GetFeedbackByVariantToolParams",
     ),
@@ -44,8 +48,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ),
     ("LIST_DATAPOINTS_TOOL_PARAMS", "ListDatapointsToolParams"),
     ("LIST_DATASETS_TOOL_PARAMS", "ListDatasetsToolParams"),
+    ("LIST_EPISODES_TOOL_PARAMS", "ListEpisodesToolParams"),
     ("LIST_INFERENCES_TOOL_PARAMS", "ListInferencesToolParams"),
     ("RUN_EVALUATION_TOOL_PARAMS", "RunEvaluationToolParams"),
+    ("UPLOAD_DATASET_TOOL_PARAMS", "UploadDatasetToolParams"),
     (
         "UPDATE_DATAPOINTS_TOOL_PARAMS",
         "UpdateDatapointsToolParams",
@@ -55,6 +61,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("CREATE_DATAPOINTS_RESPONSE", "CreateDatapointsResponse"),
     ("DELETE_DATAPOINTS_RESPONSE", "DeleteDatapointsResponse"),
     ("FEEDBACK_RESPONSE", "FeedbackResponse"),
+    (
+        "GET_FEEDBACK_BY_TARGET_ID_RESPONSE",
+        "GetFeedbackByTargetIdResponse",
+    ),
     ("GET_DATAPOINTS_RESPONSE", "GetDatapointsResponse"),
     ("GET_INFERENCES_RESPONSE", "GetInferencesResponse"),
     ("INFERENCE_RESPONSE", "InferenceResponse"),
@@ -67,8 +77,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
         "LatestFeedbackIdByMetricResponse",
     ),
     ("LIST_DATASETS_RESPONSE", "ListDatasetsResponse"),
+    ("LIST_EPISODES_RESPONSE", "ListEpisodesResponse"),
     ("RUN_EVALUATION_RESPONSE", "RunEvaluationResponse"),
     ("UPDATE_DATAPOINTS_RESPONSE", "UpdateDatapointsResponse"),
+    ("UPLOAD_DATASET_TOOL_OUTPUT", "UploadDatasetToolOutput"),
     ("WRITE_CONFIG_RESPONSE", "WriteConfigResponse"),
     ("GET_CONFIG_RESPONSE", "GetConfigResponse"),
     ("FEEDBACK_BY_VARIANT", "FeedbackByVariant"),

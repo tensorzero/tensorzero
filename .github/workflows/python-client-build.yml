@@ -248,7 +248,16 @@ jobs:
           version: "0.9.27"
       - name: Check local sdist
         run: |
-          ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero-*.tar.gz
+          for attempt in 1 2 3; do
+            if ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero-*.tar.gz; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to check local sdist after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
       - name: Run twine on sdist
         run: |
           uv pip install twine
@@ -259,6 +268,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           pattern: wheels-*
@@ -268,3 +278,5 @@ jobs:
           # Count the number of files named 'tensorzero-*.whl', and verify that it equals 5
           # If we add new platforms / python versions, update this number
           ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 6
+      - name: Check PyPI size limit
+        run: python3 ci/check_pypi_size.py './wheels-*/*'

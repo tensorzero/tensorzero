@@ -1,5 +1,6 @@
 import type { Route } from "./+types/route";
 import { abortableTimeout } from "~/utils/common";
+import { getConfig } from "~/utils/config/index.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -9,12 +10,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     return new Response("Missing evaluation_name parameter", { status: 400 });
   }
   const query = url.searchParams.get("q") || "";
+  const config = await getConfig();
+  const function_name = config.evaluations[evaluationName]?.function_name;
 
   const runs = await getTensorZeroClient()
     .searchEvaluationRuns(
       evaluationName,
       query,
-      /*functionName=*/ undefined,
+      function_name,
       /*limit=*/ 100,
       /*offset=*/ 0,
     )

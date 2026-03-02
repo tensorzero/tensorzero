@@ -4,14 +4,15 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::config::OtlpConfig;
-use crate::config::gateway::ModelInferenceCacheConfig;
+use crate::config::gateway::{InferenceCacheBackend, ModelInferenceCacheConfig};
 use crate::db::cache::CacheQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
+use crate::db::delegating_connection::PrimaryDatastore;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::db::valkey::cache::ValkeyCacheClient;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
-use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -38,34 +39,93 @@ impl CacheManager {
         Self { client }
     }
 
-    /// Select the appropriate cache backend.
+    /// Select the appropriate cache backend based on config and available connections.
     ///
-    /// When Postgres is the primary datastore, uses Valkey if available,
-    /// otherwise falls back to ClickHouse. When ClickHouse is the primary
-    /// datastore, uses ClickHouse directly.
+    /// Respects `cache_config.enabled`:
+    /// - `Some(false)` → disabled (no-op)
+    /// - `Some(true)` → resolve backend, error if unavailable
+    /// - `None` → resolve backend (see below)
+    ///
+    /// Backend resolution (`cache_config.backend`):
+    /// - `Auto` + ClickHouse primary → ClickHouse
+    /// - `Auto` + Postgres primary → Valkey (disabled if unavailable)
+    /// - `ClickHouse` → ClickHouse (error if unavailable)
+    /// - `Valkey` → Valkey (error if unavailable)
     pub fn new_from_connections(
         valkey_connection_info: &ValkeyConnectionInfo,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         cache_config: &ModelInferenceCacheConfig,
-    ) -> Self {
-        if !ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-            return Self::new(Arc::new(clickhouse_connection_info.clone()));
+        primary_datastore: PrimaryDatastore,
+    ) -> Result<Self, Error> {
+        if cache_config.enabled == Some(false) {
+            return Ok(Self::disabled());
         }
-        match valkey_connection_info {
-            ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
-                ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
-            )),
-            ValkeyConnectionInfo::Disabled => {
-                tracing::warn!(
-                    "Postgres is the primary datastore, but `TENSORZERO_VALKEY_URL` is not set; falling back to ClickHouse for cache writes if configured."
-                );
-                Self::new(Arc::new(clickhouse_connection_info.clone()))
+
+        let clickhouse_available =
+            clickhouse_connection_info.client_type() != ClickHouseClientType::Disabled;
+        let valkey_available =
+            matches!(valkey_connection_info, ValkeyConnectionInfo::Enabled { .. });
+
+        match cache_config.backend {
+            InferenceCacheBackend::Auto => {
+                let explicitly_enabled = cache_config.enabled == Some(true);
+                if primary_datastore == PrimaryDatastore::ClickHouse {
+                    if !clickhouse_available && explicitly_enabled {
+                        return Err(ErrorDetails::AppState {
+                            message: format!(
+                                "`cache.enabled` is `true` but the cache backend (`{:?}`) is not available. \
+                                 Ensure the required connection URL is set, or set `cache.enabled` to `false`.",
+                                cache_config.backend,
+                            ),
+                        }
+                        .into());
+                    }
+                    return Ok(Self::new(Arc::new(clickhouse_connection_info.clone())));
+                }
+                // Postgres primary: check if any backend is available
+                if explicitly_enabled && !valkey_available && !clickhouse_available {
+                    return Err(ErrorDetails::AppState {
+                        message: format!(
+                            "`cache.enabled` is `true` but the cache backend (`{:?}`) is not available. \
+                             Ensure the required connection URL is set, or set `cache.enabled` to `false`.",
+                            cache_config.backend,
+                        ),
+                    }
+                    .into());
+                }
+                match valkey_connection_info {
+                    ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
+                        ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+                    ))),
+                    ValkeyConnectionInfo::Disabled => Ok(Self::disabled()),
+                }
             }
+            InferenceCacheBackend::ClickHouse => {
+                if !clickhouse_available {
+                    return Err(ErrorDetails::AppState {
+                        message: "`cache.backend` is set to `clickhouse` but ClickHouse is not available. \
+                                  Ensure the required connection URL is set, or remove the `cache.backend` setting."
+                            .to_string(),
+                    }
+                    .into());
+                }
+                Ok(Self::new(Arc::new(clickhouse_connection_info.clone())))
+            }
+            InferenceCacheBackend::Valkey => match valkey_connection_info {
+                ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
+                    ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+                ))),
+                ValkeyConnectionInfo::Disabled => Err(ErrorDetails::AppState {
+                    message: "`cache.backend` is set to `valkey` but Valkey is not available. \
+                              Ensure the required connection URL is set, or remove the `cache.backend` setting."
+                        .to_string(),
+                }
+                .into()),
+            },
         }
     }
 
     /// Create a disabled cache manager (no-op: lookups return `None`, writes succeed immediately).
-    /// TODO(shuyangli): It's not test-only because tensorzero-optimizers/src/dicl.rs uses it; validate if this is appropriate.
     pub fn disabled() -> Self {
         Self::new(Arc::new(DisabledCacheQueries))
     }
@@ -587,9 +647,22 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
 #[cfg(test)]
 mod tests {
 
+    use std::borrow::Cow;
+
     use uuid::Uuid;
 
-    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+    use crate::inference::types::extra_body::{
+        ExtraBodyConfig, ExtraBodyReplacement, ExtraBodyReplacementKind, FullExtraBodyConfig,
+    };
+    use crate::inference::types::extra_headers::{
+        ExtraHeader, ExtraHeaderKind, ExtraHeadersConfig, FullExtraHeadersConfig,
+    };
+    use crate::inference::types::{
+        ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage,
+    };
+    use crate::tool::ToolCallConfig;
+    use tensorzero_types::Role;
 
     use super::*;
 
@@ -708,5 +781,517 @@ mod tests {
         };
         let streaming_cache_key = model_provider_request.get_cache_key().unwrap();
         assert_ne!(cache_key, streaming_cache_key);
+    }
+
+    static BASELINE_OUTPUT_SCHEMA: std::sync::LazyLock<serde_json::Value> =
+        std::sync::LazyLock::new(|| serde_json::json!({"type": "object"}));
+
+    /// Returns a baseline request with all cache-relevant fields set to non-default values.
+    ///
+    /// The exhaustive destructure ensures a compile error when a new field is added
+    /// to `ModelInferenceRequest`, forcing the author to decide whether it affects
+    /// the cache key and add a corresponding test.
+    fn get_baseline_request() -> ModelInferenceRequest<'static> {
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::from("hello".to_string())],
+            }],
+            system: Some("you are helpful".to_string()),
+            tool_config: None,
+            temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            max_tokens: Some(100),
+            seed: Some(42),
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: Some(&*BASELINE_OUTPUT_SCHEMA),
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
+            extra_cache_key: Some("baseline".to_string()),
+            stop_sequences: Some(Cow::Owned(vec!["stop".to_string()])),
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: Some("high".to_string()),
+                service_tier: None,
+                thinking_budget_tokens: Some(1000),
+                verbosity: Some("verbose".to_string()),
+            },
+        };
+
+        // Exhaustive destructure: a compile error here means a new field was added
+        // and must be classified as cache-relevant or explicitly excluded.
+        let ModelInferenceRequest {
+            // Excluded from cache key (unique per request)
+            inference_id: _,
+            // All remaining fields participate via JSON serialization
+            messages: _,
+            system: _,
+            tool_config: _,
+            temperature: _,
+            top_p: _,
+            presence_penalty: _,
+            frequency_penalty: _,
+            max_tokens: _,
+            seed: _,
+            stream: _,
+            json_mode: _,
+            function_type: _,
+            output_schema: _,
+            extra_body: _,
+            extra_headers: _,
+            fetch_and_encode_input_files_before_inference: _,
+            extra_cache_key: _,
+            stop_sequences: _,
+            inference_params_v2: _,
+        } = &request;
+
+        request
+    }
+
+    fn get_baseline_key(request: &ModelInferenceRequest) -> CacheKey {
+        let otlp_config = OtlpConfig::default();
+        ModelProviderRequest {
+            request,
+            model_name: "model",
+            provider_name: "provider",
+            otlp_config: &otlp_config,
+            model_inference_id: Uuid::now_v7(),
+        }
+        .get_cache_key()
+        .unwrap()
+    }
+
+    #[test]
+    fn test_cache_key_ignores_inference_id() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.inference_id = Uuid::now_v7();
+        let key = get_baseline_key(&req);
+        assert_eq!(
+            baseline_key, key,
+            "inference_id should not affect cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_ignores_model_inference_id() {
+        let baseline = get_baseline_request();
+        let otlp_config = OtlpConfig::default();
+
+        let key_a = ModelProviderRequest {
+            request: &baseline,
+            model_name: "model",
+            provider_name: "provider",
+            otlp_config: &otlp_config,
+            model_inference_id: Uuid::now_v7(),
+        }
+        .get_cache_key()
+        .unwrap();
+        let key_b = ModelProviderRequest {
+            request: &baseline,
+            model_name: "model",
+            provider_name: "provider",
+            otlp_config: &otlp_config,
+            model_inference_id: Uuid::now_v7(),
+        }
+        .get_cache_key()
+        .unwrap();
+        assert_eq!(
+            key_a, key_b,
+            "model_inference_id should not affect cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_model_name() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+        let otlp_config = OtlpConfig::default();
+
+        let key = ModelProviderRequest {
+            request: &baseline,
+            model_name: "other_model",
+            provider_name: "provider",
+            otlp_config: &otlp_config,
+            model_inference_id: Uuid::now_v7(),
+        }
+        .get_cache_key()
+        .unwrap();
+        assert_ne!(
+            baseline_key, key,
+            "different model_name should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_provider_name() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+        let otlp_config = OtlpConfig::default();
+
+        let key = ModelProviderRequest {
+            request: &baseline,
+            model_name: "model",
+            provider_name: "other_provider",
+            otlp_config: &otlp_config,
+            model_inference_id: Uuid::now_v7(),
+        }
+        .get_cache_key()
+        .unwrap();
+        assert_ne!(
+            baseline_key, key,
+            "different provider_name should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_prefix_free_encoding() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+        let otlp_config = OtlpConfig::default();
+
+        let key = ModelProviderRequest {
+            request: &baseline,
+            model_name: "modelp",
+            provider_name: "rovider",
+            otlp_config: &otlp_config,
+            model_inference_id: Uuid::now_v7(),
+        }
+        .get_cache_key()
+        .unwrap();
+        assert_ne!(
+            baseline_key, key,
+            "model/provider name boundary shift should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_messages() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::from("goodbye".to_string())],
+        }];
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different messages should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_system() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.system = Some("different system".to_string());
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different system should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_tool_config() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.tool_config = Some(Cow::Owned(ToolCallConfig::default()));
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different tool_config should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_temperature() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.temperature = Some(0.9);
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different temperature should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_top_p() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.top_p = Some(0.1);
+        let key = get_baseline_key(&req);
+        assert_ne!(baseline_key, key, "different top_p should change cache key");
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_presence_penalty() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.presence_penalty = Some(0.9);
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different presence_penalty should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_frequency_penalty() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.frequency_penalty = Some(0.9);
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different frequency_penalty should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_max_tokens() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.max_tokens = Some(200);
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different max_tokens should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_seed() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.seed = Some(99);
+        let key = get_baseline_key(&req);
+        assert_ne!(baseline_key, key, "different seed should change cache key");
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_stream() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.stream = true;
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different stream should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_json_mode() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.json_mode = ModelInferenceRequestJsonMode::On;
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different json_mode should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_function_type() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.function_type = FunctionType::Json;
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different function_type should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_output_schema() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let different_schema = serde_json::json!({"type": "string"});
+        let mut req = baseline.clone();
+        req.output_schema = Some(&different_schema);
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different output_schema should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_extra_cache_key() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.extra_cache_key = Some("different".to_string());
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different extra_cache_key should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_stop_sequences() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.stop_sequences = Some(Cow::Owned(vec!["different".to_string()]));
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different stop_sequences should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_fetch_and_encode_input_files() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.fetch_and_encode_input_files_before_inference = true;
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different fetch_and_encode_input_files_before_inference should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_extra_body() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.extra_body = FullExtraBodyConfig {
+            extra_body: Some(ExtraBodyConfig {
+                data: vec![ExtraBodyReplacement {
+                    pointer: "/custom_field".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(serde_json::json!("test")),
+                }],
+            }),
+            inference_extra_body: Default::default(),
+        };
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different extra_body should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_extra_headers() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: Some(ExtraHeadersConfig {
+                data: vec![ExtraHeader {
+                    name: "X-Custom-Header".to_string(),
+                    kind: ExtraHeaderKind::Value("test".to_string()),
+                }],
+            }),
+            inference_extra_headers: Default::default(),
+        };
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different extra_headers should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_reasoning_effort() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.inference_params_v2.reasoning_effort = Some("low".to_string());
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different reasoning_effort should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_service_tier() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.inference_params_v2.service_tier =
+            Some(crate::inference::types::chat_completion_inference_params::ServiceTier::Flex);
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different service_tier should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_thinking_budget_tokens() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.inference_params_v2.thinking_budget_tokens = Some(500);
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different thinking_budget_tokens should change cache key"
+        );
+    }
+
+    #[test]
+    fn test_cache_key_changes_with_verbosity() {
+        let baseline = get_baseline_request();
+        let baseline_key = get_baseline_key(&baseline);
+
+        let mut req = baseline.clone();
+        req.inference_params_v2.verbosity = Some("concise".to_string());
+        let key = get_baseline_key(&req);
+        assert_ne!(
+            baseline_key, key,
+            "different verbosity should change cache key"
+        );
     }
 }

@@ -67,7 +67,7 @@ use crate::tool_metadata::ToolMetadata;
 ///         &self,
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         _side_info: <Self as ToolMetadata>::SideInfo,
-///         ctx: &mut ToolContext<'_>,
+///         ctx: &mut ToolContext,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Call other tools
 ///         let search = ctx.call_tool("search", serde_json::json!({"query": llm_params.topic}), serde_json::json!(null)).await?;
@@ -129,7 +129,7 @@ use crate::tool_metadata::ToolMetadata;
 ///         &self,
 ///         llm_params: <Self as ToolMetadata>::LlmParams,
 ///         side_info: <Self as ToolMetadata>::SideInfo,
-///         ctx: &mut ToolContext<'_>,
+///         ctx: &mut ToolContext,
 ///     ) -> ToolResult<<Self as ToolMetadata>::Output> {
 ///         // Use llm_params.query (from LLM)
 ///         // Use side_info.api_token (hidden from LLM)
@@ -140,6 +140,27 @@ use crate::tool_metadata::ToolMetadata;
 #[async_trait]
 pub trait TaskTool: ToolMetadata {
     type ExtraState: Clone + Send + Sync + 'static;
+
+    /// Execute the tool logic with an owned `ToolContext`
+    ///
+    /// Almost all tools should be able to implement `execute` instead, which is more convenient
+    /// (it takes an `&mut ToolContext`, which lets it return a standard `Result` instead of a tuple)
+    ///
+    /// However, some unusual tools (e.g. RLM-based tools in autopilot) might need an owned `ToolContext`.
+    /// These tools should implement `execute_with_owned_ctx` instead, and make `execute` return an error.
+    async fn execute_with_owned_ctx(
+        &self,
+        llm_params: <Self as ToolMetadata>::LlmParams,
+        side_info: <Self as ToolMetadata>::SideInfo,
+        mut ctx: ToolContext<Self::ExtraState>,
+    ) -> ToolExecResult<(
+        <Self as ToolMetadata>::Output,
+        ToolContext<Self::ExtraState>,
+    )> {
+        let res = self.execute(llm_params, side_info, &mut ctx).await?;
+        Ok((res, ctx))
+    }
+
     /// Execute the tool logic.
     ///
     /// This is called by the durable worker when the tool is invoked.
@@ -155,7 +176,7 @@ pub trait TaskTool: ToolMetadata {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_, Self::ExtraState>,
+        ctx: &mut ToolContext<Self::ExtraState>,
     ) -> ToolExecResult<<Self as ToolMetadata>::Output>;
 }
 
@@ -186,13 +207,14 @@ impl<T: TaskTool> Task<ToolAppState<T::ExtraState>> for TaskToolAdapter<T> {
     async fn run(
         &self,
         wrapped: Self::Params,
-        mut task_ctx: TaskContext<ToolAppState<T::ExtraState>>,
+        task_ctx: TaskContext<ToolAppState<T::ExtraState>>,
         app_ctx: ToolAppState<T::ExtraState>,
     ) -> TaskResult<Self::Output> {
-        let mut tool_ctx = ToolContext::new(&mut task_ctx, &app_ctx, wrapped.episode_id);
-        self.0
-            .execute(wrapped.llm_params, wrapped.side_info, &mut tool_ctx)
-            .await
-            .map_err(Into::into)
+        let tool_ctx = ToolContext::new(task_ctx, app_ctx, wrapped.episode_id);
+        Ok(self
+            .0
+            .execute_with_owned_ctx(wrapped.llm_params, wrapped.side_info, tool_ctx)
+            .await?
+            .0)
     }
 }

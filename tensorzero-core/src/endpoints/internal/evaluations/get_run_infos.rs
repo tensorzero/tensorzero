@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfigType, get_function};
@@ -67,10 +66,7 @@ pub async fn get_evaluation_run_infos_handler(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response =
         get_evaluation_run_infos(&database, &evaluation_run_ids, &params.function_name).await?;
 
@@ -113,10 +109,7 @@ pub async fn get_evaluation_run_infos_for_datapoint_handler(
     let function_config = get_function(&app_state.config.functions, &params.function_name)?;
     let function_type = function_config.config_type();
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response = get_evaluation_run_infos_for_datapoint(
         &database,
         &datapoint_id,

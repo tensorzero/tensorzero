@@ -72,32 +72,49 @@ pub struct Args {
     /// halves of the CI in the case of asymmetric CIs) <= precision_target.
     #[arg(long = "adaptive-stopping-precision", value_parser = parse_precision_target, value_delimiter = ',', num_args = 0..)]
     pub precision_targets: Vec<(String, f32)>,
+
+    /// Per-evaluator cutoff thresholds for pass/fail exit status.
+    /// Format: evaluator_name=cutoff, comma-separated for multiple evaluators.
+    /// Example: --cutoffs exact_match=0.95,llm_judge=0.8
+    /// If both this CLI flag and evaluator config `cutoff` are provided
+    /// for the same evaluator, the CLI value takes precedence.
+    #[arg(long, value_parser = parse_cutoff_target, value_delimiter = ',', num_args = 0..)]
+    pub cutoffs: Vec<(String, f32)>,
 }
 
 /// Parse a single precision target in format "evaluator_name=precision_target"
 fn parse_precision_target(s: &str) -> Result<(String, f32), String> {
-    let s = s.trim();
-    if s.is_empty() {
-        return Err("Precision target cannot be empty".to_string());
+    parse_named_non_negative_float(s, "precision")
+}
+
+/// Parse a single cutoff target in format "evaluator_name=cutoff"
+fn parse_cutoff_target(s: &str) -> Result<(String, f32), String> {
+    parse_named_non_negative_float(s, "cutoff")
+}
+
+fn parse_named_non_negative_float(input: &str, value_label: &str) -> Result<(String, f32), String> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Err(format!("{value_label} cannot be empty"));
     }
 
-    let parts: Vec<&str> = s.splitn(2, '=').collect();
+    let parts: Vec<&str> = input.splitn(2, '=').collect();
     if parts.len() != 2 {
         return Err(format!(
-            "Invalid precision format: `{s}`. Expected format: evaluator_name=precision_target"
+            "Invalid {value_label} format: `{input}`. Expected format: evaluator_name=value"
         ));
     }
 
     let evaluator_name = parts[0].to_string();
-    let precision_target = parts[1]
+    let value = parts[1]
         .parse::<f32>()
-        .map_err(|e| format!("Invalid precision value `{}`: {e}", parts[1]))?;
+        .map_err(|e| format!("Invalid `{value_label}` value `{}`: {e}", parts[1]))?;
 
-    if precision_target < 0.0 {
+    if value < 0.0 {
         return Err(format!(
-            "Precision value must be non-negative, got {precision_target}"
+            "{value_label} value must be non-negative, got {value}",
         ));
     }
 
-    Ok((evaluator_name, precision_target))
+    Ok((evaluator_name, value))
 }

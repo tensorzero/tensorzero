@@ -267,7 +267,7 @@ impl Nursery {
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct UninitializedTrackAndStopConfig {
+pub struct UninitializedTrackAndStopExperimentationConfig {
     metric: String,
     candidate_variants: Vec<String>,
     #[serde(default)]
@@ -315,7 +315,7 @@ fn default_max_samples_per_variant() -> Option<u64> {
     Some(10_000)
 }
 
-impl UninitializedTrackAndStopConfig {
+impl UninitializedTrackAndStopExperimentationConfig {
     pub fn load(
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
@@ -373,7 +373,7 @@ impl UninitializedTrackAndStopConfig {
         }
 
         // Check for duplicates across both lists
-        check_duplicates_across(&self.candidate_variants, &self.fallback_variants)?;
+        check_duplicates_across(self.candidate_variants.iter(), &self.fallback_variants)?;
 
         // Validate min_samples_per_variant >= 1
         if self.min_samples_per_variant < 1 {
@@ -1006,7 +1006,7 @@ impl TrackAndStopState {
     /// NOTE: This function may do some CPU-bound work to compute probabilities.
     ///
     /// # Assumptions
-    /// - `candidate_variants` is non-empty (validated in `UninitializedTrackAndStopConfig::load()`)
+    /// - `candidate_variants` is non-empty (validated in `UninitializedTrackAndStopExperimentationConfig::load()`)
     /// - `variant_performances` may contain feedback for non-candidate variants (these are filtered out)
     fn new(
         candidate_variants: &[String],
@@ -2849,7 +2849,7 @@ mod tests {
 
     #[test]
     fn test_load_error_empty_candidate_variants() {
-        let config = UninitializedTrackAndStopConfig {
+        let config = UninitializedTrackAndStopExperimentationConfig {
             metric: "test_metric".to_string(),
             candidate_variants: vec![], // Empty!
             fallback_variants: vec!["A".to_string()],
@@ -2900,7 +2900,7 @@ mod tests {
 
     #[test]
     fn test_load_error_duplicate_candidates() {
-        let config = UninitializedTrackAndStopConfig {
+        let config = UninitializedTrackAndStopExperimentationConfig {
             metric: "test_metric".to_string(),
             candidate_variants: vec!["A".to_string(), "B".to_string(), "A".to_string()],
             fallback_variants: vec![],
@@ -2935,7 +2935,7 @@ mod tests {
 
     #[test]
     fn test_load_error_duplicate_fallbacks() {
-        let config = UninitializedTrackAndStopConfig {
+        let config = UninitializedTrackAndStopExperimentationConfig {
             metric: "test_metric".to_string(),
             candidate_variants: vec!["A".to_string()],
             fallback_variants: vec!["B".to_string(), "C".to_string(), "B".to_string()],
@@ -2970,7 +2970,7 @@ mod tests {
 
     #[test]
     fn test_load_error_duplicate_across_lists() {
-        let config = UninitializedTrackAndStopConfig {
+        let config = UninitializedTrackAndStopExperimentationConfig {
             metric: "test_metric".to_string(),
             candidate_variants: vec!["A".to_string(), "B".to_string()],
             fallback_variants: vec!["B".to_string(), "C".to_string()],
@@ -3006,7 +3006,7 @@ mod tests {
 
     #[test]
     fn test_load_error_multiple_duplicates_across_lists() {
-        let config = UninitializedTrackAndStopConfig {
+        let config = UninitializedTrackAndStopExperimentationConfig {
             metric: "test_metric".to_string(),
             candidate_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
             fallback_variants: vec!["B".to_string(), "C".to_string(), "D".to_string()],
@@ -3045,7 +3045,7 @@ mod tests {
 
     #[test]
     fn test_load_error_max_samples_less_than_min_samples() {
-        let config = UninitializedTrackAndStopConfig {
+        let config = UninitializedTrackAndStopExperimentationConfig {
             metric: "test_metric".to_string(),
             candidate_variants: vec!["A".to_string()],
             fallback_variants: vec![],
@@ -3085,7 +3085,7 @@ mod tests {
 
     #[test]
     fn test_load_carries_namespace() {
-        let config = UninitializedTrackAndStopConfig {
+        let config = UninitializedTrackAndStopExperimentationConfig {
             metric: "test_metric".to_string(),
             candidate_variants: vec!["A".to_string(), "B".to_string()],
             fallback_variants: vec![],
@@ -3121,7 +3121,7 @@ mod tests {
 
     #[test]
     fn test_load_carries_none_namespace() {
-        let config = UninitializedTrackAndStopConfig {
+        let config = UninitializedTrackAndStopExperimentationConfig {
             metric: "test_metric".to_string(),
             candidate_variants: vec!["A".to_string()],
             fallback_variants: vec![],
@@ -3156,7 +3156,7 @@ mod tests {
 
     #[test]
     fn test_load_carries_max_samples_per_variant() {
-        let config = UninitializedTrackAndStopConfig {
+        let config = UninitializedTrackAndStopExperimentationConfig {
             metric: "test_metric".to_string(),
             candidate_variants: vec!["A".to_string()],
             fallback_variants: vec![],
@@ -3201,7 +3201,7 @@ mod tests {
             update_period_s = 60
         "#;
 
-        let config: UninitializedTrackAndStopConfig =
+        let config: UninitializedTrackAndStopExperimentationConfig =
             toml::from_str(toml_str).expect("Should deserialize with default max_samples");
         assert_eq!(
             config.max_samples_per_variant,
@@ -3288,7 +3288,7 @@ mod tests {
             max_samples_per_variant = 500
         "#;
 
-        let config: UninitializedTrackAndStopConfig =
+        let config: UninitializedTrackAndStopExperimentationConfig =
             toml::from_str(toml_str).expect("Should deserialize with explicit max_samples");
         assert_eq!(
             config.max_samples_per_variant,

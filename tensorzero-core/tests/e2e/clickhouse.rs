@@ -453,6 +453,194 @@ async fn run_migration_0020_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     clean_start
 }
 
+async fn run_migration_0049_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
+    clickhouse: &ClickHouseConnectionInfo,
+    run_migration: F,
+) -> bool {
+    // Insert ChatInference rows with evaluation tags so the materialized view populates TagInference.
+    // Then insert feedback rows targeting those inferences. Migration 0049 should backfill
+    // InferenceEvaluationRuns from this data.
+    let run_id = Uuid::now_v7();
+    let inference_id1 = Uuid::now_v7();
+    let inference_id2 = Uuid::now_v7();
+    let episode_id = Uuid::now_v7();
+    let function_name = "test_fn_0049";
+    let variant_name = "test_variant_0049";
+    let evaluation_name = "test_eval_0049";
+    let dataset_name = "test_dataset_0049";
+    let datapoint_id1 = Uuid::now_v7();
+    let datapoint_id2 = Uuid::now_v7();
+
+    // Insert two ChatInference rows with evaluation tags
+    for (inference_id, datapoint_id) in [
+        (inference_id1, datapoint_id1),
+        (inference_id2, datapoint_id2),
+    ] {
+        clickhouse
+            .run_query_synchronous_no_params(format!(
+                "INSERT INTO ChatInference (id, function_name, variant_name, episode_id, input, output, tool_params, inference_params, processing_time_ms, tags) \
+                 VALUES ('{inference_id}', '{function_name}', '{variant_name}', '{episode_id}', '{{}}', '[]', '{{}}', '{{}}', 0, \
+                 {{'tensorzero::evaluation_run_id':'{run_id}', 'tensorzero::evaluation_name':'{evaluation_name}', 'tensorzero::dataset_name':'{dataset_name}', 'tensorzero::datapoint_id':'{datapoint_id}'}})"
+            ))
+            .await
+            .unwrap();
+    }
+
+    // Insert boolean feedback targeting inference_id1
+    let bool_feedback_id = Uuid::now_v7();
+    let bool_metric_name =
+        format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::exact_match");
+    clickhouse
+        .run_query_synchronous_no_params(format!(
+            "INSERT INTO BooleanMetricFeedback (id, target_id, metric_name, value) \
+             VALUES ('{bool_feedback_id}', '{inference_id1}', '{bool_metric_name}', true)"
+        ))
+        .await
+        .unwrap();
+
+    // Insert float feedback targeting inference_id2
+    let float_feedback_id = Uuid::now_v7();
+    let float_metric_name =
+        format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::llm_judge");
+    clickhouse
+        .run_query_synchronous_no_params(format!(
+            "INSERT INTO FloatMetricFeedback (id, target_id, metric_name, value) \
+             VALUES ('{float_feedback_id}', '{inference_id2}', '{float_metric_name}', 0.75)"
+        ))
+        .await
+        .unwrap();
+
+    // Wait for ClickHouse to process inserts and materialized views
+    sleep(Duration::from_millis(1000)).await;
+
+    let clean_start = run_migration().await;
+
+    // Verify the backfilled InferenceEvaluationRuns row
+    let response = clickhouse
+        .run_query_synchronous_no_params(format!(
+            "SELECT \
+                uint_to_uuid(run_id_uint) AS run_id, \
+                evaluation_name, \
+                function_name, \
+                function_type, \
+                dataset_name, \
+                variant_names, \
+                metrics, \
+                source \
+             FROM InferenceEvaluationRuns \
+             WHERE run_id_uint = toUInt128(toUUID('{run_id}')) \
+             FORMAT JSONEachRow"
+        ))
+        .await
+        .unwrap();
+
+    assert!(
+        !response.response.trim().is_empty(),
+        "Migration 0049 should have backfilled a row for run_id {run_id}"
+    );
+
+    let row: serde_json::Value =
+        serde_json::from_str(&response.response).expect("Backfilled row should be valid JSON");
+
+    assert_eq!(
+        row["run_id"].as_str().unwrap(),
+        run_id.to_string(),
+        "run_id should match"
+    );
+    assert_eq!(
+        row["evaluation_name"].as_str().unwrap(),
+        evaluation_name,
+        "evaluation_name should match"
+    );
+    assert_eq!(
+        row["function_name"].as_str().unwrap(),
+        function_name,
+        "function_name should match"
+    );
+    assert_eq!(
+        row["function_type"].as_str().unwrap(),
+        "chat",
+        "function_type should be `chat` since we inserted into ChatInference"
+    );
+    assert_eq!(
+        row["dataset_name"].as_str().unwrap(),
+        dataset_name,
+        "dataset_name should match"
+    );
+    assert_eq!(
+        row["source"].as_str().unwrap(),
+        "dataset_name",
+        "source should be `dataset_name` for backfilled rows"
+    );
+
+    // Check variant_names
+    let variant_names = row["variant_names"]
+        .as_array()
+        .expect("variant_names should be an array");
+    assert_eq!(
+        variant_names.len(),
+        1,
+        "Should have exactly 1 variant (both inferences use the same variant)"
+    );
+    assert_eq!(
+        variant_names[0].as_str().unwrap(),
+        variant_name,
+        "variant_name should match"
+    );
+
+    // Check metrics JSON: should contain both boolean and float metrics
+    let metrics_str = row["metrics"].as_str().expect("metrics should be a string");
+    let metrics: Vec<serde_json::Value> =
+        serde_json::from_str(metrics_str).expect("metrics should be valid JSON array");
+    assert_eq!(metrics.len(), 2, "Should have 2 metrics (boolean + float)");
+
+    let metric_names: std::collections::HashSet<&str> = metrics
+        .iter()
+        .map(|m| m["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        metric_names.contains(bool_metric_name.as_str()),
+        "Should contain the boolean metric"
+    );
+    assert!(
+        metric_names.contains(float_metric_name.as_str()),
+        "Should contain the float metric"
+    );
+
+    for metric in &metrics {
+        let name = metric["name"].as_str().unwrap();
+        if name == bool_metric_name {
+            assert_eq!(
+                metric["value_type"].as_str().unwrap(),
+                "boolean",
+                "Boolean metric should have value_type `boolean`"
+            );
+            assert_eq!(
+                metric["evaluator_name"].as_str().unwrap(),
+                "exact_match",
+                "Boolean metric should extract evaluator_name from metric_name"
+            );
+        } else {
+            assert_eq!(
+                metric["value_type"].as_str().unwrap(),
+                "float",
+                "Float metric should have value_type `float`"
+            );
+            assert_eq!(
+                metric["evaluator_name"].as_str().unwrap(),
+                "llm_judge",
+                "Float metric should extract evaluator_name from metric_name"
+            );
+        }
+        assert!(
+            metric["optimize"].is_null(),
+            "Historical backfill should set optimize to null"
+        );
+    }
+
+    clean_start
+}
+
 async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
     clickhouse: &ClickHouseConnectionInfo,
     run_migration: F,
@@ -614,7 +802,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42
     ]
 );
 
@@ -784,6 +972,13 @@ async fn test_clickhouse_migration_manager() {
                     );
                     run_migration_0048_with_data(clickhouse, run_migration).await
                 }
+                "Migration0049" => {
+                    assert!(
+                        !initial_clean_start.get(),
+                        "Migration0049 should not be run on a clean start"
+                    );
+                    run_migration_0049_with_data(clickhouse, run_migration).await
+                }
                 _ => run_migration().await,
             };
 
@@ -944,7 +1139,9 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let episode_count: u64 = response.response.trim().parse().unwrap();
-    assert_eq!(episode_count, 20000000);
+
+    // 20000000 from fixtures + 2 from run_migration_0049_with_data
+    assert_eq!(episode_count, 20000002);
 
     // Check that the FeedbackByVariantStatistics migration worked
     let response = clickhouse

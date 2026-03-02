@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::db::datasets::DatasetQueries;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, StructuredJson};
 
@@ -46,10 +45,7 @@ pub async fn clone_datapoints_handler(
         .map(|id| (*id, Uuid::now_v7()))
         .collect();
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let new_ids = database
         .clone_datapoints(
             &path_params.dataset_name,

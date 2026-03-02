@@ -5,7 +5,6 @@ use axum::extract::State;
 use tracing::instrument;
 
 use super::types::EvaluationRunStatsResponse;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -18,10 +17,7 @@ use crate::utils::gateway::{AppState, AppStateData};
 pub async fn count_evaluation_runs_handler(
     State(app_state): AppState,
 ) -> Result<Json<EvaluationRunStatsResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let count = database.count_total_evaluation_runs().await?;
 
     Ok(Json(EvaluationRunStatsResponse { count }))

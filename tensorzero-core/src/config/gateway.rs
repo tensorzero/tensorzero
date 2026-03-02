@@ -136,10 +136,31 @@ impl MetricsConfig {
     }
 }
 
-// TODO(shuyangli): Move per-request cache config (cache enabled option) here.
+/// Which backend to use for model inference caching.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InferenceCacheBackend {
+    /// Automatically select based on primary datastore:
+    /// - ClickHouse primary → ClickHouse cache
+    /// - Postgres primary → Valkey if available, else ClickHouse
+    #[default]
+    Auto,
+    ClickHouse,
+    Valkey,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelInferenceCacheConfig {
+    /// Whether caching is enabled.
+    /// - `true`: require a cache backend (fail startup if unavailable)
+    /// - `null` (default): use cache if available, warn and continue if not
+    /// - `false`: disable caching entirely
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    /// Which cache backend to use.
+    #[serde(default)]
+    pub backend: InferenceCacheBackend,
     #[serde(default)]
     pub valkey: ValkeyModelInferenceCacheConfig,
 }

@@ -9,7 +9,6 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::{EpisodeByIdRow, EpisodeQueries, TableBoundsWithCount};
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::{Error, ErrorDetails};
@@ -65,10 +64,7 @@ pub async fn list_episodes_handler(
     State(app_state): AppState,
     Query(params): Query<ListEpisodesParams>,
 ) -> Result<Json<ListEpisodesResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let episodes = list_episodes(
         &database,
         &app_state.config,
@@ -89,10 +85,7 @@ pub async fn list_episodes_post_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<ListEpisodesRequest>,
 ) -> Result<Json<ListEpisodesResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let episodes = list_episodes(
         &database,
         &app_state.config,
@@ -139,10 +132,7 @@ pub async fn list_episodes(
 pub async fn query_episode_table_bounds_handler(
     State(app_state): AppState,
 ) -> Result<Json<TableBoundsWithCount>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let bounds = query_episode_table_bounds(&database).await?;
     Ok(Json(bounds))
 }
@@ -289,7 +279,7 @@ mod tests {
                 Ok(TableBoundsWithCount {
                     first_id: Some(first_id),
                     last_id: Some(last_id),
-                    count: 100,
+                    count: Some(100),
                 })
             });
 
@@ -297,7 +287,7 @@ mod tests {
 
         assert_eq!(result.first_id, Some(first_id));
         assert_eq!(result.last_id, Some(last_id));
-        assert_eq!(result.count, 100);
+        assert_eq!(result.count, Some(100));
     }
 
     #[tokio::test]
@@ -311,7 +301,7 @@ mod tests {
                 Ok(TableBoundsWithCount {
                     first_id: None,
                     last_id: None,
-                    count: 0,
+                    count: None,
                 })
             });
 
@@ -319,7 +309,7 @@ mod tests {
 
         assert!(result.first_id.is_none());
         assert!(result.last_id.is_none());
-        assert_eq!(result.count, 0);
+        assert!(result.count.is_none());
     }
 
     #[tokio::test]

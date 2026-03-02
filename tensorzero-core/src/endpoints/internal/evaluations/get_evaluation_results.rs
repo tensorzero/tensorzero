@@ -7,7 +7,6 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::{EvaluationQueries, EvaluationResultRow};
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::EvaluationConfig;
@@ -62,10 +61,7 @@ pub async fn get_evaluation_results_handler(
     let limit = params.limit.unwrap_or(100);
     let offset = params.offset.unwrap_or(0);
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response = get_evaluation_results(
         &app_state.config,
         &database,
@@ -158,10 +154,9 @@ mod tests {
     fn create_test_config_with_chat_function() -> Config {
         let mut evaluations = HashMap::new();
         let mut evaluators = HashMap::new();
-        evaluators.insert(
-            "exact_match".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
+        #[expect(deprecated)]
+        let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match);
         evaluations.insert(
             "test_eval".to_string(),
             Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
@@ -187,10 +182,9 @@ mod tests {
     fn create_test_config_with_json_function() -> Config {
         let mut evaluations = HashMap::new();
         let mut evaluators = HashMap::new();
-        evaluators.insert(
-            "exact_match".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
+        #[expect(deprecated)]
+        let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match);
         evaluations.insert(
             "test_eval".to_string(),
             Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
@@ -345,10 +339,9 @@ mod tests {
         // Create config with evaluation but missing function
         let mut evaluations = HashMap::new();
         let mut evaluators = HashMap::new();
-        evaluators.insert(
-            "exact_match".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
+        #[expect(deprecated)]
+        let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match);
         evaluations.insert(
             "test_eval".to_string(),
             Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
@@ -417,14 +410,12 @@ mod tests {
     #[tokio::test]
     async fn test_get_evaluation_results_multiple_evaluators() {
         let mut evaluators = HashMap::new();
-        evaluators.insert(
-            "exact_match".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
-        evaluators.insert(
-            "llm_judge".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }), // Just using ExactMatch for simplicity
-        );
+        #[expect(deprecated)]
+        let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match);
+        #[expect(deprecated)]
+        let llm_judge = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("llm_judge".to_string(), llm_judge);
 
         let mut evaluations = HashMap::new();
         evaluations.insert(

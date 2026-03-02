@@ -1,8 +1,9 @@
 # Test configuration for testing ClickHouse requirement
-# This config explicitly enables observability, which requires ClickHouse
+# This config explicitly enables observability with ClickHouse backend
 
 [gateway.observability]
 enabled = true
+backend = "clickhouse"
 
 # Minimal function definition for a valid config
 [functions.test_function]

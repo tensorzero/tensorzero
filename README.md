@@ -56,17 +56,15 @@ Take what you need, adopt incrementally, and complement with other tools.
 
 - [x] **[Call any LLM](https://www.tensorzero.com/docs/gateway/call-any-llm)** (API or self-hosted) through a single unified API
 - [x] Infer with **[streaming](https://www.tensorzero.com/docs/gateway/guides/streaming-inference)**, **[tool use](https://www.tensorzero.com/docs/gateway/guides/tool-use)**, **[structured outputs (JSON)](https://www.tensorzero.com/docs/gateway/generate-structured-outputs)**, **[batch](https://www.tensorzero.com/docs/gateway/guides/batch-inference)**, **[embeddings](https://www.tensorzero.com/docs/gateway/generate-embeddings)**, **[multimodal (images, files)](https://www.tensorzero.com/docs/gateway/guides/multimodal-inference)**, **[caching](https://www.tensorzero.com/docs/gateway/guides/inference-caching)**, etc.
-- [x] **[Create prompt templates and schemas](https://www.tensorzero.com/docs/gateway/create-a-prompt-template)** to enforce a consistent, typed interface between your application and the LLMs
+- [x] **[Create prompt templates and schemas](https://www.tensorzero.com/docs/gateway/create-a-prompt-template)** to enforce a structured interface between your application and the LLMs
 - [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: **[<1ms p99 latency overhead at 10k+ QPS](https://www.tensorzero.com/docs/gateway/benchmarks)**
 - [x] Use any programming language: **[integrate via our Python SDK, any OpenAI SDK, or our HTTP API](https://www.tensorzero.com/docs/gateway/clients)**
 - [x] **[Ensure high availability](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks)** with routing, retries, fallbacks, load balancing, granular timeouts, etc.
-- [x] **[Enforce custom rate limits](https://www.tensorzero.com/docs/operations/enforce-custom-rate-limits)** with granular scopes (e.g. user-defined tags) to keep usage under control
+- [x] **[Track usage and cost](https://www.tensorzero.com/docs/operations/track-usage-and-cost)** and **[enforce custom rate limits](https://www.tensorzero.com/docs/operations/enforce-custom-rate-limits)** with granular scopes (e.g. tags)
 - [x] **[Set up auth for TensorZero](https://www.tensorzero.com/docs/operations/set-up-auth-for-tensorzero)** to allow clients to access models without sharing provider API keys
-- [ ] Soon: spend tracking and budgeting
 
-<br>
+#### Supported Model Providers
 
-**Supported Model Providers:**
 **[Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/anthropic)**,
 **[AWS Bedrock](https://www.tensorzero.com/docs/gateway/guides/providers/aws-bedrock)**,
 **[AWS SageMaker](https://www.tensorzero.com/docs/gateway/guides/providers/aws-sagemaker)**,
@@ -88,60 +86,23 @@ Take what you need, adopt incrementally, and complement with other tools.
 **[xAI (Grok)](https://www.tensorzero.com/docs/gateway/guides/providers/xai)**.
 Need something else? TensorZero also supports **[any OpenAI-compatible API (e.g. Ollama)](https://www.tensorzero.com/docs/gateway/guides/providers/openai-compatible)**.
 
-<br>
+#### Usage Example
 
-<details open>
-<summary><b>Usage: Python &mdash; TensorZero SDK</b></summary>
+You can use TensorZero with any OpenAI SDK (Python, Node, Go, etc.) or OpenAI-compatible client.
 
-You can access any provider using the TensorZero Python SDK.
-
-1. `pip install tensorzero`
-2. Optional: Set up the TensorZero configuration.
+1. **[Deploy the TensorZero Gateway](https://www.tensorzero.com/docs/deployment/tensorzero-gateway)** (one Docker container).
+2. Update the `base_url` and `model` in your OpenAI-compatible client.
 3. Run inference:
 
 ```python
-from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
+from openai import OpenAI
 
-
-with TensorZeroGateway.build_embedded(...) as t0:
-    response = t0.inference(
-        model_name="openai::gpt-4o-mini",
-        # Try other providers easily: "anthropic::claude-sonnet-4-5"
-        input={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Write a haiku about TensorZero.",
-                }
-            ]
-        },
-    )
-```
-
-See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
-
-</details>
-
-<details>
-<summary><b>Usage: Python &mdash; OpenAI SDK</b></summary>
-
-You can access any provider using the OpenAI Python SDK with TensorZero.
-
-1. `pip install tensorzero`
-2. Optional: Set up the TensorZero configuration.
-3. Run inference:
-
-```python
-from openai import OpenAI  # or AsyncOpenAI
-from tensorzero import patch_openai_client
-
-client = OpenAI()
-
-patch_openai_client(client, ...)
+# Point the client to the TensorZero Gateway
+client = OpenAI(base_url="http://localhost:3000/openai/v1")
 
 response = client.chat.completions.create(
-    model="tensorzero::model_name::openai::gpt-4o-mini",
-    # Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5"
+    # Call any model provider (or TensorZero function)
+    model="tensorzero::model_name::anthropic::claude-sonnet-4-6",
     messages=[
         {
             "role": "user",
@@ -152,71 +113,6 @@ response = client.chat.completions.create(
 ```
 
 See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
-
-</details>
-
-<details>
-<summary><b>Usage: JavaScript / TypeScript (Node) &mdash; OpenAI SDK</b></summary>
-
-You can access any provider using the OpenAI Node SDK with TensorZero.
-
-1. Deploy `tensorzero/gateway` using Docker.
-   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
-2. Set up the TensorZero configuration.
-3. Run inference:
-
-```ts
-import OpenAI from "openai";
-
-const client = new OpenAI({
-  baseURL: "http://localhost:3000/openai/v1",
-});
-
-const response = await client.chat.completions.create({
-  model: "tensorzero::model_name::openai::gpt-4o-mini",
-  // Try other providers easily: "tensorzero::model_name::anthropic::claude-sonnet-4-5"
-  messages: [
-    {
-      role: "user",
-      content: "Write a haiku about TensorZero.",
-    },
-  ],
-});
-```
-
-See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
-
-</details>
-
-<details>
-<summary><b>Usage: Other Languages & Platforms &mdash; HTTP API</b></summary>
-
-TensorZero supports virtually any programming language or platform via its HTTP API.
-
-1. Deploy `tensorzero/gateway` using Docker.
-   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
-2. Optional: Set up the TensorZero configuration.
-3. Run inference:
-
-```bash
-curl -X POST "http://localhost:3000/inference" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model_name": "openai::gpt-4o-mini",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    }
-  }'
-```
-
-See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
-
-</details>
 
 ### 🔍 LLM Observability
 

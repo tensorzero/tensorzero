@@ -9,7 +9,6 @@ use uuid::Uuid;
 use super::types::{
     GetWorkflowEvaluationRunEpisodesWithFeedbackResponse, WorkflowEvaluationRunEpisodeWithFeedback,
 };
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -40,10 +39,7 @@ pub async fn get_workflow_evaluation_run_episodes_handler(
     State(app_state): AppState,
     Query(params): Query<GetWorkflowEvaluationRunEpisodesParams>,
 ) -> Result<Json<GetWorkflowEvaluationRunEpisodesWithFeedbackResponse>, Error> {
-    let db = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info,
-        app_state.postgres_connection_info,
-    );
+    let db = app_state.get_delegating_database();
     let response =
         get_workflow_evaluation_run_episodes(&db, params.run_id, params.limit, params.offset)
             .await?;

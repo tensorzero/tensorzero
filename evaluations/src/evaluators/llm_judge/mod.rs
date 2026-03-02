@@ -565,6 +565,7 @@ mod tests {
         let llm_judge_config = LLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Serialized,
             output_type: LLMJudgeOutputType::Float,
+            #[expect(deprecated)]
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),
@@ -644,6 +645,7 @@ mod tests {
         let llm_judge_config = LLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Serialized,
             output_type: LLMJudgeOutputType::Float,
+            #[expect(deprecated)]
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig {
@@ -858,6 +860,7 @@ mod tests {
         let config = LLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Serialized,
             output_type: LLMJudgeOutputType::Float,
+            #[expect(deprecated)]
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig {
@@ -892,6 +895,7 @@ mod tests {
         let config = LLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Serialized,
             output_type: LLMJudgeOutputType::Float,
+            #[expect(deprecated)]
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig {
@@ -989,6 +993,7 @@ mod tests {
         let config = LLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Messages,
             output_type: LLMJudgeOutputType::Float,
+            #[expect(deprecated)]
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig {
@@ -1012,6 +1017,7 @@ mod tests {
         let config = LLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Messages,
             output_type: LLMJudgeOutputType::Float,
+            #[expect(deprecated)]
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig {
@@ -1033,6 +1039,7 @@ mod tests {
         let llm_judge_config = LLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Messages,
             output_type: LLMJudgeOutputType::Float,
+            #[expect(deprecated)]
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig {
@@ -1147,6 +1154,7 @@ mod tests {
         let llm_judge_config = LLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Serialized,
             output_type: LLMJudgeOutputType::Float,
+            #[expect(deprecated)]
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),

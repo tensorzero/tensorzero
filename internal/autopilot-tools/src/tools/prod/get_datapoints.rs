@@ -42,8 +42,18 @@ impl ToolMetadata for GetDatapointsTool {
     }
 
     #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "GetDatapointsToolParams".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_DATAPOINTS_RESPONSE
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "GetDatapointsResponse".to_string()
     }
 
     fn name(&self) -> Cow<'static, str> {
