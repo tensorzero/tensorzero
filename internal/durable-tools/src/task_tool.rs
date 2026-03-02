@@ -153,12 +153,12 @@ pub trait TaskTool: ToolMetadata {
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
         mut ctx: ToolContext<Self::ExtraState>,
-    ) -> (
-        ToolExecResult<<Self as ToolMetadata>::Output>,
+    ) -> ToolExecResult<(
+        <Self as ToolMetadata>::Output,
         ToolContext<Self::ExtraState>,
-    ) {
-        let res = self.execute(llm_params, side_info, &mut ctx).await;
-        (res, ctx)
+    )> {
+        let res = self.execute(llm_params, side_info, &mut ctx).await?;
+        Ok((res, ctx))
     }
 
     /// Execute the tool logic.
@@ -211,10 +211,10 @@ impl<T: TaskTool> Task<ToolAppState<T::ExtraState>> for TaskToolAdapter<T> {
         app_ctx: ToolAppState<T::ExtraState>,
     ) -> TaskResult<Self::Output> {
         let tool_ctx = ToolContext::new(task_ctx, app_ctx, wrapped.episode_id);
-        self.0
-            .execute_with_owned_ctx(wrapped.llm_params, wrapped.side_info, tool_ctx)
-            .await
+        Ok(self
             .0
-            .map_err(Into::into)
+            .execute_with_owned_ctx(wrapped.llm_params, wrapped.side_info, tool_ctx)
+            .await?
+            .0)
     }
 }
