@@ -146,11 +146,12 @@ test("tag navigation works by datapoint_id", async ({ page }) => {
   // Wait for page to load completely
   await page.waitForLoadState("networkidle");
 
-  // Use a more specific selector and ensure it's visible before clicking
-  const datapointElement = page.getByText("tensorzero::datapoint_id");
+  // Scope to the Tags table cell to avoid matching tag badges in feedback cards
+  const datapointElement = page
+    .getByRole("cell", { name: "tensorzero::datapoint_id" })
+    .first();
   await datapointElement.waitFor({ state: "visible" });
 
-  // Force the click to ensure it happens correctly
   await datapointElement.click({ force: true });
 
   // Wait for navigation to complete
