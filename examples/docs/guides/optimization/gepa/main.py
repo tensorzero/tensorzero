@@ -91,23 +91,21 @@ async def main():
     await tqdm.gather(*tasks, desc="Processing samples")
 
     job_handle = await t0.experimental_launch_optimization_workflow(
-        params={
+        function_name=FUNCTION_NAME,
+        template_variant_name=TEMPLATE_VARIANT_NAME,
+        output_source="inference",
+        limit=NUM_SAMPLES,
+        val_fraction=0.5,
+        optimizer_config={
+            "type": "gepa",
             "function_name": FUNCTION_NAME,
-            "template_variant_name": TEMPLATE_VARIANT_NAME,
-            "output_source": "inference",
-            "limit": NUM_SAMPLES,
-            "val_fraction": 0.5,
-            "optimizer_config": {
-                "type": "gepa",
-                "function_name": FUNCTION_NAME,
-                "evaluation_name": EVALUATION_NAME,
-                "analysis_model": ANALYSIS_MODEL,
-                "mutation_model": MUTATION_MODEL,
-                "initial_variants": INITIAL_VARIANTS,
-                "max_iterations": MAX_ITERATIONS,
-                "max_concurrency": MAX_CONCURRENCY,
-                "max_tokens": 16384,
-            },
+            "evaluation_name": EVALUATION_NAME,
+            "analysis_model": ANALYSIS_MODEL,
+            "mutation_model": MUTATION_MODEL,
+            "initial_variants": INITIAL_VARIANTS,
+            "max_iterations": MAX_ITERATIONS,
+            "max_concurrency": MAX_CONCURRENCY,
+            "max_tokens": 16384,
         },
     )
 

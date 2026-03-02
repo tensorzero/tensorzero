@@ -193,21 +193,19 @@ from tensorzero import AsyncTensorZeroGateway, OptimizationJobStatus
 t0 = await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000")
 
 job_handle = await t0.experimental_launch_optimization_workflow(
-    params={
+    function_name="extract_entities",
+    template_variant_name="baseline",
+    output_source="inference",
+    val_fraction=0.5,
+    optimizer_config={
+        "type": "gepa",
         "function_name": "extract_entities",
-        "template_variant_name": "baseline",
-        "output_source": "inference",
-        "val_fraction": 0.5,
-        "optimizer_config": {
-            "type": "gepa",
-            "function_name": "extract_entities",
-            "evaluation_name": "extract_entities_eval",
-            "analysis_model": "openai::gpt-5.2",
-            "mutation_model": "openai::gpt-5.2",
-            "initial_variants": ["baseline"],
-            "max_iterations": 10,
-            "max_tokens": 16384,
-        },
+        "evaluation_name": "extract_entities_eval",
+        "analysis_model": "openai::gpt-5.2",
+        "mutation_model": "openai::gpt-5.2",
+        "initial_variants": ["baseline"],
+        "max_iterations": 10,
+        "max_tokens": 16384,
     },
 )
 
