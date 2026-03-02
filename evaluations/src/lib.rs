@@ -752,7 +752,7 @@ pub async fn run_evaluation_core_streaming(
 ///
 /// Sources:
 /// - legacy config cutoff (`EvaluatorConfig::cutoff()`)
-/// - CLI cutoff (`--cutoff`)
+/// - CLI cutoff (`--cutoffs`)
 ///
 /// Precedence:
 /// - If both are present for the same evaluator, CLI value wins and a warning is emitted.
@@ -765,7 +765,9 @@ pub fn resolve_effective_cutoffs(
 ) -> Result<HashMap<String, f32>> {
     for evaluator_name in cli_cutoffs.keys() {
         if !evaluator_configs.contains_key(evaluator_name) {
-            return Err(anyhow!("Unknown evaluator in --cutoff: `{evaluator_name}`"));
+            return Err(anyhow!(
+                "Unknown evaluator in --cutoffs: `{evaluator_name}`"
+            ));
         }
     }
 
@@ -1376,8 +1378,7 @@ mod tests {
         let err = resolve_effective_cutoffs(&evaluators, &cli_cutoffs)
             .expect_err("unknown evaluator in CLI cutoffs should error");
         assert!(
-            err.to_string()
-                .contains("Unknown evaluator in --cutoff: `evaluator3`"),
+            err.to_string().contains("`evaluator3`"),
             "should error on unknown evaluator cutoff names"
         );
 
@@ -1411,8 +1412,7 @@ mod tests {
         let err = resolve_effective_cutoffs(&evaluators, &cli_cutoffs)
             .expect_err("should error when CLI cutoff references unknown evaluator");
         assert!(
-            err.to_string()
-                .contains("Unknown evaluator in --cutoff: `nonexistent`"),
+            err.to_string().contains("`nonexistent`"),
             "error should name the unknown evaluator, got: {err}"
         );
     }

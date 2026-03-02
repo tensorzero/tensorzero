@@ -1416,7 +1416,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
-        cutoffs: vec![],
+        cutoffs: vec![("topic_starts_with_f".to_string(), 0.5)],
     };
 
     let mut output = Vec::new();
@@ -1463,7 +1463,10 @@ async fn run_llm_judge_evaluation_json_pretty() {
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: vec![],
-        cutoffs: vec![],
+        cutoffs: vec![
+            ("exact_match".to_string(), 0.6),
+            ("count_sports".to_string(), 0.5),
+        ],
     };
 
     let mut output = Vec::new();
