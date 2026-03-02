@@ -13,7 +13,6 @@ import { ActionBar } from "~/components/layout/ActionBar";
 import { Button, ButtonIcon } from "~/components/ui/button";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
-import { serializeMessages } from "~/utils/conversation-serializer";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
 import type { ModelInferencesData } from "./inference-data.server";
@@ -177,8 +176,8 @@ function CopyMessagesButton({
 
   const handleCopy = async () => {
     const input = await inputPromise;
-    const serialized = serializeMessages(input, inference);
-    await copy(serialized);
+    const data = { input, output: inference.output };
+    await copy(JSON.stringify(data, null, 2));
   };
 
   return (

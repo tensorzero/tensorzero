@@ -710,25 +710,13 @@ test("should copy messages to clipboard", async ({ page, context }) => {
       .getByText("Copied messages to clipboard"),
   ).toBeVisible();
 
-  // Verify clipboard contains valid JSON messages array
+  // Verify clipboard contains valid JSON with input and output
   const clipboardText = await page.evaluate(() =>
     navigator.clipboard.readText(),
   );
-  const messages = JSON.parse(clipboardText);
-  expect(Array.isArray(messages)).toBe(true);
-  expect(messages.length).toBeGreaterThan(0);
-
-  // Verify structure: each message has role and content
-  for (const msg of messages) {
-    expect(msg).toHaveProperty("role");
-    expect(msg).toHaveProperty("content");
-    expect(["system", "user", "assistant"]).toContain(msg.role);
-  }
-
-  // Verify there's at least one assistant message (the output)
-  expect(messages.some((m: { role: string }) => m.role === "assistant")).toBe(
-    true,
-  );
+  const data = JSON.parse(clipboardText);
+  expect(data).toHaveProperty("input");
+  expect(data).toHaveProperty("output");
 });
 
 // TODO(#5691): Run all UI e2e tests against Postgres-backed gateway too.
