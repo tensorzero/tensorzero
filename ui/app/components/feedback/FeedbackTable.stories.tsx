@@ -28,6 +28,16 @@ const config: UiConfig = {
       optimize: "min" as const,
       level: "inference" as const,
     },
+    "tensorzero::evaluation_name::haiku::evaluator_name::exact_match": {
+      type: "boolean" as const,
+      optimize: "max" as const,
+      level: "inference" as const,
+    },
+    "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f": {
+      type: "boolean" as const,
+      optimize: "max" as const,
+      level: "inference" as const,
+    },
   },
   tools: {},
   evaluations: {},
@@ -404,6 +414,80 @@ export const WithVariousTags: Story = {
       nsfw_detected: makeOrderedUuid(8),
       relevance: makeOrderedUuid(7),
       hallucination: makeOrderedUuid(4),
+    },
+  },
+};
+
+export const WithEvaluationMetrics: Story = {
+  args: {
+    feedback: [
+      {
+        type: "boolean",
+        id: makeOrderedUuid(10),
+        target_id: TARGET_ID,
+        metric_name:
+          "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
+        value: false,
+        tags: {
+          "tensorzero::evaluation_name": "haiku",
+          "tensorzero::evaluator_name": "exact_match",
+          "tensorzero::evaluation_run_id":
+            "01963690-dff2-7cd3-b724-62fb705772a1",
+          "tensorzero::datapoint_id": "0193a9c3-a2d8-79a1-b41a-5d7adebca591",
+        },
+        timestamp: "2024-03-20T10:00:00Z",
+      },
+      {
+        type: "boolean",
+        id: makeOrderedUuid(9),
+        target_id: TARGET_ID,
+        metric_name:
+          "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
+        value: true,
+        tags: {
+          "tensorzero::evaluation_name": "haiku",
+          "tensorzero::evaluator_name": "topic_starts_with_f",
+          "tensorzero::evaluation_run_id":
+            "01963690-dff2-7cd3-b724-62fb705772a1",
+          "tensorzero::datapoint_id": "0193a9c3-a2d8-79a1-b41a-5d7adebca591",
+          "tensorzero::human_feedback": "true",
+        },
+        timestamp: "2024-03-20T10:01:00Z",
+      },
+      {
+        type: "boolean",
+        id: makeOrderedUuid(8),
+        target_id: TARGET_ID,
+        metric_name:
+          "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
+        value: false,
+        tags: {
+          "tensorzero::evaluation_name": "haiku",
+          "tensorzero::evaluator_name": "topic_starts_with_f",
+          "tensorzero::evaluation_run_id":
+            "01963691-9d3c-7793-a8be-3937ebb849c1",
+          "tensorzero::datapoint_id": "01946f7d-b180-7360-bf16-10d94ab1ab5e",
+        },
+        timestamp: "2024-03-20T09:59:00Z",
+      },
+      {
+        type: "float",
+        id: makeOrderedUuid(7),
+        target_id: TARGET_ID,
+        metric_name: "accuracy",
+        value: 0.95,
+        tags: { user_id: "123" },
+        timestamp: "2024-03-20T10:02:00Z",
+      },
+    ],
+    latestCommentId: undefined,
+    latestDemonstrationId: undefined,
+    latestFeedbackIdByMetric: {
+      "tensorzero::evaluation_name::haiku::evaluator_name::exact_match":
+        makeOrderedUuid(10),
+      "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f":
+        makeOrderedUuid(9),
+      accuracy: makeOrderedUuid(7),
     },
   },
 };

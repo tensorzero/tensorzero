@@ -59,12 +59,10 @@ test("should be able to add comment feedback via the episode page", async ({
   if (!newFeedbackId) {
     throw new Error("newFeedbackId is not present in the url");
   }
-  // Assert that the new feedback card is visible
+  // Assert that the new feedback row is visible
+  await expect(page.getByTestId(`feedback-row-${newFeedbackId}`)).toBeVisible();
+  // Assert that the comment is visible in the feedback row (scoped to avoid matching the textarea)
   await expect(
-    page.getByTestId(`feedback-card-${newFeedbackId}`),
-  ).toBeVisible();
-  // Assert that the comment is visible in the feedback card (scoped to avoid matching the textarea)
-  await expect(
-    page.getByTestId(`feedback-card-${newFeedbackId}`).getByText(json),
+    page.getByTestId(`feedback-row-${newFeedbackId}`).getByText(json),
   ).toBeVisible();
 });

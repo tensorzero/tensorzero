@@ -12,7 +12,7 @@ import {
 } from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import FeedbackTable, {
-  FeedbackCardsSkeleton,
+  FeedbackTableSkeleton,
 } from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
@@ -395,7 +395,7 @@ export default function EpisodeDetailPage({
           <Suspense
             fallback={
               <>
-                <FeedbackCardsSkeleton />
+                <FeedbackTableSkeleton />
                 <PageButtons disabled />
               </>
             }

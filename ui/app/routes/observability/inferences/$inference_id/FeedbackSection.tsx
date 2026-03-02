@@ -8,7 +8,7 @@ import { AlertCircle } from "lucide-react";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
 import FeedbackTable, {
-  FeedbackCardsSkeleton,
+  FeedbackTableSkeleton,
 } from "~/components/feedback/FeedbackTable";
 import type { FeedbackData } from "./inference-data.server";
 
@@ -115,7 +115,7 @@ function FeedbackContent({
 function FeedbackSkeleton() {
   return (
     <>
-      <FeedbackCardsSkeleton />
+      <FeedbackTableSkeleton />
       <PageButtons disabled />
     </>
   );
