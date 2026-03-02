@@ -25,7 +25,19 @@ type VariantPerformancesVizProps = {
 export default function VariantPerformancesViz({
   data,
 }: VariantPerformancesVizProps) {
-  const timeGranularity = (data.time_granularity as TimeWindow) || "week";
+  const VALID_TIME_WINDOWS: Set<string> = new Set([
+    "minute",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "cumulative",
+  ]);
+  const timeGranularity: TimeWindow = VALID_TIME_WINDOWS.has(
+    data.time_granularity,
+  )
+    ? (data.time_granularity as TimeWindow)
+    : "week";
   const { data: chartData, variantNames } = transformVariantPerformances(
     data.performances,
   );
