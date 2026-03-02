@@ -63,6 +63,8 @@ test("should be able to add comment feedback via the episode page", async ({
   await expect(
     page.getByTestId(`feedback-card-${newFeedbackId}`),
   ).toBeVisible();
-  // Assert that the comment is visible in the comment section
-  await expect(page.getByText(json)).toBeVisible();
+  // Assert that the comment is visible in the feedback card (scoped to avoid matching the textarea)
+  await expect(
+    page.getByTestId(`feedback-card-${newFeedbackId}`).getByText(json),
+  ).toBeVisible();
 });
