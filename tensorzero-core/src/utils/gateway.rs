@@ -303,14 +303,15 @@ impl GatewayHandle {
                 &ValkeyConnectionInfo::Disabled,
                 &postgres_connection_info,
             )
-            .unwrap(),
+            .expect("Should be able to construct RateLimitingManager"),
         );
         let cache_manager = CacheManager::new_from_connections(
             &ValkeyConnectionInfo::Disabled,
             &clickhouse_connection_info,
             &config.gateway.cache,
             PrimaryDatastore::ClickHouse,
-        );
+        )
+        .expect("Should be able to construct CacheManager");
         Self {
             app_state: AppStateData {
                 config,
@@ -445,7 +446,7 @@ impl GatewayHandle {
             &clickhouse_connection_info,
             &config.gateway.cache,
             primary_datastore,
-        );
+        )?;
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -532,7 +533,7 @@ impl AppStateData {
             &clickhouse_connection_info,
             &config.gateway.cache,
             primary_datastore,
-        );
+        )?;
         Ok(Self {
             config,
             http_client,
@@ -981,8 +982,10 @@ pub struct GatewayHandleTestOptions {
 mod tests {
     use super::*;
     use crate::config::{
-        ObservabilityBackend, ObservabilityConfig, PostgresConfig, gateway::GatewayConfig,
-        snapshot::ConfigSnapshot, unwritten::UnwrittenConfig,
+        ObservabilityBackend, ObservabilityConfig, PostgresConfig,
+        gateway::{GatewayConfig, ModelInferenceCacheConfig},
+        snapshot::ConfigSnapshot,
+        unwritten::UnwrittenConfig,
     };
     #[tokio::test]
     async fn test_setup_clickhouse() {
@@ -1432,5 +1435,95 @@ mod tests {
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");
+    }
+
+    #[tokio::test]
+    async fn test_cache_enabled_true_fails_without_backend() {
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                cache: ModelInferenceCacheConfig {
+                    enabled: Some(true),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let result = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+            HashSet::new(),
+        )
+        .await;
+        let err = result
+            .err()
+            .expect("Gateway should fail when cache.enabled=true but no backend available");
+        assert!(
+            err.to_string().contains("cache.enabled"),
+            "error should mention cache.enabled: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cache_enabled_false_starts_without_backend() {
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                cache: ModelInferenceCacheConfig {
+                    enabled: Some(false),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let _gateway = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+            HashSet::new(),
+        )
+        .await
+        .expect("Gateway should start when cache is explicitly disabled");
+    }
+
+    #[tokio::test]
+    async fn test_cache_default_starts_without_backend() {
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                cache: ModelInferenceCacheConfig {
+                    enabled: None,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let _gateway = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+            HashSet::new(),
+        )
+        .await
+        .expect("Gateway should start when cache.enabled is default (null)");
     }
 }

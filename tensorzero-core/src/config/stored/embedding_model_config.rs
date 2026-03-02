@@ -14,7 +14,6 @@ use tensorzero_types::UninitializedUnifiedCostConfig;
 /// Accepts the deprecated `timeouts` field for backward compatibility with
 /// historical config snapshots stored in ClickHouse.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct StoredEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, StoredEmbeddingProviderConfig>,

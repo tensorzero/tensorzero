@@ -1333,7 +1333,7 @@ mod tests {
 
     use crate::config::gateway::GatewayConfig;
     use crate::config::{Config, ObservabilityConfig};
-    use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::db::clickhouse::clickhouse_client::{ClickHouseClientType, MockClickHouseClient};
     use crate::error::ErrorDetails;
     use crate::utils::gateway::{GatewayHandle, GatewayHandleTestOptions};
 
@@ -1351,6 +1351,9 @@ mod tests {
         };
         let mut mock_client = MockClickHouseClient::new();
         mock_client.expect_batcher_join_handle().returning(|| None);
+        mock_client
+            .expect_client_type()
+            .returning(|| ClickHouseClientType::Production);
         let gateway_handle = GatewayHandle::new_unit_test_data(
             Arc::new(config),
             GatewayHandleTestOptions {
