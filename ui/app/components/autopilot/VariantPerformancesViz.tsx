@@ -11,17 +11,18 @@ type VariantPerformancesVizProps = {
   data: VariantPerformancesVisualization;
 };
 
+const VALID_TIME_WINDOWS: Set<string> = new Set([
+  "minute",
+  "hour",
+  "day",
+  "week",
+  "month",
+  "cumulative",
+]);
+
 export default function VariantPerformancesViz({
   data,
 }: VariantPerformancesVizProps) {
-  const VALID_TIME_WINDOWS: Set<string> = new Set([
-    "minute",
-    "hour",
-    "day",
-    "week",
-    "month",
-    "cumulative",
-  ]);
   const timeGranularity: TimeWindow = VALID_TIME_WINDOWS.has(
     data.time_granularity,
   )
