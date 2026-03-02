@@ -8,6 +8,7 @@ use clap::Parser;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
 use evaluations::stopping::MIN_DATAPOINTS;
 use evaluations::{ClientInferenceExecutor, Clients};
+use googletest::prelude::*;
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{Input, InputMessage, InputMessageContent};
@@ -255,78 +256,96 @@ async fn run_evaluations_json() {
         // Check the output to the inference is the same as the output in the response
         assert_eq!(db_output, parsed_response.output);
         // Check the inference is properly tagged
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
+        let expected_run_id = evaluation_run_id.to_string();
+        let expected_datapoint_id = parsed.datapoint.id().to_string();
+        assert_that!(
+            &db_inference.tags,
+            all!(
+                has_entry(
+                    "tensorzero::evaluation_run_id".to_string(),
+                    eq(expected_run_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::datapoint_id".to_string(),
+                    eq(expected_datapoint_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::evaluation_name".to_string(),
+                    eq("entity_extraction")
+                ),
+                has_entry(
+                    "tensorzero::dataset_name".to_string(),
+                    eq(dataset_name.as_str())
+                ),
+            )
         );
-        assert_eq!(
-            db_inference.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_name"],
-            "entity_extraction"
-        );
-        assert_eq!(db_inference.tags["tensorzero::dataset_name"], dataset_name);
         // Check boolean feedback was recorded
         let feedback = query_boolean_feedback(&db, inference_id, None)
             .await
             .unwrap();
-
-        assert_eq!(
-            feedback.metric_name,
-            "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
-        );
-        assert_eq!(
-            feedback.value,
-            parsed.evaluations["exact_match"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
+        let expected_bool_value = parsed.evaluations["exact_match"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
+            .unwrap();
+        assert_that!(
+            feedback,
+            matches_pattern!(BooleanMetricFeedbackRow {
+                metric_name: eq(
+                    "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
+                ),
+                value: eq(&expected_bool_value),
+                tags: all!(
+                    has_entry(
+                        "tensorzero::evaluation_run_id".to_string(),
+                        eq(expected_run_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::datapoint_id".to_string(),
+                        eq(expected_datapoint_id.as_str())
+                    ),
+                ),
+                ..
+            })
         );
 
         // Check float feedback was recorded
         let feedback = query_float_feedback(&db, inference_id, None).await.unwrap();
-
-        assert_eq!(
-            feedback.metric_name,
-            "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
-        );
-        assert_eq!(
-            feedback.value,
-            parsed.evaluations["count_sports"]
-                .as_ref()
-                .unwrap()
-                .as_f64()
-                .unwrap()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
         let datapoint_id = parsed.datapoint.id();
-        assert_eq!(
-            feedback.tags["tensorzero::datapoint_id"],
-            datapoint_id.to_string()
-        );
-        assert_eq!(feedback.tags["tensorzero::evaluator_name"], "count_sports");
-        assert_eq!(
-            feedback.tags["tensorzero::evaluation_name"],
-            "entity_extraction"
-        );
-        assert!(
-            !feedback
-                .tags
-                .contains_key("tensorzero::derived_from_human_feedback")
+        let expected_datapoint_id_str = datapoint_id.to_string();
+        let expected_f64_value = parsed.evaluations["count_sports"]
+            .as_ref()
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        assert_that!(
+            feedback,
+            matches_pattern!(FloatMetricFeedbackRow {
+                metric_name: eq(
+                    "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
+                ),
+                value: eq(&expected_f64_value),
+                tags: all!(
+                    has_entry(
+                        "tensorzero::evaluation_run_id".to_string(),
+                        eq(expected_run_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::datapoint_id".to_string(),
+                        eq(expected_datapoint_id_str.as_str())
+                    ),
+                    has_entry("tensorzero::evaluator_name".to_string(), eq("count_sports")),
+                    has_entry(
+                        "tensorzero::evaluation_name".to_string(),
+                        eq("entity_extraction")
+                    ),
+                    not(has_entry(
+                        "tensorzero::derived_from_human_feedback".to_string(),
+                        anything()
+                    )),
+                ),
+                ..
+            })
         );
         let evaluator_inference_id =
             Uuid::parse_str(&feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
@@ -366,9 +385,12 @@ async fn run_evaluations_json() {
         else {
             panic!("Expected json inference for evaluator");
         };
-        assert_eq!(
-            evaluator_inference.tags["tensorzero::evaluation_name"],
-            "entity_extraction"
+        assert_that!(
+            &evaluator_inference.tags,
+            has_entry(
+                "tensorzero::evaluation_name".to_string(),
+                eq("entity_extraction")
+            )
         );
         total_sports += feedback.value as u32;
         let serialized_output = db
@@ -422,13 +444,20 @@ async fn run_evaluations_json() {
             .unwrap() as u32;
         // Grab the feedback for the second run and make sure it has the human feedback tag
         let db_feedback = query_float_feedback(&db, inference_id, None).await.unwrap();
-        assert_eq!(
-            db_feedback.tags["tensorzero::derived_from_human_feedback"],
-            "true",
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluator_inference_id"],
-            evaluator_inference_ids[&parsed.datapoint.id()].to_string()
+        let expected_evaluator_inference_id =
+            evaluator_inference_ids[&parsed.datapoint.id()].to_string();
+        assert_that!(
+            &db_feedback.tags,
+            all!(
+                has_entry(
+                    "tensorzero::derived_from_human_feedback".to_string(),
+                    eq("true")
+                ),
+                has_entry(
+                    "tensorzero::evaluator_inference_id".to_string(),
+                    eq(expected_evaluator_inference_id.as_str()),
+                ),
+            )
         );
     }
     assert_eq!(total_sports, 0);
@@ -790,52 +819,61 @@ async fn run_exact_match_evaluation_chat() {
         // Check the output to the inference is the same as the output in the response
         assert_eq!(db_output, parsed_response.content);
         // Check the inference is properly tagged
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_name"],
-            "haiku_with_outputs"
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::dataset_name"], dataset_name,
-            "dataset_name tag should be derived from the datapoints"
+        let expected_run_id = evaluation_run_id.to_string();
+        let expected_datapoint_id = parsed.datapoint.id().to_string();
+        assert_that!(
+            &db_inference.tags,
+            all!(
+                has_entry(
+                    "tensorzero::evaluation_run_id".to_string(),
+                    eq(expected_run_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::datapoint_id".to_string(),
+                    eq(expected_datapoint_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::evaluation_name".to_string(),
+                    eq("haiku_with_outputs")
+                ),
+                has_entry(
+                    "tensorzero::dataset_name".to_string(),
+                    eq(dataset_name.as_str())
+                ),
+            )
         );
         let db_feedback = query_boolean_feedback(&db, inference_id, None)
             .await
             .unwrap();
-        assert_eq!(
-            db_feedback.metric_name,
-            "tensorzero::evaluation_name::haiku_with_outputs::evaluator_name::exact_match"
-        );
-        assert_eq!(
-            db_feedback.value,
-            parsed.evaluations["exact_match"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluation_name"],
-            "haiku_with_outputs"
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluator_name"],
-            "exact_match"
+        let expected_bool_value = parsed.evaluations["exact_match"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
+            .unwrap();
+        assert_that!(
+            db_feedback,
+            matches_pattern!(BooleanMetricFeedbackRow {
+                metric_name: eq(
+                    "tensorzero::evaluation_name::haiku_with_outputs::evaluator_name::exact_match"
+                ),
+                value: eq(&expected_bool_value),
+                tags: all!(
+                    has_entry(
+                        "tensorzero::evaluation_run_id".to_string(),
+                        eq(expected_run_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::datapoint_id".to_string(),
+                        eq(expected_datapoint_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::evaluation_name".to_string(),
+                        eq("haiku_with_outputs")
+                    ),
+                    has_entry("tensorzero::evaluator_name".to_string(), eq("exact_match")),
+                ),
+                ..
+            })
         );
         parsed_output.push(parsed);
     }
@@ -935,17 +973,24 @@ async fn run_llm_judge_evaluation_chat() {
         // Check the output to the inference is the same as the output in the response
         assert_eq!(db_output, parsed_response.content);
         // Check the inference is properly tagged
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_name"],
-            "haiku_without_outputs"
+        let expected_run_id = evaluation_run_id.to_string();
+        let expected_datapoint_id = parsed.datapoint.id().to_string();
+        assert_that!(
+            &db_inference.tags,
+            all!(
+                has_entry(
+                    "tensorzero::evaluation_run_id".to_string(),
+                    eq(expected_run_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::datapoint_id".to_string(),
+                    eq(expected_datapoint_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::evaluation_name".to_string(),
+                    eq("haiku_without_outputs")
+                ),
+            )
         );
 
         // There should be no Float feedback for this evaluation
@@ -961,39 +1006,43 @@ async fn run_llm_judge_evaluation_chat() {
         let db_feedback = query_boolean_feedback(&db, inference_id, None)
             .await
             .unwrap();
-        assert_eq!(
-            db_feedback.metric_name,
-            "tensorzero::evaluation_name::haiku_without_outputs::evaluator_name::topic_starts_with_f"
-        );
-        assert_eq!(
-            db_feedback.value,
-            parsed.evaluations["topic_starts_with_f"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
         total_topic_fs += db_feedback.value as u32;
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluation_name"],
-            "haiku_without_outputs"
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluator_name"],
-            "topic_starts_with_f"
-        );
-        assert!(
-            !db_feedback
-                .tags
-                .contains_key("tensorzero::derived_from_human_feedback")
+        let expected_bool_value = parsed.evaluations["topic_starts_with_f"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
+            .unwrap();
+        assert_that!(
+            db_feedback,
+            matches_pattern!(BooleanMetricFeedbackRow {
+                metric_name: eq(
+                    "tensorzero::evaluation_name::haiku_without_outputs::evaluator_name::topic_starts_with_f"
+                ),
+                value: eq(&expected_bool_value),
+                tags: all!(
+                    has_entry(
+                        "tensorzero::evaluation_run_id".to_string(),
+                        eq(expected_run_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::datapoint_id".to_string(),
+                        eq(expected_datapoint_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::evaluation_name".to_string(),
+                        eq("haiku_without_outputs")
+                    ),
+                    has_entry(
+                        "tensorzero::evaluator_name".to_string(),
+                        eq("topic_starts_with_f")
+                    ),
+                    not(has_entry(
+                        "tensorzero::derived_from_human_feedback".to_string(),
+                        anything()
+                    )),
+                ),
+                ..
+            })
         );
         let evaluator_inference_id =
             Uuid::parse_str(&db_feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
@@ -1026,9 +1075,12 @@ async fn run_llm_judge_evaluation_chat() {
         else {
             panic!("Expected json inference for evaluator");
         };
-        assert_eq!(
-            evaluator_inference.tags["tensorzero::evaluation_name"],
-            "haiku_without_outputs"
+        assert_that!(
+            &evaluator_inference.tags,
+            has_entry(
+                "tensorzero::evaluation_name".to_string(),
+                eq("haiku_without_outputs")
+            )
         );
         parsed_output.push(parsed);
     }
@@ -1066,9 +1118,12 @@ async fn run_llm_judge_evaluation_chat() {
         let db_feedback = query_boolean_feedback(&db, inference_id, None)
             .await
             .unwrap();
-        assert_eq!(
-            db_feedback.tags["tensorzero::derived_from_human_feedback"],
-            "true"
+        assert_that!(
+            &db_feedback.tags,
+            has_entry(
+                "tensorzero::derived_from_human_feedback".to_string(),
+                eq("true")
+            )
         );
     }
     assert_eq!(total_topic_fs, 0);
@@ -1156,15 +1211,22 @@ async fn run_image_evaluation() {
         // Check the output to the inference is the same as the output in the response
         assert_eq!(db_output, parsed_response.content);
         // Check the inference is properly tagged
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
+        let expected_run_id = evaluation_run_id.to_string();
+        let expected_datapoint_id = parsed.datapoint.id().to_string();
+        assert_that!(
+            &db_inference.tags,
+            all!(
+                has_entry(
+                    "tensorzero::evaluation_run_id".to_string(),
+                    eq(expected_run_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::datapoint_id".to_string(),
+                    eq(expected_datapoint_id.as_str())
+                ),
+                has_entry("tensorzero::evaluation_name".to_string(), eq("images")),
+            )
         );
-        assert_eq!(
-            db_inference.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(db_inference.tags["tensorzero::evaluation_name"], "images");
 
         // There should be no Float feedback for this evaluation
         assert!(
@@ -1189,31 +1251,36 @@ async fn run_image_evaluation() {
         )
         .await
         .unwrap();
-        assert_eq!(
-            db_feedback.metric_name,
-            "tensorzero::evaluation_name::images::evaluator_name::honest_answer"
-        );
-        assert_eq!(
-            db_feedback.value,
-            parsed.evaluations["honest_answer"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
         total_honest_answers += db_feedback.value as u32;
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(db_feedback.tags["tensorzero::evaluation_name"], "images");
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluator_name"],
-            "honest_answer"
+        let expected_honest_answer = parsed.evaluations["honest_answer"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
+            .unwrap();
+        assert_that!(
+            db_feedback,
+            matches_pattern!(BooleanMetricFeedbackRow {
+                metric_name: eq(
+                    "tensorzero::evaluation_name::images::evaluator_name::honest_answer"
+                ),
+                value: eq(&expected_honest_answer),
+                tags: all!(
+                    has_entry(
+                        "tensorzero::evaluation_run_id".to_string(),
+                        eq(expected_run_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::datapoint_id".to_string(),
+                        eq(expected_datapoint_id.as_str())
+                    ),
+                    has_entry("tensorzero::evaluation_name".to_string(), eq("images")),
+                    has_entry(
+                        "tensorzero::evaluator_name".to_string(),
+                        eq("honest_answer")
+                    ),
+                ),
+                ..
+            })
         );
         let evaluator_inference_id =
             Uuid::parse_str(&db_feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
@@ -1224,9 +1291,9 @@ async fn run_image_evaluation() {
         else {
             panic!("Expected json inference for evaluator");
         };
-        assert_eq!(
-            evaluator_inference.tags["tensorzero::evaluation_name"],
-            "images"
+        assert_that!(
+            &evaluator_inference.tags,
+            has_entry("tensorzero::evaluation_name".to_string(), eq("images"))
         );
 
         // There should be Boolean feedback for matches reference
@@ -1237,31 +1304,36 @@ async fn run_image_evaluation() {
         )
         .await
         .unwrap();
-        assert_eq!(
-            db_feedback.metric_name,
-            "tensorzero::evaluation_name::images::evaluator_name::matches_reference"
-        );
-        assert_eq!(
-            db_feedback.value,
-            parsed.evaluations["matches_reference"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
         total_matches_reference += db_feedback.value as u32;
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            db_feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(db_feedback.tags["tensorzero::evaluation_name"], "images");
-        assert_eq!(
-            db_feedback.tags["tensorzero::evaluator_name"],
-            "matches_reference"
+        let expected_matches_reference = parsed.evaluations["matches_reference"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
+            .unwrap();
+        assert_that!(
+            db_feedback,
+            matches_pattern!(BooleanMetricFeedbackRow {
+                metric_name: eq(
+                    "tensorzero::evaluation_name::images::evaluator_name::matches_reference"
+                ),
+                value: eq(&expected_matches_reference),
+                tags: all!(
+                    has_entry(
+                        "tensorzero::evaluation_run_id".to_string(),
+                        eq(expected_run_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::datapoint_id".to_string(),
+                        eq(expected_datapoint_id.as_str())
+                    ),
+                    has_entry("tensorzero::evaluation_name".to_string(), eq("images")),
+                    has_entry(
+                        "tensorzero::evaluator_name".to_string(),
+                        eq("matches_reference")
+                    ),
+                ),
+                ..
+            })
         );
         let evaluator_inference_id =
             Uuid::parse_str(&db_feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
@@ -1272,9 +1344,9 @@ async fn run_image_evaluation() {
         else {
             panic!("Expected json inference for evaluator");
         };
-        assert_eq!(
-            evaluator_inference.tags["tensorzero::evaluation_name"],
-            "images"
+        assert_that!(
+            &evaluator_inference.tags,
+            has_entry("tensorzero::evaluation_name".to_string(), eq("images"))
         );
         let input = serde_json::to_string(&evaluator_inference.input.unwrap())
             .expect("evaluator input should serialize");
@@ -1371,17 +1443,21 @@ async fn check_invalid_image_evaluation() {
         // Check the output to the inference is the same as the output in the response
         assert_eq!(db_output, parsed_response.content);
         // Check the inference is properly tagged
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_name"],
-            "bad_images"
+        let expected_run_id = evaluation_run_id.to_string();
+        let expected_datapoint_id = parsed.datapoint.id().to_string();
+        assert_that!(
+            &db_inference.tags,
+            all!(
+                has_entry(
+                    "tensorzero::evaluation_run_id".to_string(),
+                    eq(expected_run_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::datapoint_id".to_string(),
+                    eq(expected_datapoint_id.as_str())
+                ),
+                has_entry("tensorzero::evaluation_name".to_string(), eq("bad_images")),
+            )
         );
 
         // There should be no Float feedback for this evaluation
@@ -2190,75 +2266,60 @@ async fn run_evaluations_best_of_3() {
         // Check the output to the inference is the same as the output in the response
         assert_eq!(db_output, parsed_response.output);
         // Check the inference is properly tagged
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
+        let expected_run_id = evaluation_run_id.to_string();
+        let expected_datapoint_id = parsed.datapoint.id().to_string();
+        assert_that!(
+            &db_inference.tags,
+            all!(
+                has_entry(
+                    "tensorzero::evaluation_run_id".to_string(),
+                    eq(expected_run_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::datapoint_id".to_string(),
+                    eq(expected_datapoint_id.as_str())
+                ),
+                has_entry("tensorzero::evaluation_name".to_string(), eq("best_of_3")),
+                has_entry(
+                    "tensorzero::dataset_name".to_string(),
+                    eq(dataset_name.as_str())
+                ),
+            )
         );
-        assert_eq!(
-            db_inference.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_name"],
-            "best_of_3"
-        );
-        assert_eq!(db_inference.tags["tensorzero::dataset_name"], dataset_name);
         // Check boolean feedback was recorded
         let feedback = query_boolean_feedback(&db, inference_id, None)
             .await
             .unwrap();
-
-        assert_eq!(
-            feedback.metric_name,
-            "tensorzero::evaluation_name::best_of_3::evaluator_name::llm_judge_bool"
-        );
-        assert_eq!(
-            feedback.value,
-            parsed.evaluations["llm_judge_bool"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-
-        // Check bool feedback was recorded
-        let feedback = query_boolean_feedback(&db, inference_id, None)
-            .await
+        let expected_bool_value = parsed.evaluations["llm_judge_bool"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
             .unwrap();
-
-        assert_eq!(
-            feedback.metric_name,
-            "tensorzero::evaluation_name::best_of_3::evaluator_name::llm_judge_bool"
+        assert_that!(
+            feedback,
+            matches_pattern!(BooleanMetricFeedbackRow {
+                metric_name: eq(
+                    "tensorzero::evaluation_name::best_of_3::evaluator_name::llm_judge_bool"
+                ),
+                value: eq(&expected_bool_value),
+                tags: all!(
+                    has_entry(
+                        "tensorzero::evaluation_run_id".to_string(),
+                        eq(expected_run_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::datapoint_id".to_string(),
+                        eq(expected_datapoint_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::evaluator_name".to_string(),
+                        eq("llm_judge_bool")
+                    ),
+                    has_entry("tensorzero::evaluation_name".to_string(), eq("best_of_3")),
+                ),
+                ..
+            })
         );
-        assert_eq!(
-            feedback.value,
-            parsed.evaluations["llm_judge_bool"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluator_name"],
-            "llm_judge_bool"
-        );
-        assert_eq!(feedback.tags["tensorzero::evaluation_name"], "best_of_3");
         let evaluator_inference_id =
             Uuid::parse_str(&feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
         let StoredInferenceDatabase::Json(evaluator_inference) =
@@ -2268,9 +2329,9 @@ async fn run_evaluations_best_of_3() {
         else {
             panic!("Expected json inference for evaluator");
         };
-        assert_eq!(
-            evaluator_inference.tags["tensorzero::evaluation_name"],
-            "best_of_3"
+        assert_that!(
+            &evaluator_inference.tags,
+            has_entry("tensorzero::evaluation_name".to_string(), eq("best_of_3"))
         );
         parsed_output.push(parsed);
 
@@ -2378,75 +2439,66 @@ async fn run_evaluations_mixture_of_3() {
         // Check the output to the inference is the same as the output in the response
         assert_eq!(db_output, parsed_response.output);
         // Check the inference is properly tagged
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
+        let expected_run_id = evaluation_run_id.to_string();
+        let expected_datapoint_id = parsed.datapoint.id().to_string();
+        assert_that!(
+            &db_inference.tags,
+            all!(
+                has_entry(
+                    "tensorzero::evaluation_run_id".to_string(),
+                    eq(expected_run_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::datapoint_id".to_string(),
+                    eq(expected_datapoint_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::evaluation_name".to_string(),
+                    eq("mixture_of_3")
+                ),
+                has_entry(
+                    "tensorzero::dataset_name".to_string(),
+                    eq(dataset_name.as_str())
+                ),
+            )
         );
-        assert_eq!(
-            db_inference.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_name"],
-            "mixture_of_3"
-        );
-        assert_eq!(db_inference.tags["tensorzero::dataset_name"], dataset_name);
         // Check boolean feedback was recorded
         let feedback = query_boolean_feedback(&db, inference_id, None)
             .await
             .unwrap();
-
-        assert_eq!(
-            feedback.metric_name,
-            "tensorzero::evaluation_name::mixture_of_3::evaluator_name::llm_judge_bool"
-        );
-        assert_eq!(
-            feedback.value,
-            parsed.evaluations["llm_judge_bool"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-
-        // Check bool feedback was recorded
-        let feedback = query_boolean_feedback(&db, inference_id, None)
-            .await
+        let expected_bool_value = parsed.evaluations["llm_judge_bool"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
             .unwrap();
-
-        assert_eq!(
-            feedback.metric_name,
-            "tensorzero::evaluation_name::mixture_of_3::evaluator_name::llm_judge_bool"
+        assert_that!(
+            feedback,
+            matches_pattern!(BooleanMetricFeedbackRow {
+                metric_name: eq(
+                    "tensorzero::evaluation_name::mixture_of_3::evaluator_name::llm_judge_bool"
+                ),
+                value: eq(&expected_bool_value),
+                tags: all!(
+                    has_entry(
+                        "tensorzero::evaluation_run_id".to_string(),
+                        eq(expected_run_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::datapoint_id".to_string(),
+                        eq(expected_datapoint_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::evaluator_name".to_string(),
+                        eq("llm_judge_bool")
+                    ),
+                    has_entry(
+                        "tensorzero::evaluation_name".to_string(),
+                        eq("mixture_of_3")
+                    ),
+                ),
+                ..
+            })
         );
-        assert_eq!(
-            feedback.value,
-            parsed.evaluations["llm_judge_bool"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluator_name"],
-            "llm_judge_bool"
-        );
-        assert_eq!(feedback.tags["tensorzero::evaluation_name"], "mixture_of_3");
         let evaluator_inference_id =
             Uuid::parse_str(&feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
         let StoredInferenceDatabase::Json(evaluator_inference) =
@@ -2456,9 +2508,12 @@ async fn run_evaluations_mixture_of_3() {
         else {
             panic!("Expected json inference for evaluator");
         };
-        assert_eq!(
-            evaluator_inference.tags["tensorzero::evaluation_name"],
-            "mixture_of_3"
+        assert_that!(
+            &evaluator_inference.tags,
+            has_entry(
+                "tensorzero::evaluation_name".to_string(),
+                eq("mixture_of_3")
+            )
         );
         parsed_output.push(parsed);
 
@@ -2566,72 +2621,60 @@ async fn run_evaluations_dicl() {
         // Check the output to the inference is the same as the output in the response
         assert_eq!(db_output, parsed_response.output);
         // Check the inference is properly tagged
-        assert_eq!(
-            db_inference.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
+        let expected_run_id = evaluation_run_id.to_string();
+        let expected_datapoint_id = parsed.datapoint.id().to_string();
+        assert_that!(
+            &db_inference.tags,
+            all!(
+                has_entry(
+                    "tensorzero::evaluation_run_id".to_string(),
+                    eq(expected_run_id.as_str())
+                ),
+                has_entry(
+                    "tensorzero::datapoint_id".to_string(),
+                    eq(expected_datapoint_id.as_str())
+                ),
+                has_entry("tensorzero::evaluation_name".to_string(), eq("dicl")),
+                has_entry(
+                    "tensorzero::dataset_name".to_string(),
+                    eq(dataset_name.as_str())
+                ),
+            )
         );
-        assert_eq!(
-            db_inference.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(db_inference.tags["tensorzero::evaluation_name"], "dicl");
-        assert_eq!(db_inference.tags["tensorzero::dataset_name"], dataset_name);
         // Check boolean feedback was recorded
         let feedback = query_boolean_feedback(&db, inference_id, None)
             .await
             .unwrap();
-
-        assert_eq!(
-            feedback.metric_name,
-            "tensorzero::evaluation_name::dicl::evaluator_name::llm_judge_bool"
-        );
-        assert_eq!(
-            feedback.value,
-            parsed.evaluations["llm_judge_bool"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-
-        // Check bool feedback was recorded
-        let feedback = query_boolean_feedback(&db, inference_id, None)
-            .await
+        let expected_bool_value = parsed.evaluations["llm_judge_bool"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
             .unwrap();
-
-        assert_eq!(
-            feedback.metric_name,
-            "tensorzero::evaluation_name::dicl::evaluator_name::llm_judge_bool"
+        assert_that!(
+            feedback,
+            matches_pattern!(BooleanMetricFeedbackRow {
+                metric_name: eq(
+                    "tensorzero::evaluation_name::dicl::evaluator_name::llm_judge_bool"
+                ),
+                value: eq(&expected_bool_value),
+                tags: all!(
+                    has_entry(
+                        "tensorzero::evaluation_run_id".to_string(),
+                        eq(expected_run_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::datapoint_id".to_string(),
+                        eq(expected_datapoint_id.as_str())
+                    ),
+                    has_entry(
+                        "tensorzero::evaluator_name".to_string(),
+                        eq("llm_judge_bool")
+                    ),
+                    has_entry("tensorzero::evaluation_name".to_string(), eq("dicl")),
+                ),
+                ..
+            })
         );
-        assert_eq!(
-            feedback.value,
-            parsed.evaluations["llm_judge_bool"]
-                .as_ref()
-                .unwrap()
-                .as_bool()
-                .unwrap()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluation_run_id"],
-            evaluation_run_id.to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::datapoint_id"],
-            parsed.datapoint.id().to_string()
-        );
-        assert_eq!(
-            feedback.tags["tensorzero::evaluator_name"],
-            "llm_judge_bool"
-        );
-        assert_eq!(feedback.tags["tensorzero::evaluation_name"], "dicl");
         let evaluator_inference_id =
             Uuid::parse_str(&feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
         let StoredInferenceDatabase::Json(evaluator_inference) =
@@ -2641,9 +2684,9 @@ async fn run_evaluations_dicl() {
         else {
             panic!("Expected json inference for evaluator");
         };
-        assert_eq!(
-            evaluator_inference.tags["tensorzero::evaluation_name"],
-            "dicl"
+        assert_that!(
+            &evaluator_inference.tags,
+            has_entry("tensorzero::evaluation_name".to_string(), eq("dicl"))
         );
         parsed_output.push(parsed);
 
@@ -3066,25 +3109,24 @@ async fn test_precision_targets_parameter() {
     else {
         panic!("Expected chat inference");
     };
-    assert_eq!(
-        db_inference.tags["tensorzero::evaluation_run_id"],
-        evaluation_run_id.to_string(),
-        "Evaluation inferences should include `tensorzero::evaluation_run_id` tags"
-    );
-    assert_eq!(
-        db_inference.tags["tensorzero::evaluation_name"],
-        evaluation_name_tag.as_str(),
-        "Evaluation inferences should include `tensorzero::evaluation_name` tags"
-    );
-    assert_eq!(
-        db_inference.tags["tensorzero::autopilot::session_id"],
-        external_session_id.as_str(),
-        "Evaluation inferences should include external tags"
-    );
-    assert_eq!(
-        db_inference.tags["custom_tag"],
-        external_tag_value.as_str(),
-        "Evaluation inferences should include custom external tags"
+    let expected_run_id = evaluation_run_id.to_string();
+    assert_that!(
+        &db_inference.tags,
+        all!(
+            has_entry(
+                "tensorzero::evaluation_run_id".to_string(),
+                eq(expected_run_id.as_str())
+            ),
+            has_entry(
+                "tensorzero::evaluation_name".to_string(),
+                eq(evaluation_name_tag.as_str())
+            ),
+            has_entry(
+                "tensorzero::autopilot::session_id".to_string(),
+                eq(external_session_id.as_str())
+            ),
+            has_entry("custom_tag".to_string(), eq(external_tag_value.as_str())),
+        )
     );
 
     let metric_name = format!(
@@ -3094,15 +3136,15 @@ async fn test_precision_targets_parameter() {
     let db_feedback = query_boolean_feedback(&db, inference_id, Some(metric_name.as_str()))
         .await
         .expect("Should load evaluator feedback from database");
-    assert_eq!(
-        db_feedback.tags["tensorzero::autopilot::session_id"],
-        external_session_id.as_str(),
-        "Evaluator feedback should include external tags"
-    );
-    assert_eq!(
-        db_feedback.tags["custom_tag"],
-        external_tag_value.as_str(),
-        "Evaluator feedback should include custom external tags"
+    assert_that!(
+        &db_feedback.tags,
+        all!(
+            has_entry(
+                "tensorzero::autopilot::session_id".to_string(),
+                eq(external_session_id.as_str())
+            ),
+            has_entry("custom_tag".to_string(), eq(external_tag_value.as_str())),
+        )
     );
     let evaluator_inference_id =
         Uuid::parse_str(&db_feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
@@ -3113,25 +3155,23 @@ async fn test_precision_targets_parameter() {
     else {
         panic!("Expected json inference for evaluator");
     };
-    assert_eq!(
-        evaluator_inference.tags["tensorzero::evaluation_run_id"],
-        evaluation_run_id.to_string(),
-        "Judge inferences should include `tensorzero::evaluation_run_id` tags"
-    );
-    assert_eq!(
-        evaluator_inference.tags["tensorzero::evaluation_name"],
-        evaluation_name_tag.as_str(),
-        "Judge inferences should include `tensorzero::evaluation_name` tags"
-    );
-    assert_eq!(
-        evaluator_inference.tags["tensorzero::autopilot::session_id"],
-        external_session_id.as_str(),
-        "Judge inferences should include external tags"
-    );
-    assert_eq!(
-        evaluator_inference.tags["custom_tag"],
-        external_tag_value.as_str(),
-        "Judge inferences should include custom external tags"
+    assert_that!(
+        &evaluator_inference.tags,
+        all!(
+            has_entry(
+                "tensorzero::evaluation_run_id".to_string(),
+                eq(expected_run_id.as_str())
+            ),
+            has_entry(
+                "tensorzero::evaluation_name".to_string(),
+                eq(evaluation_name_tag.as_str())
+            ),
+            has_entry(
+                "tensorzero::autopilot::session_id".to_string(),
+                eq(external_session_id.as_str())
+            ),
+            has_entry("custom_tag".to_string(), eq(external_tag_value.as_str())),
+        )
     );
 }
 

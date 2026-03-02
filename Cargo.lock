@@ -2375,6 +2375,7 @@ dependencies = [
  "async-trait",
  "clap",
  "futures",
+ "googletest",
  "indicatif",
  "regex",
  "serde",

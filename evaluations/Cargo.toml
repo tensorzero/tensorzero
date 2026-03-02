@@ -30,6 +30,7 @@ ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
+googletest = "0.14.2"
 
 [lints]
 workspace = true
