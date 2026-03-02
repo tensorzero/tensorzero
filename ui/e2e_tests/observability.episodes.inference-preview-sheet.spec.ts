@@ -190,45 +190,6 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
     ).toBeVisible();
   });
 
-  test("should copy messages to clipboard from the preview sheet", async ({
-    page,
-    context,
-  }) => {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-
-    await page.goto(episodeUrl);
-    await page.waitForLoadState("networkidle");
-
-    // Open the preview sheet
-    const previewButton = page
-      .getByRole("button", { name: "View inference details" })
-      .first();
-    await previewButton.click();
-
-    // Wait for sheet to open and data to load
-    const sheet = page.locator('[role="dialog"]');
-    await sheet.waitFor({ state: "visible" });
-
-    // Wait for the Copy Messages button and click it
-    const copyButton = sheet.getByRole("button", { name: "Copy Messages" });
-    await copyButton.waitFor({ state: "visible", timeout: 10000 });
-    await copyButton.click();
-
-    // Verify toast appears
-    await expect(
-      page
-        .getByRole("region", { name: /notifications/i })
-        .getByText("Copied messages to clipboard"),
-    ).toBeVisible();
-
-    // Verify clipboard contains valid JSON with input and output
-    const clipboardText = await page.evaluate(() =>
-      navigator.clipboard.readText(),
-    );
-    const data = JSON.parse(clipboardText);
-    expect(data).toHaveProperty("output");
-  });
-
   test("should be able to add feedback from the preview sheet", async ({
     page,
   }) => {

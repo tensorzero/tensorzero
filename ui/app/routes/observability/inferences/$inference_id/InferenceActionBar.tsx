@@ -1,18 +1,15 @@
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { Await } from "react-router";
-import { ClipboardIcon } from "lucide-react";
 import type { StoredInference, Input } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
-import { useCopy } from "~/hooks/use-copy";
-import { useToast } from "~/hooks/use-toast";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import { ActionBar } from "~/components/layout/ActionBar";
-import { Button, ButtonIcon } from "~/components/ui/button";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
+import { CopyMessagesButton } from "~/components/inference/CopyMessagesButton";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
 import type { ModelInferencesData } from "./inference-data.server";
@@ -58,8 +55,8 @@ export function InferenceActionBar({
       />
       <CopyMessagesButton
         key={`copy-${locationKey}`}
-        inference={inference}
-        inputPromise={inputPromise}
+        input={inputPromise}
+        output={inference.output}
       />
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}
@@ -153,37 +150,5 @@ function TryWithVariantActionStreaming({
         }}
       </Await>
     </Suspense>
-  );
-}
-
-interface CopyMessagesButtonProps {
-  inputPromise: Promise<Input | undefined>;
-  inference: StoredInference;
-}
-
-function CopyMessagesButton({
-  inputPromise,
-  inference,
-}: CopyMessagesButtonProps) {
-  const { copy, didCopy } = useCopy();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    if (didCopy) {
-      toast.success({ title: "Copied messages to clipboard" });
-    }
-  }, [didCopy, toast]);
-
-  const handleCopy = async () => {
-    const input = await inputPromise;
-    const data = { input, output: inference.output };
-    await copy(JSON.stringify(data, null, 2));
-  };
-
-  return (
-    <Button variant="outline" size="sm" className="w-fit" onClick={handleCopy}>
-      <ButtonIcon as={ClipboardIcon} variant="tertiary" />
-      Copy Messages
-    </Button>
   );
 }

@@ -35,12 +35,10 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { DemonstrationFeedbackButton } from "~/components/feedback/DemonstrationFeedbackButton";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
-import { ClipboardIcon } from "lucide-react";
 import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
-import { useCopy } from "~/hooks/use-copy";
-import { Button, ButtonIcon } from "~/components/ui/button";
+import { CopyMessagesButton } from "~/components/inference/CopyMessagesButton";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { InputElement } from "../input_output/InputElement";
 import type { Input } from "~/types/tensorzero";
@@ -325,7 +323,7 @@ export function InferenceDetailContent({
           />
         </humanFeedbackFetcher.Form>
       </HumanFeedbackModal>
-      <CopyMessagesButton input={input} inference={inference} />
+      <CopyMessagesButton input={input} output={inference.output} />
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}
       />
@@ -476,33 +474,5 @@ export function InferenceDetailContent({
         </VariantResponseModal>
       )}
     </>
-  );
-}
-
-interface CopyMessagesButtonProps {
-  input: Input | undefined;
-  inference: StoredInference;
-}
-
-function CopyMessagesButton({ input, inference }: CopyMessagesButtonProps) {
-  const { copy, didCopy } = useCopy();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    if (didCopy) {
-      toast.success({ title: "Copied messages to clipboard" });
-    }
-  }, [didCopy, toast]);
-
-  const handleCopy = async () => {
-    const data = { input, output: inference.output };
-    await copy(JSON.stringify(data, null, 2));
-  };
-
-  return (
-    <Button variant="outline" size="sm" className="w-fit" onClick={handleCopy}>
-      <ButtonIcon as={ClipboardIcon} variant="tertiary" />
-      Copy Messages
-    </Button>
   );
 }
