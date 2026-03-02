@@ -50,7 +50,7 @@ impl TaskTool for EchoTool {
         &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         Ok(EchoOutput {
             echoed: llm_params.message,

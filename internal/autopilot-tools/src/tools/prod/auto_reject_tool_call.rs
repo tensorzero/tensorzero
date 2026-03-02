@@ -85,7 +85,7 @@ impl TaskTool for AutoRejectToolCallTool {
         &self,
         _llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Send ToolCallAuthorization::NotAvailable to autopilot API
         ctx.client()

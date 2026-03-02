@@ -82,19 +82,19 @@ impl<S> ToolAppState<S> {
 ///
 /// Wraps durable's `TaskContext` and provides access to the application context
 /// along with helper methods for calling other tools and checkpointing operations.
-pub struct ToolContext<'a, S: Clone + Send + Sync + 'static = ()> {
-    task_ctx: &'a mut TaskContext<ToolAppState<S>>,
-    app_state: &'a ToolAppState<S>,
+pub struct ToolContext<S: Clone + Send + Sync + 'static = ()> {
+    task_ctx: TaskContext<ToolAppState<S>>,
+    app_state: ToolAppState<S>,
     episode_id: Uuid,
     /// Counter for generating unique tool call identifiers.
     tool_call_counter: u32,
 }
 
-impl<'a, S: Clone + Send + Sync + 'static> ToolContext<'a, S> {
+impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
     /// Create a new tool context.
     pub fn new(
-        task_ctx: &'a mut TaskContext<ToolAppState<S>>,
-        app_ctx: &'a ToolAppState<S>,
+        task_ctx: TaskContext<ToolAppState<S>>,
+        app_ctx: ToolAppState<S>,
         episode_id: Uuid,
     ) -> Self {
         Self {
@@ -172,7 +172,7 @@ impl<'a, S: Clone + Send + Sync + 'static> ToolContext<'a, S> {
     ///
     /// Use this for advanced operations not exposed by `ToolContext`.
     pub fn task_ctx(&mut self) -> &mut TaskContext<ToolAppState<S>> {
-        self.task_ctx
+        &mut self.task_ctx
     }
 
     /// Execute a checkpointed step.

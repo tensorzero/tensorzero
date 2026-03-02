@@ -43,7 +43,7 @@ pub trait TaskTool: ToolMetadata {
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<<Self as ToolMetadata>::Output>;
 }
 ```
@@ -214,7 +214,7 @@ impl TaskTool for ResearchTool {
     async fn execute(
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Call another tool
         let _search = ctx

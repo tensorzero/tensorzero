@@ -98,7 +98,7 @@ impl TaskTool for EchoTaskTool {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         Ok(EchoOutput {
             echoed: llm_params.message,
@@ -132,7 +132,7 @@ impl TaskTool for DefaultTimeoutTaskTool {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         Ok(EchoOutput {
             echoed: llm_params.message,
