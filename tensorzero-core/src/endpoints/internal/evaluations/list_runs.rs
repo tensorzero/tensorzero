@@ -184,7 +184,7 @@ mod tests {
                     function_name: "my_function".to_string(),
                     variant_name: "my_variant".to_string(),
                     last_inference_timestamp: timestamp,
-                    snapshot_hash: None,
+                    snapshot_hash: Some("abc123".to_string()),
                 };
                 Box::pin(async move { Ok(vec![run_info]) })
             });
@@ -201,5 +201,10 @@ mod tests {
         assert_eq!(run.function_name, "my_function");
         assert_eq!(run.variant_name, "my_variant");
         assert_eq!(run.last_inference_timestamp, timestamp);
+        assert_eq!(
+            run.snapshot_hash.as_deref(),
+            Some("abc123"),
+            "snapshot_hash should be passed through from the database row"
+        );
     }
 }

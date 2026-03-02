@@ -45,7 +45,7 @@ pub struct ListEvaluationRunsResponse {
 /// Information about a single evaluation run.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct EvaluationRunInfo {
     pub evaluation_run_id: Uuid,
     pub evaluation_name: String,
@@ -53,7 +53,6 @@ pub struct EvaluationRunInfo {
     pub function_name: String,
     pub variant_name: String,
     pub last_inference_timestamp: DateTime<Utc>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<String>,
 }

@@ -17,6 +17,7 @@ set -euo pipefail
 # - "jaro_winkler_similarity_feedback.jsonl"
 # - "dynamic_evaluation_run_examples.jsonl" (Done)
 # - "dynamic_evaluation_run_episode_examples.jsonl" (Done)
+# - inference_evaluation_runs (Done, backfilled from inference tags)
 #
 # Usage:
 #   ./ui/fixtures/load_fixtures_postgres.sh
@@ -83,6 +84,8 @@ TRUNCATE TABLE tensorzero.demonstration_feedback CASCADE;
 -- Datapoint tables
 TRUNCATE TABLE tensorzero.chat_datapoints CASCADE;
 TRUNCATE TABLE tensorzero.json_datapoints CASCADE;
+-- Inference evaluation tables
+TRUNCATE TABLE tensorzero.inference_evaluation_runs CASCADE;
 -- Workflow evaluation tables (Step 5)
 TRUNCATE TABLE tensorzero.workflow_evaluation_run_episodes CASCADE;
 TRUNCATE TABLE tensorzero.workflow_evaluation_runs CASCADE;
@@ -492,6 +495,81 @@ SELECT
 FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (episode_id) DO NOTHING;
 "
+
+# =====================================================================
+# Inference Evaluation Runs (backfilled from loaded inference data)
+# =====================================================================
+
+echo "Backfilling inference_evaluation_runs from inference tags..."
+psql -q "$POSTGRES_URL" <<'EOF'
+WITH inference_eval_data AS (
+    -- Only include main function inferences, not evaluator inferences
+    -- (evaluator functions have names like `tensorzero::llm_judge::...`)
+    SELECT
+        (tags->>'tensorzero::evaluation_run_id')::uuid AS run_id,
+        tags->>'tensorzero::evaluation_name' AS evaluation_name,
+        function_name,
+        'chat'::text AS function_type,
+        tags->>'tensorzero::dataset_name' AS dataset_name,
+        variant_name
+    FROM tensorzero.chat_inferences
+    WHERE tags ? 'tensorzero::evaluation_run_id'
+      AND function_name NOT LIKE 'tensorzero::%'
+
+    UNION ALL
+
+    SELECT
+        (tags->>'tensorzero::evaluation_run_id')::uuid AS run_id,
+        tags->>'tensorzero::evaluation_name' AS evaluation_name,
+        function_name,
+        'json'::text AS function_type,
+        tags->>'tensorzero::dataset_name' AS dataset_name,
+        variant_name
+    FROM tensorzero.json_inferences
+    WHERE tags ? 'tensorzero::evaluation_run_id'
+      AND function_name NOT LIKE 'tensorzero::%'
+),
+grouped AS (
+    SELECT
+        run_id,
+        evaluation_name,
+        function_name,
+        function_type,
+        dataset_name,
+        to_jsonb(array_agg(DISTINCT variant_name ORDER BY variant_name)) AS variant_names
+    FROM inference_eval_data
+    GROUP BY run_id, evaluation_name, function_name, function_type, dataset_name
+)
+INSERT INTO tensorzero.inference_evaluation_runs (
+    run_id, evaluation_name, function_name, function_type,
+    dataset_name, variant_names, metrics, source,
+    snapshot_hash, created_at
+)
+SELECT
+    run_id,
+    evaluation_name,
+    function_name,
+    function_type,
+    dataset_name,
+    variant_names,
+    CASE evaluation_name
+        WHEN 'entity_extraction' THEN '[
+            {"name":"tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports","evaluator_name":"count_sports","value_type":"float","optimize":"min"},
+            {"name":"tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match","evaluator_name":"exact_match","value_type":"boolean","optimize":"max"}
+        ]'::jsonb
+        WHEN 'haiku' THEN '[
+            {"name":"tensorzero::evaluation_name::haiku::evaluator_name::exact_match","evaluator_name":"exact_match","value_type":"boolean","optimize":"max"},
+            {"name":"tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f","evaluator_name":"topic_starts_with_f","value_type":"boolean","optimize":"min"}
+        ]'::jsonb
+        ELSE '[]'::jsonb
+    END,
+    'dataset_name',
+    NULL,
+    tensorzero.uuid_v7_to_timestamp(run_id)
+FROM grouped
+ON CONFLICT (run_id) DO NOTHING;
+EOF
+echo "  Done"
 
 echo "Backfilling model provider statistics and latency histograms..."
 psql -q "$POSTGRES_URL" <<EOF
