@@ -259,8 +259,8 @@ function FeedbackSectionContent({ data }: { data: FeedbackData }) {
     <>
       <FeedbackTable
         feedback={feedbacks}
-        latestCommentId={bounds.by_type.comment.last_id!}
-        latestDemonstrationId={bounds.by_type.demonstration.last_id!}
+        latestCommentId={bounds.by_type.comment.last_id}
+        latestDemonstrationId={bounds.by_type.demonstration.last_id}
         latestFeedbackIdByMetric={latestFeedbackByMetric}
       />
       <PageButtons

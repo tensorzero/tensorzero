@@ -98,8 +98,8 @@ function FeedbackContent({
     <>
       <FeedbackTable
         feedback={feedback}
-        latestCommentId={feedback_bounds.by_type.comment.last_id!}
-        latestDemonstrationId={feedback_bounds.by_type.demonstration.last_id!}
+        latestCommentId={feedback_bounds.by_type.comment.last_id}
+        latestDemonstrationId={feedback_bounds.by_type.demonstration.last_id}
         latestFeedbackIdByMetric={latestFeedbackByMetric}
       />
       <PageButtons
