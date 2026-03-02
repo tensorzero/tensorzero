@@ -414,7 +414,9 @@ mod tests {
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::db::feedback::FeedbackByVariant;
-    use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+    use tensorzero_core::endpoints::feedback::internal::{
+        GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+    };
     use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
     use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
@@ -557,6 +559,14 @@ mod tests {
                 &self,
                 target_id: Uuid,
             ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+            async fn get_feedback_by_target_id(
+                &self,
+                target_id: Uuid,
+                before: Option<Uuid>,
+                after: Option<Uuid>,
+                limit: Option<u32>,
+            ) -> Result<GetFeedbackByTargetIdResponse, TensorZeroClientError>;
 
             async fn get_feedback_by_variant(
                 &self,

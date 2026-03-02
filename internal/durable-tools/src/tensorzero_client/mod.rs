@@ -28,7 +28,9 @@ pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 pub use tensorzero_core::embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput};
 pub use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
-use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+use tensorzero_core::endpoints::feedback::internal::{
+    GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+};
 pub use tensorzero_core::optimization::OptimizationJobHandle;
 pub use tensorzero_core::optimization::OptimizationJobInfo;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
@@ -129,6 +131,15 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         target_id: Uuid,
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+    /// Get all feedback for a target (inference or episode).
+    async fn get_feedback_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        limit: Option<u32>,
+    ) -> Result<GetFeedbackByTargetIdResponse, TensorZeroClientError>;
 
     /// Get feedback statistics by variant for a function and metric.
     ///

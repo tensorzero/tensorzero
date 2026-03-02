@@ -28,7 +28,9 @@ use tensorzero_core::endpoints::embeddings::{
     EmbeddingResponse, EmbeddingsParams, embeddings as core_embeddings,
 };
 use tensorzero_core::endpoints::feedback::feedback;
-use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+use tensorzero_core::endpoints::feedback::internal::{
+    GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+};
 use tensorzero_core::endpoints::inference::inference;
 use tensorzero_core::endpoints::internal::autopilot::{
     create_event, list_events, list_sessions, s3_initiate_upload,
@@ -510,6 +512,24 @@ impl TensorZeroClient for EmbeddedClient {
         tensorzero_core::endpoints::feedback::internal::get_latest_feedback_id_by_metric(
             &self.app_state.get_delegating_database(),
             target_id,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn get_feedback_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        limit: Option<u32>,
+    ) -> Result<GetFeedbackByTargetIdResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::feedback::internal::get_feedback_by_target_id(
+            &self.app_state.get_delegating_database(),
+            target_id,
+            before,
+            after,
+            limit,
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))

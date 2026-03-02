@@ -24,7 +24,8 @@ use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::db::feedback::FeedbackQueries;
 use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
 use tensorzero_core::endpoints::feedback::internal::{
-    LatestFeedbackIdByMetricResponse, get_latest_feedback_id_by_metric,
+    GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse, get_feedback_by_target_id,
+    get_latest_feedback_id_by_metric,
 };
 use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use tensorzero_core::endpoints::openai_compatible::types::embeddings::{
@@ -727,6 +728,71 @@ impl TensorZeroClient for Client {
             } => get_latest_feedback_id_by_metric(
                 &gateway.handle.app_state.get_delegating_database(),
                 target_id,
+            )
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            }),
+        }
+    }
+
+    async fn get_feedback_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        limit: Option<u32>,
+    ) -> Result<GetFeedbackByTargetIdResponse, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(http) => {
+                let mut url = http
+                    .base_url
+                    .join(&format!("internal/feedback/{target_id}"))
+                    .map_err(|e: url::ParseError| {
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
+                    })?;
+
+                {
+                    let mut query_pairs = url.query_pairs_mut();
+                    if let Some(before) = before {
+                        query_pairs.append_pair("before", &before.to_string());
+                    }
+                    if let Some(after) = after {
+                        query_pairs.append_pair("after", &after.to_string());
+                    }
+                    if let Some(limit) = limit {
+                        query_pairs.append_pair("limit", &limit.to_string());
+                    }
+                }
+
+                let response =
+                    http.http_client.get(url).send().await.map_err(|e| {
+                        TensorZeroClientError::Autopilot(AutopilotError::Request(e))
+                    })?;
+
+                if !response.status().is_success() {
+                    let status = response.status().as_u16();
+                    let text = response.text().await.unwrap_or_default();
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
+                }
+
+                response
+                    .json()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => get_feedback_by_target_id(
+                &gateway.handle.app_state.get_delegating_database(),
+                target_id,
+                before,
+                after,
+                limit,
             )
             .await
             .map_err(|e| {
