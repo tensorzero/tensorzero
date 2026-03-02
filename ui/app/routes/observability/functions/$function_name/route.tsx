@@ -62,6 +62,7 @@ function FunctionDetailPageHeader({
       {autopilotAvailable && (
         <AskAutopilotButton message={`Function: ${functionName}\n\n`} />
       )}
+      <SnapshotBanner />
     </PageHeader>
   );
 }
@@ -149,8 +150,6 @@ export default function FunctionDetailPage({
           functionName={function_name}
           functionConfig={function_config}
         />
-
-        <SnapshotBanner />
 
         <SectionsGroup>
           <VariantsSection

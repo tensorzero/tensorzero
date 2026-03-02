@@ -369,6 +369,7 @@ function VariantDetailPageHeader({
           message={`Variant: ${variantName}\nFunction: ${functionName}\n\n`}
         />
       )}
+      <SnapshotBanner />
     </PageHeader>
   );
 }
@@ -515,8 +516,6 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
           functionName={function_name}
           variantName={variant_name}
         />
-
-        <SnapshotBanner />
 
         <SectionsGroup>
           <SectionLayout>
