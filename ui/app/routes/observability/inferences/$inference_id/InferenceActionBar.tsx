@@ -1,6 +1,6 @@
 import { Suspense, useMemo } from "react";
 import { Await } from "react-router";
-import { ClipboardIcon, CheckCheckIcon } from "lucide-react";
+import { ClipboardIcon } from "lucide-react";
 import type { StoredInference, Input } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useConfig, useFunctionConfig } from "~/context/config";
@@ -57,7 +57,7 @@ export function InferenceActionBar({
         inference={inference}
         onFeedbackAdded={onFeedbackAdded}
       />
-      <CopyConversationButtonStreaming
+      <CopyConversationButton
         key={`copy-${locationKey}`}
         inference={inference}
         inputPromise={inputPromise}
@@ -157,40 +157,24 @@ function TryWithVariantActionStreaming({
   );
 }
 
-function CopyConversationButtonStreaming({
+function CopyConversationButton({
   inference,
   inputPromise,
 }: {
   inference: StoredInference;
   inputPromise: Promise<Input | undefined>;
 }) {
-  return (
-    <Suspense fallback={<Skeleton className="h-8 w-36" />}>
-      <Await resolve={inputPromise} errorElement={<ActionBarAsyncError />}>
-        {(input) => (
-          <CopyConversationButton inference={inference} input={input} />
-        )}
-      </Await>
-    </Suspense>
-  );
-}
-
-function CopyConversationButton({
-  inference,
-  input,
-}: {
-  inference: StoredInference;
-  input: Input | undefined;
-}) {
-  const { copy, didCopy, isCopyAvailable } = useCopy();
+  const { copy, isCopyAvailable } = useCopy();
   const { toast } = useToast();
 
   if (!isCopyAvailable) return null;
 
   const handleCopy = async () => {
     try {
+      const input = await inputPromise;
       const serialized = serializeConversation(input, inference);
       await copy(serialized);
+      toast.success({ title: "Copied conversation to clipboard" });
     } catch {
       toast.error({ title: "Failed to copy conversation" });
     }
@@ -198,11 +182,8 @@ function CopyConversationButton({
 
   return (
     <Button variant="outline" size="sm" className="w-fit" onClick={handleCopy}>
-      <ButtonIcon
-        as={didCopy ? CheckCheckIcon : ClipboardIcon}
-        variant="tertiary"
-      />
-      {didCopy ? "Copied" : "Copy Messages"}
+      <ButtonIcon as={ClipboardIcon} variant="tertiary" />
+      Copy Messages
     </Button>
   );
 }
