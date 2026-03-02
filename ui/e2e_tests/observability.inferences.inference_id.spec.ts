@@ -692,6 +692,45 @@ test("should not display cost chip when cost data is missing", async ({
   await expect(sheet.getByText(/^\$\d/)).not.toBeVisible();
 });
 
+test("should copy messages to clipboard", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+
+  await page.goto(
+    "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
+  );
+  await page.waitForLoadState("networkidle");
+
+  // Click the Copy Messages button
+  await page.getByRole("button", { name: "Copy Messages" }).click();
+
+  // Verify the toast appears
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("Copied messages to clipboard"),
+  ).toBeVisible();
+
+  // Verify clipboard contains valid JSON messages array
+  const clipboardText = await page.evaluate(() =>
+    navigator.clipboard.readText(),
+  );
+  const messages = JSON.parse(clipboardText);
+  expect(Array.isArray(messages)).toBe(true);
+  expect(messages.length).toBeGreaterThan(0);
+
+  // Verify structure: each message has role and content
+  for (const msg of messages) {
+    expect(msg).toHaveProperty("role");
+    expect(msg).toHaveProperty("content");
+    expect(["system", "user", "assistant"]).toContain(msg.role);
+  }
+
+  // Verify there's at least one assistant message (the output)
+  expect(messages.some((m: { role: string }) => m.role === "assistant")).toBe(
+    true,
+  );
+});
+
 // TODO(#5691): Run all UI e2e tests against Postgres-backed gateway too.
 // These are commented out because these tests are only supported on Postgres
 // because we don't TTL inference data in ClickHouse.

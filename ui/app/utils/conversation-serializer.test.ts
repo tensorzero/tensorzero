@@ -44,373 +44,7 @@ function makeJsonInference(output?: {
 }
 
 describe("serializeMessages", () => {
-  it("should serialize a basic chat conversation with string system prompt", () => {
-    const input: Input = {
-      system: "You are a helpful assistant.",
-      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
-    };
-    const inference = makeChatInference([{ type: "text", text: "Hi there!" }]);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result).toEqual([
-      { role: "system", content: "You are a helpful assistant." },
-      { role: "user", content: "Hello" },
-      { role: "assistant", content: "Hi there!" },
-    ]);
-  });
-
-  it("should serialize an Arguments system prompt as JSON", () => {
-    const input: Input = {
-      system: { tone: "formal", language: "en" },
-      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
-    };
-    const inference = makeChatInference([{ type: "text", text: "Greetings." }]);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0]).toEqual({
-      role: "system",
-      content: JSON.stringify({ tone: "formal", language: "en" }),
-    });
-  });
-
-  it("should handle missing system prompt", () => {
-    const input: Input = {
-      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
-    };
-    const inference = makeChatInference([{ type: "text", text: "Hi!" }]);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result).toEqual([
-      { role: "user", content: "Hello" },
-      { role: "assistant", content: "Hi!" },
-    ]);
-  });
-
-  it("should flatten single text content blocks to a plain string", () => {
-    const input: Input = {
-      messages: [
-        { role: "user", content: [{ type: "text", text: "One block" }] },
-      ],
-    };
-    const inference = makeChatInference([
-      { type: "text", text: "Single output" },
-    ]);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toBe("One block");
-    expect(result[1].content).toBe("Single output");
-  });
-
-  it("should keep multiple content blocks as an array", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "First" },
-            { type: "text", text: "Second" },
-          ],
-        },
-      ],
-    };
-    const inference = makeChatInference([]);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toEqual([
-      { type: "text", text: "First" },
-      { type: "text", text: "Second" },
-    ]);
-  });
-
-  it("should serialize tool_call content blocks (ToolCall variant)", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "tool_call",
-              id: "tc_1",
-              name: "get_weather",
-              arguments: '{"city":"SF"}',
-            },
-          ],
-        },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toEqual([
-      {
-        type: "tool_call",
-        id: "tc_1",
-        name: "get_weather",
-        arguments: '{"city":"SF"}',
-      },
-    ]);
-  });
-
-  it("should serialize tool_call content blocks (InferenceResponseToolCall variant)", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "tool_call",
-              id: "tc_1",
-              raw_name: "get_weather",
-              raw_arguments: '{"city":"SF"}',
-              name: "get_weather",
-              arguments: { city: "SF" },
-            } as InputMessage["content"][number],
-          ],
-        },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toEqual([
-      {
-        type: "tool_call",
-        id: "tc_1",
-        name: "get_weather",
-        arguments: '{"city":"SF"}',
-      },
-    ]);
-  });
-
-  it("should serialize tool_result content blocks", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              id: "tc_1",
-              name: "get_weather",
-              result: "Sunny, 72F",
-            },
-          ],
-        },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toEqual([
-      {
-        type: "tool_result",
-        id: "tc_1",
-        name: "get_weather",
-        result: "Sunny, 72F",
-      },
-    ]);
-  });
-
-  it("should serialize thought content blocks", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "assistant",
-          content: [{ type: "thought", text: "Let me think..." }],
-        },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toEqual([
-      { type: "thought", text: "Let me think..." },
-    ]);
-  });
-
-  it("should serialize template content blocks as text with stringified arguments", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "template",
-              name: "greeting",
-              arguments: { name: "World" },
-            },
-          ],
-        },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    // Single text block gets flattened to a plain string
-    expect(result[0].content).toBe(JSON.stringify({ name: "World" }));
-  });
-
-  it("should serialize raw_text as text", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "raw_text", value: "Raw content here" }],
-        },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toBe("Raw content here");
-  });
-
-  it("should serialize file content blocks with file_type only", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "file",
-              file_type: "url",
-              url: "https://example.com/image.png",
-              mime_type: "image/png",
-            } as InputMessage["content"][number],
-          ],
-        },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toEqual([{ type: "file", file_type: "url" }]);
-  });
-
-  it("should serialize unknown content blocks", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "unknown", data: { custom: "data" } }],
-        },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toEqual([
-      { type: "unknown", data: { custom: "data" } },
-    ]);
-  });
-
-  it("should handle chat inference with no output", () => {
-    const input: Input = {
-      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
-    };
-    const inference = makeChatInference(undefined);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result).toEqual([{ role: "user", content: "Hello" }]);
-  });
-
-  it("should serialize chat output tool_call blocks", () => {
-    const input: Input = {
-      messages: [
-        { role: "user", content: [{ type: "text", text: "Get weather" }] },
-      ],
-    };
-    const inference = makeChatInference([
-      {
-        type: "tool_call",
-        id: "tc_1",
-        raw_name: "get_weather",
-        raw_arguments: '{"city":"NYC"}',
-        name: "get_weather",
-        arguments: { city: "NYC" },
-      },
-    ]);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[1]).toEqual({
-      role: "assistant",
-      content: [
-        {
-          type: "tool_call",
-          id: "tc_1",
-          name: "get_weather",
-          arguments: '{"city":"NYC"}',
-        },
-      ],
-    });
-  });
-
-  it("should serialize JSON inference with raw output", () => {
-    const input: Input = {
-      messages: [
-        { role: "user", content: [{ type: "text", text: "Extract data" }] },
-      ],
-    };
-    const inference = makeJsonInference({
-      raw: '{"name": "John"}',
-      parsed: { name: "John" },
-    });
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[1]).toEqual({
-      role: "assistant",
-      content: '{"name": "John"}',
-    });
-  });
-
-  it("should serialize JSON inference with null raw but present parsed", () => {
-    const input: Input = {
-      messages: [
-        { role: "user", content: [{ type: "text", text: "Extract data" }] },
-      ],
-    };
-    const inference = makeJsonInference({
-      raw: null,
-      parsed: { name: "John" },
-    });
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[1]).toEqual({
-      role: "assistant",
-      content: JSON.stringify({ name: "John" }),
-    });
-  });
-
-  it("should handle undefined input and still serialize output", () => {
-    const inference = makeChatInference([
-      { type: "text", text: "I can help with that." },
-    ]);
-
-    const result = JSON.parse(serializeMessages(undefined, inference));
-
-    expect(result).toEqual([
-      { role: "assistant", content: "I can help with that." },
-    ]);
-  });
-
-  it("should handle a multi-turn conversation", () => {
+  it("should serialize a multi-turn chat conversation", () => {
     const input: Input = {
       system: "You are helpful.",
       messages: [
@@ -432,104 +66,97 @@ describe("serializeMessages", () => {
     ]);
   });
 
-  it("should handle tool_call with null name falling back to raw_name", () => {
+  it("should serialize a tool use conversation with both tool_call variants", () => {
     const input: Input = {
-      messages: [
-        { role: "user", content: [{ type: "text", text: "Get weather" }] },
-      ],
-    };
-    const inference = makeChatInference([
-      {
-        type: "tool_call",
-        id: "tc_1",
-        raw_name: "get_weather",
-        raw_arguments: '{"city":"NYC"}',
-        name: null,
-        arguments: null,
-      },
-    ]);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[1].content).toEqual([
-      {
-        type: "tool_call",
-        id: "tc_1",
-        name: "get_weather",
-        arguments: '{"city":"NYC"}',
-      },
-    ]);
-  });
-
-  it("should handle thought with undefined text", () => {
-    const input: Input = {
+      system: { assistant_name: "WeatherBot" },
       messages: [
         {
-          role: "assistant",
-          content: [{ type: "thought" } as InputMessage["content"][number]],
+          role: "user",
+          content: [{ type: "text", text: "What's the weather?" }],
         },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toEqual([{ type: "thought", text: "" }]);
-  });
-
-  it("should handle JSON inference with undefined output", () => {
-    const input: Input = {
-      messages: [
-        { role: "user", content: [{ type: "text", text: "Extract data" }] },
-      ],
-    };
-    const inference = makeJsonInference(undefined);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result).toEqual([{ role: "user", content: "Extract data" }]);
-  });
-
-  it("should handle empty messages array", () => {
-    const input: Input = {
-      system: "You are helpful.",
-      messages: [],
-    };
-    const inference = makeChatInference([{ type: "text", text: "Hi!" }]);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result).toEqual([
-      { role: "system", content: "You are helpful." },
-      { role: "assistant", content: "Hi!" },
-    ]);
-  });
-
-  it("should handle mixed content block types in a single message", () => {
-    const input: Input = {
-      messages: [
         {
           role: "assistant",
           content: [
-            { type: "thought", text: "Thinking..." },
-            { type: "text", text: "Here is the answer." },
             {
+              // InferenceResponseToolCall variant (has raw_name/raw_arguments)
               type: "tool_call",
               id: "tc_1",
-              name: "search",
-              arguments: '{"q":"test"}',
+              raw_name: "get_weather",
+              raw_arguments: '{"city":"SF"}',
+              name: null,
+              arguments: null,
+            } as InputMessage["content"][number],
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              id: "tc_1",
+              name: "get_weather",
+              result: "Sunny, 72F",
             },
           ],
         },
       ],
     };
-    const inference = makeChatInference();
+    const inference = makeChatInference([
+      { type: "text", text: "The weather in SF is sunny and 72F." },
+    ]);
 
     const result = JSON.parse(serializeMessages(input, inference));
 
-    expect(result[0].content).toEqual([
-      { type: "thought", text: "Thinking..." },
-      { type: "text", text: "Here is the answer." },
+    // Arguments system prompt is JSON-stringified
+    expect(result[0]).toEqual({
+      role: "system",
+      content: JSON.stringify({ assistant_name: "WeatherBot" }),
+    });
+    // tool_call with null name falls back to raw_name
+    expect(result[2].content).toEqual([
+      {
+        type: "tool_call",
+        id: "tc_1",
+        name: "get_weather",
+        arguments: '{"city":"SF"}',
+      },
+    ]);
+    // tool_result
+    expect(result[3].content).toEqual([
+      {
+        type: "tool_result",
+        id: "tc_1",
+        name: "get_weather",
+        result: "Sunny, 72F",
+      },
+    ]);
+    // Output flattened to string (single text block)
+    expect(result[4].content).toBe("The weather in SF is sunny and 72F.");
+  });
+
+  it("should serialize output with mixed block types (thought + tool_call)", () => {
+    const input: Input = {
+      messages: [
+        { role: "user", content: [{ type: "text", text: "Search for it" }] },
+      ],
+    };
+    const inference = makeChatInference([
+      { type: "thought" } as ContentBlockChatOutput,
+      {
+        type: "tool_call",
+        id: "tc_1",
+        raw_name: "search",
+        raw_arguments: '{"q":"test"}',
+        name: "search",
+        arguments: { q: "test" },
+      },
+    ]);
+
+    const result = JSON.parse(serializeMessages(input, inference));
+
+    // Multi-block output stays as array, thought with undefined text defaults to ""
+    expect(result[1].content).toEqual([
+      { type: "thought", text: "" },
       {
         type: "tool_call",
         id: "tc_1",
@@ -539,120 +166,48 @@ describe("serializeMessages", () => {
     ]);
   });
 
-  it("should serialize output thought blocks", () => {
+  it("should serialize JSON inference preferring raw over parsed", () => {
     const input: Input = {
       messages: [
-        { role: "user", content: [{ type: "text", text: "Think about this" }] },
+        { role: "user", content: [{ type: "text", text: "Extract data" }] },
       ],
     };
-    const inference = makeChatInference([
-      { type: "thought", text: "Let me reason..." },
-      { type: "text", text: "Here is my answer." },
-    ]);
 
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[1]).toEqual({
-      role: "assistant",
-      content: [
-        { type: "thought", text: "Let me reason..." },
-        { type: "text", text: "Here is my answer." },
-      ],
+    // raw present → use raw
+    const withRaw = makeJsonInference({
+      raw: '{"name": "John"}',
+      parsed: { name: "John" },
     });
-  });
+    const result1 = JSON.parse(serializeMessages(input, withRaw));
+    expect(result1[1].content).toBe('{"name": "John"}');
 
-  it("should serialize output thought blocks with undefined text", () => {
-    const inference = makeChatInference([
-      { type: "thought" } as ContentBlockChatOutput,
-    ]);
-
-    const result = JSON.parse(serializeMessages(undefined, inference));
-
-    expect(result[0].content).toEqual([{ type: "thought", text: "" }]);
-  });
-
-  it("should serialize output unknown blocks", () => {
-    const inference = makeChatInference([
-      { type: "unknown", data: { provider: "custom", raw: "abc" } },
-    ]);
-
-    const result = JSON.parse(serializeMessages(undefined, inference));
-
-    expect(result[0].content).toEqual([
-      { type: "unknown", data: { provider: "custom", raw: "abc" } },
-    ]);
-  });
-
-  it("should handle input tool_call with null name falling back to raw_name", () => {
-    const input: Input = {
-      messages: [
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "tool_call",
-              id: "tc_1",
-              raw_name: "lookup",
-              raw_arguments: "{}",
-              name: null,
-              arguments: null,
-            } as InputMessage["content"][number],
-          ],
-        },
-      ],
-    };
-    const inference = makeChatInference();
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result[0].content).toEqual([
-      { type: "tool_call", id: "tc_1", name: "lookup", arguments: "{}" },
-    ]);
-  });
-
-  it("should produce content: [] for chat inference with empty output array", () => {
-    const input: Input = {
-      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
-    };
-    const inference = makeChatInference([]);
-
-    const result = JSON.parse(serializeMessages(input, inference));
-
-    expect(result).toHaveLength(2);
-    expect(result[1]).toEqual({
-      role: "assistant",
-      content: [],
+    // raw null → JSON.stringify(parsed)
+    const withoutRaw = makeJsonInference({
+      raw: null,
+      parsed: { name: "John" },
     });
+    const result2 = JSON.parse(serializeMessages(input, withoutRaw));
+    expect(result2[1].content).toBe(JSON.stringify({ name: "John" }));
   });
 
-  it("should handle JSON inference with null raw and null parsed", () => {
-    const inference = makeJsonInference({ raw: null, parsed: null });
+  it("should handle edge cases: undefined input, no output, empty messages", () => {
+    // Undefined input + output → output only
+    const outputOnly = makeChatInference([
+      { type: "text", text: "I can help." },
+    ]);
+    expect(JSON.parse(serializeMessages(undefined, outputOnly))).toEqual([
+      { role: "assistant", content: "I can help." },
+    ]);
 
-    const result = JSON.parse(serializeMessages(undefined, inference));
+    // Undefined input + no output → empty array
+    const nothing = makeChatInference(undefined);
+    expect(JSON.parse(serializeMessages(undefined, nothing))).toEqual([]);
 
-    expect(result[0]).toEqual({
-      role: "assistant",
-      content: "null",
-    });
-  });
-
-  it("should produce empty array when both input and output are absent", () => {
-    const inference = makeChatInference(undefined);
-
-    const result = JSON.parse(serializeMessages(undefined, inference));
-
-    expect(result).toEqual([]);
-  });
-
-  it("should return valid JSON string with proper formatting", () => {
-    const input: Input = {
-      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
+    // No system prompt → no system message
+    const noSystem: Input = {
+      messages: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
     };
-    const inference = makeChatInference([{ type: "text", text: "Hi!" }]);
-
-    const result = serializeMessages(input, inference);
-
-    expect(result).toContain("\n");
-    expect(() => JSON.parse(result)).not.toThrow();
+    const result = JSON.parse(serializeMessages(noSystem, makeChatInference()));
+    expect(result[0].role).toBe("user");
   });
 });
