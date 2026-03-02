@@ -164,10 +164,8 @@ function CopyConversationButton({
   inference: StoredInference;
   inputPromise: Promise<Input | undefined>;
 }) {
-  const { copy, isCopyAvailable } = useCopy();
+  const { copy } = useCopy();
   const { toast } = useToast();
-
-  if (!isCopyAvailable) return null;
 
   const handleCopy = async () => {
     try {
