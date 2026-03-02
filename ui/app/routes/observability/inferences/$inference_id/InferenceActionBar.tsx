@@ -57,13 +57,13 @@ export function InferenceActionBar({
         inference={inference}
         onFeedbackAdded={onFeedbackAdded}
       />
-      <AskAutopilotButton
-        message={`Inference ID: ${inference.inference_id}\n\n`}
-      />
       <CopyConversationButtonStreaming
         key={`copy-${locationKey}`}
         inference={inference}
         inputPromise={inputPromise}
+      />
+      <AskAutopilotButton
+        message={`Inference ID: ${inference.inference_id}\n\n`}
       />
     </ActionBar>
   );
