@@ -211,7 +211,8 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     ''
                 ) AS variant_name,
                 argMax(dataset_name, updated_at) AS dataset_name,
-                formatDateTime(min(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
+                formatDateTime(min(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp,
+                argMax(snapshot_hash, updated_at) AS snapshot_hash
             FROM InferenceEvaluationRuns
             GROUP BY run_id_uint
             ORDER BY run_id_uint DESC
