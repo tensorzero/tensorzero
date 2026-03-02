@@ -206,9 +206,13 @@ test("should be able to add float feedback via the inference page", async ({
     timeout: 10000,
   });
 
-  // Verify the feedback value is visible in the table cell
+  // Verify the new feedback card is visible
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
   await expect(
-    page.getByRole("cell", { name: randomFloat.toString() }),
+    page.getByTestId(`feedback-card-${newFeedbackId}`),
   ).toBeVisible();
 });
 
@@ -255,8 +259,10 @@ test("should be able to add boolean feedback via the inference page", async ({
     throw new Error("newFeedbackId is not present in the url");
   }
 
-  // Assert that the feedback value is visible in its table cell
-  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+  // Assert that the new feedback card is visible
+  await expect(
+    page.getByTestId(`feedback-card-${newFeedbackId}`),
+  ).toBeVisible();
 });
 
 test("should be able to add json demonstration feedback via the inference page", async ({
@@ -305,8 +311,10 @@ test("should be able to add json demonstration feedback via the inference page",
   if (!newFeedbackId) {
     throw new Error("newFeedbackId is not present in the url");
   }
-  // Assert that the feedback value is visible in its table cell
-  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+  // Assert that the new feedback card is visible
+  await expect(
+    page.getByTestId(`feedback-card-${newFeedbackId}`),
+  ).toBeVisible();
 });
 
 test("should be able to add chat demonstration feedback via the inference page", async ({
@@ -354,8 +362,10 @@ test("should be able to add chat demonstration feedback via the inference page",
   if (!newFeedbackId) {
     throw new Error("newFeedbackId is not present in the url");
   }
-  // Assert that the feedback value is visible in its table cell
-  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+  // Assert that the new feedback card is visible
+  await expect(
+    page.getByTestId(`feedback-card-${newFeedbackId}`),
+  ).toBeVisible();
 });
 
 test.describe("should be able to add demonstration feedback via Try with X flows", () => {
@@ -429,9 +439,9 @@ test.describe("should be able to add demonstration feedback via Try with X flows
         throw new Error("newFeedbackId is not present in the url");
       }
 
-      // Assert that the feedback ID is visible in the feedback table
+      // Assert that the new feedback card is visible
       await expect(
-        page.getByRole("cell", { name: newFeedbackId }),
+        page.getByTestId(`feedback-card-${newFeedbackId}`),
       ).toBeVisible();
     });
   });

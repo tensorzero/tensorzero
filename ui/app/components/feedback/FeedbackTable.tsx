@@ -1,12 +1,3 @@
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TableEmptyState,
-} from "~/components/ui/table";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow } from "~/types/tensorzero";
@@ -16,24 +7,29 @@ import { useConfig } from "~/context/config";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { cn } from "~/utils/common";
 import { Badge } from "../ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { Skeleton } from "../ui/skeleton";
 import { useMemo } from "react";
 
 /**
- * Table headers for feedback skeleton and error states.
- * Shows the base 5 columns (without the dynamic "overwrites" column).
+ * Skeleton for feedback cards during loading state.
  */
-export function FeedbackTableHeaders() {
+export function FeedbackCardsSkeleton() {
   return (
-    <TableHeader>
-      <TableRow>
-        <TableHead>ID</TableHead>
-        <TableHead>Metric</TableHead>
-        <TableHead>Value</TableHead>
-        <TableHead>Tags</TableHead>
-        <TableHead>Time</TableHead>
-      </TableRow>
-    </TableHeader>
+    <div className="space-y-2">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="rounded-lg border p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-5 w-14 rounded-full" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -52,7 +48,6 @@ export default function FeedbackTable({
   const metrics = config.metrics;
 
   const anyOverwrites = useMemo(() => {
-    // Metric name => array of feedback IDs
     const metricToItem = feedback
       .filter((item) => "metric_name" in item)
       .reduce<Record<string, string[]>>(
@@ -64,16 +59,13 @@ export default function FeedbackTable({
       );
 
     return (
-      // Any comment that's not the latest
       feedback.some(
         (row) => row.type === "comment" && row.id !== latestCommentId,
       ) ||
-      // Any demonstration that's not the latest
       feedback.some(
         (row) =>
           row.type === "demonstration" && row.id !== latestDemonstrationId,
       ) ||
-      // Any metric where any feedback is not the latest for that metric
       Object.entries(metricToItem).some(([metric_name, ids]) => {
         return ids.some((id) => id !== latestFeedbackIdByMetric?.[metric_name]);
       })
@@ -85,96 +77,86 @@ export default function FeedbackTable({
     latestFeedbackIdByMetric,
   ]);
 
+  if (feedback.length === 0) {
+    return (
+      <div className="text-fg-muted flex items-center justify-center rounded-lg border py-12 text-sm">
+        No feedback found
+      </div>
+    );
+  }
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>ID</TableHead>
-          <TableHead>Metric</TableHead>
-          {anyOverwrites && <TableHead />}
-          <TableHead>Value</TableHead>
-          <TableHead>Tags</TableHead>
-          <TableHead>Time</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {feedback.length === 0 ? (
-          <TableEmptyState message="No feedback found" />
-        ) : (
-          feedback.map((item, index) => {
-            const isLatestOfType =
-              item.type === "comment"
-                ? item.id === latestCommentId
-                : item.type === "demonstration"
-                  ? item.id === latestDemonstrationId
-                  : latestFeedbackIdByMetric?.[item.metric_name] === item.id;
+    <div className="space-y-2">
+      {feedback.map((item, index) => {
+        const isLatestOfType =
+          item.type === "comment"
+            ? item.id === latestCommentId
+            : item.type === "demonstration"
+              ? item.id === latestDemonstrationId
+              : latestFeedbackIdByMetric?.[item.metric_name] === item.id;
 
-            return (
-              <TableRow key={`${item.id}-${index}`}>
-                <TableCell className="max-w-[200px]">
-                  <TableItemShortUuid id={item.id} />
-                </TableCell>
-
-                <TableCell className="max-w-[300px]">
-                  <div className="flex items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help truncate font-mono">
-                          {getMetricName(item)}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <span className="font-mono">{getMetricName(item)}</span>
-                      </TooltipContent>
-                    </Tooltip>
-                    {metrics[getMetricName(item)] && (
-                      <FeedbackBadges
-                        metric={metrics[getMetricName(item)]!}
-                        row={item}
-                      />
-                    )}
-                  </div>
-                </TableCell>
-
-                {anyOverwrites && (
-                  <TableCell>
-                    {isLatestOfType ? (
-                      <Badge variant="secondary">Latest</Badge>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className="border-red-400 text-red-400"
-                      >
-                        Overwritten
-                      </Badge>
-                    )}
-                  </TableCell>
-                )}
-
-                <TableCell
-                  className={cn(
-                    "max-w-[200px]",
-                    !isLatestOfType && "opacity-50",
-                  )}
-                >
-                  <FeedbackValue
-                    feedback={item}
-                    metric={metrics[getMetricName(item)]}
+        return (
+          <div
+            key={`${item.id}-${index}`}
+            data-testid={`feedback-card-${item.id}`}
+            className={cn(
+              "rounded-lg border p-4",
+              !isLatestOfType && anyOverwrites && "opacity-60",
+            )}
+          >
+            {/* Top row: metric name + badges + overwrite status + time */}
+            <div className="mb-2 flex items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <span className="break-all font-mono text-sm">
+                  {getMetricName(item)}
+                </span>
+                {metrics[getMetricName(item)] && (
+                  <FeedbackBadges
+                    metric={metrics[getMetricName(item)]!}
+                    row={item}
                   />
-                </TableCell>
+                )}
+                {anyOverwrites &&
+                  (isLatestOfType ? (
+                    <Badge variant="secondary">Latest</Badge>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="border-red-400 text-red-400"
+                    >
+                      Overwritten
+                    </Badge>
+                  ))}
+              </div>
+              <div className="text-fg-tertiary shrink-0 text-xs">
+                <TableItemTime timestamp={item.timestamp} />
+              </div>
+            </div>
 
-                <TableCell className={cn(!isLatestOfType && "opacity-50")}>
-                  <TagsBadges tags={item.tags} />
-                </TableCell>
+            {/* Middle row: ID + value */}
+            <div className="flex items-center gap-x-5 text-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="text-fg-secondary text-sm">ID</span>
+                <TableItemShortUuid id={item.id} />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-fg-secondary text-sm">Value</span>
+                <FeedbackValue
+                  feedback={item}
+                  metric={metrics[getMetricName(item)]}
+                />
+              </div>
+            </div>
 
-                <TableCell>
-                  <TableItemTime timestamp={item.timestamp} />
-                </TableCell>
-              </TableRow>
-            );
-          })
-        )}
-      </TableBody>
-    </Table>
+            {/* Bottom row: tags */}
+            {Object.keys(item.tags).length > 0 && (
+              <div className="mt-3">
+                <TagsBadges tags={item.tags} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
