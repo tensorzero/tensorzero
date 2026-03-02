@@ -9,15 +9,21 @@ import type { ResolvedObject } from "~/types/tensorzero";
 // Observability - Functions
 // ============================================================================
 
-export function toFunctionUrl(functionName: string): string {
-  return `/observability/functions/${encodeURIComponent(functionName)}`;
+export function toFunctionUrl(
+  functionName: string,
+  snapshotHash?: string | null,
+): string {
+  const base = `/observability/functions/${encodeURIComponent(functionName)}`;
+  return appendSnapshotHash(base, snapshotHash);
 }
 
 export function toVariantUrl(
   functionName: string,
   variantName: string,
+  snapshotHash?: string | null,
 ): string {
-  return `/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variantName)}`;
+  const base = `/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variantName)}`;
+  return appendSnapshotHash(base, snapshotHash);
 }
 
 // ============================================================================
@@ -129,6 +135,16 @@ export function toResolvedObjectUrl(
       return _exhaustiveCheck;
     }
   }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function appendSnapshotHash(url: string, snapshotHash?: string | null): string {
+  if (!snapshotHash) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}snapshot_hash=${encodeURIComponent(snapshotHash)}`;
 }
 
 // ============================================================================

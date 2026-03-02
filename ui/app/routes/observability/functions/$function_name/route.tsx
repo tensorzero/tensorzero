@@ -2,10 +2,14 @@ import type { Route } from "./+types/route";
 import { data, useLocation } from "react-router";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { SnapshotHashProvider } from "~/context/snapshot";
+import {
+  getConfig,
+  getConfigForSnapshot,
+  getFunctionConfig,
+} from "~/utils/config/index.server";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
-import { useFunctionConfig } from "~/context/config";
 import {
   PageHeader,
   PageLayout,
@@ -65,7 +69,10 @@ function FunctionDetailPageHeader({
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
-  const config = await getConfig();
+  const snapshotHash = url.searchParams.get("snapshot_hash");
+  const config = snapshotHash
+    ? await getConfigForSnapshot(snapshotHash)
+    : await getConfig();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;
@@ -91,6 +98,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     function_name,
+    function_config,
+    snapshotHash,
     variantsData: fetchVariantsSectionData({ function_name, function_config }),
     experimentationData:
       function_name !== DEFAULT_FUNCTION
@@ -125,6 +134,8 @@ export default function FunctionDetailPage({
 }: Route.ComponentProps) {
   const {
     function_name,
+    function_config,
+    snapshotHash,
     variantsData,
     experimentationData,
     throughputData,
@@ -133,53 +144,53 @@ export default function FunctionDetailPage({
     inferencesData,
   } = loaderData;
   const location = useLocation();
-  const function_config = useFunctionConfig(function_name);
-
-  if (!function_config) {
-    throw data(`Function ${function_name} not found`, { status: 404 });
-  }
 
   return (
-    <PageLayout>
-      <FunctionDetailPageHeader
-        functionName={function_name}
-        functionConfig={function_config}
-      />
-
-      <SectionsGroup>
-        <VariantsSection
-          variantsData={variantsData}
+    <SnapshotHashProvider value={snapshotHash}>
+      <PageLayout>
+        <FunctionDetailPageHeader
           functionName={function_name}
-          locationKey={location.key}
+          functionConfig={function_config}
         />
 
-        {experimentationData && (
-          <ExperimentationSection
-            experimentationData={experimentationData}
-            functionConfig={function_config}
+        <SectionsGroup>
+          <VariantsSection
+            variantsData={variantsData}
             functionName={function_name}
             locationKey={location.key}
           />
-        )}
 
-        <ThroughputSection
-          throughputData={throughputData}
-          locationKey={location.key}
-        />
+          {experimentationData && (
+            <ExperimentationSection
+              experimentationData={experimentationData}
+              functionConfig={function_config}
+              functionName={function_name}
+              locationKey={location.key}
+            />
+          )}
 
-        <MetricsSection metricsData={metricsData} locationKey={location.key} />
+          <ThroughputSection
+            throughputData={throughputData}
+            locationKey={location.key}
+          />
 
-        <SectionLayout>
-          <SectionHeader heading="Schemas" />
-          <FunctionSchema functionConfig={function_config} />
-        </SectionLayout>
+          <MetricsSection
+            metricsData={metricsData}
+            locationKey={location.key}
+          />
 
-        <InferencesSection
-          inferencesData={inferencesData}
-          countPromise={inferenceCountPromise}
-          locationKey={location.key}
-        />
-      </SectionsGroup>
-    </PageLayout>
+          <SectionLayout>
+            <SectionHeader heading="Schemas" />
+            <FunctionSchema functionConfig={function_config} />
+          </SectionLayout>
+
+          <InferencesSection
+            inferencesData={inferencesData}
+            countPromise={inferenceCountPromise}
+            locationKey={location.key}
+          />
+        </SectionsGroup>
+      </PageLayout>
+    </SnapshotHashProvider>
   );
 }

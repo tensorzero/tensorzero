@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { SnapshotHashProvider } from "~/context/snapshot";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfigForSnapshot } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
@@ -98,6 +99,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     inference,
+    snapshotHash: inference.snapshot_hash ?? null,
     variantType,
     newFeedbackId,
     modelInferences: fetchModelInferences(inference_id),
@@ -116,6 +118,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
+    snapshotHash,
     variantType,
     newFeedbackId,
     modelInferences,
@@ -164,100 +167,102 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   );
 
   return (
-    <PageLayout>
-      <PageHeader
-        eyebrow={
-          <Breadcrumbs
-            segments={[
-              { label: "Inferences", href: "/observability/inferences" },
-            ]}
+    <SnapshotHashProvider value={snapshotHash}>
+      <PageLayout>
+        <PageHeader
+          eyebrow={
+            <Breadcrumbs
+              segments={[
+                { label: "Inferences", href: "/observability/inferences" },
+              ]}
+            />
+          }
+          name={inference.inference_id}
+        >
+          <BasicInfoStreaming
+            inference={inference}
+            variantType={variantType}
+            promise={modelInferences}
+            locationKey={location.key}
           />
-        }
-        name={inference.inference_id}
-      >
-        <BasicInfoStreaming
-          inference={inference}
-          variantType={variantType}
-          promise={modelInferences}
-          locationKey={location.key}
-        />
-        <InferenceActionBar
-          inference={inference}
-          usedVariantsPromise={usedVariants}
-          hasDemonstrationPromise={hasDemonstration}
-          inputPromise={input}
-          modelInferencesPromise={modelInferences}
-          onFeedbackAdded={handleFeedbackAdded}
-          locationKey={location.key}
-        />
-      </PageHeader>
+          <InferenceActionBar
+            inference={inference}
+            usedVariantsPromise={usedVariants}
+            hasDemonstrationPromise={hasDemonstration}
+            inputPromise={input}
+            modelInferencesPromise={modelInferences}
+            onFeedbackAdded={handleFeedbackAdded}
+            locationKey={location.key}
+          />
+        </PageHeader>
 
-      <SectionsGroup>
-        <InputSection promise={input} locationKey={location.key} />
+        <SectionsGroup>
+          <InputSection promise={input} locationKey={location.key} />
 
-        <SectionLayout>
-          <SectionHeader heading="Output" />
-          {inference.type === "json" ? (
-            <JsonOutputElement
-              output={inference.output}
-              outputSchema={inference.output_schema}
-            />
-          ) : (
-            <ChatOutputElement output={inference.output} />
-          )}
-        </SectionLayout>
-
-        <FeedbackSection
-          promise={feedbackData}
-          locationKey={location.key}
-          count={feedbackCount}
-          onCountUpdate={setFeedbackCount}
-        />
-
-        <SectionLayout>
-          <SectionHeader heading="Inference Parameters" />
-          {inference.inference_params ? (
-            <ParameterCard
-              parameters={JSON.stringify(inference.inference_params, null, 2)}
-            />
-          ) : (
-            <div className="text-fg-muted flex items-center justify-center py-12 text-sm">
-              Parameters missing
-            </div>
-          )}
-        </SectionLayout>
-
-        {inference.type === "chat" && (
           <SectionLayout>
-            <SectionHeader heading="Tool Parameters" />
-            <ToolParametersSection
-              allowed_tools={inference.allowed_tools}
-              additional_tools={inference.additional_tools}
-              tool_choice={inference.tool_choice}
-              parallel_tool_calls={inference.parallel_tool_calls}
-              provider_tools={inference.provider_tools}
+            <SectionHeader heading="Output" />
+            {inference.type === "json" ? (
+              <JsonOutputElement
+                output={inference.output}
+                outputSchema={inference.output_schema}
+              />
+            ) : (
+              <ChatOutputElement output={inference.output} />
+            )}
+          </SectionLayout>
+
+          <FeedbackSection
+            promise={feedbackData}
+            locationKey={location.key}
+            count={feedbackCount}
+            onCountUpdate={setFeedbackCount}
+          />
+
+          <SectionLayout>
+            <SectionHeader heading="Inference Parameters" />
+            {inference.inference_params ? (
+              <ParameterCard
+                parameters={JSON.stringify(inference.inference_params, null, 2)}
+              />
+            ) : (
+              <div className="text-fg-muted flex items-center justify-center py-12 text-sm">
+                Parameters missing
+              </div>
+            )}
+          </SectionLayout>
+
+          {inference.type === "chat" && (
+            <SectionLayout>
+              <SectionHeader heading="Tool Parameters" />
+              <ToolParametersSection
+                allowed_tools={inference.allowed_tools}
+                additional_tools={inference.additional_tools}
+                tool_choice={inference.tool_choice}
+                parallel_tool_calls={inference.parallel_tool_calls}
+                provider_tools={inference.provider_tools}
+              />
+            </SectionLayout>
+          )}
+
+          <SectionLayout>
+            <SectionHeader heading="Tags" />
+            <TagsTable
+              tags={Object.fromEntries(
+                Object.entries(inference.tags).filter(
+                  (entry): entry is [string, string] => entry[1] !== undefined,
+                ),
+              )}
+              isEditing={false}
             />
           </SectionLayout>
-        )}
 
-        <SectionLayout>
-          <SectionHeader heading="Tags" />
-          <TagsTable
-            tags={Object.fromEntries(
-              Object.entries(inference.tags).filter(
-                (entry): entry is [string, string] => entry[1] !== undefined,
-              ),
-            )}
-            isEditing={false}
+          <ModelInferencesSection
+            promise={modelInferences}
+            locationKey={location.key}
           />
-        </SectionLayout>
-
-        <ModelInferencesSection
-          promise={modelInferences}
-          locationKey={location.key}
-        />
-      </SectionsGroup>
-    </PageLayout>
+        </SectionsGroup>
+      </PageLayout>
+    </SnapshotHashProvider>
   );
 }
 
