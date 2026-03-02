@@ -43,7 +43,10 @@ export function CopyMessagesButton({ input, output }: CopyMessagesButtonProps) {
           Copy Messages
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
+      <DropdownMenuContent
+        align="start"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <DropdownMenuItem onClick={handleCopyJson}>
           <BracesIcon />
           JSON
