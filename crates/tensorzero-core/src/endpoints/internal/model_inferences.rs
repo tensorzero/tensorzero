@@ -15,6 +15,7 @@ use crate::utils::gateway::{AppState, AppStateData};
 
 /// Response containing model inferences
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetModelInferencesResponse {
@@ -24,6 +25,7 @@ pub struct GetModelInferencesResponse {
 // NOTE(shuyangli): Internal-only until we sort out `input_messages` types.
 /// Wire type for a single ModelInference (raw request and response sent to a model).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ModelInference {
@@ -66,6 +68,7 @@ pub struct ModelInference {
     pub ttft_ms: Option<u32>,
 
     /// Timestamp of the inference.
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
 
     /// System prompt used for the inference.
@@ -87,10 +90,23 @@ pub struct ModelInference {
     /// Cost of the inference.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | undefined"))]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<f64>))]
     pub cost: Option<Decimal>,
 }
 
 /// HTTP handler for getting model inferences by inference ID
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/model_inferences/{inference_id}",
+    params(
+        ("inference_id" = String, Path, description = "The inference ID"),
+    ),
+    responses(
+        (status = 200, description = "Model inferences for inference", body = GetModelInferencesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_model_inferences_handler",

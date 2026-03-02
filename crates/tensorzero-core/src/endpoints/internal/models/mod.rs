@@ -20,6 +20,15 @@ use crate::utils::gateway::{AppState, AppStateData};
 /// Handler for `GET /internal/models/count`
 ///
 /// Returns the count of distinct models that have been used.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/models/count",
+    responses(
+        (status = 200, description = "Model count", body = CountModelsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "models.count", skip_all)]
 pub async fn count_models_handler(
@@ -35,6 +44,15 @@ pub async fn count_models_handler(
 /// Handler for `GET /internal/models/usage`
 ///
 /// Returns model usage timeseries data (tokens, counts over time).
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/models/usage",
+    responses(
+        (status = 200, description = "Model usage timeseries", body = GetModelUsageResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "models.usage", skip_all)]
 pub async fn get_model_usage_handler(
@@ -53,6 +71,15 @@ pub async fn get_model_usage_handler(
 /// Handler for `GET /internal/models/latency`
 ///
 /// Returns model latency quantile distributions.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/models/latency",
+    responses(
+        (status = 200, description = "Model latency quantiles", body = GetModelLatencyResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "models.latency", skip_all)]
 pub async fn get_model_latency_handler(

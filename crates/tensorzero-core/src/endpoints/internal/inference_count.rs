@@ -20,6 +20,7 @@ use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the inference count endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct InferenceCountQueryParams {
     /// Optional variant name to filter by
@@ -30,6 +31,7 @@ pub struct InferenceCountQueryParams {
 
 /// Grouping options for inference count
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
@@ -40,6 +42,7 @@ pub enum InferenceCountGroupBy {
 
 /// Response containing inference count
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct InferenceCountResponse {
@@ -52,6 +55,7 @@ pub struct InferenceCountResponse {
 
 /// Inference count for a variant
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceCountByVariant {
@@ -74,6 +78,7 @@ impl From<CountByVariant> for InferenceCountByVariant {
 }
 
 /// Query parameters for the feedback stats endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct InferenceWithFeedbackCountQueryParams {
     /// Optional threshold for curated inference filtering (float metrics only)
@@ -83,6 +88,7 @@ pub struct InferenceWithFeedbackCountQueryParams {
 
 /// Response containing inference count with feedback count
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceWithFeedbackCountResponse {
@@ -93,6 +99,7 @@ pub struct InferenceWithFeedbackCountResponse {
 }
 
 /// Query parameters for the function throughput by variant endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct FunctionThroughputByVariantQueryParams {
     /// Time granularity for grouping throughput data
@@ -108,6 +115,7 @@ fn default_max_periods() -> u32 {
 
 /// Response containing function throughput data grouped by variant and time period
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetFunctionThroughputByVariantResponse {
@@ -117,6 +125,7 @@ pub struct GetFunctionThroughputByVariantResponse {
 
 /// Response containing all functions with their inference counts
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListFunctionsWithInferenceCountResponse {
@@ -125,6 +134,18 @@ pub struct ListFunctionsWithInferenceCountResponse {
 }
 
 /// HTTP handler for the inference count endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/inference_count",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+    ),
+    responses(
+        (status = 200, description = "Inference count", body = InferenceCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_inference_count_handler",
@@ -145,6 +166,19 @@ pub async fn get_inference_count_handler(
 }
 
 /// HTTP handler for the feedback stats endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/inference_count/{metric_name}",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+        ("metric_name" = String, Path, description = "The metric name"),
+    ),
+    responses(
+        (status = 200, description = "Inference and feedback counts", body = InferenceWithFeedbackCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_inference_with_feedback_count_handler",
@@ -288,6 +322,18 @@ async fn get_inference_with_feedback_count(
 }
 
 /// HTTP handler for the function throughput by variant endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/throughput_by_variant",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+    ),
+    responses(
+        (status = 200, description = "Function throughput by variant", body = GetFunctionThroughputByVariantResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_function_throughput_by_variant_handler",
@@ -331,6 +377,15 @@ pub async fn get_function_throughput_by_variant(
 }
 
 /// HTTP handler for listing all functions with their inference counts
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/inference_counts",
+    responses(
+        (status = 200, description = "Functions with inference counts", body = ListFunctionsWithInferenceCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(name = "list_functions_with_inference_count_handler", skip_all)]
 pub async fn list_functions_with_inference_count_handler(

@@ -30,7 +30,6 @@ use tensorzero_core::utils::gateway;
 
 mod cli;
 mod router;
-mod routes;
 
 use cli::GatewayArgs;
 

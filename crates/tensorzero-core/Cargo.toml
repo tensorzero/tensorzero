@@ -19,6 +19,11 @@ ts-bindings = [
     "autopilot-client/ts-bindings",
     "tensorzero-auth/ts-bindings",
 ]
+openapi = [
+    "dep:utoipa",
+    "tensorzero-types/openapi",
+    "autopilot-client/openapi",
+]
 
 [[test]]
 name = "e2e"
@@ -118,6 +123,7 @@ walkdir = { workspace = true }
 enum-map = "2.7.3"
 tokio-util = { workspace = true }
 ts-rs = { workspace = true, optional = true }
+utoipa = { workspace = true, optional = true }
 moka = { workspace = true }
 tonic = { version = "0.14.5", default-features = false }
 sqlx = { workspace = true }

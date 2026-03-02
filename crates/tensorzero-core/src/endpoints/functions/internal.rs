@@ -16,6 +16,7 @@ use crate::function::get_function;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the metrics endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct MetricsQueryParams {
     /// Optional variant name to filter by
@@ -23,6 +24,7 @@ pub struct MetricsQueryParams {
 }
 
 /// Response containing metrics with feedback statistics
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -32,6 +34,18 @@ pub struct MetricsWithFeedbackResponse {
 }
 
 /// HTTP handler for getting metrics with feedback for a function
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/metrics",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+    ),
+    responses(
+        (status = 200, description = "Metrics with feedback statistics", body = MetricsWithFeedbackResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_function_metrics_handler",
@@ -93,6 +107,7 @@ pub async fn get_function_metrics(
 }
 
 /// Query parameters for the variant performances endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct VariantPerformancesQueryParams {
     /// The metric name to compute performance for
@@ -104,6 +119,7 @@ pub struct VariantPerformancesQueryParams {
 }
 
 /// Response containing variant performance statistics
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -113,6 +129,18 @@ pub struct VariantPerformancesResponse {
 }
 
 /// HTTP handler for getting variant performance statistics for a function and metric
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/variant_performances",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+    ),
+    responses(
+        (status = 200, description = "Variant performance statistics", body = VariantPerformancesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_variant_performances_handler",

@@ -4,6 +4,7 @@
     "format:check": "oxfmt --check \"**/*.{md,mdx,yaml,yml,json}\"",
     "build-bindings": "pnpm --filter=tensorzero-node build-bindings",
     "generate-python-schemas": "cd crates/tensorzero-python && uv run --no-project generate_schema_types.py",
+    "generate-openapi-spec": "cargo run --manifest-path crates/Cargo.toml --package generate-openapi-spec > openapi.json",
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
     "ui:storybook": "pnpm --filter=tensorzero-ui storybook",
     "ui:test": "pnpm --filter=tensorzero-ui test",

@@ -42,6 +42,7 @@ pub struct ProviderInferenceResponseChunk {
     pub finish_reason: Option<FinishReason>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -52,12 +53,14 @@ pub enum ContentBlockChunk {
     Unknown(UnknownChunk),
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TextChunk {
     pub id: String,
     pub text: String,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThoughtChunk {
     pub id: String,
@@ -79,6 +82,7 @@ pub struct ThoughtChunk {
     pub extra_data: Option<Value>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UnknownChunk {
     pub id: String,

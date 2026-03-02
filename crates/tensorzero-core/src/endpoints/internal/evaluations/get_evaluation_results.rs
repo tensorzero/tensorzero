@@ -14,6 +14,7 @@ use crate::function::FunctionConfigType;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting evaluation results.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetEvaluationResultsParams {
     /// The name of the evaluation (e.g., "haiku", "entity_extraction")
@@ -29,6 +30,7 @@ pub struct GetEvaluationResultsParams {
 }
 
 /// Response containing paginated evaluation results.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -39,6 +41,15 @@ pub struct GetEvaluationResultsResponse {
 /// Handler for `GET /internal/evaluations/results`
 ///
 /// Returns paginated evaluation results across one or more evaluation runs.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/evaluations/results",
+    responses(
+        (status = 200, description = "Evaluation results", body = GetEvaluationResultsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "evaluations.get_results", skip_all)]
 pub async fn get_evaluation_results_handler(

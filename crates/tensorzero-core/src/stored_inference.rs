@@ -72,14 +72,17 @@ pub struct SimpleStoredSampleInfo {
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StoredInference {
     #[schemars(title = "StoredInferenceChat")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInferenceChat"))]
     Chat(StoredChatInference),
     #[schemars(title = "StoredInferenceJson")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInferenceJson"))]
     Json(StoredJsonInference),
 }
 
@@ -303,6 +306,7 @@ impl StoredInferenceDatabase {
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StoredChatInference {
@@ -317,6 +321,7 @@ pub struct StoredChatInference {
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     #[schemars(with = "String")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
@@ -408,6 +413,7 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StoredJsonInference {
@@ -422,6 +428,7 @@ pub struct StoredJsonInference {
     #[serde(default)]
     pub dispreferred_outputs: Vec<JsonInferenceOutput>,
     #[schemars(with = "String")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,

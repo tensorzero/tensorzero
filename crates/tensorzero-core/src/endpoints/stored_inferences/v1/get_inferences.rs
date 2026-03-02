@@ -12,6 +12,16 @@ use super::types::{GetInferencesRequest, GetInferencesResponse, ListInferencesRe
 
 /// Handler for the POST `/v1/inferences/get_inferences` endpoint.
 /// Retrieves specific inferences by their IDs.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/inferences/get_inferences",
+    request_body = inline(GetInferencesRequest),
+    responses(
+        (status = 200, description = "Retrieved inferences", body = GetInferencesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Observability"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "inferences.v1.get_inferences", skip(app_state, request))]
 pub async fn get_inferences_handler(
@@ -61,6 +71,16 @@ pub async fn get_inferences(
 
 /// Handler for the POST `/v1/inferences/list_inferences` endpoint.
 /// Lists inferences with optional filtering, pagination, and sorting.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/inferences/list_inferences",
+    request_body = inline(ListInferencesRequest),
+    responses(
+        (status = 200, description = "List of inferences", body = GetInferencesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Observability"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "inferences.v1.list_inferences", skip(app_state, request))]
 pub async fn list_inferences_handler(

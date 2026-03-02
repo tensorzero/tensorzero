@@ -10,6 +10,7 @@ use crate::db::feedback::{FeedbackQueries, FeedbackRow};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetFeedbackByTargetIdParams {
     pub before: Option<Uuid>,
@@ -17,6 +18,7 @@ pub struct GetFeedbackByTargetIdParams {
     pub limit: Option<u32>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -25,6 +27,18 @@ pub struct GetFeedbackByTargetIdResponse {
 }
 
 /// HTTP handler for getting feedback by target ID
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/feedback/{target_id}",
+    params(
+        ("target_id" = String, Path, description = "The target ID (inference or episode)"),
+    ),
+    responses(
+        (status = 200, description = "Feedback for target", body = GetFeedbackByTargetIdResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_feedback_by_target_id_handler",

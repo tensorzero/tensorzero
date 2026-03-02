@@ -14,6 +14,7 @@ use crate::utils::gateway::{AppState, AppStateData};
 
 /// Request to count inferences matching the given parameters.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct CountInferencesRequest {
@@ -40,6 +41,7 @@ pub struct CountInferencesRequest {
 
 /// Response containing the count of matching inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CountInferencesResponse {
@@ -84,6 +86,16 @@ pub async fn count_inferences(
 }
 
 /// HTTP handler for the count inferences endpoint.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/inferences/count",
+    request_body = inline(CountInferencesRequest),
+    responses(
+        (status = 200, description = "Inference count", body = CountInferencesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "count_inferences_handler",

@@ -29,7 +29,7 @@ pub fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) 
         ),
         (
             "/batch_inference/{batch_id}/inference/{inference_id}",
-            get(endpoints::batch_inference::poll_batch_inference_handler),
+            get(endpoints::batch_inference::poll_batch_inference_by_inference_handler),
         ),
         ("/feedback", post(endpoints::feedback::feedback_handler)),
     ];

@@ -14,6 +14,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for listing workflow evaluation run episodes by task name.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct ListWorkflowEvaluationRunEpisodesByTaskNameParams {
     /// Comma-separated list of run IDs to filter episodes by.
@@ -29,6 +30,15 @@ const DEFAULT_OFFSET: u32 = 0;
 ///
 /// Returns a list of workflow evaluation run episodes grouped by task_name.
 /// Episodes with NULL task_name are grouped individually.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/workflow_evaluations/episodes_by_task_name",
+    responses(
+        (status = 200, description = "Episodes grouped by task name", body = ListWorkflowEvaluationRunEpisodesByTaskNameResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "workflow_evaluations.list_episodes_by_task_name", skip_all)]
 pub async fn list_workflow_evaluation_run_episodes_by_task_name_handler(

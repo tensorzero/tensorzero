@@ -1697,6 +1697,7 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(untagged, rename_all = "snake_case")]
@@ -1706,6 +1707,7 @@ pub enum InferenceResponse {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ChatInferenceResponse {
@@ -1729,6 +1731,7 @@ pub struct ChatInferenceResponse {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct JsonInferenceResponse {
@@ -1912,6 +1915,7 @@ impl InferenceResponse {
     }
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum InferenceResponseChunk {
@@ -1919,6 +1923,7 @@ pub enum InferenceResponseChunk {
     Json(JsonInferenceResponseChunk),
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatInferenceResponseChunk {
     pub inference_id: Uuid,
@@ -1944,6 +1949,7 @@ pub struct ChatInferenceResponseChunk {
     pub aggregated_response: Option<Vec<ContentBlockChatOutput>>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsonInferenceResponseChunk {
     pub inference_id: Uuid,
@@ -2170,6 +2176,7 @@ pub struct InferenceModels {
 
 /// InferenceParams is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -2178,6 +2185,7 @@ pub struct InferenceParams {
     pub chat_completion: ChatCompletionInferenceParams,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

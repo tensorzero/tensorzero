@@ -53,6 +53,7 @@ impl DatapointKind {
 /// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -61,8 +62,10 @@ impl DatapointKind {
 #[export_schema]
 pub enum Datapoint {
     #[schemars(title = "DatapointChat")]
+    #[cfg_attr(feature = "openapi", schema(title = "DatapointChat"))]
     Chat(ChatInferenceDatapoint),
     #[schemars(title = "DatapointJson")]
+    #[cfg_attr(feature = "openapi", schema(title = "DatapointJson"))]
     Json(JsonInferenceDatapoint),
 }
 
@@ -396,6 +399,7 @@ impl Datapoint {
 /// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -448,6 +452,7 @@ impl std::fmt::Display for ChatInferenceDatapoint {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]

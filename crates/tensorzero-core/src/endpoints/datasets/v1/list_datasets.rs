@@ -10,6 +10,15 @@ use super::types::{DatasetMetadata, ListDatasetsRequest, ListDatasetsResponse};
 
 /// Handler for the GET `/internal/datasets` endpoint.
 /// Returns metadata for all datasets with optional filtering and pagination.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/datasets",
+    responses(
+        (status = 200, description = "List of datasets", body = ListDatasetsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "datasets.v1.list_datasets", skip(app_state, params))]
 pub async fn list_datasets_handler(

@@ -10,6 +10,7 @@ use crate::db::feedback::{FeedbackBounds, FeedbackBoundsByType, FeedbackQueries}
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -32,6 +33,18 @@ impl From<FeedbackBounds> for GetFeedbackBoundsResponse {
 }
 
 /// HTTP handler for getting feedback bounds by target ID
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/feedback/{target_id}/bounds",
+    params(
+        ("target_id" = String, Path, description = "The target ID"),
+    ),
+    responses(
+        (status = 200, description = "Feedback bounds for target", body = GetFeedbackBoundsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_feedback_bounds_by_target_id_handler",

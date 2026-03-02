@@ -6,6 +6,7 @@ use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
 
 /// Response containing the count of distinct models used.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CountModelsResponse {
@@ -14,6 +15,7 @@ pub struct CountModelsResponse {
 }
 
 /// Query parameters for the model usage timeseries endpoint.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetModelUsageQueryParams {
     /// The time window granularity for grouping data.
@@ -24,6 +26,7 @@ pub struct GetModelUsageQueryParams {
 
 /// Response containing model usage timeseries data.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetModelUsageResponse {
@@ -32,6 +35,7 @@ pub struct GetModelUsageResponse {
 }
 
 /// Query parameters for the model latency quantiles endpoint.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetModelLatencyQueryParams {
     /// The time window for aggregating latency data.
@@ -40,6 +44,7 @@ pub struct GetModelLatencyQueryParams {
 
 /// Response containing model latency quantile data.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetModelLatencyResponse {

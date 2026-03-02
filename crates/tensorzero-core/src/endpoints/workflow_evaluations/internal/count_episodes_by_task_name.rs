@@ -12,6 +12,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for counting workflow evaluation run episode groups.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct CountWorkflowEvaluationRunEpisodesByTaskNameParams {
     /// Comma-separated list of run IDs to filter episodes by.
@@ -21,6 +22,15 @@ pub struct CountWorkflowEvaluationRunEpisodesByTaskNameParams {
 /// Handler for `GET /internal/workflow_evaluations/episodes_by_task_name/count`
 ///
 /// Returns the count of distinct episode groups (by task_name) for the given run IDs.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/workflow_evaluations/episodes_by_task_name/count",
+    responses(
+        (status = 200, description = "Episode groups count", body = CountWorkflowEvaluationRunEpisodesByTaskNameResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "workflow_evaluations.count_episodes_by_task_name", skip_all)]
 pub async fn count_workflow_evaluation_run_episodes_handler(

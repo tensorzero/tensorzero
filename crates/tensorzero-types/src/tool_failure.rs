@@ -9,6 +9,7 @@ use thiserror::Error;
 /// plus a `User` variant for tool-specific errors. Tool implementations should
 /// define their own error types and convert them to `NonControlToolError::User`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Error, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "kind")]
 #[serde(rename_all = "snake_case")]
@@ -98,6 +99,7 @@ pub enum NonControlToolError {
 
 /// The type written in `ToolOutcome::Failure` for tool errors.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, TensorZeroDeserialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "kind")]

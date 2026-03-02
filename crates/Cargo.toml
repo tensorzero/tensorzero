@@ -28,6 +28,7 @@ members = [
     "tensorzero-types",
     "tensorzero-types-providers",
     "tensorzero-unsafe-helpers",
+    "generate-openapi-spec",
 ]
 resolver = "2"
 
@@ -137,6 +138,8 @@ walkdir = "2.5.0"
 tempfile = "3.26.0"
 toml_edit = "0.25"
 googletest = "0.14.2"
+utoipa = { version = "5.4", features = ["uuid", "chrono", "url", "decimal_float", "preserve_order"] }
+utoipa-axum = "0.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

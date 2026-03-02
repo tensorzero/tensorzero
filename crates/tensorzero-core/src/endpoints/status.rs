@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 pub const TENSORZERO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StatusResponse {
@@ -21,6 +22,14 @@ pub struct StatusResponse {
 }
 
 /// A handler for a simple liveness check
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/status",
+    responses(
+        (status = 200, description = "Gateway status", body = StatusResponse),
+    ),
+    tag = "Status"
+))]
 #[expect(clippy::unused_async)]
 pub async fn status_handler(State(app_state): AppState) -> Json<StatusResponse> {
     Json(StatusResponse {
@@ -31,6 +40,14 @@ pub async fn status_handler(State(app_state): AppState) -> Json<StatusResponse> 
 }
 
 /// A handler for a health check that includes availability of related services
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = 200, description = "Health check"),
+    ),
+    tag = "Status"
+))]
 pub async fn health_handler(
     State(AppStateData {
         clickhouse_connection_info,

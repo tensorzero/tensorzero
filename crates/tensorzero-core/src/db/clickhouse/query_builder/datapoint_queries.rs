@@ -9,6 +9,8 @@ use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 /// Filter tree for querying datapoints.
 /// This is similar to `InferenceFilter` but without metric filters, as datapoints don't have associated metrics.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(no_recursion))]
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -17,22 +19,27 @@ use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 pub enum DatapointFilter {
     /// Filter by tag key-value pair
     #[schemars(title = "TagDatapointFilter")]
+    #[cfg_attr(feature = "openapi", schema(title = "TagDatapointFilter"))]
     Tag(TagFilter),
 
     /// Filter by datapoint update time
     #[schemars(title = "TimeDatapointFilter")]
+    #[cfg_attr(feature = "openapi", schema(title = "TimeDatapointFilter"))]
     Time(TimeFilter),
 
     /// Logical AND of multiple filters
     #[schemars(title = "AndDatapointFilter")]
+    #[cfg_attr(feature = "openapi", schema(title = "AndDatapointFilter"))]
     And { children: Vec<DatapointFilter> },
 
     /// Logical OR of multiple filters
     #[schemars(title = "OrDatapointFilter")]
+    #[cfg_attr(feature = "openapi", schema(title = "OrDatapointFilter"))]
     Or { children: Vec<DatapointFilter> },
 
     /// Logical NOT of a filter
     #[schemars(title = "NotDatapointFilter")]
+    #[cfg_attr(feature = "openapi", schema(title = "NotDatapointFilter"))]
     Not { child: Box<DatapointFilter> },
 }
 

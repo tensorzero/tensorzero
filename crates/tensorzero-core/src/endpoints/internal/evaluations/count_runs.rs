@@ -12,6 +12,15 @@ use crate::utils::gateway::{AppState, AppStateData};
 /// Handler for `GET /internal/evaluations/runs/count`
 ///
 /// Returns the total count of unique evaluation runs across all functions.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/evaluations/runs/count",
+    responses(
+        (status = 200, description = "Evaluation runs count", body = EvaluationRunStatsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "evaluations.count_evaluation_runs", skip_all)]
 pub async fn count_evaluation_runs_handler(

@@ -35,6 +35,7 @@ use pyo3::prelude::*;
 ///
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -99,6 +100,7 @@ impl StoredInput {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -241,6 +243,7 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -248,21 +251,29 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 #[export_schema]
 pub enum StoredInputMessageContent {
     #[schemars(title = "StoredInputMessageContentText")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentText"))]
     Text(Text),
     #[schemars(title = "StoredInputMessageContentTemplate")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentTemplate"))]
     Template(Template),
     #[schemars(title = "StoredInputMessageContentToolCall")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentToolCall"))]
     ToolCall(ToolCall),
     #[schemars(title = "StoredInputMessageContentToolResult")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentToolResult"))]
     ToolResult(ToolResult),
     #[schemars(title = "StoredInputMessageContentRawText")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentRawText"))]
     RawText(RawText),
     #[schemars(title = "StoredInputMessageContentThought")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentThought"))]
     Thought(Thought),
     #[serde(alias = "image")]
     #[schemars(title = "StoredInputMessageContentFile", with = "ObjectStoragePointer")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentFile"))]
     File(Box<StoredFile>),
     #[schemars(title = "StoredInputMessageContentUnknown")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentUnknown"))]
     Unknown(Unknown),
 }
 
@@ -337,6 +348,7 @@ impl StoredInputMessageContent {
 /// A newtype wrapper around `ObjectStoragePointer` that handles legacy deserialization formats.
 /// See the deserializer implementation below for details on the legacy formats it supports.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -502,6 +514,7 @@ impl StoredInput {
 /// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
 /// of `ResolvedInput/StoredInput`
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StoredRequestMessage {

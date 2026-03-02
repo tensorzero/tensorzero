@@ -18,11 +18,13 @@ use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 /// Response containing a config snapshot.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetConfigResponse {
     /// The config as a JSON value.
     /// Important: This should not be a strongly typed UninitializedConfig.
     /// Nothing outside of the gateway should attempt to deserialize it into UninitializedConfig.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub config: Value,
     /// The hash identifying this config version.
     pub hash: String,
@@ -57,6 +59,15 @@ impl GetConfigResponse {
 /// Handler for `GET /internal/config`
 ///
 /// Returns the live config snapshot.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/config",
+    responses(
+        (status = 200, description = "Live config snapshot", body = GetConfigResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "config.get_live", skip_all)]
 pub async fn get_live_config_handler(
@@ -72,6 +83,18 @@ pub async fn get_live_config_handler(
 /// Handler for `GET /internal/config/{hash}`
 ///
 /// Returns a config snapshot by hash.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/config/{hash}",
+    params(
+        ("hash" = String, Path, description = "Config snapshot hash"),
+    ),
+    responses(
+        (status = 200, description = "Config snapshot by hash", body = GetConfigResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "config.get_by_hash", skip_all, fields(hash = %hash))]
 pub async fn get_config_by_hash_handler(
@@ -91,9 +114,11 @@ pub async fn get_config_by_hash_handler(
 }
 
 /// Request body for writing a config snapshot.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WriteConfigRequest {
     /// The config to write.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub config: UninitializedConfig,
     /// Templates that should be stored with the config.
     #[serde(default)]
@@ -106,6 +131,7 @@ pub struct WriteConfigRequest {
 
 /// Response from writing a config snapshot.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct WriteConfigResponse {
@@ -123,6 +149,16 @@ pub struct WriteConfigResponse {
 /// (with credential validation disabled) before writing. This catches
 /// issues like invalid model references, missing templates, and
 /// cross-reference errors that serde deserialization alone would miss.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/config",
+    request_body = inline(WriteConfigRequest),
+    responses(
+        (status = 200, description = "Config snapshot written", body = WriteConfigResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "config.write", skip_all)]
 pub async fn write_config_handler(

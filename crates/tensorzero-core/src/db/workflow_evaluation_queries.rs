@@ -240,6 +240,7 @@ pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
 /// A workflow evaluation run episode with feedback, including its group key.
 ///
 /// The group_key is either the task_name or a generated key for episodes with NULL task_name.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -249,6 +250,7 @@ pub struct GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow {
     /// The episode ID
     pub episode_id: Uuid,
     /// When the episode started (RFC 3339 format)
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
     /// The run ID this episode belongs to
     pub run_id: Uuid,

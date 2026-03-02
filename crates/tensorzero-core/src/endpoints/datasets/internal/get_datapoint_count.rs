@@ -10,6 +10,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the datapoint count endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetDatapointCountQueryParams {
     /// Optional function name to filter by
@@ -17,6 +18,7 @@ pub struct GetDatapointCountQueryParams {
 }
 
 /// Response containing datapoint counts
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -39,6 +41,18 @@ pub async fn get_datapoint_count(
 }
 
 /// HTTP handler for the datapoint count endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/datasets/{dataset_name}/datapoints/count",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    responses(
+        (status = 200, description = "Datapoint count", body = GetDatapointCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_datapoint_count_handler",

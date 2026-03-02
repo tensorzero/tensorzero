@@ -10,6 +10,15 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Handler for `GET /internal/workflow_evaluations/projects/count`
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/workflow_evaluations/projects/count",
+    responses(
+        (status = 200, description = "Workflow evaluation project count", body = GetWorkflowEvaluationProjectCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "workflow_evaluations.count_projects", skip_all)]
 pub async fn get_workflow_evaluation_project_count_handler(

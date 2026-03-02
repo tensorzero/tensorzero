@@ -272,6 +272,15 @@ fn create_evaluation_stream(
 /// Handler for `POST /internal/evaluations/run`
 ///
 /// Runs an evaluation and streams results via SSE.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/evaluations/run",
+    responses(
+        (status = 200, description = "SSE stream of evaluation results", content_type = "text/event-stream"),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 pub async fn run_evaluation_handler(
     State(app_state): AppState,
