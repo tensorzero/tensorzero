@@ -157,13 +157,15 @@ function TryWithVariantActionStreaming({
   );
 }
 
-function CopyMessagesButton({
-  inference,
-  inputPromise,
-}: {
-  inference: StoredInference;
+interface CopyMessagesButtonProps {
   inputPromise: Promise<Input | undefined>;
-}) {
+  inference: StoredInference;
+}
+
+function CopyMessagesButton({
+  inputPromise,
+  inference,
+}: CopyMessagesButtonProps) {
   const { copy, didCopy } = useCopy();
   const { toast } = useToast();
 
