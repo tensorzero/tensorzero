@@ -98,7 +98,7 @@ export default function EvaluationRunsTable({
             <TableHead>Dataset</TableHead>
             <TableHead>Function</TableHead>
             <TableHead>Variant</TableHead>
-            <TableHead>Last Updated</TableHead>
+            <TableHead>Created At</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

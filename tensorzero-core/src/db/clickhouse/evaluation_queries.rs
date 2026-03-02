@@ -290,14 +290,17 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             HAVING
                 argMax(evaluation_name, updated_at) = {{evaluation_name:String}}
                 {function_name_clause}
-                AND positionCaseInsensitive(
-                    if(
-                        length(argMax(variant_names, updated_at)) > 0,
-                        argMax(variant_names, updated_at)[1],
-                        ''
-                    ),
-                    {{query:String}}
-                ) > 0
+                AND (
+                    positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {{query:String}}) > 0
+                    OR positionCaseInsensitive(
+                        if(
+                            length(argMax(variant_names, updated_at)) > 0,
+                            argMax(variant_names, updated_at)[1],
+                            ''
+                        ),
+                        {{query:String}}
+                    ) > 0
+                )
             ORDER BY run_id_uint DESC
             LIMIT {{limit:UInt32}}
             OFFSET {{offset:UInt32}}
@@ -983,6 +986,7 @@ mod tests {
                 assert_query_contains(query, "HAVING");
                 assert_query_contains(query, "argMax(evaluation_name, updated_at) = {evaluation_name:String}");
                 assert_query_contains(query, "argMax(function_name, updated_at) = {function_name:String}");
+                assert_query_contains(query, "positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {query:String}) > 0");
                 assert_query_contains(query, "ORDER BY run_id_uint DESC");
                 assert_query_contains(
                     query,

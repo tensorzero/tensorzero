@@ -385,9 +385,12 @@ fn build_search_evaluation_runs_query(
     }
     qb.push(
         r"
-        AND COALESCE(variant_names->>0, '') ILIKE ",
+        AND (run_id::TEXT ILIKE ",
     );
     qb.push_bind(format!("%{query}%"));
+    qb.push(" OR COALESCE(variant_names->>0, '') ILIKE ");
+    qb.push_bind(format!("%{query}%"));
+    qb.push(")");
     qb.push(
         r"
         ORDER BY run_id DESC
