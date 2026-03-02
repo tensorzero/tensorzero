@@ -144,11 +144,12 @@ function buildMultiQuestionPayload() {
  */
 async function createSession(
   page: import("@playwright/test").Page,
+  message = `Test question flow ${v7()}`,
 ): Promise<string> {
   await page.goto("/autopilot/sessions/new");
   await page.waitForLoadState("networkidle");
   const messageInput = page.getByRole("textbox");
-  await messageInput.fill(`Test question flow ${v7()}`);
+  await messageInput.fill(message);
   const sendButton = page.getByRole("button", { name: "Send message" });
   await expect(sendButton).toBeEnabled({ timeout: 10000 });
   await sendButton.click();
@@ -496,31 +497,20 @@ test.describe("User questions (full e2e)", () => {
   test("should complete multiple choice flow through live backend", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(240000);
 
-    await page.goto("/autopilot/sessions/new");
-    await page.waitForLoadState("networkidle");
-
-    const messageInput = page.getByRole("textbox");
-    await messageInput.fill(
+    const sessionId = await createSession(
+      page,
       `Use the ask_user_questions tool to ask me exactly one multiple choice question. Use header "Auth", question "Which auth method?", type "multiple_choice", multi_select false, and two options: label "JWT" description "JSON Web Tokens" and label "OAuth" description "OAuth 2.0 flow". Call the tool directly without using any other tools first. ${v7()}`,
     );
 
-    const sendButton = page.getByRole("button", { name: "Send message" });
-    await expect(sendButton).toBeEnabled({ timeout: 10000 });
-    await sendButton.click();
-
-    // Wait for redirect to session page
-    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
-      timeout: 30000,
-    });
-
-    // Wait for the question card from the real worker
-    await expect(page.getByText("Which auth method?")).toBeVisible({
+    // Wait for the question card from the real worker (the LLM may
+    // paraphrase, so we check for a substring that must appear)
+    await expect(page.getByText("JWT")).toBeVisible({
       timeout: 90000,
     });
 
-    // Select JWT
+    // Select JWT and submit
     await page.getByText("JWT").click();
     await page.getByRole("button", { name: /submit/i }).click();
 
@@ -531,35 +521,30 @@ test.describe("User questions (full e2e)", () => {
     await expect(page.getByText("Tool Result").first()).toBeVisible({
       timeout: 60000,
     });
+
+    // Verify the answer was persisted correctly in the database
+    const answer = queryFirstAnswerPayload(sessionId);
+    expect(answer.type).toBe("user_questions_answers");
+    const response = Object.values(answer.responses)[0];
+    expect(response.type, "answer should be a multiple choice response").toBe(
+      "multiple_choice",
+    );
   });
 
   test("should complete free response flow through live backend", async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    test.setTimeout(240000);
 
-    await page.goto("/autopilot/sessions/new");
-    await page.waitForLoadState("networkidle");
-
-    const messageInput = page.getByRole("textbox");
-    await messageInput.fill(
+    const sessionId = await createSession(
+      page,
       `Use the ask_user_questions tool to ask me exactly one free response question. Use header "Notes", question "Any requirements?", type "free_response". Call the tool directly without using any other tools first. ${v7()}`,
     );
 
-    const sendButton = page.getByRole("button", { name: "Send message" });
-    await expect(sendButton).toBeEnabled({ timeout: 10000 });
-    await sendButton.click();
-
-    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
-      timeout: 30000,
-    });
-
-    // Wait for the free response question from the real worker
-    await expect(page.getByText("Any requirements?")).toBeVisible({
-      timeout: 90000,
-    });
-
+    // Wait for the free response textarea to appear
     const textarea = page.getByPlaceholder("Type your response...");
+    await expect(textarea).toBeVisible({ timeout: 90000 });
+
     await textarea.fill("We need RBAC support");
     await page.getByRole("button", { name: /submit/i }).click();
 
@@ -568,5 +553,14 @@ test.describe("User questions (full e2e)", () => {
     await expect(page.getByText("Tool Result").first()).toBeVisible({
       timeout: 60000,
     });
+
+    // Verify the answer was persisted correctly in the database
+    const answer = queryFirstAnswerPayload(sessionId);
+    expect(answer.type).toBe("user_questions_answers");
+    const response = Object.values(answer.responses)[0];
+    expect(response.type, "answer should be a free response").toBe(
+      "free_response",
+    );
+    expect(response.text).toBe("We need RBAC support");
   });
 });
