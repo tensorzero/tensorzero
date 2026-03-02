@@ -13,6 +13,7 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
+import { useSnapshotHash } from "~/context/snapshot";
 import { toFunctionUrl, toVariantUrl } from "~/utils/urls";
 
 interface BasicInfoProps {
@@ -26,6 +27,7 @@ export default function BasicInfo({
   function_name,
   function_type,
 }: BasicInfoProps) {
+  const snapshotHash = useSnapshotHash();
   // Get function icon and background
   const functionIconConfig = getFunctionTypeIcon(function_type);
 
@@ -48,7 +50,7 @@ export default function BasicInfo({
             iconBg={functionIconConfig.iconBg}
             label={function_name}
             secondaryLabel={function_type}
-            link={toFunctionUrl(function_name)}
+            link={toFunctionUrl(function_name, snapshotHash)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -202,7 +204,11 @@ export default function BasicInfo({
                       <Chip
                         key={candidate}
                         label={candidate}
-                        link={toVariantUrl(function_name, candidate)}
+                        link={toVariantUrl(
+                          function_name,
+                          candidate,
+                          snapshotHash,
+                        )}
                         font="mono"
                       />
                     ))}
@@ -385,7 +391,11 @@ export default function BasicInfo({
                       <Chip
                         key={candidate}
                         label={candidate}
-                        link={toVariantUrl(function_name, candidate)}
+                        link={toVariantUrl(
+                          function_name,
+                          candidate,
+                          snapshotHash,
+                        )}
                         font="mono"
                       />
                     ))}
