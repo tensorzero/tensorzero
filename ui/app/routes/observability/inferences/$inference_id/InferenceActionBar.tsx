@@ -55,8 +55,10 @@ export function InferenceActionBar({
       />
       <CopyMessagesButton
         key={`copy-${locationKey}`}
-        input={inputPromise}
-        output={inference.output}
+        data={inputPromise.then((input) => ({
+          input,
+          output: inference.output,
+        }))}
       />
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}

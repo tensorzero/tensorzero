@@ -323,7 +323,7 @@ export function InferenceDetailContent({
           />
         </humanFeedbackFetcher.Form>
       </HumanFeedbackModal>
-      <CopyMessagesButton input={input} output={inference.output} />
+      <CopyMessagesButton data={{ input, output: inference.output }} />
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}
       />
