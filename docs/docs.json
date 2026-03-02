@@ -119,7 +119,7 @@
             "pages": [
               "experimentation/run-adaptive-ab-tests",
               "experimentation/run-static-ab-tests",
-              "experimentation/namespaces"
+              "experimentation/scope-experiments-with-namespaces"
             ]
           },
           {
