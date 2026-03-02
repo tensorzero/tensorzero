@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { v7 } from "uuid";
 import { insertEvent, queryEventPayloads } from "./helpers/db";
+import { createSession } from "./helpers/session";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -136,34 +137,6 @@ function buildMultiQuestionPayload() {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
-
-/**
- * Create a new autopilot session and return the session ID.
- * Sends a message through the UI, waits for redirect, then waits for the
- * worker to finish processing so the session is quiescent.
- */
-async function createSession(
-  page: import("@playwright/test").Page,
-): Promise<string> {
-  await page.goto("/autopilot/sessions/new");
-  await page.waitForLoadState("networkidle");
-  const messageInput = page.getByRole("textbox");
-  await messageInput.fill(`Test question flow ${v7()}`);
-  const sendButton = page.getByRole("button", { name: "Send message" });
-  await expect(sendButton).toBeEnabled({ timeout: 10000 });
-  await sendButton.click();
-
-  await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
-    timeout: 30000,
-  });
-
-  const sessionId = page
-    .url()
-    .match(/\/autopilot\/sessions\/([a-f0-9-]+)$/)?.[1];
-  if (!sessionId) throw new Error("Could not extract session ID from URL");
-
-  return sessionId;
-}
 
 /**
  * Query the first user_questions_answers payload for a session.

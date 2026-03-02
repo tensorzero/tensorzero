@@ -1,7 +1,5 @@
-import type {
-  VariantPerformancesVisualization,
-  TimeWindow,
-} from "~/types/tensorzero";
+import type { VariantPerformancesVisualization } from "~/types/tensorzero";
+import { TIME_WINDOWS, type TimeWindow } from "~/utils/date";
 import {
   transformVariantPerformances,
   VariantPerformanceChart,
@@ -11,14 +9,7 @@ type VariantPerformancesVizProps = {
   data: VariantPerformancesVisualization;
 };
 
-const VALID_TIME_WINDOWS: Set<string> = new Set([
-  "minute",
-  "hour",
-  "day",
-  "week",
-  "month",
-  "cumulative",
-]);
+const VALID_TIME_WINDOWS: Set<string> = new Set(TIME_WINDOWS);
 
 export default function VariantPerformancesViz({
   data,

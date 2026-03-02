@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { v7 } from "uuid";
 import { insertEvent } from "./helpers/db";
+import { createSession } from "./helpers/session";
 
 // ── Payload builders ───────────────────────────────────────────────────
 
@@ -45,31 +46,6 @@ function buildVariantPerformancesVisualization() {
   };
 
   return { payload, toolExecutionId };
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────
-
-async function createSession(
-  page: import("@playwright/test").Page,
-): Promise<string> {
-  await page.goto("/autopilot/sessions/new");
-  await page.waitForLoadState("networkidle");
-  const messageInput = page.getByRole("textbox");
-  await messageInput.fill(`Test variant perf viz ${v7()}`);
-  const sendButton = page.getByRole("button", { name: "Send message" });
-  await expect(sendButton).toBeEnabled({ timeout: 10000 });
-  await sendButton.click();
-
-  await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
-    timeout: 30000,
-  });
-
-  const sessionId = page
-    .url()
-    .match(/\/autopilot\/sessions\/([a-f0-9-]+)$/)?.[1];
-  if (!sessionId) throw new Error("Could not extract session ID from URL");
-
-  return sessionId;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
