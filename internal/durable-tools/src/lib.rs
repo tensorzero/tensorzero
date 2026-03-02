@@ -238,6 +238,11 @@ pub use tensorzero_client::{
     EvaluatorStats, RunEvaluationParams, RunEvaluationResponse,
 };
 
+// Re-export embedding types
+pub use tensorzero_client::{
+    Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingResponse, EmbeddingsParams,
+};
+
 // Re-export TensorZero inference types for convenience
 pub use tensorzero::{
     Client, ClientInferenceParams, DynamicToolParams, GetInferencesResponse, InferenceParams,

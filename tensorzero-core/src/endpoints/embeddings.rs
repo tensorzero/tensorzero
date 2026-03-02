@@ -134,7 +134,7 @@ pub async fn embeddings(
     })
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingResponse {
     pub embeddings: Vec<Embedding>,
     pub usage: Usage,

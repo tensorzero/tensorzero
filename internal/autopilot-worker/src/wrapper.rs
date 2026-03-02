@@ -390,6 +390,11 @@ mod tests {
                 params: ClientInferenceParams,
             ) -> Result<InferenceResponse, TensorZeroClientError>;
 
+            async fn embeddings(
+                &self,
+                params: durable_tools::EmbeddingsParams,
+            ) -> Result<durable_tools::EmbeddingResponse, TensorZeroClientError>;
+
             async fn feedback(
                 &self,
                 params: FeedbackParams,
