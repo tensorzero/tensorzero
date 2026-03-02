@@ -1051,6 +1051,7 @@ mod tests {
         evaluators
             .iter()
             .map(|(name, optimize)| {
+                #[expect(deprecated)]
                 let evaluator_config = match *optimize {
                     "max" => {
                         // ExactMatch always maximizes

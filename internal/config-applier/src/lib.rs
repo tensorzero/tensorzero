@@ -536,6 +536,7 @@ type = "exact_match"
         let mut variants = HashMap::new();
         variants.insert("v1".to_string(), variant);
 
+        #[expect(deprecated)]
         let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Messages,
             variants,
@@ -674,10 +675,10 @@ type = "exact_match"
 
         // First: upsert an evaluation with an exact_match evaluator
         let mut evaluators = HashMap::new();
-        evaluators.insert(
-            "exact_match".to_string(),
-            UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
+        #[expect(deprecated)]
+        let exact_match_evaluator =
+            UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match_evaluator);
 
         let evaluation =
             UninitializedEvaluationConfig::Inference(UninitializedInferenceEvaluationConfig {
@@ -698,6 +699,7 @@ type = "exact_match"
 
         // Second: upsert another evaluator into the same evaluation.
         // This should succeed even though the evaluators table was inlined.
+        #[expect(deprecated)]
         let new_evaluator =
             UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.5) });
 
@@ -870,6 +872,7 @@ type = "exact_match"
             .await
             .expect("failed to create writer");
 
+        #[expect(deprecated)]
         let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Messages,
             variants: HashMap::new(),
@@ -908,6 +911,7 @@ type = "exact_match"
             .await
             .expect("failed to create writer");
 
+        #[expect(deprecated)]
         let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
             input_format: LLMJudgeInputFormat::Messages,
             variants: HashMap::new(),

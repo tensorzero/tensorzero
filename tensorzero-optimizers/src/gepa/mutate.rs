@@ -456,10 +456,9 @@ mod tests {
         let mut evaluators = HashMap::new();
 
         // Add an exact match evaluator
-        evaluators.insert(
-            "exact_match".to_string(),
-            EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-        );
+        #[expect(deprecated)]
+        let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        evaluators.insert("exact_match".to_string(), exact_match);
 
         EvaluationConfig::Inference(InferenceEvaluationConfig {
             evaluators,
