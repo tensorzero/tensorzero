@@ -485,3 +485,88 @@ test.describe("User questions", () => {
     ).toBe(1);
   });
 });
+
+// ── Full E2E Tests ────────────────────────────────────────────────────
+// These tests go through the live autopilot backend: send a message that
+// triggers the LLM to call ask_user_questions, wait for the real worker
+// to write the UserQuestions event, interact with the UI, and verify the
+// tool result.
+
+test.describe("User questions (full e2e)", () => {
+  test("should complete multiple choice flow through live backend", async ({
+    page,
+  }) => {
+    test.setTimeout(180000);
+
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const messageInput = page.getByRole("textbox");
+    await messageInput.fill(
+      `Use the ask_user_questions tool to ask me exactly one multiple choice question. Use header "Auth", question "Which auth method?", type "multiple_choice", multi_select false, and two options: label "JWT" description "JSON Web Tokens" and label "OAuth" description "OAuth 2.0 flow". Call the tool directly without using any other tools first. ${v7()}`,
+    );
+
+    const sendButton = page.getByRole("button", { name: "Send message" });
+    await expect(sendButton).toBeEnabled({ timeout: 10000 });
+    await sendButton.click();
+
+    // Wait for redirect to session page
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
+      timeout: 30000,
+    });
+
+    // Wait for the question card from the real worker
+    await expect(page.getByText("Which auth method?")).toBeVisible({
+      timeout: 90000,
+    });
+
+    // Select JWT
+    await page.getByText("JWT").click();
+    await page.getByRole("button", { name: /submit/i }).click();
+
+    // Verify "Answered" event appears
+    await expect(page.getByText("Answered")).toBeVisible({ timeout: 15000 });
+
+    // Verify tool result appears (confirms the tool unblocked and returned)
+    await expect(page.getByText("Tool Result").first()).toBeVisible({
+      timeout: 60000,
+    });
+  });
+
+  test("should complete free response flow through live backend", async ({
+    page,
+  }) => {
+    test.setTimeout(180000);
+
+    await page.goto("/autopilot/sessions/new");
+    await page.waitForLoadState("networkidle");
+
+    const messageInput = page.getByRole("textbox");
+    await messageInput.fill(
+      `Use the ask_user_questions tool to ask me exactly one free response question. Use header "Notes", question "Any requirements?", type "free_response". Call the tool directly without using any other tools first. ${v7()}`,
+    );
+
+    const sendButton = page.getByRole("button", { name: "Send message" });
+    await expect(sendButton).toBeEnabled({ timeout: 10000 });
+    await sendButton.click();
+
+    await expect(page).toHaveURL(/\/autopilot\/sessions\/[a-f0-9-]+$/, {
+      timeout: 30000,
+    });
+
+    // Wait for the free response question from the real worker
+    await expect(page.getByText("Any requirements?")).toBeVisible({
+      timeout: 90000,
+    });
+
+    const textarea = page.getByPlaceholder("Type your response...");
+    await textarea.fill("We need RBAC support");
+    await page.getByRole("button", { name: /submit/i }).click();
+
+    await expect(page.getByText("Answered")).toBeVisible({ timeout: 15000 });
+
+    await expect(page.getByText("Tool Result").first()).toBeVisible({
+      timeout: 60000,
+    });
+  });
+});
