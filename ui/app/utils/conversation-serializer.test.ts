@@ -539,6 +539,111 @@ describe("serializeConversation", () => {
     ]);
   });
 
+  it("should serialize output thought blocks", () => {
+    const input: Input = {
+      messages: [
+        { role: "user", content: [{ type: "text", text: "Think about this" }] },
+      ],
+    };
+    const inference = makeChatInference([
+      { type: "thought", text: "Let me reason..." },
+      { type: "text", text: "Here is my answer." },
+    ]);
+
+    const result = JSON.parse(serializeConversation(input, inference));
+
+    expect(result[1]).toEqual({
+      role: "assistant",
+      content: [
+        { type: "thought", text: "Let me reason..." },
+        { type: "text", text: "Here is my answer." },
+      ],
+    });
+  });
+
+  it("should serialize output thought blocks with undefined text", () => {
+    const inference = makeChatInference([
+      { type: "thought" } as ContentBlockChatOutput,
+    ]);
+
+    const result = JSON.parse(serializeConversation(undefined, inference));
+
+    expect(result[0].content).toEqual([{ type: "thought", text: "" }]);
+  });
+
+  it("should serialize output unknown blocks", () => {
+    const inference = makeChatInference([
+      { type: "unknown", data: { provider: "custom", raw: "abc" } },
+    ]);
+
+    const result = JSON.parse(serializeConversation(undefined, inference));
+
+    expect(result[0].content).toEqual([
+      { type: "unknown", data: { provider: "custom", raw: "abc" } },
+    ]);
+  });
+
+  it("should handle input tool_call with null name falling back to raw_name", () => {
+    const input: Input = {
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_call",
+              id: "tc_1",
+              raw_name: "lookup",
+              raw_arguments: "{}",
+              name: null,
+              arguments: null,
+            } as InputMessage["content"][number],
+          ],
+        },
+      ],
+    };
+    const inference = makeChatInference();
+
+    const result = JSON.parse(serializeConversation(input, inference));
+
+    expect(result[0].content).toEqual([
+      { type: "tool_call", id: "tc_1", name: "lookup", arguments: "{}" },
+    ]);
+  });
+
+  it("should produce content: [] for chat inference with empty output array", () => {
+    const input: Input = {
+      messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
+    };
+    const inference = makeChatInference([]);
+
+    const result = JSON.parse(serializeConversation(input, inference));
+
+    expect(result).toHaveLength(2);
+    expect(result[1]).toEqual({
+      role: "assistant",
+      content: [],
+    });
+  });
+
+  it("should handle JSON inference with null raw and null parsed", () => {
+    const inference = makeJsonInference({ raw: null, parsed: null });
+
+    const result = JSON.parse(serializeConversation(undefined, inference));
+
+    expect(result[0]).toEqual({
+      role: "assistant",
+      content: "null",
+    });
+  });
+
+  it("should produce empty array when both input and output are absent", () => {
+    const inference = makeChatInference(undefined);
+
+    const result = JSON.parse(serializeConversation(undefined, inference));
+
+    expect(result).toEqual([]);
+  });
+
   it("should return valid JSON string with proper formatting", () => {
     const input: Input = {
       messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
