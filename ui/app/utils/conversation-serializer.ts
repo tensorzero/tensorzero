@@ -17,7 +17,7 @@ type SerializedContentBlock =
   | { type: "tool_call"; id: string; name: string; arguments: string }
   | { type: "tool_result"; id: string; name: string; result: string }
   | { type: "thought"; text: string }
-  | { type: "file"; file_type: string; mime_type?: string }
+  | { type: "file"; file_type: string }
   | { type: "unknown"; data: unknown };
 
 function serializeSystem(system: System): string {

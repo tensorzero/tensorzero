@@ -6,15 +6,16 @@ import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import { useCopy } from "~/hooks/use-copy";
+import { useToast } from "~/hooks/use-toast";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { Button, ButtonIcon } from "~/components/ui/button";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
+import { serializeConversation } from "~/utils/conversation-serializer";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
-import { serializeConversation } from "~/utils/conversation-serializer";
 import type { ModelInferencesData } from "./inference-data.server";
 
 interface InferenceActionBarProps {
@@ -182,12 +183,17 @@ function CopyConversationButton({
   input: Input | undefined;
 }) {
   const { copy, didCopy, isCopyAvailable } = useCopy();
+  const { toast } = useToast();
 
   if (!isCopyAvailable) return null;
 
-  const handleCopy = () => {
-    const serialized = serializeConversation(input, inference);
-    copy(serialized);
+  const handleCopy = async () => {
+    try {
+      const serialized = serializeConversation(input, inference);
+      await copy(serialized);
+    } catch {
+      toast.error({ title: "Failed to copy conversation" });
+    }
   };
 
   return (

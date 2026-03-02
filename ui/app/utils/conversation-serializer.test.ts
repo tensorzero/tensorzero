@@ -432,6 +432,113 @@ describe("serializeConversation", () => {
     ]);
   });
 
+  it("should handle tool_call with null name falling back to raw_name", () => {
+    const input: Input = {
+      messages: [
+        { role: "user", content: [{ type: "text", text: "Get weather" }] },
+      ],
+    };
+    const inference = makeChatInference([
+      {
+        type: "tool_call",
+        id: "tc_1",
+        raw_name: "get_weather",
+        raw_arguments: '{"city":"NYC"}',
+        name: null,
+        arguments: null,
+      },
+    ]);
+
+    const result = JSON.parse(serializeConversation(input, inference));
+
+    expect(result[1].content).toEqual([
+      {
+        type: "tool_call",
+        id: "tc_1",
+        name: "get_weather",
+        arguments: '{"city":"NYC"}',
+      },
+    ]);
+  });
+
+  it("should handle thought with undefined text", () => {
+    const input: Input = {
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "thought" } as InputMessage["content"][number]],
+        },
+      ],
+    };
+    const inference = makeChatInference();
+
+    const result = JSON.parse(serializeConversation(input, inference));
+
+    expect(result[0].content).toEqual([{ type: "thought", text: "" }]);
+  });
+
+  it("should handle JSON inference with undefined output", () => {
+    const input: Input = {
+      messages: [
+        { role: "user", content: [{ type: "text", text: "Extract data" }] },
+      ],
+    };
+    const inference = makeJsonInference(undefined);
+
+    const result = JSON.parse(serializeConversation(input, inference));
+
+    expect(result).toEqual([{ role: "user", content: "Extract data" }]);
+  });
+
+  it("should handle empty messages array", () => {
+    const input: Input = {
+      system: "You are helpful.",
+      messages: [],
+    };
+    const inference = makeChatInference([{ type: "text", text: "Hi!" }]);
+
+    const result = JSON.parse(serializeConversation(input, inference));
+
+    expect(result).toEqual([
+      { role: "system", content: "You are helpful." },
+      { role: "assistant", content: "Hi!" },
+    ]);
+  });
+
+  it("should handle mixed content block types in a single message", () => {
+    const input: Input = {
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thought", text: "Thinking..." },
+            { type: "text", text: "Here is the answer." },
+            {
+              type: "tool_call",
+              id: "tc_1",
+              name: "search",
+              arguments: '{"q":"test"}',
+            },
+          ],
+        },
+      ],
+    };
+    const inference = makeChatInference();
+
+    const result = JSON.parse(serializeConversation(input, inference));
+
+    expect(result[0].content).toEqual([
+      { type: "thought", text: "Thinking..." },
+      { type: "text", text: "Here is the answer." },
+      {
+        type: "tool_call",
+        id: "tc_1",
+        name: "search",
+        arguments: '{"q":"test"}',
+      },
+    ]);
+  });
+
   it("should return valid JSON string with proper formatting", () => {
     const input: Input = {
       messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
