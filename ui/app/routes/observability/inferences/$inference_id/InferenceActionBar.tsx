@@ -5,7 +5,6 @@ import type { StoredInference, Input } from "~/types/tensorzero";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
-import { useCopy } from "~/hooks/use-copy";
 import { useToast } from "~/hooks/use-toast";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
@@ -164,14 +163,17 @@ function CopyConversationButton({
   inference: StoredInference;
   inputPromise: Promise<Input | undefined>;
 }) {
-  const { copy } = useCopy();
   const { toast } = useToast();
 
+  // Using navigator.clipboard directly instead of useCopy because:
+  // 1. useCopy swallows errors internally (never re-throws), so callers can't
+  //    distinguish success from failure for toast feedback
+  // 2. useCopy's didCopy text swap ("Copied") changes button width, causing jiggle
   const handleCopy = async () => {
     try {
       const input = await inputPromise;
       const serialized = serializeConversation(input, inference);
-      await copy(serialized);
+      await navigator.clipboard.writeText(serialized);
       toast.success({ title: "Copied conversation to clipboard" });
     } catch {
       toast.error({ title: "Failed to copy conversation" });
