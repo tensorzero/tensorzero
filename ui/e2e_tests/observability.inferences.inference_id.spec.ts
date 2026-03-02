@@ -431,7 +431,7 @@ test.describe("should be able to add demonstration feedback via Try with X flows
           .getByText("Feedback Added"),
       ).toBeVisible();
 
-      // Get the feedback ID from URL and verify it appears in the feedback table
+      // Get the feedback ID from URL and verify the feedback card is visible
       const newFeedbackId = new URL(page.url()).searchParams.get(
         "newFeedbackId",
       );

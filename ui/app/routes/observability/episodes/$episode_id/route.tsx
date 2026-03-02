@@ -246,7 +246,7 @@ function FeedbackSectionContent({ data }: { data: FeedbackData }) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  // These are swapped because the table is sorted in descending order
+  // These are swapped because feedback is sorted in descending order
   const disablePrevious =
     !topFeedback?.id || !bounds.last_id || bounds.last_id === topFeedback.id;
 

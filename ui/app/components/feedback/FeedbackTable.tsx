@@ -10,18 +10,21 @@ import { Badge } from "../ui/badge";
 import { Skeleton } from "../ui/skeleton";
 import { useMemo } from "react";
 
-/**
- * Skeleton for feedback cards during loading state.
- */
 export function FeedbackCardsSkeleton() {
   return (
     <div className="space-y-2">
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="rounded-lg border p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-5 w-14 rounded-full" />
-            <Skeleton className="h-5 w-16 rounded-full" />
+        <div
+          key={i}
+          className="rounded-lg border border-border bg-bg-primary p-4"
+        >
+          <div className="mb-2 flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-5 w-14 rounded-full" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <Skeleton className="h-4 w-20 shrink-0" />
           </div>
           <div className="flex items-center gap-4">
             <Skeleton className="h-4 w-16" />
@@ -88,6 +91,8 @@ export default function FeedbackTable({
   return (
     <div className="space-y-2">
       {feedback.map((item, index) => {
+        const metricName = getMetricName(item);
+        const metricConfig = metrics[metricName];
         const isLatestOfType =
           item.type === "comment"
             ? item.id === latestCommentId
@@ -100,21 +105,17 @@ export default function FeedbackTable({
             key={`${item.id}-${index}`}
             data-testid={`feedback-card-${item.id}`}
             className={cn(
-              "rounded-lg border p-4",
+              "rounded-lg border border-border bg-bg-primary p-4",
               !isLatestOfType && anyOverwrites && "opacity-60",
             )}
           >
-            {/* Top row: metric name + badges + overwrite status + time */}
             <div className="mb-2 flex items-start justify-between gap-3">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                 <span className="break-all font-mono text-sm">
-                  {getMetricName(item)}
+                  {metricName}
                 </span>
-                {metrics[getMetricName(item)] && (
-                  <FeedbackBadges
-                    metric={metrics[getMetricName(item)]!}
-                    row={item}
-                  />
+                {metricConfig && (
+                  <FeedbackBadges metric={metricConfig} row={item} />
                 )}
                 {anyOverwrites &&
                   (isLatestOfType ? (
@@ -133,7 +134,6 @@ export default function FeedbackTable({
               </div>
             </div>
 
-            {/* Middle row: ID + value */}
             <div className="flex items-center gap-x-5 text-sm">
               <div className="flex items-center gap-1.5">
                 <span className="text-fg-secondary text-sm">ID</span>
@@ -141,14 +141,10 @@ export default function FeedbackTable({
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-fg-secondary text-sm">Value</span>
-                <FeedbackValue
-                  feedback={item}
-                  metric={metrics[getMetricName(item)]}
-                />
+                <FeedbackValue feedback={item} metric={metricConfig} />
               </div>
             </div>
 
-            {/* Bottom row: tags */}
             {Object.keys(item.tags).length > 0 && (
               <div className="mt-3">
                 <TagsBadges tags={item.tags} />
