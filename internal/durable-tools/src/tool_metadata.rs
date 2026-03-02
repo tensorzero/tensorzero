@@ -122,18 +122,20 @@ pub trait ToolMetadata: Send + Sync + 'static {
     /// Contains all declarations needed to fully define the type and its
     /// transitive dependencies, concatenated in dependency order.
     #[cfg(feature = "ts-bindings")]
-    fn llm_params_ts_bundle() -> TsTypeBundle {
-        tracing::warn!("TypeScript type bundle not available for this tool's LlmParams");
-        TsTypeBundle("")
-    }
+    fn llm_params_ts_bundle() -> TsTypeBundle;
+
+    /// Returns the TypeScript type name for the `LlmParams` type.
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String;
 
     /// Returns the TypeScript type bundle for the `Output` type.
     ///
     /// Contains all declarations needed to fully define the type and its
     /// transitive dependencies, concatenated in dependency order.
     #[cfg(feature = "ts-bindings")]
-    fn output_ts_bundle() -> TsTypeBundle {
-        tracing::warn!("TypeScript type bundle not available for this tool's Output");
-        TsTypeBundle("")
-    }
+    fn output_ts_bundle() -> TsTypeBundle;
+
+    /// Returns the TypeScript type name for the `Output` type.
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String;
 }

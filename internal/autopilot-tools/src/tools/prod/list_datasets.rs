@@ -41,8 +41,18 @@ impl ToolMetadata for ListDatasetsTool {
     }
 
     #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "ListDatasetsToolParams".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LIST_DATASETS_RESPONSE
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "ListDatasetsResponse".to_string()
     }
 
     fn name(&self) -> Cow<'static, str> {

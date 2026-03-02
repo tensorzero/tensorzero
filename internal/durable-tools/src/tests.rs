@@ -53,6 +53,26 @@ impl ToolMetadata for EchoSimpleTool {
     fn timeout(&self) -> Duration {
         Duration::from_secs(10)
     }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
 }
 
 #[async_trait]
@@ -89,6 +109,26 @@ impl ToolMetadata for EchoTaskTool {
     fn timeout(&self) -> Duration {
         Duration::from_secs(60)
     }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
 }
 
 #[async_trait]
@@ -123,6 +163,26 @@ impl ToolMetadata for DefaultTimeoutTaskTool {
         Cow::Borrowed("Uses default timeout")
     }
     // Uses default timeout (60 seconds from ToolMetadata)
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
 }
 
 #[async_trait]
@@ -157,6 +217,26 @@ impl ToolMetadata for DefaultTimeoutSimpleTool {
         Cow::Borrowed("Uses default timeout")
     }
     // Uses default timeout (60 seconds from ToolMetadata)
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
 }
 
 #[async_trait]
@@ -411,6 +491,26 @@ mod registry_tests {
 
             fn description(&self) -> Cow<'static, str> {
                 Cow::Borrowed("Conflicting tool")
+            }
+
+            #[cfg(feature = "ts-bindings")]
+            fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+                tensorzero_ts_types::UNIT
+            }
+
+            #[cfg(feature = "ts-bindings")]
+            fn llm_params_ts_bundle_type_name() -> String {
+                "void".to_string()
+            }
+
+            #[cfg(feature = "ts-bindings")]
+            fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+                tensorzero_ts_types::UNIT
+            }
+
+            #[cfg(feature = "ts-bindings")]
+            fn output_ts_bundle_type_name() -> String {
+                "void".to_string()
             }
         }
 
