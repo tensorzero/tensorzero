@@ -12,6 +12,7 @@ use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the variant sampling probabilities endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetVariantSamplingProbabilitiesParams {
     /// The name of the function to get probabilities for
@@ -19,6 +20,7 @@ pub struct GetVariantSamplingProbabilitiesParams {
 }
 
 /// Response containing variant sampling probabilities
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

@@ -12,6 +12,7 @@ use crate::function::{FunctionConfigType, get_function};
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting evaluation run infos by IDs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetEvaluationRunInfosParams {
     /// Comma-separated list of evaluation run UUIDs
@@ -20,12 +21,14 @@ pub struct GetEvaluationRunInfosParams {
 }
 
 /// Query parameters for getting evaluation run infos for a datapoint.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetEvaluationRunInfosForDatapointParams {
     pub function_name: String,
 }
 
 /// Information about a single evaluation run (returned by get_evaluation_run_infos).
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -36,6 +39,7 @@ pub struct EvaluationRunInfoById {
 }
 
 /// Response containing evaluation run infos.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

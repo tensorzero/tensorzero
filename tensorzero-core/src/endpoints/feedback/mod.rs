@@ -62,6 +62,8 @@ pub(crate) trait FeedbackDatabaseQueries: InferenceQueries + FeedbackQueries {}
 impl<T: InferenceQueries + FeedbackQueries> FeedbackDatabaseQueries for T {}
 
 // TODO(shuyangli): rename this to CreateFeedbackRequest and export
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = FeedbackParams))]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
@@ -102,6 +104,7 @@ impl From<&MetricConfigType> for FeedbackType {
 
 // TODO(shuyangli): rename this to CreateFeedbackResponse and export
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FeedbackResponse {

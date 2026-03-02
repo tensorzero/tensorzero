@@ -11,16 +11,19 @@ use crate::utils::gateway::{AppState, StructuredJson};
 
 use super::super::legacy::validate_dataset_name;
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct CloneDatapointsPathParams {
     pub dataset_name: String,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct CloneDatapointsRequest {
     pub datapoint_ids: Vec<Uuid>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

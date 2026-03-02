@@ -14,6 +14,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the inference_metadata endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct InferenceMetadataQueryParams {
     /// Cursor to fetch records before this ID (mutually exclusive with `after`)
@@ -32,6 +33,7 @@ pub struct InferenceMetadataQueryParams {
 
 /// Response containing a list of inference metadata
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListInferenceMetadataResponse {

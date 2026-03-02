@@ -16,6 +16,7 @@ use pyo3::prelude::*;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StorageKind {
@@ -45,6 +46,7 @@ pub enum StorageKind {
 /// unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
 /// file data first.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -57,6 +59,7 @@ pub struct StoragePath {
     )]
     #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     #[schemars(with = "String")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub path: object_store::path::Path,
 }
 

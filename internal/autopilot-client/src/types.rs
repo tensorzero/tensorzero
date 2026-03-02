@@ -22,6 +22,7 @@ use uuid::Uuid;
 /// Content block types allowed in autopilot event messages.
 /// Restricted to only Text blocks (no ToolCall, File, Template, etc.).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
@@ -35,6 +36,7 @@ pub enum EventPayloadMessageContent {
 /// A message payload specific to autopilot events.
 /// Content is restricted to Text blocks only.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadMessage {
@@ -47,6 +49,7 @@ pub struct EventPayloadMessage {
     pub metadata: EventPayloadMessageMetadata,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct EventPayloadMessageMetadata {
     /// Attempted lookups for anything that matched a UUID regex
@@ -74,6 +77,7 @@ impl From<EventPayloadMessage> for InputMessage {
 
 /// A session representing an autopilot conversation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct Session {
@@ -82,9 +86,11 @@ pub struct Session {
     pub workspace_id: String,
     pub deployment_id: String,
     pub tensorzero_version: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub created_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>))]
     pub last_event_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
@@ -95,11 +101,13 @@ pub struct Session {
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     pub id: Uuid,
     pub payload: EventPayload,
     pub session_id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub created_at: DateTime<Utc>,
 }
 
@@ -107,12 +115,14 @@ pub struct Event {
 ///
 /// Uses `GatewayEventPayload` which excludes `NotAvailable` authorization status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GatewayEvent {
     pub id: Uuid,
     pub payload: GatewayEventPayload,
     pub session_id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub created_at: DateTime<Utc>,
 }
 
@@ -131,6 +141,7 @@ impl TryFrom<Event> for GatewayEvent {
 
 /// The UX-relevant status of the Autopilot.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case", tag = "status")]
@@ -148,6 +159,7 @@ pub enum AutopilotStatus {
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamUpdate {
     pub event: Event,
@@ -158,6 +170,7 @@ pub struct StreamUpdate {
 ///
 /// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GatewayStreamUpdate {
@@ -178,6 +191,7 @@ impl TryFrom<StreamUpdate> for GatewayStreamUpdate {
 
 /// Error payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadError {
     pub message: String,
@@ -185,6 +199,7 @@ pub struct EventPayloadError {
 
 /// Status update payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadStatusUpdate {
     pub status_update: StatusUpdate,
@@ -192,6 +207,7 @@ pub struct EventPayloadStatusUpdate {
 
 /// Tool result payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadToolResult {
     pub tool_call_event_id: Uuid,
@@ -202,6 +218,7 @@ pub struct EventPayloadToolResult {
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(tag = "type", rename_all = "snake_case"))]
@@ -238,6 +255,7 @@ impl EventPayload {
 ///
 /// Uses `GatewayEventPayloadToolCallAuthorization` which excludes `NotAvailable` status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
@@ -284,6 +302,7 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
 
 /// A status update within a session.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
@@ -303,11 +322,13 @@ pub enum StatusUpdate {
 /// This extends the interface of a standard tool call with bookkeeping information that
 /// allows the caller to send over non-llm generated parameters.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadToolCall {
     /// Name
     pub name: String,
     /// Arguments
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub arguments: serde_json::Value,
     /// Side info to pass to the tool (hidden from LLM, used for execution context).
     pub side_info: AutopilotSideInfo,
@@ -320,6 +341,7 @@ pub struct EventPayloadToolCall {
 /// We should implement this as a type that has optional or mandatory fields as needed
 /// for each kind of tool
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutopilotSideInfo {
     /// The event ID of the ToolCall event (for correlating ToolResult).
@@ -337,6 +359,7 @@ pub struct AutopilotSideInfo {
 
 /// Side info for optimization workflow tool (hidden from LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct OptimizationWorkflowSideInfo {
     /// Polling interval in seconds (default: 60).
@@ -386,12 +409,14 @@ impl AutopilotSideInfo {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutopilotToolResult {
     pub result: String,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallDecisionSource {
@@ -401,6 +426,7 @@ pub enum ToolCallDecisionSource {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
@@ -412,6 +438,7 @@ pub struct EventPayloadToolCallAuthorization {
 ///
 /// Uses `GatewayToolCallAuthorizationStatus` which excludes `NotAvailable`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayEventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
@@ -432,6 +459,7 @@ impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallA
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallAuthorizationStatus {
@@ -445,6 +473,7 @@ pub enum ToolCallAuthorizationStatus {
 /// This is a narrower type than `ToolCallAuthorizationStatus` that excludes
 /// `NotAvailable` since that status is filtered out before reaching consumers.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GatewayToolCallAuthorizationStatus {
@@ -471,6 +500,7 @@ impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutcome {
@@ -487,6 +517,7 @@ pub enum ToolOutcome {
         /// Structured error data from the tool.
         /// For autopilot tools, this is typically a serialized `AutopilotToolError`
         /// with a `kind` field discriminator (e.g., "ClientError", "Validation").
+        #[cfg_attr(feature = "openapi", schema(value_type = Object))]
         error: serde_json::Value,
     },
     Missing,
@@ -501,6 +532,7 @@ pub enum ToolOutcome {
 
 /// Summary statistics for a variant's performance.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VariantSummary {
@@ -519,6 +551,7 @@ pub struct VariantSummary {
 
 /// Visualization data for a top-k evaluation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TopKEvaluationVisualization {
@@ -537,6 +570,7 @@ pub struct TopKEvaluationVisualization {
 
 /// Types of visualizations that can be displayed.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
@@ -549,11 +583,13 @@ pub enum VisualizationType {
     /// Unknown visualization type for forward compatibility.
     /// Old clients can gracefully handle new visualization types they don't recognize.
     #[serde(untagged)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     Unknown(serde_json::Value),
 }
 
 /// Visualization payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadVisualization {
@@ -571,6 +607,7 @@ pub struct EventPayloadVisualization {
 
 /// Questions payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadUserQuestions {
@@ -579,6 +616,7 @@ pub struct EventPayloadUserQuestions {
 
 /// A single question to display to the user.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadUserQuestion {
@@ -593,6 +631,7 @@ pub struct EventPayloadUserQuestion {
 
 /// The format of a user question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -603,6 +642,7 @@ pub enum EventPayloadUserQuestionInner {
 
 /// A multiple choice question with options.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MultipleChoiceQuestion {
@@ -614,6 +654,7 @@ pub struct MultipleChoiceQuestion {
 
 /// An option in a multiple choice question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MultipleChoiceOption {
@@ -626,6 +667,7 @@ pub struct MultipleChoiceOption {
 
 /// User responses payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadUserQuestionsAnswers {
@@ -636,6 +678,7 @@ pub struct EventPayloadUserQuestionsAnswers {
 
 /// A user's response to a question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -647,6 +690,7 @@ pub enum UserQuestionAnswer {
 
 /// A user's answer to a multiple choice question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MultipleChoiceAnswer {
@@ -656,6 +700,7 @@ pub struct MultipleChoiceAnswer {
 
 /// A user's free-form text answer.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FreeResponseAnswer {
@@ -686,6 +731,7 @@ pub struct CreateEventRequest {
 
 /// Query parameters for listing events.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListEventsParams {
@@ -701,6 +747,7 @@ pub struct ListEventsParams {
 
 /// Query parameters for listing sessions.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListSessionsParams {
@@ -716,6 +763,7 @@ pub struct ListSessionsParams {
 
 /// Query parameters for streaming events.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StreamEventsParams {
@@ -741,6 +789,7 @@ pub struct ApproveAllToolCallsRequest {
 
 /// Response from creating an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CreateEventResponse {
@@ -752,6 +801,7 @@ pub struct CreateEventResponse {
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListEventsResponse {
     pub events: Vec<Event>,
@@ -774,6 +824,7 @@ pub struct ListEventsResponse {
 ///
 /// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GatewayListEventsResponse {
@@ -795,6 +846,7 @@ pub struct GatewayListEventsResponse {
 
 /// Response from listing sessions.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListSessionsResponse {
@@ -803,6 +855,7 @@ pub struct ListSessionsResponse {
 
 /// Query parameters for listing config writes.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListConfigWritesParams {
@@ -820,6 +873,7 @@ pub struct ListConfigWritesParams {
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListConfigWritesResponse {
     pub config_writes: Vec<Event>,
@@ -829,6 +883,7 @@ pub struct ListConfigWritesResponse {
 ///
 /// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GatewayListConfigWritesResponse {
@@ -837,6 +892,7 @@ pub struct GatewayListConfigWritesResponse {
 
 /// Response from approving all pending tool calls.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ApproveAllToolCallsResponse {
@@ -859,6 +915,7 @@ pub struct S3UploadRequest {
 }
 
 /// Response from initiating an S3 upload, containing temporary credentials.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct S3UploadResponse {
     pub bucket: String,
@@ -871,6 +928,7 @@ pub struct S3UploadResponse {
     pub access_key_id: Option<String>,
     pub secret_access_key: Option<String>,
     pub session_token: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub credential_expiration: DateTime<Utc>,
 }
 

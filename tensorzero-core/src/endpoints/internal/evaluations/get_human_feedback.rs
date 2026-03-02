@@ -11,6 +11,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Request body for checking human feedback.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetHumanFeedbackRequest {
     /// The name of the metric being evaluated.
@@ -20,6 +21,7 @@ pub struct GetHumanFeedbackRequest {
 }
 
 /// Response for the check human feedback endpoint.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]

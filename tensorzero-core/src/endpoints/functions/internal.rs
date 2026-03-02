@@ -16,6 +16,7 @@ use crate::function::get_function;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the metrics endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct MetricsQueryParams {
     /// Optional variant name to filter by
@@ -23,6 +24,7 @@ pub struct MetricsQueryParams {
 }
 
 /// Response containing metrics with feedback statistics
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -93,6 +95,7 @@ pub async fn get_function_metrics(
 }
 
 /// Query parameters for the variant performances endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct VariantPerformancesQueryParams {
     /// The metric name to compute performance for
@@ -104,6 +107,7 @@ pub struct VariantPerformancesQueryParams {
 }
 
 /// Response containing variant performance statistics
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

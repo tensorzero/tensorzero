@@ -1,0 +1,14 @@
+[package]
+name = "generate-openapi-spec"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+autopilot-client = { path = "../autopilot-client", features = ["openapi"] }
+serde_json.workspace = true
+tensorzero-core = { path = "../../tensorzero-core", features = ["openapi"] }
+utoipa = { workspace = true }

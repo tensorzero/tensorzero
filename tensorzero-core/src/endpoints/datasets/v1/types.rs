@@ -20,6 +20,7 @@ use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
 /// The property to order datapoints by.
 /// This is flattened in the public API inside the `DatapointOrderBy` struct.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "by", rename_all = "snake_case")]
@@ -39,6 +40,7 @@ pub enum DatapointOrderByTerm {
 
 /// Order by clauses for querying datapoints.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -53,6 +55,7 @@ pub struct DatapointOrderBy {
 
 /// Request to update one or more datapoints in a dataset.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -63,6 +66,7 @@ pub struct UpdateDatapointsRequest {
 
 /// A tagged request to update a single datapoint in a dataset.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -82,6 +86,7 @@ pub enum UpdateDatapointRequest {
 
 /// An update request for a chat datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, JsonSchema, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
@@ -244,6 +249,7 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
 
 /// A request to update the dynamic tool parameters of a datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
@@ -289,6 +295,7 @@ parallel tool calls). If specified as a value, it will be set to the provided va
 
 /// An update request for a JSON datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, JsonSchema, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
@@ -398,6 +405,7 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
 ///
 /// We intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -411,6 +419,7 @@ pub struct JsonDatapointOutputUpdate {
 
 /// A request to update the metadata of a datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Default, Deserialize, Clone, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
@@ -426,6 +435,7 @@ be set to the provided value.")]
 
 /// A response to a request to update one or more datapoints in a dataset.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -438,6 +448,7 @@ pub struct UpdateDatapointsResponse {
 /// Request to update metadata for one or more datapoints in a dataset.
 /// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -448,6 +459,7 @@ pub struct UpdateDatapointsMetadataRequest {
 
 /// A request to update the metadata of a single datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
@@ -463,6 +475,7 @@ pub struct UpdateDatapointMetadataRequest {
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
@@ -510,6 +523,7 @@ pub struct ListDatapointsRequest {
 /// Request to get specific datapoints by their IDs.
 /// Used by the `POST /v1/datasets/{dataset_name}/get_datapoints` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -520,6 +534,7 @@ pub struct GetDatapointsRequest {
 
 /// Response containing the requested datapoints.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -530,6 +545,7 @@ pub struct GetDatapointsResponse {
 
 /// Request to create datapoints from inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct CreateDatapointsFromInferenceRequest {
@@ -540,6 +556,7 @@ pub struct CreateDatapointsFromInferenceRequest {
 /// Parameters for creating datapoints from inferences.
 /// Can specify either a list of inference IDs or a query to find inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
@@ -570,6 +587,7 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 
 /// Response from creating datapoints.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -581,6 +599,7 @@ pub struct CreateDatapointsResponse {
 /// Request to create datapoints manually.
 /// Used by the `POST /v1/datasets/{dataset_id}/datapoints` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -591,6 +610,7 @@ pub struct CreateDatapointsRequest {
 
 /// A tagged request to create a single datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -610,6 +630,7 @@ pub enum CreateDatapointRequest {
 
 /// A request to create a chat datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -644,6 +665,7 @@ pub struct CreateChatDatapointRequest {
 
 /// A request to create a JSON datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -677,6 +699,7 @@ pub struct CreateJsonDatapointRequest {
 
 /// Request to delete datapoints from a dataset.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -687,6 +710,7 @@ pub struct DeleteDatapointsRequest {
 
 /// Response containing the number of deleted datapoints.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -698,6 +722,7 @@ pub struct DeleteDatapointsResponse {
 /// Request to list datasets with optional filtering and pagination.
 /// Used by the `GET /internal/datasets` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
@@ -715,6 +740,7 @@ pub struct ListDatasetsRequest {
 
 /// Metadata for a single dataset.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -729,6 +755,7 @@ pub struct DatasetMetadata {
 
 /// Response containing a list of datasets.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]

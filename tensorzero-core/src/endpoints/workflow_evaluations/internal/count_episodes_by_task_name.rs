@@ -12,6 +12,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for counting workflow evaluation run episode groups.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct CountWorkflowEvaluationRunEpisodesByTaskNameParams {
     /// Comma-separated list of run IDs to filter episodes by.

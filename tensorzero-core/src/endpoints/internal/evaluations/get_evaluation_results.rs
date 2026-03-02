@@ -13,6 +13,7 @@ use crate::evaluations::EvaluationConfig;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting evaluation results.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetEvaluationResultsParams {
     /// The name of the evaluation (e.g., "haiku", "entity_extraction")
@@ -28,6 +29,7 @@ pub struct GetEvaluationResultsParams {
 }
 
 /// Response containing paginated evaluation results.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

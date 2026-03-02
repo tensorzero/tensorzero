@@ -15,6 +15,7 @@ use crate::stored_inference::StoredInference;
 pub use crate::endpoints::shared_types::OrderDirection;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FloatMetricFilter {
@@ -24,6 +25,7 @@ pub struct FloatMetricFilter {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct BooleanMetricFilter {
@@ -33,6 +35,7 @@ pub struct BooleanMetricFilter {
 
 /// Filter by tag key-value pair.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TagFilter {
@@ -43,17 +46,20 @@ pub struct TagFilter {
 
 /// Filter by timestamp.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TimeFilter {
     #[cfg_attr(feature = "ts-bindings", ts(type = "Date"))]
     #[schemars(with = "String")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub time: DateTime<Utc>,
     pub comparison_operator: TimeComparisonOperator,
 }
 
 /// Comparison operators for float metrics.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum FloatComparisonOperator {
@@ -73,6 +79,7 @@ pub enum FloatComparisonOperator {
 
 /// Comparison operators for timestamps.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TimeComparisonOperator {
@@ -92,6 +99,7 @@ pub enum TimeComparisonOperator {
 
 /// Comparison operators for tag filters.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TagComparisonOperator {
@@ -103,6 +111,7 @@ pub enum TagComparisonOperator {
 
 /// Filter by whether an inference has a demonstration.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DemonstrationFeedbackFilter {
@@ -112,6 +121,7 @@ pub struct DemonstrationFeedbackFilter {
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "by", rename_all = "snake_case")]
@@ -140,6 +150,7 @@ pub enum OrderByTerm {
 
 /// Order by clauses for querying inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OrderBy {
@@ -153,6 +164,8 @@ pub struct OrderBy {
 
 /// Filters for querying inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(no_recursion))]
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
@@ -195,6 +208,7 @@ pub enum InferenceFilter {
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Default, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
@@ -323,6 +337,7 @@ impl ListInferencesRequest {
 /// Request to get specific inferences by their IDs.
 /// Used by the `POST /v1/inferences/get_inferences` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
@@ -346,6 +361,7 @@ pub struct GetInferencesRequest {
 
 /// Response containing the requested inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]

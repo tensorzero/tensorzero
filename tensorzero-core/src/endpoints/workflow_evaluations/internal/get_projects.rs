@@ -11,6 +11,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting workflow evaluation projects.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetWorkflowEvaluationProjectsParams {
     pub limit: Option<u32>,

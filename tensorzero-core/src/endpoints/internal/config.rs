@@ -17,9 +17,11 @@ use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 /// Response containing a config snapshot.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetConfigResponse {
     /// The config in a form suitable for serialization.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub config: UninitializedConfig,
     /// The hash identifying this config version.
     pub hash: String,
@@ -81,9 +83,11 @@ pub async fn get_config_by_hash_handler(
 }
 
 /// Request body for writing a config snapshot.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WriteConfigRequest {
     /// The config to write.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub config: UninitializedConfig,
     /// Templates that should be stored with the config.
     #[serde(default)]
@@ -96,6 +100,7 @@ pub struct WriteConfigRequest {
 
 /// Response from writing a config snapshot.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct WriteConfigResponse {

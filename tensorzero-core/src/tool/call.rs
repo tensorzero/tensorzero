@@ -72,6 +72,7 @@ impl InferenceResponseToolCallExt for InferenceResponseToolCall {
     }
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: String,

@@ -20,6 +20,7 @@ use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the inference count endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct InferenceCountQueryParams {
     /// Optional variant name to filter by
@@ -30,6 +31,7 @@ pub struct InferenceCountQueryParams {
 
 /// Grouping options for inference count
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
@@ -40,6 +42,7 @@ pub enum InferenceCountGroupBy {
 
 /// Response containing inference count
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct InferenceCountResponse {
@@ -52,6 +55,7 @@ pub struct InferenceCountResponse {
 
 /// Inference count for a variant
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceCountByVariant {
@@ -74,6 +78,7 @@ impl From<CountByVariant> for InferenceCountByVariant {
 }
 
 /// Query parameters for the feedback stats endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct InferenceWithFeedbackCountQueryParams {
     /// Optional threshold for curated inference filtering (float metrics only)
@@ -83,6 +88,7 @@ pub struct InferenceWithFeedbackCountQueryParams {
 
 /// Response containing inference count with feedback count
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceWithFeedbackCountResponse {
@@ -93,6 +99,7 @@ pub struct InferenceWithFeedbackCountResponse {
 }
 
 /// Query parameters for the function throughput by variant endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct FunctionThroughputByVariantQueryParams {
     /// Time granularity for grouping throughput data
@@ -108,6 +115,7 @@ fn default_max_periods() -> u32 {
 
 /// Response containing function throughput data grouped by variant and time period
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetFunctionThroughputByVariantResponse {
@@ -117,6 +125,7 @@ pub struct GetFunctionThroughputByVariantResponse {
 
 /// Response containing all functions with their inference counts
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ListFunctionsWithInferenceCountResponse {

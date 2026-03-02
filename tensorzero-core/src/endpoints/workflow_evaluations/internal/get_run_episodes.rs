@@ -14,6 +14,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting workflow evaluation run episodes with feedback.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetWorkflowEvaluationRunEpisodesParams {
     /// The run ID to get episodes for

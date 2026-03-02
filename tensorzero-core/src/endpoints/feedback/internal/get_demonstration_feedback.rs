@@ -10,6 +10,7 @@ use crate::db::feedback::{DemonstrationFeedbackRow, FeedbackQueries};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetDemonstrationFeedbackParams {
     pub before: Option<Uuid>,
@@ -17,6 +18,7 @@ pub struct GetDemonstrationFeedbackParams {
     pub limit: Option<u32>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

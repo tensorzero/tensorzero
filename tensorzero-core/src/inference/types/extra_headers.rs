@@ -3,6 +3,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraHeadersConfig {
@@ -10,6 +11,7 @@ pub struct ExtraHeadersConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 pub struct ExtraHeader {
     pub name: String,
@@ -18,6 +20,7 @@ pub struct ExtraHeader {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -34,6 +37,7 @@ pub enum ExtraHeaderKind {
 /// The 'InferenceExtraHeaders' options provided directly in an inference request
 /// These have not yet been filtered by variant name
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraHeaders {
@@ -85,6 +89,7 @@ pub mod dynamic {
     use tensorzero_derive::export_schema;
 
     #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+    #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
     #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
     #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
     #[export_schema]

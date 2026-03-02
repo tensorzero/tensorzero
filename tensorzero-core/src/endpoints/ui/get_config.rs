@@ -24,13 +24,18 @@ use crate::{
 ///
 /// Contains only UI-safe fields from the gateway config, excluding sensitive
 /// information like provider credentials, API keys, and internal settings.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UiConfig {
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub functions: HashMap<String, Arc<FunctionConfig>>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub metrics: HashMap<String, MetricConfig>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub tools: HashMap<String, Arc<StaticToolConfig>>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>,
     pub model_names: Vec<String>,
     pub config_hash: String,

@@ -21,6 +21,7 @@ use crate::{
     },
 };
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkflowEvaluationRunParams {
     pub variants: HashMap<String, String>,
@@ -34,6 +35,7 @@ pub struct WorkflowEvaluationRunParams {
     pub internal: bool, // For internal use only
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkflowEvaluationRunResponse {
     pub run_id: Uuid,
@@ -73,6 +75,7 @@ pub struct WorkflowEvaluationRunEpisodePathParams {
     pub run_id: Uuid,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct WorkflowEvaluationRunEpisodeParams {
     #[serde(default)]
@@ -81,6 +84,7 @@ pub struct WorkflowEvaluationRunEpisodeParams {
     pub tags: HashMap<String, String>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WorkflowEvaluationRunEpisodeResponse {
     pub episode_id: Uuid,

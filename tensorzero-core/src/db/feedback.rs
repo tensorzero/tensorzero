@@ -245,11 +245,13 @@ pub struct InternalCumulativeFeedbackTimeSeriesPoint {
     pub count: u64,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CumulativeFeedbackTimeSeriesPoint {
     // Time point up to which cumulative statistics are computed
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub period_end: DateTime<Utc>,
     pub variant_name: String,
     // Mean of feedback values up to time point `period_end`
@@ -267,6 +269,7 @@ pub struct CumulativeFeedbackTimeSeriesPoint {
 }
 
 // Feedback by target ID types
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -276,9 +279,11 @@ pub struct BooleanMetricFeedbackRow {
     pub metric_name: String,
     pub value: bool,
     pub tags: std::collections::HashMap<String, String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -288,9 +293,11 @@ pub struct FloatMetricFeedbackRow {
     pub metric_name: String,
     pub value: f64,
     pub tags: std::collections::HashMap<String, String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -300,8 +307,10 @@ pub struct CommentFeedbackRow {
     pub target_type: CommentTargetType,
     pub value: String,
     pub tags: std::collections::HashMap<String, String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
 }
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -311,6 +320,7 @@ pub enum CommentTargetType {
     Episode,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -319,9 +329,11 @@ pub struct DemonstrationFeedbackRow {
     pub inference_id: Uuid,
     pub value: String,
     pub tags: HashMap<String, String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
@@ -334,6 +346,7 @@ pub enum FeedbackRow {
     Demonstration(DemonstrationFeedbackRow),
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -345,6 +358,7 @@ pub struct FeedbackBounds {
     pub by_type: FeedbackBoundsByType,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -355,6 +369,7 @@ pub struct FeedbackBoundsByType {
     pub demonstration: TableBounds,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -369,6 +384,7 @@ pub struct MetricWithFeedback {
     pub feedback_count: u32,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -404,12 +420,14 @@ pub struct GetVariantPerformanceParams<'a> {
 
 /// Row returned from the variant performance query.
 /// Contains statistics for each (variant, time_period) combination.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VariantPerformanceRow {
     /// Start datetime of the period in RFC 3339 format.
     /// For cumulative time window, this is '1970-01-01T00:00:00Z'.
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub period_start: DateTime<Utc>,
     /// The variant name
     pub variant_name: String,

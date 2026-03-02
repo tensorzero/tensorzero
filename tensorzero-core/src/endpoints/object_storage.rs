@@ -17,6 +17,7 @@ use object_store::ObjectStoreExt;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "e2e_tests", derive(PartialEq))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ObjectResponse {
     pub data: String,
     pub reused_object_store: bool,

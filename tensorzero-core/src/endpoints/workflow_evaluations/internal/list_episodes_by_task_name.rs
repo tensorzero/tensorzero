@@ -14,6 +14,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for listing workflow evaluation run episodes by task name.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct ListWorkflowEvaluationRunEpisodesByTaskNameParams {
     /// Comma-separated list of run IDs to filter episodes by.

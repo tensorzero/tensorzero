@@ -61,6 +61,7 @@ use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 /// The expected payload to the `/start_batch_inference` endpoint.
 /// It will be a JSON object with the following fields:
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StartBatchInferenceParams {
@@ -69,6 +70,7 @@ pub struct StartBatchInferenceParams {
     // the episode IDs for each inference (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Vec<Option<String>>>))]
     pub episode_ids: Option<BatchEpisodeIdInput>,
     // the inputs for the inferences
     pub inputs: Vec<Input>,
@@ -81,6 +83,7 @@ pub struct StartBatchInferenceParams {
     pub variant_name: Option<String>,
     // the tags to add to the inference
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Vec<Option<Object>>>))]
     pub tags: Option<BatchTags>,
     // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
     #[serde(flatten)]
@@ -97,8 +100,10 @@ pub struct StartBatchInferenceParams {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Vec<Option<Object>>>))]
     pub output_schemas: Option<BatchOutputSchemas>,
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub credentials: InferenceCredentials,
 }
 
@@ -489,6 +494,7 @@ async fn start_variant_batch_inference(
 }
 
 // Determines the return type of the `/start_batch_inference` endpoint upon success
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize)]
 pub struct PrepareBatchInferenceOutput {
     pub batch_id: Uuid,
@@ -578,6 +584,7 @@ pub async fn poll_batch_inference_handler(
     }
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum PollInferenceResponse {
@@ -600,6 +607,7 @@ impl PollInferenceResponse {
     }
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Serialize)]
 pub struct CompletedBatchInferenceResponse {
     pub batch_id: Uuid,

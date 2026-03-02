@@ -14,6 +14,7 @@ use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(transparent)]
@@ -25,6 +26,7 @@ pub struct Arguments(
 );
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
@@ -36,6 +38,7 @@ pub struct Template {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[serde(untagged)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -55,6 +58,7 @@ pub enum System {
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
@@ -81,6 +85,7 @@ impl Text {
 /// Struct that represents raw text content that should be passed directly to the model
 /// without any template processing or validation
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
@@ -107,6 +112,7 @@ impl RawText {
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass)]
@@ -229,6 +235,7 @@ impl Unknown {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
@@ -242,6 +249,7 @@ pub enum ThoughtSummaryBlock {
 
 /// Struct that represents a model's reasoning
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 // Note: We don't use `get_all` because `extra_data` is `Value` which doesn't implement `IntoPyObject`.

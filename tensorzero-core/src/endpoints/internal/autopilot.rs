@@ -43,6 +43,7 @@ static UUID_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 /// This is the request type used by the HTTP handler. The `deployment_id` is
 /// injected from the gateway's app state, so it's not included in this request.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CreateEventGatewayRequest {
@@ -58,6 +59,7 @@ pub struct CreateEventGatewayRequest {
 /// This is the request type used by the HTTP handler. The `deployment_id` and
 /// `tensorzero_version` are injected from the gateway's app state.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ApproveAllToolCallsGatewayRequest {
@@ -69,6 +71,7 @@ pub struct ApproveAllToolCallsGatewayRequest {
 /// HTTP request body for initiating an S3 upload.
 ///
 /// This is the request type used by the HTTP handler.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct S3InitiateUploadGatewayRequest {
     pub tool_call_event_id: Uuid,
@@ -79,6 +82,7 @@ pub struct S3InitiateUploadGatewayRequest {
 /// Indicates whether the autopilot client is configured (i.e., whether
 /// `TENSORZERO_AUTOPILOT_API_KEY` is set).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AutopilotStatusResponse {

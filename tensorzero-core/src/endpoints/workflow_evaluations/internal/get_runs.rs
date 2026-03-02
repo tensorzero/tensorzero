@@ -12,6 +12,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting workflow evaluation runs by IDs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetWorkflowEvaluationRunsParams {
     /// Comma-separated list of run IDs

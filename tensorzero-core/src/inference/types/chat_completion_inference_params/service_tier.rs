@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Controls the priority and latency characteristics of the request.
 /// Different providers map these values differently to their own service tiers.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
