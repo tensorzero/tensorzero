@@ -796,7 +796,7 @@ max_tokens = 800
 type = "chat_completion"
 model = "together-deepseek-r1"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 800
+max_tokens = 1000
 
 [functions.basic_test.variants.together-kimi]
 type = "chat_completion"
