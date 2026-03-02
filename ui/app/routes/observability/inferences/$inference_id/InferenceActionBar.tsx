@@ -53,13 +53,16 @@ export function InferenceActionBar({
         inference={inference}
         onFeedbackAdded={onFeedbackAdded}
       />
-      <CopyMessagesButton
+      <Suspense
         key={`copy-${locationKey}`}
-        data={inputPromise.then((input) => ({
-          input,
-          output: inference.output,
-        }))}
-      />
+        fallback={<Skeleton className="h-8 w-36" />}
+      >
+        <Await resolve={inputPromise} errorElement={<ActionBarAsyncError />}>
+          {(input) => (
+            <CopyMessagesButton input={input} output={inference.output} />
+          )}
+        </Await>
+      </Suspense>
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}
       />
