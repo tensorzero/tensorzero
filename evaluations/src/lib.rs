@@ -183,21 +183,15 @@ pub async fn run_evaluation(
     // TODO(#5754): Extract environment variable reading to a centralized location
     info!("Initializing evaluation environment");
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
-    if let Some(clickhouse_url) = clickhouse_url.as_ref() {
-        debug!(clickhouse_url = %clickhouse_url, "ClickHouse URL resolved");
-    } else {
+    if clickhouse_url.is_none() {
         debug!("ClickHouse URL not provided");
     }
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
-    if let Some(postgres_url) = postgres_url.as_ref() {
-        debug!(postgres_url = %postgres_url, "Postgres URL resolved");
-    } else {
+    if postgres_url.is_none() {
         debug!("Postgres URL not provided");
     }
     let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
-    if let Some(valkey_url) = valkey_url.as_ref() {
-        debug!(valkey_url = %valkey_url, "Valkey URL resolved");
-    } else {
+    if valkey_url.is_none() {
         debug!("Valkey URL not provided");
     }
     // We do not validate credentials here since we just want the evaluator config
@@ -217,6 +211,12 @@ pub async fn run_evaluation(
         &clickhouse_client,
         &postgres_connection,
     )?;
+    if primary_datastore == PrimaryDatastore::Disabled {
+        bail!(
+            "Evaluations require an observability database but none is available. Set \
+            `TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL` according to your observability backend."
+        );
+    }
     let database = DelegatingDatabaseConnection::new(
         clickhouse_client.clone(),
         postgres_connection.clone(),
