@@ -60,3 +60,27 @@ impl From<StoredObservabilityConfig> for ObservabilityConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Historical: `disable_automatic_migrations` was an observability field before
+    /// being migrated to a top-level `[clickhouse]` section. Stored snapshots from
+    /// that era must still parse.
+    #[test]
+    fn test_disable_automatic_migrations_parses() {
+        let toml_str = r"
+            enabled = true
+            async_writes = true
+            disable_automatic_migrations = true
+        ";
+
+        let stored: StoredObservabilityConfig =
+            toml::from_str(toml_str).expect("should parse deprecated field");
+        assert!(
+            stored.disable_automatic_migrations,
+            "deprecated field should be preserved"
+        );
+    }
+}
