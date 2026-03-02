@@ -692,14 +692,42 @@ test("should not display cost chip when cost data is missing", async ({
   await expect(sheet.getByText(/^\$\d/)).not.toBeVisible();
 });
 
-test("should copy messages to clipboard as JSON", async ({ page, context }) => {
-  // Grant clipboard permissions for this test only
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+// Clipboard API requires permissions that aren't available in CI Docker.
+// Mock it via page.evaluate so it works in all environments.
+async function installClipboardMock(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    const storage = { text: "" };
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: (text: string) => {
+          storage.text = text;
+          return Promise.resolve();
+        },
+        readText: () => Promise.resolve(storage.text),
+      },
+      writable: true,
+      configurable: true,
+    });
+    (
+      window as unknown as { __clipboardStorage: typeof storage }
+    ).__clipboardStorage = storage;
+  });
+}
 
+async function readMockClipboard(page: import("@playwright/test").Page) {
+  return page.evaluate(
+    () =>
+      (window as unknown as { __clipboardStorage: { text: string } })
+        .__clipboardStorage.text,
+  );
+}
+
+test("should copy messages to clipboard as JSON", async ({ page }) => {
   await page.goto(
     "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
   );
   await page.waitForLoadState("networkidle");
+  await installClipboardMock(page);
 
   // Wait for the button to render (behind Suspense/Await)
   const copyButton = page.getByRole("button", { name: "Copy Messages" });
@@ -717,25 +745,18 @@ test("should copy messages to clipboard as JSON", async ({ page, context }) => {
   ).toBeVisible();
 
   // Verify clipboard contains valid JSON with input and output
-  const clipboardText = await page.evaluate(() =>
-    navigator.clipboard.readText(),
-  );
+  const clipboardText = await readMockClipboard(page);
   const data = JSON.parse(clipboardText);
   expect(data).toHaveProperty("input");
   expect(data).toHaveProperty("output");
 });
 
-test("should copy messages to clipboard as Markdown", async ({
-  page,
-  context,
-}) => {
-  // Grant clipboard permissions for this test only
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-
+test("should copy messages to clipboard as Markdown", async ({ page }) => {
   await page.goto(
     "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
   );
   await page.waitForLoadState("networkidle");
+  await installClipboardMock(page);
 
   // Wait for the button to render (behind Suspense/Await)
   const copyButton = page.getByRole("button", { name: "Copy Messages" });
@@ -753,9 +774,7 @@ test("should copy messages to clipboard as Markdown", async ({
   ).toBeVisible();
 
   // Verify clipboard contains markdown with role headers
-  const clipboardText = await page.evaluate(() =>
-    navigator.clipboard.readText(),
-  );
+  const clipboardText = await readMockClipboard(page);
   expect(clipboardText).toContain("## user");
   expect(clipboardText).toContain("## assistant");
 });
