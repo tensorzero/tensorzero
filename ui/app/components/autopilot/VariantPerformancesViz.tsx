@@ -5,7 +5,7 @@ import type {
 import {
   transformVariantPerformances,
   VariantPerformanceChart,
-} from "~/components/function/variant/VariantPerformance";
+} from "~/components/function/variant/VariantPerformanceChart";
 
 type VariantPerformancesVizProps = {
   data: VariantPerformancesVisualization;
