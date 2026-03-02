@@ -692,15 +692,52 @@ test("should not display cost chip when cost data is missing", async ({
   await expect(sheet.getByText(/^\$\d/)).not.toBeVisible();
 });
 
-test("should show Copy Messages button", async ({ page }) => {
+test("should copy messages to clipboard", async ({ page }) => {
+  // Mock clipboard API to capture written text reliably in all environments
   await page.goto(
     "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
   );
   await page.waitForLoadState("networkidle");
 
+  // Install clipboard mock before clicking
+  await page.evaluate(() => {
+    (window as unknown as { __clipboardText: string }).__clipboardText = "";
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: (text: string) => {
+          (window as unknown as { __clipboardText: string }).__clipboardText =
+            text;
+          return Promise.resolve();
+        },
+        readText: () =>
+          Promise.resolve(
+            (window as unknown as { __clipboardText: string }).__clipboardText,
+          ),
+      },
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  // Wait for the button to render (behind Suspense/Await)
   const copyButton = page.getByRole("button", { name: "Copy Messages" });
   await expect(copyButton).toBeVisible({ timeout: 10000 });
-  await expect(copyButton).toBeEnabled();
+  await copyButton.click();
+
+  // Verify the success toast appears
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("Copied messages to clipboard"),
+  ).toBeVisible();
+
+  // Verify clipboard contains valid JSON with input and output
+  const clipboardText = await page.evaluate(
+    () => (window as unknown as { __clipboardText: string }).__clipboardText,
+  );
+  const data = JSON.parse(clipboardText);
+  expect(data).toHaveProperty("input");
+  expect(data).toHaveProperty("output");
 });
 
 // TODO(#5691): Run all UI e2e tests against Postgres-backed gateway too.
