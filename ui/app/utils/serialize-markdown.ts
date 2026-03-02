@@ -31,7 +31,7 @@ export function serializeConversationMarkdown(
       const systemText =
         typeof input.system === "string"
           ? input.system
-          : serializeArguments(input.system);
+          : serializeJsonValue(input.system);
       sections.push(`## system\n\n${systemText}`);
     }
 
@@ -60,21 +60,25 @@ function serializeInputContent(block: InputMessageContent): string {
     case "raw_text":
       return block.value;
     case "thought":
-      return block.text ?? "";
+      return `*${block.text ?? ""}*`;
     case "template":
-      return serializeArguments(block.arguments);
+      return serializeJsonValue(block.arguments);
     case "tool_call": {
       const args =
         "raw_arguments" in block ? block.raw_arguments : block.arguments;
       const name = "raw_name" in block ? block.raw_name : block.name;
-      return `**Tool call: ${name}**\n${jsonFence(typeof args === "string" ? args : JSON.stringify(args, null, 2))}`;
+      const argsText =
+        typeof args === "string"
+          ? tryParseAndSerialize(args)
+          : serializeJsonValue(args);
+      return `**Tool call: ${name}**\n\n${argsText}`;
     }
     case "tool_result":
-      return `**Tool result: ${block.name}**\n\`\`\`\n${block.result}\n\`\`\``;
+      return `**Tool result: ${block.name}**\n\n${block.result}`;
     case "file":
       return `[file: ${block.file_type}]`;
     case "unknown":
-      return jsonFence(JSON.stringify(block.data, null, 2));
+      return serializeJsonValue(block.data);
     default: {
       const _exhaustiveCheck: never = block;
       return _exhaustiveCheck;
@@ -87,10 +91,16 @@ function serializeOutput(output: StoredInference["output"]): string {
     return "";
   }
 
-  // JSON inference output
+  // JSON inference output — parse and render as markdown
   if ("raw" in output) {
-    const json = output.raw ?? JSON.stringify(output.parsed, null, 2);
-    return jsonFence(json);
+    const raw = output.raw;
+    if (raw !== null && raw !== undefined) {
+      return tryParseAndSerialize(raw);
+    }
+    if (output.parsed !== null && output.parsed !== undefined) {
+      return serializeJsonValue(output.parsed);
+    }
+    return "";
   }
 
   // Chat inference output (array of content blocks)
@@ -102,12 +112,13 @@ function serializeChatOutputBlock(block: ContentBlockChatOutput): string {
     case "text":
       return block.text;
     case "thought":
-      return block.text ?? "";
+      return `*${block.text ?? ""}*`;
     case "tool_call": {
-      return `**Tool call: ${block.raw_name}**\n${jsonFence(block.raw_arguments)}`;
+      const argsText = tryParseAndSerialize(block.raw_arguments);
+      return `**Tool call: ${block.raw_name}**\n\n${argsText}`;
     }
     case "unknown":
-      return jsonFence(JSON.stringify(block.data, null, 2));
+      return serializeJsonValue(block.data);
     default: {
       const _exhaustiveCheck: never = block;
       return _exhaustiveCheck;
@@ -116,33 +127,56 @@ function serializeChatOutputBlock(block: ContentBlockChatOutput): string {
 }
 
 /**
- * Renders a template Arguments map as readable key-value pairs.
- * Simple scalar values render as `**key**: value`.
- * Complex values (objects/arrays) render as `**key**:\n```json\n...\n````.
+ * Try to parse a JSON string and render as markdown key-value pairs.
+ * Falls back to the raw string if it's not valid JSON or not an object.
  */
-function serializeArguments(args: Record<string, JsonValue>): string {
-  const entries = Object.entries(args);
-  if (entries.length === 0) return "";
-  return entries
-    .map(([key, value]) => serializeKeyValue(key, value))
-    .join("\n");
+function tryParseAndSerialize(raw: string): string {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return serializeJsonValue(parsed as JsonValue);
+  } catch {
+    return raw;
+  }
 }
 
-function serializeKeyValue(key: string, value: JsonValue): string {
+/**
+ * Recursively renders a JSON value as readable markdown.
+ * - Objects → **key**: value lines (nested objects indent)
+ * - Arrays → bulleted lists
+ * - Scalars → plain text
+ */
+function serializeJsonValue(value: JsonValue, depth: number = 0): string {
   if (value === null || value === undefined) {
-    return `**${key}**: null`;
+    return "null";
   }
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return `**${key}**: ${value}`;
-  }
-  // Arrays and objects get a code fence
-  return `**${key}**:\n${jsonFence(JSON.stringify(value, null, 2))}`;
-}
 
-function jsonFence(content: string): string {
-  return `\`\`\`json\n${content}\n\`\`\``;
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "*(empty)*";
+    return value
+      .map((item) => `- ${serializeJsonValue(item, depth + 1)}`)
+      .join("\n");
+  }
+
+  // Object
+  const entries = Object.entries(value);
+  if (entries.length === 0) return "*(empty)*";
+
+  return entries
+    .map(([key, val]) => {
+      const serialized = serializeJsonValue(val, depth + 1);
+      // If the value is multi-line (nested object/array), put it on the next line
+      if (serialized.includes("\n")) {
+        return `**${key}**:\n${serialized}`;
+      }
+      return `**${key}**: ${serialized}`;
+    })
+    .join("\n");
 }
