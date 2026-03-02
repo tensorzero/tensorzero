@@ -1,0 +1,57 @@
+import { data } from "react-router";
+import { getEnv } from "~/utils/env.server";
+import { setApiKeyOverride } from "~/utils/get-tensorzero-client.server";
+import { setAutopilotApiKeyOverride } from "~/utils/get-autopilot-client.server";
+
+export async function action({ request }: { request: Request }) {
+  const formData = await request.formData();
+  const apiKey = formData.get("apiKey");
+
+  if (typeof apiKey !== "string" || !apiKey.trim()) {
+    return data({ error: "API key is required" }, { status: 400 });
+  }
+
+  const trimmed = apiKey.trim();
+  const env = getEnv();
+
+  // Validate the key by making a test request to the gateway
+  try {
+    const response = await fetch(
+      `${env.TENSORZERO_GATEWAY_URL}/api/ui_config`,
+      {
+        method: "GET",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${trimmed}`,
+        },
+      },
+    );
+
+    if (response.status === 401) {
+      return data(
+        { error: "Invalid API key. The gateway rejected this key." },
+        { status: 401 },
+      );
+    }
+
+    if (!response.ok) {
+      return data(
+        {
+          error: `Gateway returned ${response.status}. Check that the gateway is running.`,
+        },
+        { status: 502 },
+      );
+    }
+  } catch {
+    return data(
+      { error: "Unable to connect to the gateway. Check that it is running." },
+      { status: 502 },
+    );
+  }
+
+  // Key is valid — store it in the module-level override
+  setApiKeyOverride(trimmed);
+  setAutopilotApiKeyOverride(trimmed);
+
+  return data({ success: true });
+}

@@ -10,6 +10,8 @@ export default [
 
   // API routes
   ...prefix("api", [
+    route("auth/set_gateway_key", "routes/api/auth/set-gateway-key.route.ts"),
+
     route(
       "curated_inferences/count",
       "routes/api/curated_inferences/count.route.ts",

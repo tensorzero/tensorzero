@@ -1,17 +1,22 @@
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Database,
   FileQuestion,
   KeyRound,
+  Loader2,
   Server,
   Unplug,
 } from "lucide-react";
-import { isRouteErrorResponse } from "react-router";
+import { isRouteErrorResponse, useFetcher } from "react-router";
 import {
   InfraErrorType,
   type ClassifiedError,
   getPageErrorInfo,
 } from "~/utils/tensorzero/errors";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { CardContent } from "~/components/ui/card";
 import {
   ErrorContentCard,
   ErrorContentHeader,
@@ -71,6 +76,17 @@ function GatewayUnavailableContent() {
 }
 
 function GatewayAuthContent() {
+  const fetcher = useFetcher<{ success?: boolean; error?: string }>();
+  const [apiKey, setApiKey] = useState("");
+  const isSubmitting = fetcher.state === "submitting";
+  const error = fetcher.data?.error;
+
+  useEffect(() => {
+    if (fetcher.data?.success) {
+      window.location.reload();
+    }
+  }, [fetcher.data]);
+
   return (
     <ErrorContentCard>
       <ErrorContentHeader
@@ -78,10 +94,57 @@ function GatewayAuthContent() {
         title="Authentication Failed"
         description="Unable to authenticate with the TensorZero Gateway."
       />
+      <CardContent className="border-t p-6">
+        <div className="space-y-3">
+          <label
+            htmlFor="gateway-api-key"
+            className="text-foreground text-sm font-medium"
+          >
+            Gateway API Key
+          </label>
+          <div className="flex gap-2">
+            <Input
+              id="gateway-api-key"
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Enter API key"
+              disabled={isSubmitting}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && apiKey.trim()) {
+                  fetcher.submit(
+                    { apiKey },
+                    { method: "post", action: "/api/auth/set_gateway_key" },
+                  );
+                }
+              }}
+            />
+            <Button
+              type="button"
+              disabled={isSubmitting || !apiKey.trim()}
+              onClick={() => {
+                fetcher.submit(
+                  { apiKey },
+                  { method: "post", action: "/api/auth/set_gateway_key" },
+                );
+              }}
+            >
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Connect"
+              )}
+            </Button>
+          </div>
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          )}
+        </div>
+      </CardContent>
       <TroubleshootingSection>
         <>
-          Verify <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode> is set
-          correctly
+          Or set <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode> on the UI
+          server
         </>
         <>Ensure the API key has not expired or been revoked</>
         <>Check Gateway logs for authentication details</>
