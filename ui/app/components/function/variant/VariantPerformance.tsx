@@ -1,4 +1,4 @@
-import type { VariantPerformanceRow } from "~/types/tensorzero";
+import type { VariantPerformanceRow, TimeWindow } from "~/types/tensorzero";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,
@@ -24,6 +24,124 @@ import {
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
+interface VariantPerformanceChartProps {
+  data: VariantPerformanceData[];
+  variantNames: string[];
+  timeGranularity: TimeWindow;
+  singleVariantMode: boolean;
+}
+
+export function VariantPerformanceChart({
+  data,
+  variantNames,
+  timeGranularity,
+  singleVariantMode,
+}: VariantPerformanceChartProps) {
+  const chartConfig: Record<string, { label: string; color: string }> =
+    variantNames.reduce(
+      (config, variantName, index) => ({
+        ...config,
+        [variantName]: {
+          label: variantName,
+          color: singleVariantMode
+            ? CHART_COLORS[0]
+            : CHART_COLORS[index % CHART_COLORS.length],
+        },
+      }),
+      {},
+    );
+
+  return (
+    <>
+      <ChartContainer config={chartConfig}>
+        <BarChart accessibilityLayer data={data}>
+          <CartesianGrid vertical={false} />
+          <XAxis
+            dataKey="date"
+            tickLine={false}
+            tickMargin={10}
+            axisLine={true}
+            tickFormatter={(value) =>
+              formatXAxisTimestamp(new Date(value), timeGranularity)
+            }
+          />
+          <YAxis
+            tickLine={false}
+            tickMargin={10}
+            axisLine={true}
+            tickFormatter={formatChartNumber}
+          />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                labelFormatter={(label) =>
+                  formatTooltipTimestamp(new Date(label), timeGranularity)
+                }
+                formatter={(value, name, entry) => {
+                  const numInferences = entry.payload[`${name}_num_inferences`];
+                  return (
+                    <div className="flex flex-1 items-center justify-between leading-none">
+                      <span className="text-muted-foreground font-mono text-xs">
+                        {name}
+                      </span>
+                      <div className="ml-2 grid text-right">
+                        <span className="text-foreground font-mono font-medium tabular-nums">
+                          {formatDetailedNumber(value as number)}
+                        </span>
+                        <span className="text-muted-foreground text-[10px]">
+                          n={formatDetailedNumber(numInferences)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+            }
+          />
+          {singleVariantMode ? (
+            <Bar
+              key={variantNames[0]}
+              dataKey={variantNames[0]}
+              name={variantNames[0]}
+              fill={CHART_COLORS[0]}
+              radius={4}
+              maxBarSize={100}
+            >
+              <ErrorBar
+                dataKey={`${variantNames[0]}_ci_error`}
+                strokeWidth={1}
+              />
+            </Bar>
+          ) : (
+            variantNames.map((variantName) => (
+              <Bar
+                key={variantName}
+                dataKey={variantName}
+                name={variantName}
+                fill={chartConfig[variantName].color}
+                radius={4}
+                maxBarSize={100}
+              >
+                <ErrorBar dataKey={`${variantName}_ci_error`} strokeWidth={1} />
+              </Bar>
+            ))
+          )}
+        </BarChart>
+      </ChartContainer>
+      <ChartLegend
+        items={variantNames}
+        colors={
+          singleVariantMode
+            ? [CHART_COLORS[0]]
+            : variantNames.map(
+                (name) => chartConfig[name]?.color ?? CHART_COLORS[0],
+              )
+        }
+      />
+    </>
+  );
+}
+
 export function VariantPerformance({
   variant_performances,
   metric_name,
@@ -39,20 +157,6 @@ export function VariantPerformance({
   );
   const { data, variantNames } =
     transformVariantPerformances(variant_performances);
-
-  const chartConfig: Record<string, { label: string; color: string }> =
-    variantNames.reduce(
-      (config, variantName, index) => ({
-        ...config,
-        [variantName]: {
-          label: variantName,
-          color: singleVariantMode
-            ? CHART_COLORS[0]
-            : CHART_COLORS[index % CHART_COLORS.length],
-        },
-      }),
-      {},
-    );
 
   return (
     <div className="space-y-8">
@@ -83,94 +187,11 @@ export function VariantPerformance({
           />
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig}>
-            <BarChart accessibilityLayer data={data}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                tickMargin={10}
-                axisLine={true}
-                tickFormatter={(value) =>
-                  formatXAxisTimestamp(new Date(value), time_granularity)
-                }
-              />
-              <YAxis
-                tickLine={false}
-                tickMargin={10}
-                axisLine={true}
-                tickFormatter={formatChartNumber}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    labelFormatter={(label) =>
-                      formatTooltipTimestamp(new Date(label), time_granularity)
-                    }
-                    formatter={(value, name, entry) => {
-                      const numInferences =
-                        entry.payload[`${name}_num_inferences`];
-                      return (
-                        <div className="flex flex-1 items-center justify-between leading-none">
-                          <span className="text-muted-foreground font-mono text-xs">
-                            {name}
-                          </span>
-                          <div className="ml-2 grid text-right">
-                            <span className="text-foreground font-mono font-medium tabular-nums">
-                              {formatDetailedNumber(value as number)}
-                            </span>
-                            <span className="text-muted-foreground text-[10px]">
-                              n={formatDetailedNumber(numInferences)}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    }}
-                  />
-                }
-              />
-              {singleVariantMode ? (
-                <Bar
-                  key={variantNames[0]}
-                  dataKey={variantNames[0]}
-                  name={variantNames[0]}
-                  fill={CHART_COLORS[0]}
-                  radius={4}
-                  maxBarSize={100}
-                >
-                  <ErrorBar
-                    dataKey={`${variantNames[0]}_ci_error`}
-                    strokeWidth={1}
-                  />
-                </Bar>
-              ) : (
-                variantNames.map((variantName) => (
-                  <Bar
-                    key={variantName}
-                    dataKey={variantName}
-                    name={variantName}
-                    fill={chartConfig[variantName].color}
-                    radius={4}
-                    maxBarSize={100}
-                  >
-                    <ErrorBar
-                      dataKey={`${variantName}_ci_error`}
-                      strokeWidth={1}
-                    />
-                  </Bar>
-                ))
-              )}
-            </BarChart>
-          </ChartContainer>
-          <ChartLegend
-            items={variantNames}
-            colors={
-              singleVariantMode
-                ? [CHART_COLORS[0]]
-                : variantNames.map(
-                    (name) => chartConfig[name]?.color ?? CHART_COLORS[0],
-                  )
-            }
+          <VariantPerformanceChart
+            data={data}
+            variantNames={variantNames}
+            timeGranularity={time_granularity}
+            singleVariantMode={singleVariantMode}
           />
         </CardContent>
       </Card>
