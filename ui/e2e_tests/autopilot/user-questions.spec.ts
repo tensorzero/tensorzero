@@ -504,15 +504,14 @@ test.describe("User questions (full e2e)", () => {
       `Use the ask_user_questions tool to ask me exactly one multiple choice question. Use header "Auth", question "Which auth method?", type "multiple_choice", multi_select false, and two options: label "JWT" description "JSON Web Tokens" and label "OAuth" description "OAuth 2.0 flow". Call the tool directly without using any other tools first. ${v7()}`,
     );
 
-    // Wait for the question card from the real worker (the LLM may
-    // paraphrase, so we check for a substring that must appear)
-    await expect(page.getByText("JWT")).toBeVisible({
-      timeout: 90000,
-    });
+    // Wait for the question card's Submit button (unique to question cards —
+    // the user message also contains "JWT" so we can't use getByText("JWT"))
+    const submitButton = page.getByRole("button", { name: /submit/i });
+    await expect(submitButton).toBeVisible({ timeout: 90000 });
 
-    // Select JWT and submit
-    await page.getByText("JWT").click();
-    await page.getByRole("button", { name: /submit/i }).click();
+    // Select JWT option and submit (options render as buttons in the card)
+    await page.getByRole("button", { name: /JWT/ }).click();
+    await submitButton.click();
 
     // Verify "Answered" event appears
     await expect(page.getByText("Answered")).toBeVisible({ timeout: 15000 });
