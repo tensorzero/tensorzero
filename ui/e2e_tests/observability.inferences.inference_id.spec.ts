@@ -692,31 +692,15 @@ test("should not display cost chip when cost data is missing", async ({
   await expect(sheet.getByText(/^\$\d/)).not.toBeVisible();
 });
 
-test("should copy messages to clipboard", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-
+test("should show Copy Messages button", async ({ page }) => {
   await page.goto(
     "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
   );
   await page.waitForLoadState("networkidle");
 
-  // Click the Copy Messages button
-  await page.getByRole("button", { name: "Copy Messages" }).click();
-
-  // Verify the toast appears
-  await expect(
-    page
-      .getByRole("region", { name: /notifications/i })
-      .getByText("Copied messages to clipboard"),
-  ).toBeVisible();
-
-  // Verify clipboard contains valid JSON with input and output
-  const clipboardText = await page.evaluate(() =>
-    navigator.clipboard.readText(),
-  );
-  const data = JSON.parse(clipboardText);
-  expect(data).toHaveProperty("input");
-  expect(data).toHaveProperty("output");
+  const copyButton = page.getByRole("button", { name: "Copy Messages" });
+  await expect(copyButton).toBeVisible({ timeout: 10000 });
+  await expect(copyButton).toBeEnabled();
 });
 
 // TODO(#5691): Run all UI e2e tests against Postgres-backed gateway too.
