@@ -53,16 +53,11 @@ export function InferenceActionBar({
         inference={inference}
         onFeedbackAdded={onFeedbackAdded}
       />
-      <Suspense
+      <CopyMessagesButtonStreaming
         key={`copy-${locationKey}`}
-        fallback={<Skeleton className="h-8 w-36" />}
-      >
-        <Await resolve={inputPromise} errorElement={<ActionBarAsyncError />}>
-          {(input) => (
-            <CopyMessagesButton input={input} output={inference.output} />
-          )}
-        </Await>
-      </Suspense>
+        inference={inference}
+        inputPromise={inputPromise}
+      />
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}
       />
@@ -91,6 +86,24 @@ function AddToDatasetButtonStreaming({
             episodeId={inference.episode_id}
             hasDemonstration={hasDemonstration}
           />
+        )}
+      </Await>
+    </Suspense>
+  );
+}
+
+function CopyMessagesButtonStreaming({
+  inference,
+  inputPromise,
+}: {
+  inference: StoredInference;
+  inputPromise: Promise<Input | undefined>;
+}) {
+  return (
+    <Suspense fallback={<Skeleton className="h-8 w-36" />}>
+      <Await resolve={inputPromise} errorElement={<ActionBarAsyncError />}>
+        {(input) => (
+          <CopyMessagesButton input={input} output={inference.output} />
         )}
       </Await>
     </Suspense>
