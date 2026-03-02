@@ -11,12 +11,16 @@ import {
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import { AlertCircle } from "lucide-react";
 import { Suspense, useMemo } from "react";
+import { SnapshotHashProvider, useSnapshotHash } from "~/context/snapshot";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
-import { useFunctionConfig } from "~/context/config";
 import PageButtons from "~/components/utils/PageButtons";
 import VariantInferenceTable from "./VariantInferenceTable";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import {
+  getConfig,
+  getConfigForSnapshot,
+  getFunctionConfig,
+} from "~/utils/config/index.server";
 import { countInferencesForVariant } from "~/utils/clickhouse/inference.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { TimeWindow } from "~/types/tensorzero";
@@ -127,8 +131,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     return redirect("/observability/functions");
   }
 
-  const config = await getConfig();
   const url = new URL(request.url);
+  const snapshotHash = url.searchParams.get("snapshot_hash");
+  const config = snapshotHash
+    ? await getConfigForSnapshot(snapshotHash)
+    : await getConfig();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;
@@ -147,7 +154,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // Return granular promises for independent streaming
   return {
     function_name,
+    function_config,
     variant_name,
+    snapshotHash,
     // Metrics section - split into selector data and chart data
     metricsWithFeedbackData:
       getTensorZeroClient().getFunctionMetricsWithFeedback(
@@ -339,6 +348,7 @@ function VariantDetailPageHeader({
   variantName: string;
 }) {
   const autopilotAvailable = useAutopilotAvailable();
+  const snapshotHash = useSnapshotHash();
 
   return (
     <PageHeader
@@ -348,7 +358,7 @@ function VariantDetailPageHeader({
             { label: "Functions", href: "/observability/functions" },
             {
               label: functionName,
-              href: toFunctionUrl(functionName),
+              href: toFunctionUrl(functionName, snapshotHash),
               isIdentifier: true,
             },
             { label: "Variants" },
@@ -453,24 +463,15 @@ function InferencesSection({
 export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const {
     function_name,
+    function_config,
     variant_name,
+    snapshotHash,
     metricsWithFeedbackData,
     variantPerformanceData,
     inferencesTableData,
     inferenceCountData,
   } = loaderData;
   const location = useLocation();
-  const function_config = useFunctionConfig(function_name);
-
-  if (!function_config) {
-    throw new Response(
-      "Function not found. This likely means there is data in ClickHouse from an old TensorZero config.",
-      {
-        status: 404,
-        statusText: "Not Found",
-      },
-    );
-  }
 
   let variant_info = function_config.variants[variant_name];
   if (!variant_info) {
@@ -511,38 +512,40 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const function_type = function_config.type;
 
   return (
-    <PageLayout>
-      <VariantDetailPageHeader
-        functionName={function_name}
-        variantName={variant_name}
-      />
+    <SnapshotHashProvider value={snapshotHash}>
+      <PageLayout>
+        <VariantDetailPageHeader
+          functionName={function_name}
+          variantName={variant_name}
+        />
 
-      <SectionsGroup>
-        <SectionLayout>
-          <BasicInfo
-            variantConfig={variant_info.inner}
-            function_name={function_name}
-            function_type={function_type}
+        <SectionsGroup>
+          <SectionLayout>
+            <BasicInfo
+              variantConfig={variant_info.inner}
+              function_name={function_name}
+              function_type={function_type}
+            />
+          </SectionLayout>
+
+          <MetricsSection
+            metricsWithFeedbackData={metricsWithFeedbackData}
+            variantPerformanceData={variantPerformanceData}
+            locationKey={location.key}
           />
-        </SectionLayout>
 
-        <MetricsSection
-          metricsWithFeedbackData={metricsWithFeedbackData}
-          variantPerformanceData={variantPerformanceData}
-          locationKey={location.key}
-        />
+          <SectionLayout>
+            <SectionHeader heading="Templates" />
+            <VariantTemplate variantConfig={variant_info.inner} />
+          </SectionLayout>
 
-        <SectionLayout>
-          <SectionHeader heading="Templates" />
-          <VariantTemplate variantConfig={variant_info.inner} />
-        </SectionLayout>
-
-        <InferencesSection
-          inferencesTableData={inferencesTableData}
-          inferenceCountData={inferenceCountData}
-          locationKey={location.key}
-        />
-      </SectionsGroup>
-    </PageLayout>
+          <InferencesSection
+            inferencesTableData={inferencesTableData}
+            inferenceCountData={inferenceCountData}
+            locationKey={location.key}
+          />
+        </SectionsGroup>
+      </PageLayout>
+    </SnapshotHashProvider>
   );
 }
