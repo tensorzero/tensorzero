@@ -13,7 +13,7 @@ import { ActionBar } from "~/components/layout/ActionBar";
 import { Button, ButtonIcon } from "~/components/ui/button";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
-import { serializeConversation } from "~/utils/conversation-serializer";
+import { serializeMessages } from "~/utils/conversation-serializer";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
 import type { ModelInferencesData } from "./inference-data.server";
@@ -57,7 +57,7 @@ export function InferenceActionBar({
         inference={inference}
         onFeedbackAdded={onFeedbackAdded}
       />
-      <CopyConversationButton
+      <CopyMessagesButton
         key={`copy-${locationKey}`}
         inference={inference}
         inputPromise={inputPromise}
@@ -157,7 +157,7 @@ function TryWithVariantActionStreaming({
   );
 }
 
-function CopyConversationButton({
+function CopyMessagesButton({
   inference,
   inputPromise,
 }: {
@@ -169,13 +169,13 @@ function CopyConversationButton({
 
   useEffect(() => {
     if (didCopy) {
-      toast.success({ title: "Copied conversation to clipboard" });
+      toast.success({ title: "Copied messages to clipboard" });
     }
   }, [didCopy, toast]);
 
   const handleCopy = async () => {
     const input = await inputPromise;
-    const serialized = serializeConversation(input, inference);
+    const serialized = serializeMessages(input, inference);
     await copy(serialized);
   };
 

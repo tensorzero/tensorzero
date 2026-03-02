@@ -110,7 +110,7 @@ function maybeFlattenContent(
   return blocks;
 }
 
-export function serializeConversation(
+export function serializeMessages(
   input: Input | undefined,
   inference: StoredInference,
 ): string {

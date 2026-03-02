@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { serializeConversation } from "./conversation-serializer";
+import { serializeMessages } from "./conversation-serializer";
 import type {
   ContentBlockChatOutput,
   Input,
@@ -43,7 +43,7 @@ function makeJsonInference(output?: {
   };
 }
 
-describe("serializeConversation", () => {
+describe("serializeMessages", () => {
   it("should serialize a basic chat conversation with string system prompt", () => {
     const input: Input = {
       system: "You are a helpful assistant.",
@@ -51,7 +51,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference([{ type: "text", text: "Hi there!" }]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result).toEqual([
       { role: "system", content: "You are a helpful assistant." },
@@ -67,7 +67,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference([{ type: "text", text: "Greetings." }]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0]).toEqual({
       role: "system",
@@ -81,7 +81,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference([{ type: "text", text: "Hi!" }]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result).toEqual([
       { role: "user", content: "Hello" },
@@ -99,7 +99,7 @@ describe("serializeConversation", () => {
       { type: "text", text: "Single output" },
     ]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toBe("One block");
     expect(result[1].content).toBe("Single output");
@@ -119,7 +119,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference([]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([
       { type: "text", text: "First" },
@@ -145,7 +145,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([
       {
@@ -177,7 +177,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([
       {
@@ -207,7 +207,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([
       {
@@ -230,7 +230,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([
       { type: "thought", text: "Let me think..." },
@@ -254,7 +254,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     // Single text block gets flattened to a plain string
     expect(result[0].content).toBe(JSON.stringify({ name: "World" }));
@@ -271,7 +271,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toBe("Raw content here");
   });
@@ -294,7 +294,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([{ type: "file", file_type: "url" }]);
   });
@@ -310,7 +310,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([
       { type: "unknown", data: { custom: "data" } },
@@ -323,7 +323,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference(undefined);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result).toEqual([{ role: "user", content: "Hello" }]);
   });
@@ -345,7 +345,7 @@ describe("serializeConversation", () => {
       },
     ]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[1]).toEqual({
       role: "assistant",
@@ -371,7 +371,7 @@ describe("serializeConversation", () => {
       parsed: { name: "John" },
     });
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[1]).toEqual({
       role: "assistant",
@@ -390,7 +390,7 @@ describe("serializeConversation", () => {
       parsed: { name: "John" },
     });
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[1]).toEqual({
       role: "assistant",
@@ -403,7 +403,7 @@ describe("serializeConversation", () => {
       { type: "text", text: "I can help with that." },
     ]);
 
-    const result = JSON.parse(serializeConversation(undefined, inference));
+    const result = JSON.parse(serializeMessages(undefined, inference));
 
     expect(result).toEqual([
       { role: "assistant", content: "I can help with that." },
@@ -421,7 +421,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference([{ type: "text", text: "4" }]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result).toEqual([
       { role: "system", content: "You are helpful." },
@@ -449,7 +449,7 @@ describe("serializeConversation", () => {
       },
     ]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[1].content).toEqual([
       {
@@ -472,7 +472,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([{ type: "thought", text: "" }]);
   });
@@ -485,7 +485,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeJsonInference(undefined);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result).toEqual([{ role: "user", content: "Extract data" }]);
   });
@@ -497,7 +497,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference([{ type: "text", text: "Hi!" }]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result).toEqual([
       { role: "system", content: "You are helpful." },
@@ -525,7 +525,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([
       { type: "thought", text: "Thinking..." },
@@ -550,7 +550,7 @@ describe("serializeConversation", () => {
       { type: "text", text: "Here is my answer." },
     ]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[1]).toEqual({
       role: "assistant",
@@ -566,7 +566,7 @@ describe("serializeConversation", () => {
       { type: "thought" } as ContentBlockChatOutput,
     ]);
 
-    const result = JSON.parse(serializeConversation(undefined, inference));
+    const result = JSON.parse(serializeMessages(undefined, inference));
 
     expect(result[0].content).toEqual([{ type: "thought", text: "" }]);
   });
@@ -576,7 +576,7 @@ describe("serializeConversation", () => {
       { type: "unknown", data: { provider: "custom", raw: "abc" } },
     ]);
 
-    const result = JSON.parse(serializeConversation(undefined, inference));
+    const result = JSON.parse(serializeMessages(undefined, inference));
 
     expect(result[0].content).toEqual([
       { type: "unknown", data: { provider: "custom", raw: "abc" } },
@@ -603,7 +603,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference();
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result[0].content).toEqual([
       { type: "tool_call", id: "tc_1", name: "lookup", arguments: "{}" },
@@ -616,7 +616,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference([]);
 
-    const result = JSON.parse(serializeConversation(input, inference));
+    const result = JSON.parse(serializeMessages(input, inference));
 
     expect(result).toHaveLength(2);
     expect(result[1]).toEqual({
@@ -628,7 +628,7 @@ describe("serializeConversation", () => {
   it("should handle JSON inference with null raw and null parsed", () => {
     const inference = makeJsonInference({ raw: null, parsed: null });
 
-    const result = JSON.parse(serializeConversation(undefined, inference));
+    const result = JSON.parse(serializeMessages(undefined, inference));
 
     expect(result[0]).toEqual({
       role: "assistant",
@@ -639,7 +639,7 @@ describe("serializeConversation", () => {
   it("should produce empty array when both input and output are absent", () => {
     const inference = makeChatInference(undefined);
 
-    const result = JSON.parse(serializeConversation(undefined, inference));
+    const result = JSON.parse(serializeMessages(undefined, inference));
 
     expect(result).toEqual([]);
   });
@@ -650,7 +650,7 @@ describe("serializeConversation", () => {
     };
     const inference = makeChatInference([{ type: "text", text: "Hi!" }]);
 
-    const result = serializeConversation(input, inference);
+    const result = serializeMessages(input, inference);
 
     expect(result).toContain("\n");
     expect(() => JSON.parse(result)).not.toThrow();
