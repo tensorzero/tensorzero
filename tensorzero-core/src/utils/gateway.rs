@@ -441,6 +441,19 @@ impl GatewayHandle {
         )
         .await?;
 
+        // Validate auth config: auth requires Postgres
+        if config.gateway.auth.enabled
+            && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
+        {
+            return Err(ErrorDetails::AppState {
+                message:
+                    "Authentication is enabled (`gateway.auth.enabled = true`) but Postgres is not available. \
+                     Authentication requires Postgres. Set `TENSORZERO_POSTGRES_URL` or disable auth."
+                        .to_string(),
+            }
+            .into());
+        }
+
         let cache_manager = CacheManager::new_from_connections(
             &valkey_cache_connection_info,
             &clickhouse_connection_info,
@@ -659,25 +672,33 @@ async fn create_postgres_connection(
 
 // TODO(#5764): We should test that on startup we issue the correct SQL for write_retention_config,
 // but this is currently structured that's difficult to swap in a Mock.
+#[expect(deprecated)]
 pub async fn setup_postgres(
     config: &Config,
     postgres_url: Option<&str>,
 ) -> Result<PostgresConnectionInfo, Error> {
-    // TODO(#5691): we should stop checking an explicit postgres.enabled config.
+    if config.postgres.enabled.is_some() {
+        crate::utils::deprecation_warning(
+            "`postgres.enabled` is deprecated (2026.3+) and will be removed in a future release. \
+             Postgres connectivity is now determined by the `TENSORZERO_POSTGRES_URL` environment variable. \
+             Remove `postgres.enabled` from your config.",
+        );
+    }
+
     let postgres_connection_info = match (config.postgres.enabled, postgres_url) {
-        // Postgres disabled by config
+        // Postgres disabled by config (deprecated)
         (Some(false), _) => {
             tracing::info!("Disabling Postgres: `postgres.enabled` is set to false in config.");
             PostgresConnectionInfo::Disabled
         }
-        // Postgres enabled but no URL
+        // Postgres enabled but no URL (deprecated)
         (Some(true), None) => {
             return Err(ErrorDetails::AppState {
                 message: "Missing environment variable `TENSORZERO_POSTGRES_URL`.".to_string(),
             }
             .into());
         }
-        // Postgres enabled and URL provided
+        // Postgres enabled and URL provided (deprecated)
         (Some(true), Some(postgres_url)) => {
             create_postgres_connection(
                 postgres_url,
@@ -688,9 +709,7 @@ pub async fn setup_postgres(
         }
         // Postgres default and no URL
         (None, None) => {
-            tracing::debug!(
-                "Disabling Postgres: `postgres.enabled` is not explicitly specified in config and `TENSORZERO_POSTGRES_URL` is not set."
-            );
+            tracing::debug!("Disabling Postgres: `TENSORZERO_POSTGRES_URL` is not set.");
             PostgresConnectionInfo::Disabled
         }
         // Postgres default and URL provided
@@ -1188,6 +1207,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_setup_postgres_disabled() {
         let logs_contain = crate::utils::testing::capture_logs();
 
@@ -1229,6 +1249,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_setup_postgres_default_no_url() {
         // Default postgres config (enabled: None) and no URL
         let config = Box::leak(Box::new(Config {
@@ -1247,6 +1268,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_setup_postgres_enabled_no_url() {
         // Postgres enabled but URL is missing
         let config = Box::leak(Box::new(Config {
@@ -1265,6 +1287,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_setup_postgres_bad_url() {
         // Postgres enabled with bad URL
         let config = Box::leak(Box::new(Config {
@@ -1408,6 +1431,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_no_rate_limiting_does_not_require_postgres_or_valkey() {
         // Rate limiting enabled=false should not fail validation (no rules configured)
         let config_no_rules = Arc::new(Config {
@@ -1525,5 +1549,132 @@ mod tests {
         )
         .await
         .expect("Gateway should start when cache.enabled is default (null)");
+    }
+
+    #[tokio::test]
+    #[expect(deprecated)]
+    async fn test_setup_postgres_deprecated_enabled_true_emits_warning() {
+        let logs_contain = crate::utils::testing::capture_logs();
+
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        }));
+
+        // Will fail because the URL is bad, but the deprecation warning should still fire
+        let _ = setup_postgres(config, Some("bad_url")).await;
+        assert!(
+            logs_contain("`postgres.enabled` is deprecated"),
+            "should emit deprecation warning when postgres.enabled is explicitly set to true"
+        );
+    }
+
+    #[tokio::test]
+    #[expect(deprecated)]
+    async fn test_setup_postgres_deprecated_enabled_false_emits_warning() {
+        let logs_contain = crate::utils::testing::capture_logs();
+
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        }));
+
+        let postgres_connection_info = setup_postgres(config, None).await.unwrap();
+        assert!(
+            matches!(postgres_connection_info, PostgresConnectionInfo::Disabled),
+            "postgres should be disabled when enabled=false"
+        );
+        assert!(
+            logs_contain("`postgres.enabled` is deprecated"),
+            "should emit deprecation warning when postgres.enabled is explicitly set to false"
+        );
+    }
+
+    #[tokio::test]
+    #[expect(deprecated)]
+    async fn test_setup_postgres_default_no_deprecation_warning() {
+        let logs_contain = crate::utils::testing::capture_logs();
+
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: None,
+                ..Default::default()
+            },
+            ..Default::default()
+        }));
+
+        let _ = setup_postgres(config, None).await.unwrap();
+        assert!(
+            !logs_contain("`postgres.enabled` is deprecated"),
+            "should not emit deprecation warning when postgres.enabled is not set"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_auth_enabled_fails_without_postgres() {
+        use crate::config::gateway::AuthConfig;
+
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                auth: AuthConfig {
+                    enabled: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let result = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+            HashSet::new(),
+        )
+        .await;
+        let err = result
+            .err()
+            .expect("Gateway should fail when auth is enabled but Postgres is unavailable");
+        assert!(
+            err.to_string().contains("Authentication is enabled")
+                && err.to_string().contains("Postgres"),
+            "error should mention auth and Postgres: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_auth_disabled_starts_without_postgres() {
+        let config = Arc::new(Config {
+            gateway: GatewayConfig {
+                auth: Default::default(), // auth.enabled = false
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+        let _gateway = GatewayHandle::new_with_database_and_http_client(
+            config,
+            ClickHouseConnectionInfo::new_disabled(),
+            PostgresConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            ValkeyConnectionInfo::Disabled,
+            http_client,
+            None,
+            HashSet::new(),
+            HashSet::new(),
+        )
+        .await
+        .expect("Gateway should start when auth is disabled even without Postgres");
     }
 }

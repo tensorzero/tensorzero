@@ -2453,6 +2453,13 @@ impl PathWithContents {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct PostgresConfig {
+    /// DEPRECATED (2026.3+): Postgres connectivity is now determined by the
+    /// `TENSORZERO_POSTGRES_URL` environment variable. This field is accepted
+    /// for backward compatibility but will be removed in a future release.
+    #[deprecated(
+        note = "Postgres connectivity is now determined by the `TENSORZERO_POSTGRES_URL` environment variable. Remove `postgres.enabled` from your config."
+    )]
+    #[serde(default, skip_serializing)]
     pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
@@ -2480,6 +2487,7 @@ fn default_connection_pool_size() -> u32 {
 
 impl Default for PostgresConfig {
     fn default() -> Self {
+        #[expect(deprecated)]
         Self {
             enabled: None,
             connection_pool_size: 20,
