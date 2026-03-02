@@ -86,9 +86,10 @@ function serializeOutput(output: StoredInference["output"]): string {
     return "";
   }
 
-  // JSON inference output
+  // JSON inference output — wrap in code fence for readability
   if ("raw" in output) {
-    return output.raw ?? JSON.stringify(output.parsed, null, 2);
+    const json = output.raw ?? JSON.stringify(output.parsed, null, 2);
+    return `\`\`\`json\n${json}\n\`\`\``;
   }
 
   // Chat inference output (array of content blocks)

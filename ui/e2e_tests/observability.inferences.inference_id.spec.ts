@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+import {
+  installClipboardMock,
+  readMockClipboard,
+} from "./helpers/clipboard-helpers";
 import { createDatapointFromInference } from "./helpers/datapoint-helpers";
 
 test("should show the inference detail page", async ({ page }) => {
@@ -691,36 +695,6 @@ test("should not display cost chip when cost data is missing", async ({
   // Verify no cost chip in the sheet either
   await expect(sheet.getByText(/^\$\d/)).not.toBeVisible();
 });
-
-// Clipboard API requires permissions that aren't available in CI Docker.
-// Mock it via page.evaluate so it works in all environments.
-async function installClipboardMock(page: import("@playwright/test").Page) {
-  await page.evaluate(() => {
-    const storage = { text: "" };
-    Object.defineProperty(navigator, "clipboard", {
-      value: {
-        writeText: (text: string) => {
-          storage.text = text;
-          return Promise.resolve();
-        },
-        readText: () => Promise.resolve(storage.text),
-      },
-      writable: true,
-      configurable: true,
-    });
-    (
-      window as unknown as { __clipboardStorage: typeof storage }
-    ).__clipboardStorage = storage;
-  });
-}
-
-async function readMockClipboard(page: import("@playwright/test").Page) {
-  return page.evaluate(
-    () =>
-      (window as unknown as { __clipboardStorage: { text: string } })
-        .__clipboardStorage.text,
-  );
-}
 
 test("should copy messages to clipboard as JSON", async ({ page }) => {
   await page.goto(
