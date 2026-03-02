@@ -78,7 +78,7 @@ function GatewayUnavailableContent() {
 function GatewayAuthContent() {
   const fetcher = useFetcher<{ success?: boolean; error?: string }>();
   const [apiKey, setApiKey] = useState("");
-  const isSubmitting = fetcher.state === "submitting";
+  const isBusy = fetcher.state !== "idle";
   const error = fetcher.data?.error;
 
   useEffect(() => {
@@ -86,6 +86,15 @@ function GatewayAuthContent() {
       window.location.reload();
     }
   }, [fetcher.data]);
+
+  const handleSubmit = () => {
+    if (apiKey.trim()) {
+      fetcher.submit(
+        { apiKey },
+        { method: "post", action: "/api/auth/set_gateway_key" },
+      );
+    }
+  };
 
   return (
     <ErrorContentCard>
@@ -109,36 +118,24 @@ function GatewayAuthContent() {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="Enter API key"
-              disabled={isSubmitting}
+              disabled={isBusy}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && apiKey.trim()) {
-                  fetcher.submit(
-                    { apiKey },
-                    { method: "post", action: "/api/auth/set_gateway_key" },
-                  );
-                }
+                if (e.key === "Enter") handleSubmit();
               }}
             />
             <Button
               type="button"
-              disabled={isSubmitting || !apiKey.trim()}
-              onClick={() => {
-                fetcher.submit(
-                  { apiKey },
-                  { method: "post", action: "/api/auth/set_gateway_key" },
-                );
-              }}
+              disabled={isBusy || !apiKey.trim()}
+              onClick={handleSubmit}
             >
-              {isSubmitting ? (
+              {isBusy ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 "Connect"
               )}
             </Button>
           </div>
-          {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          )}
+          {error && <p className="text-destructive text-sm">{error}</p>}
         </div>
       </CardContent>
       <TroubleshootingSection>

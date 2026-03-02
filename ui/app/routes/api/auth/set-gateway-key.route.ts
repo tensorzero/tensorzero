@@ -13,6 +13,16 @@ export async function action({ request }: { request: Request }) {
   const trimmed = apiKey.trim();
   const env = getEnv();
 
+  if (env.TENSORZERO_API_KEY) {
+    return data(
+      {
+        error:
+          "TENSORZERO_API_KEY is already configured on the server. Update the environment variable instead.",
+      },
+      { status: 409 },
+    );
+  }
+
   // Validate the key by making a test request to the gateway
   try {
     const response = await fetch(
