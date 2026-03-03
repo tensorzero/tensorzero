@@ -136,6 +136,19 @@ type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"
 description = "Generate a haiku about a given topic"
 
+[functions.write_haiku.experimentation]
+type = "static_weights"
+candidate_variants = { "initial_prompt_gpt4o_mini" = 0.5, "initial_prompt_haiku_4_5" = 0.3, "better_prompt_haiku_4_5" = 0.2 }
+fallback_variants = ["dummy_slow"]
+
+[functions.write_haiku.experimentation.namespaces.mobile]
+type = "static_weights"
+candidate_variants = { "initial_prompt_gpt4o_mini" = 1.0 }
+
+[functions.write_haiku.experimentation.namespaces.web]
+type = "static_weights"
+candidate_variants = { "initial_prompt_haiku_4_5" = 0.6, "better_prompt_haiku_4_5" = 0.4 }
+
 [functions.write_haiku.variants.dummy_slow]
 type = "chat_completion"
 model = "dummy::slow"

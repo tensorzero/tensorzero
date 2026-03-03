@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::config::Config;
+use crate::config::namespace::Namespace;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::function::DEFAULT_FUNCTION_NAME;
@@ -16,6 +17,15 @@ use crate::utils::gateway::{AppState, AppStateData};
 pub struct GetVariantSamplingProbabilitiesParams {
     /// The name of the function to get probabilities for
     pub function_name: String,
+    /// Optional namespace to get namespace-specific probabilities
+    pub namespace: Option<Namespace>,
+}
+
+/// Query parameters for the path-based variant sampling probabilities endpoint
+#[derive(Debug, Deserialize)]
+pub struct GetVariantSamplingProbabilitiesByFunctionParams {
+    /// Optional namespace to get namespace-specific probabilities
+    pub namespace: Option<Namespace>,
 }
 
 /// Response containing variant sampling probabilities
@@ -33,8 +43,12 @@ pub struct GetVariantSamplingProbabilitiesResponse {
 pub async fn get_variant_sampling_probabilities_by_function_handler(
     State(app_state): AppState,
     Path(function_name): Path<String>,
+    Query(query): Query<GetVariantSamplingProbabilitiesByFunctionParams>,
 ) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, Error> {
-    let params = GetVariantSamplingProbabilitiesParams { function_name };
+    let params = GetVariantSamplingProbabilitiesParams {
+        function_name,
+        namespace: query.namespace,
+    };
     Ok(Json(
         get_variant_sampling_probabilities(
             &app_state.config,
@@ -80,7 +94,7 @@ pub async fn get_variant_sampling_probabilities(
 
     // Get the current display probabilities from the experimentation config
     let probabilities = function
-        .experimentation()
+        .experimentation_for_namespace(params.namespace.as_ref())
         .get_current_display_probabilities(
             function_name,
             function.variants(),
@@ -142,6 +156,7 @@ mod tests {
 
         let params = GetVariantSamplingProbabilitiesParams {
             function_name: "test_function".to_string(),
+            namespace: None,
         };
 
         let response = get_variant_sampling_probabilities(&config, &postgres, params)
@@ -180,6 +195,7 @@ mod tests {
 
         let params = GetVariantSamplingProbabilitiesParams {
             function_name: "tensorzero::default".to_string(),
+            namespace: None,
         };
 
         let response = get_variant_sampling_probabilities(&config, &postgres, params)
@@ -195,6 +211,7 @@ mod tests {
 
         let params = GetVariantSamplingProbabilitiesParams {
             function_name: "nonexistent_function".to_string(),
+            namespace: None,
         };
 
         let result = get_variant_sampling_probabilities(&config, &postgres, params).await;

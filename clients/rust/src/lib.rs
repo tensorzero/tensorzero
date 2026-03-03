@@ -1428,6 +1428,7 @@ impl ClientExt for Client {
                         &gateway.handle.app_state.postgres_connection_info,
                         GetVariantSamplingProbabilitiesParams {
                             function_name: function_name.to_string(),
+                            namespace: None,
                         },
                     )
                     .await

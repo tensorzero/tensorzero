@@ -22,17 +22,24 @@ export async function fetchExperimentationSectionData(params: {
   function_name: string;
   function_config: FunctionConfig;
   time_granularity: TimeWindow;
+  namespace: string | undefined;
 }): Promise<ExperimentationSectionData> {
-  const { function_name, function_config, time_granularity } = params;
+  const { function_name, function_config, time_granularity, namespace } =
+    params;
 
   const client = getTensorZeroClient();
 
+  // Resolve the active experimentation config (namespace-specific or base)
+  const activeConfig =
+    namespace && function_config.experimentation.namespaces[namespace]
+      ? function_config.experimentation.namespaces[namespace]
+      : function_config.experimentation.base;
+
   const feedbackParams =
-    function_config.experimentation.base.type === "adaptive"
+    activeConfig.type === "adaptive"
       ? {
-          metric_name: function_config.experimentation.base.metric,
-          variant_names:
-            function_config.experimentation.base.candidate_variants,
+          metric_name: activeConfig.metric,
+          variant_names: activeConfig.candidate_variants,
         }
       : null;
 
@@ -47,7 +54,7 @@ export async function fetchExperimentationSectionData(params: {
           })
         : Promise.resolve(undefined),
       client
-        .getVariantSamplingProbabilities(function_name)
+        .getVariantSamplingProbabilities(function_name, namespace)
         .then((response) => response.probabilities),
     ]);
 
