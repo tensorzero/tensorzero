@@ -56,4 +56,11 @@ describe("parseFeedbackByVariant", () => {
     const result = parseFeedbackByVariant(input);
     expect(result).toEqual(input);
   });
+
+  test("returns null when variance is wrong type", () => {
+    const input = [
+      { variant_name: "v1", mean: 0.8, count: 100, variance: "0.04" },
+    ];
+    expect(parseFeedbackByVariant(input)).toBeNull();
+  });
 });

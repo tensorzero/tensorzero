@@ -28,7 +28,8 @@ function isFeedbackByVariant(v: unknown): v is ParsedFeedbackByVariant {
   return (
     typeof obj.variant_name === "string" &&
     typeof obj.mean === "number" &&
-    typeof obj.count === "number"
+    typeof obj.count === "number" &&
+    (obj.variance == null || typeof obj.variance === "number")
   );
 }
 

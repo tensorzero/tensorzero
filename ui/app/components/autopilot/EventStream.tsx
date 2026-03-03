@@ -630,20 +630,16 @@ function EventItem({
       const raw: unknown = JSON.parse(event.payload.outcome.result);
       const data = parseFeedbackByVariant(raw);
       if (!data) return null;
-      const args = toolCallInfo.arguments;
+      const params =
+        typeof toolCallInfo.arguments === "object" &&
+        toolCallInfo.arguments !== null
+          ? (toolCallInfo.arguments as Record<string, unknown>)
+          : null;
       const metricName =
-        typeof args === "object" &&
-        args !== null &&
-        "metric_name" in args &&
-        typeof (args as Record<string, unknown>).metric_name === "string"
-          ? ((args as Record<string, unknown>).metric_name as string)
-          : "metric";
+        typeof params?.metric_name === "string" ? params.metric_name : "metric";
       const functionName =
-        typeof args === "object" &&
-        args !== null &&
-        "function_name" in args &&
-        typeof (args as Record<string, unknown>).function_name === "string"
-          ? ((args as Record<string, unknown>).function_name as string)
+        typeof params?.function_name === "string"
+          ? params.function_name
           : "function";
       return { data, metricName, functionName };
     } catch {
