@@ -219,11 +219,6 @@ impl From<DurableError> for ToolError {
                     message: format!("invalid task state: {state}"),
                 })
             }
-            DurableError::InvalidState { state } => {
-                ToolError::NonControl(NonControlToolError::Internal {
-                    message: format!("invalid task state: {state}"),
-                })
-            }
         }
     }
 }
