@@ -442,15 +442,17 @@ impl GatewayHandle {
         }
 
         let spawn_client = if let Some(pool) = postgres_connection_info.get_pool() {
+            let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
+                .unwrap_or_else(|_| "autopilot".to_string());
             match SpawnClient::builder()
                 .pool(pool.clone())
-                .queue_name("autopilot")
+                .queue_name(&queue_name)
                 .build()
                 .await
             {
                 Ok(client) => Some(Arc::new(client)),
                 Err(e) => {
-                    tracing::warn!("Failed to create SpawnClient: {e}");
+                    tracing::warn!("Failed to create `SpawnClient`: {e}");
                     None
                 }
             }
