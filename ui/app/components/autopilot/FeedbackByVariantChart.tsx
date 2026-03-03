@@ -7,10 +7,40 @@ import {
   VariantPerformanceChart,
 } from "~/components/function/variant/VariantPerformanceChart";
 
+// JSON.parse returns number (not bigint) for count, so override it.
+type ParsedFeedbackByVariant = Omit<FeedbackByVariant, "count"> & {
+  count: number;
+};
+
 interface FeedbackByVariantChartProps {
-  data: FeedbackByVariant[];
+  data: ParsedFeedbackByVariant[];
   metricName: string;
   functionName: string;
+}
+
+/**
+ * Validates that a parsed JSON value looks like a FeedbackByVariant entry.
+ * Guards against malformed tool result data rendering NaN bars.
+ */
+function isFeedbackByVariant(v: unknown): v is ParsedFeedbackByVariant {
+  if (typeof v !== "object" || v === null) return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    typeof obj.variant_name === "string" &&
+    typeof obj.mean === "number" &&
+    typeof obj.count === "number"
+  );
+}
+
+/**
+ * Validates that a parsed JSON array contains FeedbackByVariant entries.
+ */
+export function parseFeedbackByVariant(
+  data: unknown,
+): ParsedFeedbackByVariant[] | null {
+  if (!Array.isArray(data)) return null;
+  if (!data.every(isFeedbackByVariant)) return null;
+  return data;
 }
 
 /**
@@ -20,21 +50,20 @@ interface FeedbackByVariantChartProps {
  * Computes stdev from variance and derives a 95% confidence interval.
  */
 function toPerformanceRows(
-  feedback: FeedbackByVariant[],
+  feedback: ParsedFeedbackByVariant[],
 ): VariantPerformanceRow[] {
   return feedback.map((f) => {
-    const count = Number(f.count);
     const stdev =
       f.variance != null ? Math.sqrt(Math.max(0, f.variance)) : undefined;
     const ci_error =
-      stdev != null && count > 0
-        ? (1.96 * stdev) / Math.sqrt(count)
+      stdev != null && f.count > 0
+        ? (1.96 * stdev) / Math.sqrt(f.count)
         : undefined;
 
     return {
       period_start: "1970-01-01T00:00:00Z",
       variant_name: f.variant_name,
-      count,
+      count: f.count,
       avg_metric: f.mean,
       stdev,
       ci_error,

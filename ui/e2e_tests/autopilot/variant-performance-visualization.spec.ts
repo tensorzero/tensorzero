@@ -21,7 +21,8 @@ function buildFeedbackByVariantToolEvents() {
       session_id: "placeholder",
       config_snapshot_hash: "abc123",
       optimization: {
-        target_function_name: "basic_test",
+        poll_interval_secs: 60,
+        max_wait_secs: 86400,
       },
     },
   };
@@ -124,7 +125,8 @@ test.describe("Variant Performance Visualization", () => {
         session_id: "placeholder",
         config_snapshot_hash: "abc123",
         optimization: {
-          target_function_name: "simple_fn",
+          poll_interval_secs: 60,
+          max_wait_secs: 86400,
         },
       },
     };

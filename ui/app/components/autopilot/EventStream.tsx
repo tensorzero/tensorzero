@@ -30,10 +30,8 @@ import type {
   AutopilotStatus,
   EventPayloadMessageContent,
   EventPayloadUserQuestion,
-  FeedbackByVariant,
   GatewayEvent,
   GatewayEventPayload,
-  GetFeedbackByVariantToolParams,
   JsonValue,
   TopKEvaluationVisualization,
   UserQuestionAnswer,
@@ -44,7 +42,9 @@ import { hasAnsweredResponse } from "~/components/autopilot/question-cards/respo
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
-import FeedbackByVariantChart from "./FeedbackByVariantChart";
+import FeedbackByVariantChart, {
+  parseFeedbackByVariant,
+} from "./FeedbackByVariantChart";
 
 /**
  * Max height for expandable tool content (tool call arguments, tool results, errors).
@@ -649,15 +649,25 @@ function EventItem({
     if (event.payload.type !== "tool_result") return null;
     if (event.payload.outcome.type !== "success") return null;
     try {
-      const parsed: unknown = JSON.parse(event.payload.outcome.result);
-      if (!Array.isArray(parsed)) return null;
-      const args =
-        toolCallInfo.arguments as unknown as GetFeedbackByVariantToolParams;
-      return {
-        data: parsed as FeedbackByVariant[],
-        metricName: args.metric_name,
-        functionName: args.function_name,
-      };
+      const raw: unknown = JSON.parse(event.payload.outcome.result);
+      const data = parseFeedbackByVariant(raw);
+      if (!data) return null;
+      const args = toolCallInfo.arguments;
+      const metricName =
+        typeof args === "object" &&
+        args !== null &&
+        "metric_name" in args &&
+        typeof (args as Record<string, unknown>).metric_name === "string"
+          ? ((args as Record<string, unknown>).metric_name as string)
+          : "metric";
+      const functionName =
+        typeof args === "object" &&
+        args !== null &&
+        "function_name" in args &&
+        typeof (args as Record<string, unknown>).function_name === "string"
+          ? ((args as Record<string, unknown>).function_name as string)
+          : "function";
+      return { data, metricName, functionName };
     } catch {
       return null;
     }
