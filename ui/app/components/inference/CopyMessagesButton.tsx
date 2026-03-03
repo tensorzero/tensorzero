@@ -18,7 +18,7 @@ interface CopyMessagesButtonProps {
 }
 
 export function CopyMessagesButton({ input, output }: CopyMessagesButtonProps) {
-  const { copy, didCopy } = useCopy();
+  const { copy, didCopy, isCopyAvailable } = useCopy();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -34,6 +34,8 @@ export function CopyMessagesButton({ input, output }: CopyMessagesButtonProps) {
   const handleCopyMarkdown = async () => {
     await copy(serializeConversationMarkdown(input, output));
   };
+
+  if (!isCopyAvailable) return null;
 
   return (
     <DropdownMenu>

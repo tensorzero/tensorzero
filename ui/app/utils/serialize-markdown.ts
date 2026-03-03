@@ -151,18 +151,6 @@ function serializeJsonValue(value: JsonValue): string {
   }
 
   if (typeof value === "string") {
-    // If the string looks like JSON (object or array), try to parse and recurse
-    const trimmed = value.trimStart();
-    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-      try {
-        const parsed: unknown = JSON.parse(value);
-        if (typeof parsed === "object" && parsed !== null) {
-          return serializeJsonValue(parsed as JsonValue);
-        }
-      } catch {
-        // Not valid JSON — fall through to return raw string
-      }
-    }
     return value;
   }
 

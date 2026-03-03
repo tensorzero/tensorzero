@@ -323,10 +323,11 @@ export function InferenceDetailContent({
           />
         </humanFeedbackFetcher.Form>
       </HumanFeedbackModal>
-      <CopyMessagesButton input={input} output={inference.output} />
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}
       />
+      {/* Keep at end of row — conditionally hidden, so trailing position avoids jitter */}
+      <CopyMessagesButton input={input} output={inference.output} />
     </ActionBar>
   );
 
