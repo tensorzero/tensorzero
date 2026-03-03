@@ -58,6 +58,7 @@ use crate::db::{
     EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries, HowdyTokenUsage,
     ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
 };
+use crate::endpoints::inference::InferenceResponse;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigType};
@@ -474,13 +475,13 @@ impl InferenceQueries for DelegatingDatabaseConnection {
             .await
     }
 
-    async fn get_inference_output(
+    async fn get_serialized_inference_output_for_feedback(
         &self,
         function_info: &FunctionInfo,
         inference_id: Uuid,
     ) -> Result<Option<String>, Error> {
         self.get_database()
-            .get_inference_output(function_info, inference_id)
+            .get_serialized_inference_output_for_feedback(function_info, inference_id)
             .await
     }
 
@@ -974,6 +975,14 @@ impl EvaluationQueries for DelegatingDatabaseConnection {
                 offset,
             )
             .await
+    }
+
+    fn serialize_output_for_feedback(
+        &self,
+        inference_response: &InferenceResponse,
+    ) -> Result<String, Error> {
+        self.get_database()
+            .serialize_output_for_feedback(inference_response)
     }
 
     async fn get_inference_evaluation_human_feedback(

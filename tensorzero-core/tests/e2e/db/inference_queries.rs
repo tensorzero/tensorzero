@@ -39,7 +39,9 @@ async fn get_e2e_config() -> Config {
 // ===== SHARED TEST IMPLEMENTATIONS =====
 // These tests work with both ClickHouse and Postgres.
 
-async fn test_get_inference_output_chat_inference(conn: impl InferenceQueries) {
+async fn test_get_serialized_inference_output_for_feedback_chat_inference(
+    conn: impl InferenceQueries,
+) {
     // Use a hardcoded inference ID.
     let inference_id = Uuid::parse_str("0196c682-72e0-7c83-a92b-9d1a3c7630f2").expect("Valid UUID");
 
@@ -56,9 +58,9 @@ async fn test_get_inference_output_chat_inference(conn: impl InferenceQueries) {
         "write_haiku should be a Chat function"
     );
 
-    // Now test get_inference_output
+    // Now test get_serialized_inference_output_for_feedback
     let output = conn
-        .get_inference_output(&function_info, inference_id)
+        .get_serialized_inference_output_for_feedback(&function_info, inference_id)
         .await
         .unwrap();
 
@@ -72,9 +74,11 @@ async fn test_get_inference_output_chat_inference(conn: impl InferenceQueries) {
         "Output should not be empty for existing inference"
     );
 }
-make_db_test!(test_get_inference_output_chat_inference);
+make_db_test!(test_get_serialized_inference_output_for_feedback_chat_inference);
 
-async fn test_get_inference_output_json_inference(conn: impl InferenceQueries) {
+async fn test_get_serialized_inference_output_for_feedback_json_inference(
+    conn: impl InferenceQueries,
+) {
     // Use a hardcoded inference ID.
     let inference_id = Uuid::parse_str("0196374c-2c6d-7ce0-b508-e3b24ee4579c").expect("Valid UUID");
 
@@ -91,9 +95,9 @@ async fn test_get_inference_output_json_inference(conn: impl InferenceQueries) {
         "extract_entities should be a Json function"
     );
 
-    // Now test get_inference_output
+    // Now test get_serialized_inference_output_for_feedback
     let output = conn
-        .get_inference_output(&function_info, inference_id)
+        .get_serialized_inference_output_for_feedback(&function_info, inference_id)
         .await
         .unwrap();
 
@@ -107,9 +111,9 @@ async fn test_get_inference_output_json_inference(conn: impl InferenceQueries) {
         "Output should not be empty for existing json inference"
     );
 }
-make_db_test!(test_get_inference_output_json_inference);
+make_db_test!(test_get_serialized_inference_output_for_feedback_json_inference);
 
-async fn test_get_inference_output_not_found(conn: impl InferenceQueries) {
+async fn test_get_serialized_inference_output_for_feedback_not_found(conn: impl InferenceQueries) {
     // Create a fake function_info with a non-existent inference_id
     let fake_function_info = FunctionInfo {
         function_name: "write_haiku".to_string(),
@@ -121,7 +125,10 @@ async fn test_get_inference_output_not_found(conn: impl InferenceQueries) {
     let non_existent_inference_id = Uuid::now_v7();
 
     let output = conn
-        .get_inference_output(&fake_function_info, non_existent_inference_id)
+        .get_serialized_inference_output_for_feedback(
+            &fake_function_info,
+            non_existent_inference_id,
+        )
         .await
         .unwrap();
 
@@ -130,7 +137,7 @@ async fn test_get_inference_output_not_found(conn: impl InferenceQueries) {
         "Should return None for non-existent inference"
     );
 }
-make_db_test!(test_get_inference_output_not_found);
+make_db_test!(test_get_serialized_inference_output_for_feedback_not_found);
 
 async fn test_list_inferences_chat_function(conn: impl InferenceQueries) {
     let config = get_e2e_config().await;

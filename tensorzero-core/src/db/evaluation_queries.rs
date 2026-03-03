@@ -10,6 +10,7 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::config::MetricConfigOptimize;
+use crate::endpoints::inference::InferenceResponse;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput, StoredInput};
@@ -421,19 +422,30 @@ pub trait EvaluationQueries {
         offset: u32,
     ) -> Result<Vec<EvaluationResultRow>, Error>;
 
-    /// Gets existing human feedback for a given inference evaluation if it exists.
+    /// Serializes an inference response's output into a string that is consistent
+    /// with how `get_serialized_inference_output_for_feedback` stored it.
     ///
-    /// This function queries the StaticEvaluationHumanFeedback table to find existing
-    /// human feedback for a specific combination of metric name, datapoint ID, and output.
+    /// ClickHouse preserves the original struct field order, so this is plain
+    /// `serde_json::to_string`. Postgres JSONB does not preserve key order, so
+    /// this sorts keys before serializing.
+    ///
+    /// Call this before `get_inference_evaluation_human_feedback` to produce
+    /// a correctly normalized output string.
+    ///
+    /// TODO(#6664): Make the lookup order-independent instead of requiring a particular
+    /// backend-dependent serialization implementation.
+    fn serialize_output_for_feedback(
+        &self,
+        inference_response: &InferenceResponse,
+    ) -> Result<String, Error>;
+
+    /// Gets existing human feedback for a given inference evaluation if it exists.
     ///
     /// # Arguments
     /// * `metric_name` - The name of the metric being evaluated
     /// * `datapoint_id` - The UUID of the datapoint being evaluated
-    /// * `output` - The serialized inference output to match against
-    ///
-    /// # Returns
-    /// * `Some(InferenceEvaluationHumanFeedbackRow)` - If human feedback exists
-    /// * `None` - If no human feedback exists for this combination
+    /// * `output` - The serialized inference output, produced by
+    ///   [`serialize_output_for_feedback`](Self::serialize_output_for_feedback)
     async fn get_inference_evaluation_human_feedback(
         &self,
         metric_name: &str,
