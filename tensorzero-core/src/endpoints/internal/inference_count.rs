@@ -134,6 +134,18 @@ pub struct ListFunctionsWithInferenceCountResponse {
 }
 
 /// HTTP handler for the inference count endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/inference_count",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+    ),
+    responses(
+        (status = 200, description = "Inference count", body = InferenceCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_inference_count_handler",
@@ -154,6 +166,19 @@ pub async fn get_inference_count_handler(
 }
 
 /// HTTP handler for the feedback stats endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/inference_count/{metric_name}",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+        ("metric_name" = String, Path, description = "The metric name"),
+    ),
+    responses(
+        (status = 200, description = "Inference and feedback counts", body = InferenceWithFeedbackCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_inference_with_feedback_count_handler",
@@ -297,6 +322,18 @@ async fn get_inference_with_feedback_count(
 }
 
 /// HTTP handler for the function throughput by variant endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/throughput_by_variant",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+    ),
+    responses(
+        (status = 200, description = "Function throughput by variant", body = GetFunctionThroughputByVariantResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_function_throughput_by_variant_handler",
@@ -340,6 +377,15 @@ pub async fn get_function_throughput_by_variant(
 }
 
 /// HTTP handler for listing all functions with their inference counts
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/inference_counts",
+    responses(
+        (status = 200, description = "Functions with inference counts", body = ListFunctionsWithInferenceCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(name = "list_functions_with_inference_count_handler", skip_all)]
 pub async fn list_functions_with_inference_count_handler(

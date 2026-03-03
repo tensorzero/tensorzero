@@ -19,6 +19,19 @@ use super::types::{
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/from_inferences` endpoint.
 /// Creates datapoints from inferences based on either specific inference IDs or an inference query.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/datasets/{dataset_name}/from_inferences",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    request_body = inline(CreateDatapointsFromInferenceRequest),
+    responses(
+        (status = 200, description = "Datapoints created from inferences", body = CreateDatapointsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Datasets"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "datasets.v1.create_from_inferences", skip(app_state, request))]
 pub async fn create_from_inferences_handler(

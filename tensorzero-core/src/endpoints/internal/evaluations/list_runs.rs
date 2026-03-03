@@ -13,6 +13,15 @@ use crate::utils::gateway::{AppState, AppStateData};
 /// Handler for `GET /internal/evaluations/runs`
 ///
 /// Returns a paginated list of evaluation runs across all functions.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/evaluations/runs",
+    responses(
+        (status = 200, description = "List of evaluation runs", body = ListEvaluationRunsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "evaluations.list_runs", skip_all)]
 pub async fn list_evaluation_runs_handler(

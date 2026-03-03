@@ -24,6 +24,15 @@ const DEFAULT_GET_WORKFLOW_EVALUATION_PROJECTS_OFFSET: u32 = 0;
 /// Handler for `GET /internal/workflow_evaluations/projects`
 ///
 /// Returns a paginated list of workflow evaluation projects.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/workflow_evaluations/projects",
+    responses(
+        (status = 200, description = "Workflow evaluation projects", body = GetWorkflowEvaluationProjectsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "workflow_evaluations.get_projects", skip_all)]
 pub async fn get_workflow_evaluation_projects_handler(

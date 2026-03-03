@@ -288,6 +288,15 @@ pub async fn s3_initiate_upload(
 /// Handler for `GET /internal/autopilot/v1/sessions`
 ///
 /// Lists sessions from the Autopilot API.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/autopilot/v1/sessions",
+    responses(
+        (status = 200, description = "List of autopilot sessions", body = inline(autopilot_client::ListSessionsResponse)),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.list_sessions", skip_all)]
 pub async fn list_sessions_handler(
@@ -302,6 +311,18 @@ pub async fn list_sessions_handler(
 /// Handler for `GET /internal/autopilot/v1/sessions/{session_id}/events`
 ///
 /// Lists events for a session from the Autopilot API.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/autopilot/v1/sessions/{session_id}/events",
+    params(
+        ("session_id" = String, Path, description = "The session ID"),
+    ),
+    responses(
+        (status = 200, description = "List of events", body = inline(autopilot_client::GatewayListEventsResponse)),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.list_events", skip_all, fields(session_id = %session_id))]
 pub async fn list_events_handler(
@@ -319,6 +340,19 @@ pub async fn list_events_handler(
 /// Creates an event in a session via the Autopilot API.
 /// The deployment_id is injected from the gateway's app state.
 /// The `tensorzero-beta-tools` header, if present, is forwarded to the remote server.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/autopilot/v1/sessions/{session_id}/events",
+    params(
+        ("session_id" = String, Path, description = "The session ID"),
+    ),
+    request_body = inline(CreateEventGatewayRequest),
+    responses(
+        (status = 200, description = "Event created", body = inline(autopilot_client::CreateEventResponse)),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.create_event", skip_all, fields(session_id = %session_id))]
 pub async fn create_event_handler(
@@ -380,6 +414,19 @@ pub async fn create_event_handler(
 ///
 /// Approves all pending tool calls for a session via the Autopilot API.
 /// The deployment_id and tensorzero_version are injected from the gateway's app state.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/autopilot/v1/sessions/{session_id}/actions/approve_all",
+    params(
+        ("session_id" = String, Path, description = "The session ID"),
+    ),
+    request_body = inline(ApproveAllToolCallsGatewayRequest),
+    responses(
+        (status = 200, description = "Tool calls approved", body = inline(autopilot_client::ApproveAllToolCallsResponse)),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.approve_all_tool_calls", skip_all, fields(session_id = %session_id))]
 pub async fn approve_all_tool_calls_handler(
@@ -407,6 +454,18 @@ pub async fn approve_all_tool_calls_handler(
 /// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/actions/interrupt`
 ///
 /// Interrupts an autopilot session via the Autopilot API.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/autopilot/v1/sessions/{session_id}/actions/interrupt",
+    params(
+        ("session_id" = String, Path, description = "The session ID"),
+    ),
+    responses(
+        (status = 200, description = "Session interrupted"),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.interrupt_session", skip_all, fields(session_id = %session_id))]
 pub async fn interrupt_session_handler(
@@ -420,6 +479,18 @@ pub async fn interrupt_session_handler(
 /// Handler for `GET /internal/autopilot/v1/sessions/{session_id}/config-writes`
 ///
 /// Lists config writes (write_config tool calls) for a session from the Autopilot API.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/autopilot/v1/sessions/{session_id}/config-writes",
+    params(
+        ("session_id" = String, Path, description = "The session ID"),
+    ),
+    responses(
+        (status = 200, description = "Config writes for session", body = inline(autopilot_client::GatewayListConfigWritesResponse)),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.list_config_writes", skip_all, fields(session_id = %session_id))]
 pub async fn list_config_writes_handler(
@@ -435,6 +506,19 @@ pub async fn list_config_writes_handler(
 /// Handler for `POST /internal/autopilot/v1/sessions/{session_id}/aws/s3_initiate_upload`
 ///
 /// Initiates an S3 upload via the Autopilot API.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/autopilot/v1/sessions/{session_id}/aws/s3_initiate_upload",
+    params(
+        ("session_id" = String, Path, description = "The session ID"),
+    ),
+    request_body = inline(S3InitiateUploadGatewayRequest),
+    responses(
+        (status = 200, description = "S3 upload initiated", body = inline(autopilot_client::S3UploadResponse)),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.s3_initiate_upload", skip_all)]
 pub async fn s3_initiate_upload_handler(
@@ -454,6 +538,14 @@ pub async fn s3_initiate_upload_handler(
 ///
 /// Returns whether autopilot is configured (i.e., whether `TENSORZERO_AUTOPILOT_API_KEY` is set).
 /// This endpoint does not require authentication and does not make any external calls.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/autopilot/status",
+    responses(
+        (status = 200, description = "Autopilot status", body = AutopilotStatusResponse),
+    ),
+    tag = "Internal"
+))]
 #[instrument(name = "autopilot.status", skip_all)]
 pub async fn autopilot_status_handler(State(app_state): AppState) -> Json<AutopilotStatusResponse> {
     Json(AutopilotStatusResponse {
@@ -465,6 +557,18 @@ pub async fn autopilot_status_handler(State(app_state): AppState) -> Json<Autopi
 ///
 /// Streams events for a session via SSE from the Autopilot API.
 /// Note: The #[instrument] macro is not used here due to lifetime issues with the SSE stream.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/autopilot/v1/sessions/{session_id}/events/stream",
+    params(
+        ("session_id" = String, Path, description = "The session ID"),
+    ),
+    responses(
+        (status = 200, description = "SSE stream of events", content_type = "text/event-stream"),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 pub async fn stream_events_handler(
     State(app_state): AppState,

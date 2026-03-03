@@ -10,6 +10,16 @@ use tracing::instrument;
 /// Handler for `POST /internal/action`
 ///
 /// Executes an inference, feedback, or evaluation action using a historical config snapshot.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/action",
+    request_body = inline(Object),
+    responses(
+        (status = 200, description = "Action result", body = Object),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(name = "action", skip_all, fields(snapshot_hash = %params.snapshot_hash))]
 pub async fn action_handler(

@@ -13,6 +13,15 @@ use crate::utils::gateway::{AppState, AppStateData};
 /// Handler for `GET /internal/evaluations/datapoint_count`
 ///
 /// Returns the count of unique datapoints across the specified evaluation runs.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/evaluations/datapoint_count",
+    responses(
+        (status = 200, description = "Datapoint count for evaluations", body = DatapointStatsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "evaluations.count_datapoints", skip_all)]
 pub async fn count_datapoints_handler(

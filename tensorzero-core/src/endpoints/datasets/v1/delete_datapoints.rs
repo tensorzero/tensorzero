@@ -15,6 +15,19 @@ pub struct DeleteDatapointsPathParams {
     pub dataset_name: String,
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    delete,
+    path = "/v1/datasets/{dataset_name}/datapoints",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    request_body = inline(DeleteDatapointsRequest),
+    responses(
+        (status = 200, description = "Datapoints deleted", body = DeleteDatapointsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Datasets"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "datasets.v1.delete_datapoints", skip(app_state, request))]
 pub async fn delete_datapoints_handler(
@@ -27,6 +40,18 @@ pub async fn delete_datapoints_handler(
     Ok(Json(response))
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    delete,
+    path = "/v1/datasets/{dataset_name}",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    responses(
+        (status = 200, description = "Dataset deleted", body = DeleteDatapointsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Datasets"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "datasets.v1.delete_dataset", skip(app_state))]
 pub async fn delete_dataset_handler(

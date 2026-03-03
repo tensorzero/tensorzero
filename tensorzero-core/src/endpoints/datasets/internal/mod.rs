@@ -1,5 +1,5 @@
-mod clone_datapoints;
-mod get_datapoint_count;
+pub mod clone_datapoints;
+pub mod get_datapoint_count;
 
 pub use clone_datapoints::{
     CloneDatapointsRequest, CloneDatapointsResponse, clone_datapoints_handler,

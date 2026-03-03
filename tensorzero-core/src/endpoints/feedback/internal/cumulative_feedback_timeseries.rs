@@ -30,6 +30,15 @@ pub struct GetCumulativeFeedbackTimeseriesResponse {
 }
 
 /// HTTP handler for getting cumulative feedback time series
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/feedback/timeseries",
+    responses(
+        (status = 200, description = "Cumulative feedback timeseries", body = GetCumulativeFeedbackTimeseriesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_cumulative_feedback_timeseries_handler",

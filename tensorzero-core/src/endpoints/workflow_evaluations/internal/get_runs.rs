@@ -23,6 +23,15 @@ pub struct GetWorkflowEvaluationRunsParams {
 /// Handler for `GET /internal/workflow_evaluations/get_runs`
 ///
 /// Gets workflow evaluation runs by their IDs.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/workflow_evaluations/get_runs",
+    responses(
+        (status = 200, description = "Workflow evaluation runs by IDs", body = GetWorkflowEvaluationRunsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "workflow_evaluations.get_runs", skip_all)]
 pub async fn get_workflow_evaluation_runs_handler(

@@ -40,6 +40,15 @@ pub struct GetEvaluationResultsResponse {
 /// Handler for `GET /internal/evaluations/results`
 ///
 /// Returns paginated evaluation results across one or more evaluation runs.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/evaluations/results",
+    responses(
+        (status = 200, description = "Evaluation results", body = GetEvaluationResultsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "evaluations.get_results", skip_all)]
 pub async fn get_evaluation_results_handler(

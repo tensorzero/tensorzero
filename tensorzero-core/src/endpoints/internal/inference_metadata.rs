@@ -41,6 +41,15 @@ pub struct ListInferenceMetadataResponse {
 }
 
 /// HTTP handler for listing inference metadata
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/inference_metadata",
+    responses(
+        (status = 200, description = "Inference metadata list", body = ListInferenceMetadataResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(name = "get_inference_metadata_handler", skip_all)]
 pub async fn get_inference_metadata_handler(

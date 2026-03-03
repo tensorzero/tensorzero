@@ -41,6 +41,16 @@ pub struct WorkflowEvaluationRunResponse {
     pub run_id: Uuid,
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/workflow_evaluation_run",
+    request_body = inline(WorkflowEvaluationRunParams),
+    responses(
+        (status = 200, description = "Workflow evaluation run created", body = WorkflowEvaluationRunResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Workflow Evaluation"
+))]
 #[debug_handler(state = AppStateData)]
 pub async fn workflow_evaluation_run_handler(
     State(app_state): AppState,
@@ -90,6 +100,19 @@ pub struct WorkflowEvaluationRunEpisodeResponse {
     pub episode_id: Uuid,
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/workflow_evaluation_run/{run_id}/episode",
+    params(
+        ("run_id" = String, Path, description = "The workflow evaluation run ID"),
+    ),
+    request_body = inline(WorkflowEvaluationRunEpisodeParams),
+    responses(
+        (status = 200, description = "Episode created", body = WorkflowEvaluationRunEpisodeResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Workflow Evaluation"
+))]
 #[debug_handler(state = AppStateData)]
 pub async fn workflow_evaluation_run_episode_handler(
     State(app_state): AppState,

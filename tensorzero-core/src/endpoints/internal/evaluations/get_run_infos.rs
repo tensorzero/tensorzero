@@ -50,6 +50,15 @@ pub struct GetEvaluationRunInfosResponse {
 /// Handler for `GET /internal/evaluations/run_infos`
 ///
 /// Returns information about specific evaluation runs.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/evaluations/run_infos",
+    responses(
+        (status = 200, description = "Evaluation run infos", body = GetEvaluationRunInfosResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "evaluations.get_run_infos", skip_all)]
 pub async fn get_evaluation_run_infos_handler(
@@ -102,6 +111,18 @@ pub async fn get_evaluation_run_infos(
 /// Handler for `GET /internal/evaluations/datapoints/{datapoint_id}/run_infos`
 ///
 /// Returns information about evaluation runs associated with a specific datapoint.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/evaluations/datapoints/{datapoint_id}/run_infos",
+    params(
+        ("datapoint_id" = String, Path, description = "The datapoint ID"),
+    ),
+    responses(
+        (status = 200, description = "Evaluation run infos for datapoint", body = GetEvaluationRunInfosResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "evaluations.get_run_infos_for_datapoint", skip_all)]
 pub async fn get_evaluation_run_infos_for_datapoint_handler(

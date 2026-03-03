@@ -95,6 +95,18 @@ pub struct ModelInference {
 }
 
 /// HTTP handler for getting model inferences by inference ID
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/model_inferences/{inference_id}",
+    params(
+        ("inference_id" = String, Path, description = "The inference ID"),
+    ),
+    responses(
+        (status = 200, description = "Model inferences for inference", body = GetModelInferencesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_model_inferences_handler",

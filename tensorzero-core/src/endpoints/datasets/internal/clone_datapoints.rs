@@ -33,6 +33,19 @@ pub struct CloneDatapointsResponse {
 
 /// The handler for the POST `/internal/datasets/{dataset_name}/datapoints/clone` endpoint.
 /// This endpoint clones datapoints to a target dataset, preserving all fields except id and dataset_name.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/datasets/{dataset_name}/datapoints/clone",
+    params(
+        ("dataset_name" = String, Path, description = "The target dataset name"),
+    ),
+    request_body = inline(CloneDatapointsRequest),
+    responses(
+        (status = 200, description = "Datapoints cloned", body = CloneDatapointsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[tracing::instrument(name = "clone_datapoints_handler", skip(app_state))]
 pub async fn clone_datapoints_handler(
     State(app_state): AppState,

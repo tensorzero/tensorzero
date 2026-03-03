@@ -15,7 +15,8 @@
         "tags": [
           "Batch Inference"
         ],
-        "operationId": "start_batch_inference",
+        "summary": "This handler starts a batch inference request for a particular function.\nThe entire batch must use the same function and variant.\nIt will fail if we fail to kick off the batch request for any reason.\nHowever, the batch request might still fail for other reasons after it has been started.",
+        "operationId": "start_batch_inference_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -109,14 +110,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -126,7 +120,8 @@
         "tags": [
           "Batch Inference"
         ],
-        "operationId": "poll_batch_inference",
+        "summary": "Polls a batch inference request that was made using the `/start_batch_inference` endpoint\nSemantics: if the batch is pending, it will actually poll the model provider\nIf the batch is failed, it will return a failed response immediately\nIf the batch is completed, it will return the appropriate response immediately from the database",
+        "operationId": "poll_batch_inference_handler",
         "parameters": [
           {
             "name": "batch_id",
@@ -150,14 +145,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -167,7 +155,8 @@
         "tags": [
           "Batch Inference"
         ],
-        "operationId": "poll_batch_inference_single",
+        "summary": "Polls a single inference within a batch inference request.\nThis is a thin wrapper around `poll_batch_inference_handler` that converts the path params.",
+        "operationId": "poll_batch_inference_by_inference_handler",
         "parameters": [
           {
             "name": "batch_id",
@@ -200,14 +189,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -217,7 +199,8 @@
         "tags": [
           "Feedback"
         ],
-        "operationId": "feedback",
+        "summary": "A handler for the feedback endpoint",
+        "operationId": "feedback_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -283,14 +266,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -300,7 +276,8 @@
         "tags": [
           "Status"
         ],
-        "operationId": "health",
+        "summary": "A handler for a health check that includes availability of related services",
+        "operationId": "health_handler",
         "responses": {
           "200": {
             "description": "Health check"
@@ -313,7 +290,8 @@
         "tags": [
           "Inference"
         ],
-        "operationId": "inference",
+        "summary": "A handler for the inference endpoint",
+        "operationId": "inference_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -442,14 +420,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -459,7 +430,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "internal_action",
+        "summary": "Handler for `POST /internal/action`",
+        "description": "Executes an inference, feedback, or evaluation action using a historical config snapshot.",
+        "operationId": "action_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -482,14 +455,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -499,7 +465,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "autopilot_status",
+        "summary": "Handler for `GET /internal/autopilot/status`",
+        "description": "Returns whether autopilot is configured (i.e., whether `TENSORZERO_AUTOPILOT_API_KEY` is set).\nThis endpoint does not require authentication and does not make any external calls.",
+        "operationId": "autopilot_status_handler",
         "responses": {
           "200": {
             "description": "Autopilot status",
@@ -519,7 +487,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "list_autopilot_sessions",
+        "summary": "Handler for `GET /internal/autopilot/v1/sessions`",
+        "description": "Lists sessions from the Autopilot API.",
+        "operationId": "list_sessions_handler",
         "responses": {
           "200": {
             "description": "List of autopilot sessions",
@@ -544,14 +514,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -561,7 +524,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "approve_all_tool_calls",
+        "summary": "Handler for `POST /internal/autopilot/v1/sessions/{session_id}/actions/approve_all`",
+        "description": "Approves all pending tool calls for a session via the Autopilot API.\nThe deployment_id and tensorzero_version are injected from the gateway's app state.",
+        "operationId": "approve_all_tool_calls_handler",
         "parameters": [
           {
             "name": "session_id",
@@ -636,14 +601,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -653,7 +611,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "interrupt_session",
+        "summary": "Handler for `POST /internal/autopilot/v1/sessions/{session_id}/actions/interrupt`",
+        "description": "Interrupts an autopilot session via the Autopilot API.",
+        "operationId": "interrupt_session_handler",
         "parameters": [
           {
             "name": "session_id",
@@ -670,14 +630,7 @@
             "description": "Session interrupted"
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -687,7 +640,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "s3_initiate_upload",
+        "summary": "Handler for `POST /internal/autopilot/v1/sessions/{session_id}/aws/s3_initiate_upload`",
+        "description": "Initiates an S3 upload via the Autopilot API.",
+        "operationId": "s3_initiate_upload_handler",
         "parameters": [
           {
             "name": "session_id",
@@ -788,14 +743,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -805,7 +753,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "list_config_writes",
+        "summary": "Handler for `GET /internal/autopilot/v1/sessions/{session_id}/config-writes`",
+        "description": "Lists config writes (write_config tool calls) for a session from the Autopilot API.",
+        "operationId": "list_config_writes_handler",
         "parameters": [
           {
             "name": "session_id",
@@ -841,14 +791,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -858,7 +801,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "list_autopilot_events",
+        "summary": "Handler for `GET /internal/autopilot/v1/sessions/{session_id}/events`",
+        "description": "Lists events for a session from the Autopilot API.",
+        "operationId": "list_events_handler",
         "parameters": [
           {
             "name": "session_id",
@@ -919,14 +864,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       },
@@ -934,7 +872,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "create_autopilot_event",
+        "summary": "Handler for `POST /internal/autopilot/v1/sessions/{session_id}/events`",
+        "description": "Creates an event in a session via the Autopilot API.\nThe deployment_id is injected from the gateway's app state.\nThe `tensorzero-beta-tools` header, if present, is forwarded to the remote server.",
+        "operationId": "create_event_handler",
         "parameters": [
           {
             "name": "session_id",
@@ -1000,14 +940,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1017,7 +950,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "stream_autopilot_events",
+        "summary": "Handler for `GET /internal/autopilot/v1/sessions/{session_id}/events/stream`",
+        "description": "Streams events for a session via SSE from the Autopilot API.\nNote: The #[instrument] macro is not used here due to lifetime issues with the SSE stream.",
+        "operationId": "stream_events_handler",
         "parameters": [
           {
             "name": "session_id",
@@ -1037,14 +972,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1054,7 +982,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_live_config",
+        "summary": "Handler for `GET /internal/config`",
+        "description": "Returns the live config snapshot.",
+        "operationId": "get_live_config_handler",
         "responses": {
           "200": {
             "description": "Live config snapshot",
@@ -1067,14 +997,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       },
@@ -1082,7 +1005,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "write_config",
+        "summary": "Handler for `POST /internal/config`",
+        "description": "Writes a config snapshot to the database and returns its hash.\nIf a config with the same hash already exists, tags are merged\n(new tags override existing keys) and created_at is preserved.\n\nThe config is validated by running the full config loading pipeline\n(with credential validation disabled) before writing. This catches\nissues like invalid model references, missing templates, and\ncross-reference errors that serde deserialization alone would miss.",
+        "operationId": "write_config_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1135,14 +1060,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1152,7 +1070,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_config_by_hash",
+        "summary": "Handler for `GET /internal/config/{hash}`",
+        "description": "Returns a config snapshot by hash.",
+        "operationId": "get_config_by_hash_handler",
         "parameters": [
           {
             "name": "hash",
@@ -1176,14 +1096,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1193,7 +1106,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "internal_list_datasets",
+        "summary": "Handler for the GET `/internal/datasets` endpoint.\nReturns metadata for all datasets with optional filtering and pagination.",
+        "operationId": "list_datasets_handler",
         "responses": {
           "200": {
             "description": "List of datasets",
@@ -1206,14 +1120,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1223,7 +1130,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "clone_datapoints",
+        "summary": "The handler for the POST `/internal/datasets/{dataset_name}/datapoints/clone` endpoint.\nThis endpoint clones datapoints to a target dataset, preserving all fields except id and dataset_name.",
+        "operationId": "clone_datapoints_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -1269,14 +1177,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1286,7 +1187,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_datapoint_count",
+        "summary": "HTTP handler for the datapoint count endpoint",
+        "operationId": "get_datapoint_count_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -1310,14 +1212,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1327,7 +1222,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "list_episodes_get",
+        "summary": "HTTP handler for querying episodes (GET)",
+        "operationId": "list_episodes_handler",
         "responses": {
           "200": {
             "description": "List of episodes",
@@ -1340,14 +1236,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       },
@@ -1355,7 +1244,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "list_episodes_post",
+        "summary": "HTTP handler for querying episodes (POST with filters)",
+        "operationId": "list_episodes_post_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1424,14 +1314,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1441,7 +1324,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "query_episode_table_bounds",
+        "summary": "HTTP handler for querying episode table bounds",
+        "operationId": "query_episode_table_bounds_handler",
         "responses": {
           "200": {
             "description": "Episode table bounds",
@@ -1478,14 +1362,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1495,7 +1372,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_episode_inference_count",
+        "summary": "HTTP handler for getting inference counts for an episode",
+        "operationId": "get_episode_inference_count_handler",
         "parameters": [
           {
             "name": "episode_id",
@@ -1519,14 +1397,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1536,7 +1407,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "count_evaluation_datapoints",
+        "summary": "Handler for `GET /internal/evaluations/datapoint_count`",
+        "description": "Returns the count of unique datapoints across the specified evaluation runs.",
+        "operationId": "count_datapoints_handler",
         "responses": {
           "200": {
             "description": "Datapoint count for evaluations",
@@ -1549,14 +1422,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1566,7 +1432,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_human_feedback",
+        "summary": "Handler for `POST /internal/evaluations/datapoints/{datapoint_id}/get_human_feedback`",
+        "description": "Checks if human feedback exists for a given combination of metric name,\ndatapoint ID, and output.",
+        "operationId": "get_human_feedback_handler",
         "parameters": [
           {
             "name": "datapoint_id",
@@ -1615,14 +1483,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1632,7 +1493,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_evaluation_run_infos_for_datapoint",
+        "summary": "Handler for `GET /internal/evaluations/datapoints/{datapoint_id}/run_infos`",
+        "description": "Returns information about evaluation runs associated with a specific datapoint.",
+        "operationId": "get_evaluation_run_infos_for_datapoint_handler",
         "parameters": [
           {
             "name": "datapoint_id",
@@ -1656,14 +1519,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1673,7 +1529,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_evaluation_results",
+        "summary": "Handler for `GET /internal/evaluations/results`",
+        "description": "Returns paginated evaluation results across one or more evaluation runs.",
+        "operationId": "get_evaluation_results_handler",
         "responses": {
           "200": {
             "description": "Evaluation results",
@@ -1686,14 +1544,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1703,7 +1554,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "run_evaluation",
+        "summary": "Handler for `POST /internal/evaluations/run`",
+        "description": "Runs an evaluation and streams results via SSE.",
+        "operationId": "run_evaluation_handler",
         "responses": {
           "200": {
             "description": "SSE stream of evaluation results",
@@ -1712,14 +1565,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1729,7 +1575,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_evaluation_run_infos",
+        "summary": "Handler for `GET /internal/evaluations/run_infos`",
+        "description": "Returns information about specific evaluation runs.",
+        "operationId": "get_evaluation_run_infos_handler",
         "responses": {
           "200": {
             "description": "Evaluation run infos",
@@ -1742,14 +1590,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1759,7 +1600,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "list_evaluation_runs",
+        "summary": "Handler for `GET /internal/evaluations/runs`",
+        "description": "Returns a paginated list of evaluation runs across all functions.",
+        "operationId": "list_evaluation_runs_handler",
         "responses": {
           "200": {
             "description": "List of evaluation runs",
@@ -1772,14 +1615,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1789,7 +1625,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "count_evaluation_runs",
+        "summary": "Handler for `GET /internal/evaluations/runs/count`",
+        "description": "Returns the total count of unique evaluation runs across all functions.",
+        "operationId": "count_evaluation_runs_handler",
         "responses": {
           "200": {
             "description": "Evaluation runs count",
@@ -1802,14 +1640,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1819,7 +1650,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "search_evaluation_runs",
+        "summary": "Handler for `GET /internal/evaluations/runs/search`",
+        "description": "Searches evaluation runs by ID or variant name.",
+        "operationId": "search_evaluation_runs_handler",
         "responses": {
           "200": {
             "description": "Search results",
@@ -1832,14 +1665,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1849,7 +1675,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_evaluation_statistics",
+        "summary": "Handler for `GET /internal/evaluations/statistics`",
+        "description": "Returns aggregated statistics (mean, confidence intervals) for the specified\nevaluation runs and metrics.",
+        "operationId": "get_evaluation_statistics_handler",
         "responses": {
           "200": {
             "description": "Evaluation statistics",
@@ -1862,14 +1690,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1879,7 +1700,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_cumulative_feedback_timeseries",
+        "summary": "HTTP handler for getting cumulative feedback time series",
+        "operationId": "get_cumulative_feedback_timeseries_handler",
         "responses": {
           "200": {
             "description": "Cumulative feedback timeseries",
@@ -1892,14 +1714,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1909,7 +1724,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_demonstration_feedback",
+        "summary": "HTTP handler for getting demonstration feedback by inference ID",
+        "operationId": "get_demonstration_feedback_handler",
         "parameters": [
           {
             "name": "inference_id",
@@ -1933,14 +1749,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1950,7 +1759,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_feedback_by_target_id",
+        "summary": "HTTP handler for getting feedback by target ID",
+        "operationId": "get_feedback_by_target_id_handler",
         "parameters": [
           {
             "name": "target_id",
@@ -1974,14 +1784,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -1991,7 +1794,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_feedback_bounds_by_target_id",
+        "summary": "HTTP handler for getting feedback bounds by target ID",
+        "operationId": "get_feedback_bounds_by_target_id_handler",
         "parameters": [
           {
             "name": "target_id",
@@ -2015,14 +1819,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2032,7 +1829,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "count_feedback_by_target_id",
+        "summary": "HTTP handler for counting feedback by target ID",
+        "operationId": "count_feedback_by_target_id_handler",
         "parameters": [
           {
             "name": "target_id",
@@ -2056,14 +1854,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2073,7 +1864,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_latest_feedback_id_by_metric",
+        "summary": "HTTP handler for getting the latest feedback ID for each metric for a target",
+        "operationId": "get_latest_feedback_id_by_metric_handler",
         "parameters": [
           {
             "name": "target_id",
@@ -2097,14 +1889,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2114,7 +1899,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "list_functions_with_inference_count",
+        "summary": "HTTP handler for listing all functions with their inference counts",
+        "operationId": "list_functions_with_inference_count_handler",
         "responses": {
           "200": {
             "description": "Functions with inference counts",
@@ -2127,14 +1913,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2144,7 +1923,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_inference_count",
+        "summary": "HTTP handler for the inference count endpoint",
+        "operationId": "get_inference_count_handler",
         "parameters": [
           {
             "name": "function_name",
@@ -2168,14 +1948,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2185,7 +1958,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_inference_with_feedback_count",
+        "summary": "HTTP handler for the feedback stats endpoint",
+        "operationId": "get_inference_with_feedback_count_handler",
         "parameters": [
           {
             "name": "function_name",
@@ -2218,14 +1992,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2235,7 +2002,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_function_metrics",
+        "summary": "HTTP handler for getting metrics with feedback for a function",
+        "operationId": "get_function_metrics_handler",
         "parameters": [
           {
             "name": "function_name",
@@ -2259,14 +2027,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2276,7 +2037,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_function_throughput_by_variant",
+        "summary": "HTTP handler for the function throughput by variant endpoint",
+        "operationId": "get_function_throughput_by_variant_handler",
         "parameters": [
           {
             "name": "function_name",
@@ -2300,14 +2062,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2317,7 +2072,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_variant_performances",
+        "summary": "HTTP handler for getting variant performance statistics for a function and metric",
+        "operationId": "get_variant_performances_handler",
         "parameters": [
           {
             "name": "function_name",
@@ -2341,14 +2097,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2358,7 +2107,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_variant_sampling_probabilities_by_function",
+        "summary": "HTTP handler for the variant sampling probabilities endpoint (path-based)",
+        "operationId": "get_variant_sampling_probabilities_by_function_handler",
         "parameters": [
           {
             "name": "function_name",
@@ -2382,14 +2132,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2399,7 +2142,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_inference_metadata",
+        "summary": "HTTP handler for listing inference metadata",
+        "operationId": "get_inference_metadata_handler",
         "responses": {
           "200": {
             "description": "Inference metadata list",
@@ -2412,14 +2156,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2429,7 +2166,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "count_inferences",
+        "summary": "HTTP handler for the count inferences endpoint.",
+        "operationId": "count_inferences_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2499,14 +2237,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2516,7 +2247,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_model_inferences",
+        "summary": "HTTP handler for getting model inferences by inference ID",
+        "operationId": "get_model_inferences_handler",
         "parameters": [
           {
             "name": "inference_id",
@@ -2540,14 +2272,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2557,7 +2282,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "count_models",
+        "summary": "Handler for `GET /internal/models/count`",
+        "description": "Returns the count of distinct models that have been used.",
+        "operationId": "count_models_handler",
         "responses": {
           "200": {
             "description": "Model count",
@@ -2570,14 +2297,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2587,7 +2307,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_model_latency",
+        "summary": "Handler for `GET /internal/models/latency`",
+        "description": "Returns model latency quantile distributions.",
+        "operationId": "get_model_latency_handler",
         "responses": {
           "200": {
             "description": "Model latency quantiles",
@@ -2600,14 +2322,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2617,7 +2332,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_model_usage",
+        "summary": "Handler for `GET /internal/models/usage`",
+        "description": "Returns model usage timeseries data (tokens, counts over time).",
+        "operationId": "get_model_usage_handler",
         "responses": {
           "200": {
             "description": "Model usage timeseries",
@@ -2630,14 +2347,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2647,7 +2357,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_object",
+        "summary": "Fetches an object using the object store and path specified by the encoded `StoragePath`.\nThis does not need to match the gateway's current object store (e.g. a `StorageKind::Filesystem`)\ncould be provided even if the gateway is configured with `StorageKind::S3Compatible`.\nHowever, if the provider requires authentication, the gateway must have the correct credentials\nset as environment variables.",
+        "description": "This is invoked as `GET /internal/object_storage?storage_path=<urlencoded_storagepath>`.\nThe `<urlencoded_storagepath>` value constructed by serializing `StoragePath` to JSON,\nand the urlencoding the resulting string.\nFor example, `GET /internal/object_storage?storage_path={%22kind%22:{%22type%22:%22filesystem%22,%22path%22:%22/tmp%22},%22path%22:%22fake-tensorzero-file%22}`",
+        "operationId": "get_object_handler",
         "responses": {
           "200": {
             "description": "Object data",
@@ -2672,14 +2384,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2689,7 +2394,7 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "resolve_uuid",
+        "operationId": "resolve_uuid_handler",
         "parameters": [
           {
             "name": "id",
@@ -2730,14 +2435,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2747,7 +2445,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "ui_config",
+        "summary": "Handler for GET /internal/ui_config",
+        "description": "Returns a UI-safe subset of the Config.",
+        "operationId": "ui_config_handler",
         "responses": {
           "200": {
             "description": "UI config",
@@ -2767,7 +2467,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "ui_config_by_hash",
+        "summary": "Handler for GET /internal/ui_config/{hash}",
+        "description": "Returns a UI-safe subset of the Config for a historical config snapshot.",
+        "operationId": "ui_config_by_hash_handler",
         "parameters": [
           {
             "name": "hash",
@@ -2791,14 +2493,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2808,7 +2503,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "list_workflow_evaluation_run_episodes_by_task_name",
+        "summary": "Handler for `GET /internal/workflow_evaluations/episodes_by_task_name`",
+        "description": "Returns a list of workflow evaluation run episodes grouped by task_name.\nEpisodes with NULL task_name are grouped individually.",
+        "operationId": "list_workflow_evaluation_run_episodes_by_task_name_handler",
         "responses": {
           "200": {
             "description": "Episodes grouped by task name",
@@ -2821,14 +2518,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2838,7 +2528,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "count_workflow_evaluation_run_episodes",
+        "summary": "Handler for `GET /internal/workflow_evaluations/episodes_by_task_name/count`",
+        "description": "Returns the count of distinct episode groups (by task_name) for the given run IDs.",
+        "operationId": "count_workflow_evaluation_run_episodes_handler",
         "responses": {
           "200": {
             "description": "Episode groups count",
@@ -2851,14 +2543,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2868,7 +2553,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_workflow_evaluation_runs",
+        "summary": "Handler for `GET /internal/workflow_evaluations/get_runs`",
+        "description": "Gets workflow evaluation runs by their IDs.",
+        "operationId": "get_workflow_evaluation_runs_handler",
         "responses": {
           "200": {
             "description": "Workflow evaluation runs by IDs",
@@ -2881,14 +2568,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2898,7 +2578,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "list_workflow_evaluation_runs",
+        "summary": "Handler for `GET /internal/workflow_evaluations/runs`",
+        "description": "Returns a paginated list of workflow evaluation runs with episode counts.",
+        "operationId": "list_workflow_evaluation_runs_handler",
         "responses": {
           "200": {
             "description": "List of workflow evaluation runs",
@@ -2911,14 +2593,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2928,7 +2603,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_workflow_evaluation_projects",
+        "summary": "Handler for `GET /internal/workflow_evaluations/projects`",
+        "description": "Returns a paginated list of workflow evaluation projects.",
+        "operationId": "get_workflow_evaluation_projects_handler",
         "responses": {
           "200": {
             "description": "Workflow evaluation projects",
@@ -2941,14 +2618,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2958,7 +2628,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_workflow_evaluation_project_count",
+        "summary": "Handler for `GET /internal/workflow_evaluations/projects/count`",
+        "operationId": "get_workflow_evaluation_project_count_handler",
         "responses": {
           "200": {
             "description": "Workflow evaluation project count",
@@ -2971,14 +2642,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -2988,7 +2652,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_workflow_evaluation_run_episodes",
+        "summary": "Handler for `GET /internal/workflow_evaluations/run_episodes`",
+        "description": "Gets workflow evaluation run episodes with their feedback for a specific run.",
+        "operationId": "get_workflow_evaluation_run_episodes_handler",
         "responses": {
           "200": {
             "description": "Workflow evaluation run episodes",
@@ -3001,14 +2667,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3018,7 +2677,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "count_workflow_evaluation_run_episodes_total",
+        "summary": "Handler for `GET /internal/workflow_evaluations/run_episodes/count`",
+        "description": "Returns the total count of episodes for a given workflow evaluation run.",
+        "operationId": "count_workflow_evaluation_run_episodes_total_handler",
         "responses": {
           "200": {
             "description": "Total episodes count for run",
@@ -3031,14 +2692,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3048,7 +2702,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_workflow_evaluation_run_statistics",
+        "summary": "Handler for `GET /internal/workflow_evaluations/run_statistics`",
+        "description": "Gets aggregated statistics (count, mean, stdev, confidence intervals) for a workflow\nevaluation run, grouped by metric name.",
+        "operationId": "get_workflow_evaluation_run_statistics_handler",
         "responses": {
           "200": {
             "description": "Workflow evaluation run statistics",
@@ -3061,14 +2717,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3078,7 +2727,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "count_workflow_evaluation_runs",
+        "summary": "Handler for `GET /internal/workflow_evaluations/runs/count`",
+        "description": "Returns the total count of workflow evaluation runs.",
+        "operationId": "count_workflow_evaluation_runs_handler",
         "responses": {
           "200": {
             "description": "Workflow evaluation runs count",
@@ -3091,14 +2742,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3108,7 +2752,9 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "search_workflow_evaluation_runs",
+        "summary": "Handler for `GET /internal/workflow_evaluations/runs/search`",
+        "description": "Searches workflow evaluation runs by project_name and/or search_query.",
+        "operationId": "search_workflow_evaluation_runs_handler",
         "responses": {
           "200": {
             "description": "Search workflow evaluation runs",
@@ -3121,30 +2767,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/metrics": {
-      "get": {
-        "tags": [
-          "Status"
-        ],
-        "operationId": "metrics",
-        "responses": {
-          "200": {
-            "description": "Prometheus metrics",
-            "content": {
-              "text/plain": {}
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3154,7 +2777,8 @@
         "tags": [
           "Status"
         ],
-        "operationId": "gateway_status",
+        "summary": "A handler for a simple liveness check",
+        "operationId": "status_handler",
         "responses": {
           "200": {
             "description": "Gateway status",
@@ -3174,7 +2798,7 @@
         "tags": [
           "Datasets"
         ],
-        "operationId": "delete_dataset",
+        "operationId": "delete_dataset_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -3198,14 +2822,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3215,7 +2832,8 @@
         "tags": [
           "Datasets"
         ],
-        "operationId": "create_datapoints",
+        "summary": "Handler for the POST `/v1/datasets/{dataset_id}/datapoints` endpoint.\nCreates manual datapoints in a dataset.",
+        "operationId": "create_datapoints_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -3262,14 +2880,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       },
@@ -3277,7 +2888,7 @@
         "tags": [
           "Datasets"
         ],
-        "operationId": "delete_datapoints",
+        "operationId": "delete_datapoints_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -3325,14 +2936,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       },
@@ -3340,7 +2944,7 @@
         "tags": [
           "Datasets"
         ],
-        "operationId": "update_datapoints",
+        "operationId": "update_datapoints_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -3387,14 +2991,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3404,7 +3001,7 @@
         "tags": [
           "Datasets"
         ],
-        "operationId": "update_datapoints_metadata",
+        "operationId": "update_datapoints_metadata_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -3451,14 +3048,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3468,7 +3058,8 @@
         "tags": [
           "Datasets"
         ],
-        "operationId": "create_from_inferences",
+        "summary": "Handler for the POST `/v1/datasets/{dataset_id}/from_inferences` endpoint.\nCreates datapoints from inferences based on either specific inference IDs or an inference query.",
+        "operationId": "create_from_inferences_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -3507,14 +3098,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3524,7 +3108,8 @@
         "tags": [
           "Datasets"
         ],
-        "operationId": "get_datapoints_by_dataset",
+        "summary": "Handler for the POST `/v1/datasets/{dataset_name}/get_datapoints` endpoint.\nRetrieves datapoints scoped to a dataset by their IDs.",
+        "operationId": "get_datapoints_by_dataset_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -3572,14 +3157,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3589,7 +3167,8 @@
         "tags": [
           "Datasets"
         ],
-        "operationId": "list_datapoints",
+        "summary": "Handler for the POST `/v1/datasets/{dataset_id}/list_datapoints` endpoint.\nLists datapoints from a dataset with optional filtering and pagination.",
+        "operationId": "list_datapoints_handler",
         "parameters": [
           {
             "name": "dataset_name",
@@ -3689,14 +3268,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3706,7 +3278,8 @@
         "tags": [
           "Observability"
         ],
-        "operationId": "get_inferences",
+        "summary": "Handler for the POST `/v1/inferences/get_inferences` endpoint.\nRetrieves specific inferences by their IDs.",
+        "operationId": "get_inferences_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3754,14 +3327,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3771,7 +3337,8 @@
         "tags": [
           "Observability"
         ],
-        "operationId": "list_inferences",
+        "summary": "Handler for the POST `/v1/inferences/list_inferences` endpoint.\nLists inferences with optional filtering, pagination, and sorting.",
+        "operationId": "list_inferences_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3885,14 +3452,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3902,7 +3462,8 @@
         "tags": [
           "Internal"
         ],
-        "operationId": "get_variant_sampling_probabilities",
+        "summary": "HTTP handler for the variant sampling probabilities endpoint (query-based)",
+        "operationId": "get_variant_sampling_probabilities_handler",
         "responses": {
           "200": {
             "description": "Variant sampling probabilities",
@@ -3915,14 +3476,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -3932,7 +3486,7 @@
         "tags": [
           "Workflow Evaluation"
         ],
-        "operationId": "create_workflow_evaluation_run",
+        "operationId": "workflow_evaluation_run_handler",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3993,14 +3547,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -4010,7 +3557,7 @@
         "tags": [
           "Workflow Evaluation"
         ],
-        "operationId": "create_workflow_evaluation_run_episode",
+        "operationId": "workflow_evaluation_run_episode_handler",
         "parameters": [
           {
             "name": "run_id",
@@ -4061,14 +3608,7 @@
             }
           },
           "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
+            "description": "Bad request"
           }
         }
       }
@@ -6025,18 +5565,6 @@
           "last_inference_id": {
             "type": "string",
             "format": "uuid"
-          }
-        }
-      },
-      "ErrorBody": {
-        "type": "object",
-        "description": "Error response body returned by the API.",
-        "required": [
-          "error"
-        ],
-        "properties": {
-          "error": {
-            "type": "string"
           }
         }
       },

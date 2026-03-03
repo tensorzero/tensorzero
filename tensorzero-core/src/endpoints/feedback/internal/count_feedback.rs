@@ -19,6 +19,18 @@ pub struct CountFeedbackByTargetIdResponse {
 }
 
 /// HTTP handler for counting feedback by target ID
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/feedback/{target_id}/count",
+    params(
+        ("target_id" = String, Path, description = "The target ID"),
+    ),
+    responses(
+        (status = 200, description = "Feedback count for target", body = CountFeedbackByTargetIdResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "count_feedback_by_target_id_handler",

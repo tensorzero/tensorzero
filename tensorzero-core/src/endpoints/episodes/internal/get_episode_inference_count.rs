@@ -21,6 +21,18 @@ pub struct GetEpisodeInferenceCountResponse {
 }
 
 /// HTTP handler for getting inference counts for an episode
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/episodes/{episode_id}/inference_count",
+    params(
+        ("episode_id" = String, Path, description = "The episode ID"),
+    ),
+    responses(
+        (status = 200, description = "Episode inference count", body = GetEpisodeInferenceCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_episode_inference_count_handler",

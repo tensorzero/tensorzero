@@ -49,6 +49,15 @@ impl GetConfigResponse {
 /// Handler for `GET /internal/config`
 ///
 /// Returns the live config snapshot.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/config",
+    responses(
+        (status = 200, description = "Live config snapshot", body = GetConfigResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "config.get_live", skip_all)]
 pub async fn get_live_config_handler(
@@ -64,6 +73,18 @@ pub async fn get_live_config_handler(
 /// Handler for `GET /internal/config/{hash}`
 ///
 /// Returns a config snapshot by hash.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/config/{hash}",
+    params(
+        ("hash" = String, Path, description = "Config snapshot hash"),
+    ),
+    responses(
+        (status = 200, description = "Config snapshot by hash", body = GetConfigResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "config.get_by_hash", skip_all, fields(hash = %hash))]
 pub async fn get_config_by_hash_handler(
@@ -118,6 +139,16 @@ pub struct WriteConfigResponse {
 /// (with credential validation disabled) before writing. This catches
 /// issues like invalid model references, missing templates, and
 /// cross-reference errors that serde deserialization alone would miss.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/config",
+    request_body = inline(WriteConfigRequest),
+    responses(
+        (status = 200, description = "Config snapshot written", body = WriteConfigResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "config.write", skip_all)]
 pub async fn write_config_handler(

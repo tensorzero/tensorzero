@@ -1,5 +1,5 @@
-mod get_episode_inference_count;
-mod list_episodes;
+pub mod get_episode_inference_count;
+pub mod list_episodes;
 
 pub use get_episode_inference_count::*;
 pub use list_episodes::{

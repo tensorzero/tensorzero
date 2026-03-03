@@ -8,6 +8,18 @@ use crate::db::resolve_uuid::{ResolveUuidQueries, ResolveUuidResponse};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/resolve_uuid/{id}",
+    params(
+        ("id" = String, Path, description = "The UUID to resolve"),
+    ),
+    responses(
+        (status = 200, description = "Resolved UUID", body = inline(crate::db::resolve_uuid::ResolveUuidResponse)),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(name = "resolve_uuid_handler", skip_all, fields(id = %id))]
 pub async fn resolve_uuid_handler(

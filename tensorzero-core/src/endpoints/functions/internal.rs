@@ -34,6 +34,18 @@ pub struct MetricsWithFeedbackResponse {
 }
 
 /// HTTP handler for getting metrics with feedback for a function
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/metrics",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+    ),
+    responses(
+        (status = 200, description = "Metrics with feedback statistics", body = MetricsWithFeedbackResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_function_metrics_handler",
@@ -117,6 +129,18 @@ pub struct VariantPerformancesResponse {
 }
 
 /// HTTP handler for getting variant performance statistics for a function and metric
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/variant_performances",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+    ),
+    responses(
+        (status = 200, description = "Variant performance statistics", body = VariantPerformancesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_variant_performances_handler",

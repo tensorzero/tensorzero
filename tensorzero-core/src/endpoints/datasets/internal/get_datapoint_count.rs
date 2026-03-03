@@ -41,6 +41,18 @@ pub async fn get_datapoint_count(
 }
 
 /// HTTP handler for the datapoint count endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/datasets/{dataset_name}/datapoints/count",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    responses(
+        (status = 200, description = "Datapoint count", body = GetDatapointCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_datapoint_count_handler",

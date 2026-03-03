@@ -22,6 +22,15 @@ pub struct CountWorkflowEvaluationRunEpisodesParams {
 /// Handler for `GET /internal/workflow_evaluations/run_episodes/count`
 ///
 /// Returns the total count of episodes for a given workflow evaluation run.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/workflow_evaluations/run_episodes/count",
+    responses(
+        (status = 200, description = "Total episodes count for run", body = CountWorkflowEvaluationRunEpisodesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "workflow_evaluations.count_run_episodes", skip_all)]
 pub async fn count_workflow_evaluation_run_episodes_total_handler(

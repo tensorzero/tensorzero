@@ -27,6 +27,15 @@ const DEFAULT_LIST_WORKFLOW_EVALUATION_RUNS_OFFSET: u32 = 0;
 /// Handler for `GET /internal/workflow_evaluations/runs`
 ///
 /// Returns a paginated list of workflow evaluation runs with episode counts.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/workflow_evaluations/list_runs",
+    responses(
+        (status = 200, description = "List of workflow evaluation runs", body = ListWorkflowEvaluationRunsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "workflow_evaluations.list_runs", skip_all)]
 pub async fn list_workflow_evaluation_runs_handler(

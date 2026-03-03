@@ -112,6 +112,16 @@ pub struct FeedbackResponse {
 }
 
 /// A handler for the feedback endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/feedback",
+    request_body = inline(Params),
+    responses(
+        (status = 200, description = "Feedback recorded", body = FeedbackResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Feedback"
+))]
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(
     State(app_state): AppState,

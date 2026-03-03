@@ -15,6 +15,19 @@ const DEFAULT_ALLOW_STALE: bool = false;
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/list_datapoints` endpoint.
 /// Lists datapoints from a dataset with optional filtering and pagination.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/datasets/{dataset_name}/list_datapoints",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    request_body = inline(ListDatapointsRequest),
+    responses(
+        (status = 200, description = "List of datapoints", body = GetDatapointsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Datasets"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "datasets.v1.list_datapoints", skip(app_state, request))]
 pub async fn list_datapoints_handler(
@@ -47,6 +60,19 @@ pub async fn get_datapoints_handler(
 
 /// Handler for the POST `/v1/datasets/{dataset_name}/get_datapoints` endpoint.
 /// Retrieves datapoints scoped to a dataset by their IDs.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/datasets/{dataset_name}/get_datapoints",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    request_body = inline(GetDatapointsRequest),
+    responses(
+        (status = 200, description = "Retrieved datapoints", body = GetDatapointsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Datasets"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(
     name = "datasets.v1.get_datapoints_by_dataset",

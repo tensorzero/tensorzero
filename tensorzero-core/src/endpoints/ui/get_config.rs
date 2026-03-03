@@ -137,6 +137,14 @@ impl UiConfig {
 /// Handler for GET /internal/ui_config
 ///
 /// Returns a UI-safe subset of the Config.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/ui_config",
+    responses(
+        (status = 200, description = "UI config", body = UiConfig),
+    ),
+    tag = "Internal"
+))]
 #[expect(clippy::unused_async)]
 pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
     Json(UiConfig::from_config(&app_state.config))
@@ -145,6 +153,18 @@ pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
 /// Handler for GET /internal/ui_config/{hash}
 ///
 /// Returns a UI-safe subset of the Config for a historical config snapshot.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/ui_config/{hash}",
+    params(
+        ("hash" = String, Path, description = "Config snapshot hash"),
+    ),
+    responses(
+        (status = 200, description = "UI config by hash", body = UiConfig),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 pub async fn ui_config_by_hash_handler(
     State(app_state): AppState,

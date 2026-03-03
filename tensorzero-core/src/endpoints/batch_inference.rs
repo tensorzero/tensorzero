@@ -115,6 +115,16 @@ pub type BatchOutputSchemas = Vec<Option<Value>>;
 /// The entire batch must use the same function and variant.
 /// It will fail if we fail to kick off the batch request for any reason.
 /// However, the batch request might still fail for other reasons after it has been started.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/batch_inference",
+    request_body = inline(StartBatchInferenceParams),
+    responses(
+        (status = 200, description = "Batch inference started", body = PrepareBatchInferenceOutput),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Batch Inference"
+))]
 #[instrument(
     name="start_batch_inference",
     skip_all,
@@ -512,6 +522,18 @@ pub struct PollPathParams {
 /// Semantics: if the batch is pending, it will actually poll the model provider
 /// If the batch is failed, it will return a failed response immediately
 /// If the batch is completed, it will return the appropriate response immediately from the database
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/batch_inference/{batch_id}",
+    params(
+        ("batch_id" = String, Path, description = "The batch inference ID"),
+    ),
+    responses(
+        (status = 200, description = "Batch inference result", body = CompletedBatchInferenceResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Batch Inference"
+))]
 #[instrument(name = "poll_batch_inference", skip_all, fields(query))]
 #[debug_handler(state = AppStateData)]
 pub async fn poll_batch_inference_handler(
@@ -582,6 +604,39 @@ pub async fn poll_batch_inference_handler(
         }
         BatchStatus::Failed => Ok(Json(PollInferenceResponse::Failed).into_response()),
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PollByInferencePathParams {
+    pub batch_id: Uuid,
+    pub inference_id: Uuid,
+}
+
+/// Polls a single inference within a batch inference request.
+/// This is a thin wrapper around `poll_batch_inference_handler` that converts the path params.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/batch_inference/{batch_id}/inference/{inference_id}",
+    params(
+        ("batch_id" = String, Path, description = "The batch inference ID"),
+        ("inference_id" = String, Path, description = "A specific inference ID within the batch"),
+    ),
+    responses(
+        (status = 200, description = "Single batch inference result", body = CompletedBatchInferenceResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Batch Inference"
+))]
+#[debug_handler(state = AppStateData)]
+pub async fn poll_batch_inference_by_inference_handler(
+    state: AppState,
+    Path(path_params): Path<PollByInferencePathParams>,
+) -> Result<Response<Body>, Error> {
+    let poll_params = PollPathParams {
+        batch_id: path_params.batch_id,
+        inference_id: Some(path_params.inference_id),
+    };
+    poll_batch_inference_handler(state, Path(poll_params)).await
 }
 
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]

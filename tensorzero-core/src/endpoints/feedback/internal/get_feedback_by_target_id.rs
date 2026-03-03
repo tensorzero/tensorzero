@@ -27,6 +27,18 @@ pub struct GetFeedbackByTargetIdResponse {
 }
 
 /// HTTP handler for getting feedback by target ID
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/feedback/{target_id}",
+    params(
+        ("target_id" = String, Path, description = "The target ID (inference or episode)"),
+    ),
+    responses(
+        (status = 200, description = "Feedback for target", body = GetFeedbackByTargetIdResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_feedback_by_target_id_handler",
