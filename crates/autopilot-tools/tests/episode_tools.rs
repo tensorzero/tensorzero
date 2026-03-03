@@ -45,7 +45,6 @@ async fn test_list_episodes_tool_basic(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -100,7 +99,6 @@ async fn test_list_episodes_tool_with_before_pagination(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -151,7 +149,6 @@ async fn test_list_episodes_tool_with_after_pagination(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -199,7 +196,6 @@ async fn test_list_episodes_tool_error(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -253,7 +249,6 @@ async fn test_list_episodes_tool_with_function_name(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -324,7 +319,6 @@ async fn test_list_episodes_tool_with_boolean_filter(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -391,7 +385,6 @@ async fn test_list_episodes_tool_with_combined_filters(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "test_hash".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
