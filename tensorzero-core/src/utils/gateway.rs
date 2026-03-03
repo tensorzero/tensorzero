@@ -529,6 +529,7 @@ impl AppStateData {
         Config::load_from_snapshot(snapshot.clone(), runtime_overlay, false).await?;
 
         let db = self.get_delegating_database();
+        #[expect(clippy::disallowed_methods)]
         db.write_config_snapshot(snapshot).await
     }
 

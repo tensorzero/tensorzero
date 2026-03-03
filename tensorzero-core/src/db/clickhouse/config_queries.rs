@@ -182,6 +182,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(clippy::disallowed_methods)]
     async fn test_write_config_snapshot() {
         let mut mock = MockClickHouseClient::new();
 
