@@ -64,7 +64,9 @@ test.describe("Variant Performance Visualization", () => {
     insertEvent(eventId, sessionId, payload);
 
     // Wait for the visualization card to appear (auto-expanded)
-    await expect(page.getByText("Variant Performance")).toBeVisible({
+    await expect(
+      page.getByText("Variant Performance", { exact: true }),
+    ).toBeVisible({
       timeout: 15000,
     });
 
@@ -117,7 +119,9 @@ test.describe("Variant Performance Visualization", () => {
     insertEvent(eventId, sessionId, payload);
 
     // Wait for the visualization card to appear (auto-expanded)
-    await expect(page.getByText("Variant Performance")).toBeVisible({
+    await expect(
+      page.getByText("Variant Performance", { exact: true }),
+    ).toBeVisible({
       timeout: 15000,
     });
 

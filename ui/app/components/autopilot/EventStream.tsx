@@ -446,7 +446,7 @@ function renderEventTitle(event: GatewayEvent) {
             const _exhaustiveCheck: never = payload.outcome; // TS compiler should yell if this branch is reachable
           }
           throw new Error(
-            "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+            "Unknown tool result outcome. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
           );
       }
     case "error":

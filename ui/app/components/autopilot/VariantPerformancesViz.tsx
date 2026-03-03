@@ -4,6 +4,7 @@ import {
   transformVariantPerformances,
   VariantPerformanceChart,
 } from "~/components/function/variant/VariantPerformanceChart";
+import { logger } from "~/utils/logger";
 
 type VariantPerformancesVizProps = {
   data: VariantPerformancesVisualization;
@@ -14,11 +15,15 @@ const VALID_TIME_WINDOWS: Set<string> = new Set(TIME_WINDOWS);
 export default function VariantPerformancesViz({
   data,
 }: VariantPerformancesVizProps) {
-  const timeGranularity: TimeWindow = VALID_TIME_WINDOWS.has(
-    data.time_granularity,
-  )
-    ? (data.time_granularity as TimeWindow)
-    : "week";
+  let timeGranularity: TimeWindow;
+  if (VALID_TIME_WINDOWS.has(data.time_granularity)) {
+    timeGranularity = data.time_granularity as TimeWindow;
+  } else {
+    logger.warn(
+      `Unknown time_granularity "${data.time_granularity}", falling back to "week"`,
+    );
+    timeGranularity = "week";
+  }
   const { data: chartData, variantNames } = transformVariantPerformances(
     data.performances,
   );
