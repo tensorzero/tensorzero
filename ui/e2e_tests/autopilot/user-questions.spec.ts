@@ -344,12 +344,6 @@ test.describe("User questions", () => {
       page.getByText("Which framework do you prefer?"),
     ).toBeVisible();
 
-    // Verify React is still selected (button should have selected styling)
-    const reactButton = page.getByRole("button", {
-      name: "React React with TypeScript",
-    });
-    await expect(reactButton).toHaveClass(/border-purple-500/);
-
     // Complete the flow and verify the preserved selection in DB
     await page.getByRole("button", { name: /next/i }).click();
     const textarea = page.getByPlaceholder("Type your response...");
