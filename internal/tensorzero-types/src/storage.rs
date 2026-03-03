@@ -16,10 +16,12 @@ use pyo3::prelude::*;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StorageKind {
     #[schemars(title = "StorageKindS3Compatible")]
+    #[cfg_attr(feature = "openapi", schema(title = "StorageKindS3Compatible"))]
     S3Compatible {
         bucket_name: Option<String>,
         region: Option<String>,
@@ -33,6 +35,7 @@ pub enum StorageKind {
         prefix: String,
     },
     #[schemars(title = "StorageKindFilesystem")]
+    #[cfg_attr(feature = "openapi", schema(title = "StorageKindFilesystem"))]
     Filesystem { path: String },
     // This must be set explicitly in `tensorzero.toml` to allow image requests to succeed
     // By default, requests will fail (we'll have a `None` for the outer `ObjectStoreData`)
@@ -45,6 +48,7 @@ pub enum StorageKind {
 /// unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
 /// file data first.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -57,6 +61,7 @@ pub struct StoragePath {
     )]
     #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     #[schemars(with = "String")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub path: object_store::path::Path,
 }
 

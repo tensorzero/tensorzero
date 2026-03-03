@@ -22,12 +22,14 @@ sqlx.workspace = true
 uuid.workspace = true
 ts-rs = { workspace = true, optional = true }
 url = { workspace = true, features = ["serde"] }
+utoipa = { workspace = true, optional = true }
 
 [features]
 default = []
 pyo3 = ["dep:pyo3"]
 e2e_tests = []
 ts-bindings = ["dep:ts-rs"]
+openapi = ["dep:utoipa"]
 
 [dependencies.pyo3]
 workspace = true

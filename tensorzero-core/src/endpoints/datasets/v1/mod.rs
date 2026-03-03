@@ -1,10 +1,10 @@
 mod conversion_utils;
-mod create_datapoints;
-mod create_from_inferences;
-mod delete_datapoints;
-mod get_datapoints;
-mod list_datasets;
-mod update_datapoints;
+pub mod create_datapoints;
+pub mod create_from_inferences;
+pub mod delete_datapoints;
+pub mod get_datapoints;
+pub mod list_datasets;
+pub mod update_datapoints;
 
 pub mod types;
 

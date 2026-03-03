@@ -21,6 +21,7 @@ use crate::{
     },
 };
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkflowEvaluationRunParams {
     pub variants: HashMap<String, String>,
@@ -34,11 +35,22 @@ pub struct WorkflowEvaluationRunParams {
     pub internal: bool, // For internal use only
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkflowEvaluationRunResponse {
     pub run_id: Uuid,
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/workflow_evaluation_run",
+    request_body = inline(WorkflowEvaluationRunParams),
+    responses(
+        (status = 200, description = "Workflow evaluation run created", body = WorkflowEvaluationRunResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Workflow Evaluation"
+))]
 #[debug_handler(state = AppStateData)]
 pub async fn workflow_evaluation_run_handler(
     State(app_state): AppState,
@@ -73,6 +85,7 @@ pub struct WorkflowEvaluationRunEpisodePathParams {
     pub run_id: Uuid,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct WorkflowEvaluationRunEpisodeParams {
     #[serde(default)]
@@ -81,11 +94,25 @@ pub struct WorkflowEvaluationRunEpisodeParams {
     pub tags: HashMap<String, String>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WorkflowEvaluationRunEpisodeResponse {
     pub episode_id: Uuid,
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/workflow_evaluation_run/{run_id}/episode",
+    params(
+        ("run_id" = String, Path, description = "The workflow evaluation run ID"),
+    ),
+    request_body = inline(WorkflowEvaluationRunEpisodeParams),
+    responses(
+        (status = 200, description = "Episode created", body = WorkflowEvaluationRunEpisodeResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Workflow Evaluation"
+))]
 #[debug_handler(state = AppStateData)]
 pub async fn workflow_evaluation_run_episode_handler(
     State(app_state): AppState,

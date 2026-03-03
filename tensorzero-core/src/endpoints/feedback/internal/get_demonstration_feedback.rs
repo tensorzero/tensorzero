@@ -10,6 +10,7 @@ use crate::db::feedback::{DemonstrationFeedbackRow, FeedbackQueries};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetDemonstrationFeedbackParams {
     pub before: Option<Uuid>,
@@ -17,6 +18,7 @@ pub struct GetDemonstrationFeedbackParams {
     pub limit: Option<u32>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -25,6 +27,18 @@ pub struct GetDemonstrationFeedbackResponse {
 }
 
 /// HTTP handler for getting demonstration feedback by inference ID
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/feedback/{inference_id}/demonstrations",
+    params(
+        ("inference_id" = String, Path, description = "The inference ID"),
+    ),
+    responses(
+        (status = 200, description = "Demonstration feedback", body = GetDemonstrationFeedbackResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_demonstration_feedback_handler",

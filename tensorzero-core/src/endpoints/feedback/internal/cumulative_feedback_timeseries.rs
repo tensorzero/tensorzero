@@ -10,6 +10,7 @@ use crate::db::feedback::{CumulativeFeedbackTimeSeriesPoint, FeedbackQueries};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetCumulativeFeedbackTimeseriesParams {
     pub function_name: String,
@@ -20,6 +21,7 @@ pub struct GetCumulativeFeedbackTimeseriesParams {
     pub max_periods: u32,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -28,6 +30,15 @@ pub struct GetCumulativeFeedbackTimeseriesResponse {
 }
 
 /// HTTP handler for getting cumulative feedback time series
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/feedback/timeseries",
+    responses(
+        (status = 200, description = "Cumulative feedback timeseries", body = GetCumulativeFeedbackTimeseriesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_cumulative_feedback_timeseries_handler",

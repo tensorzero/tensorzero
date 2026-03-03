@@ -877,17 +877,24 @@ impl RateLimitedInputContent for ContentBlock {
 /// The version of `ContentBlock` that is stored in ClickHouse.
 /// This is almost identical to `ContentBlock`, but without `File` data.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum StoredContentBlock {
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockText"))]
     Text(Text),
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockToolCall"))]
     ToolCall(ToolCall),
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockToolResult"))]
     ToolResult(ToolResult),
     #[serde(alias = "image")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockFile"))]
     File(Box<StoredFile>),
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockThought"))]
     Thought(Thought),
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockUnknown"))]
     Unknown(Unknown),
 }
 
@@ -951,19 +958,25 @@ enum ContentBlockOutputType {
 
 /// Types of content blocks that can be returned by a model provider
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum ContentBlockOutput {
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockOutputText"))]
     Text(Text),
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockOutputToolCall"))]
     ToolCall(ToolCall),
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockOutputThought"))]
     Thought(Thought),
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockOutputUnknown"))]
     Unknown(Unknown),
 }
 
 /// Defines the types of content block that can come from a `chat` function
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(tag = "type")]
@@ -971,12 +984,16 @@ pub enum ContentBlockOutput {
 #[export_schema]
 pub enum ContentBlockChatOutput {
     #[schemars(title = "ContentBlockChatOutputText")]
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockChatOutputText"))]
     Text(Text),
     #[schemars(title = "ContentBlockChatOutputToolCall")]
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockChatOutputToolCall"))]
     ToolCall(InferenceResponseToolCall),
     #[schemars(title = "ContentBlockChatOutputThought")]
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockChatOutputThought"))]
     Thought(Thought),
     #[schemars(title = "ContentBlockChatOutputUnknown")]
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockChatOutputUnknown"))]
     Unknown(Unknown),
 }
 
@@ -1207,6 +1224,7 @@ impl ModelInput {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
@@ -1415,6 +1433,7 @@ pub struct JsonInferenceResult {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

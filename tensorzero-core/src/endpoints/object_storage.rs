@@ -17,6 +17,7 @@ use object_store::ObjectStoreExt;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "e2e_tests", derive(PartialEq))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ObjectResponse {
     pub data: String,
     pub reused_object_store: bool,
@@ -37,6 +38,15 @@ pub struct PathParams {
 /// The `<urlencoded_storagepath>` value constructed by serializing `StoragePath` to JSON,
 /// and the urlencoding the resulting string.
 /// For example, `GET /internal/object_storage?storage_path={%22kind%22:{%22type%22:%22filesystem%22,%22path%22:%22/tmp%22},%22path%22:%22fake-tensorzero-file%22}`
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/object_storage",
+    responses(
+        (status = 200, description = "Object data", body = inline(ObjectResponse)),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 pub async fn get_object_handler(
     State(AppStateData { config, .. }): AppState,
     Query(params): Query<PathParams>,

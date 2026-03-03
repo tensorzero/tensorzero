@@ -81,6 +81,8 @@ use crate::endpoints::validate_tags;
 use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
 /// The expected payload is a JSON object with the following fields:
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = InferenceParams))]
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
@@ -95,6 +97,7 @@ pub struct Params {
     // configs will be used if available. Stored as a `tensorzero::namespace` tag.
     // Must be a non-empty string.
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>))]
     pub namespace: Option<Namespace>,
     // the input for the inference
     pub input: Input,
@@ -136,6 +139,7 @@ pub struct Params {
     #[serde(default)]
     pub cache_options: CacheParamsOptions,
     #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub credentials: InferenceCredentials,
     /// DEPRECATED (#5697 / 2026.4+): Use `include_raw_response` instead.
     /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.
@@ -159,6 +163,7 @@ pub struct Params {
     #[serde(default)]
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Object>))]
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
@@ -202,6 +207,16 @@ struct InferenceMetadata {
 pub type InferenceCredentials = HashMap<String, SecretString>;
 
 /// A handler for the inference endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/inference",
+    request_body = inline(Params),
+    responses(
+        (status = 200, description = "Inference response (non-streaming)", body = InferenceResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Inference"
+))]
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
     State(AppStateData {
@@ -1697,6 +1712,7 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(untagged, rename_all = "snake_case")]
@@ -1706,6 +1722,7 @@ pub enum InferenceResponse {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ChatInferenceResponse {
@@ -1729,6 +1746,7 @@ pub struct ChatInferenceResponse {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct JsonInferenceResponse {
@@ -1939,6 +1957,7 @@ impl JsonInferenceResponse {
     }
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum InferenceResponseChunk {
@@ -1946,6 +1965,7 @@ pub enum InferenceResponseChunk {
     Json(JsonInferenceResponseChunk),
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatInferenceResponseChunk {
     pub inference_id: Uuid,
@@ -1971,6 +1991,7 @@ pub struct ChatInferenceResponseChunk {
     pub aggregated_response: Option<Vec<ContentBlockChatOutput>>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsonInferenceResponseChunk {
     pub inference_id: Uuid,
@@ -2197,6 +2218,7 @@ pub struct InferenceModels {
 
 /// InferenceParams is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -2205,6 +2227,7 @@ pub struct InferenceParams {
     pub chat_completion: ChatCompletionInferenceParams,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

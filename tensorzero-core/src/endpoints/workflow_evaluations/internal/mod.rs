@@ -2,18 +2,18 @@
 //!
 //! These endpoints support the UI for viewing and managing workflow evaluation runs and results.
 
-mod count_episodes_by_task_name;
-mod count_run_episodes;
-mod count_runs;
-mod get_project_count;
-mod get_projects;
-mod get_run_episodes;
-mod get_run_statistics;
-mod get_runs;
-mod list_episodes_by_task_name;
-mod list_runs;
-mod search_runs;
-mod types;
+pub mod count_episodes_by_task_name;
+pub mod count_run_episodes;
+pub mod count_runs;
+pub mod get_project_count;
+pub mod get_projects;
+pub mod get_run_episodes;
+pub mod get_run_statistics;
+pub mod get_runs;
+pub mod list_episodes_by_task_name;
+pub mod list_runs;
+pub mod search_runs;
+pub mod types;
 
 pub use count_episodes_by_task_name::count_workflow_evaluation_run_episodes;
 pub use count_episodes_by_task_name::count_workflow_evaluation_run_episodes_handler;

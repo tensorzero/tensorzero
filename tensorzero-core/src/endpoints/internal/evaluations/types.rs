@@ -9,6 +9,7 @@ use uuid::Uuid;
 // =============================================================================
 
 /// Response containing the count of evaluation runs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -22,6 +23,7 @@ pub struct EvaluationRunStatsResponse {
 // =============================================================================
 
 /// Query parameters for listing evaluation runs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct ListEvaluationRunsParams {
     #[serde(default = "default_limit")]
@@ -35,6 +37,7 @@ fn default_limit() -> u32 {
 }
 
 /// Response containing a list of evaluation runs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -43,6 +46,7 @@ pub struct ListEvaluationRunsResponse {
 }
 
 /// Information about a single evaluation run.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -62,6 +66,7 @@ pub struct EvaluationRunInfo {
 // =============================================================================
 
 /// Query parameters for counting datapoints across evaluation runs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct CountDatapointsParams {
     pub function_name: String,
@@ -70,6 +75,7 @@ pub struct CountDatapointsParams {
 }
 
 /// Response containing the count of unique datapoints.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -82,6 +88,7 @@ pub struct DatapointStatsResponse {
 // =============================================================================
 
 /// Query parameters for searching evaluation runs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct SearchEvaluationRunsParams {
     pub evaluation_name: String,
@@ -94,6 +101,7 @@ pub struct SearchEvaluationRunsParams {
 }
 
 /// Response containing search results for evaluation runs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -102,6 +110,7 @@ pub struct SearchEvaluationRunsResponse {
 }
 
 /// A single search result for an evaluation run.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -115,6 +124,7 @@ pub struct SearchEvaluationRunResult {
 // =============================================================================
 
 /// Query parameters for getting evaluation statistics.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetEvaluationStatisticsParams {
     pub function_name: String,
@@ -127,6 +137,7 @@ pub struct GetEvaluationStatisticsParams {
 }
 
 /// Response containing evaluation statistics.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -135,6 +146,7 @@ pub struct GetEvaluationStatisticsResponse {
 }
 
 /// Statistics for a single evaluation run and metric.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]

@@ -17,6 +17,15 @@ use crate::utils::gateway::{AppState, AppStateData};
 ///
 /// Returns aggregated statistics (mean, confidence intervals) for the specified
 /// evaluation runs and metrics.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/evaluations/statistics",
+    responses(
+        (status = 200, description = "Evaluation statistics", body = GetEvaluationStatisticsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "evaluations.get_statistics", skip_all)]
 pub async fn get_evaluation_statistics_handler(

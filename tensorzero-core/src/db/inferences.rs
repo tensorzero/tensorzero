@@ -190,6 +190,7 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
 /// Source of an inference output when querying inferences. Users can choose this because there may be
 /// demonstration feedback (manually-curated output) for the inference that should be preferred.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
@@ -324,6 +325,7 @@ pub enum PaginationParams {
 
 /// Inference metadata from the InferenceById table.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct InferenceMetadata {
@@ -420,11 +422,13 @@ pub struct GetFunctionThroughputByVariantParams<'a> {
 
 /// Row returned from the get_function_throughput_by_variant query.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VariantThroughput {
     /// Start datetime of the period in RFC 3339 format with milliseconds
     #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub period_start: DateTime<Utc>,
     pub variant_name: String,
     /// Number of inferences for this (period, variant) combination
@@ -433,12 +437,14 @@ pub struct VariantThroughput {
 
 /// Row returned from the list_functions_with_inference_count query.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FunctionInferenceCount {
     pub function_name: String,
     /// ISO 8601 timestamp of the most recent inference for this function
     #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub last_inference_timestamp: DateTime<Utc>,
     /// Total number of inferences for this function
     pub inference_count: u32,

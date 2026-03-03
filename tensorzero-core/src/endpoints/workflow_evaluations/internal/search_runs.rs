@@ -11,6 +11,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for searching workflow evaluation runs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct SearchWorkflowEvaluationRunsParams {
     pub limit: Option<u32>,
@@ -26,6 +27,15 @@ const DEFAULT_SEARCH_WORKFLOW_EVALUATION_RUNS_OFFSET: u32 = 0;
 /// Handler for `GET /internal/workflow_evaluations/runs/search`
 ///
 /// Searches workflow evaluation runs by project_name and/or search_query.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/workflow_evaluations/runs/search",
+    responses(
+        (status = 200, description = "Search workflow evaluation runs", body = SearchWorkflowEvaluationRunsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "workflow_evaluations.search_runs", skip_all)]
 pub async fn search_workflow_evaluation_runs_handler(

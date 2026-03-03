@@ -15,6 +15,7 @@ pub const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
 pub const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]

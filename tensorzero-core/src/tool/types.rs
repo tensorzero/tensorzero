@@ -37,6 +37,7 @@ use super::config::DynamicToolConfig;
 /// as there's not really anything we can do besides experiment with them.
 /// They are a separate type `ProviderTool`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(AsRefStr, Clone, Debug, JsonSchema, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -44,9 +45,11 @@ use super::config::DynamicToolConfig;
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
     #[schemars(title = "FunctionTool")]
+    #[cfg_attr(feature = "openapi", schema(title = "FunctionTool"))]
     Function(FunctionTool), // Custom deserializer below accepts no type or type="client_side_function" (legacy)
     #[schemars(title = "OpenAICustomTool")]
     #[serde(rename = "openai_custom")]
+    #[cfg_attr(feature = "openapi", schema(title = "OpenAICustomTool"))]
     OpenAICustom(OpenAICustomTool),
 }
 
@@ -193,6 +196,7 @@ impl Tool {
 /// Notably, we assume there is a JSON schema `parameters` that specifies the
 /// set of arguments that the tool will accept.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
@@ -262,6 +266,7 @@ impl FunctionTool {
 /// This only applies to the Chat Completions API. The Responses API has a slightly different request
 /// shape so we implement a conversion in `responses.rs`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
@@ -282,17 +287,21 @@ impl fmt::Display for OpenAICustomTool {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {
     #[schemars(title = "OpenAICustomToolFormatText")]
+    #[cfg_attr(feature = "openapi", schema(title = "OpenAICustomToolFormatText"))]
     Text,
     #[schemars(title = "OpenAICustomToolFormatGrammar")]
+    #[cfg_attr(feature = "openapi", schema(title = "OpenAICustomToolFormatGrammar"))]
     Grammar { grammar: OpenAIGrammarDefinition },
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OpenAIGrammarDefinition {
@@ -301,6 +310,7 @@ pub struct OpenAIGrammarDefinition {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
@@ -336,8 +346,10 @@ impl OpenAICustomTool {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[schemars(title = "ProviderToolScopeModelProvider")]
+#[cfg_attr(feature = "openapi", schema(title = "ProviderToolScopeModelProvider"))]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
 pub struct ProviderToolScopeModelProvider {
     pub model_name: String,
@@ -346,6 +358,7 @@ pub struct ProviderToolScopeModelProvider {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(untagged)]
 #[export_schema]
@@ -374,6 +387,7 @@ impl ProviderToolScope {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]

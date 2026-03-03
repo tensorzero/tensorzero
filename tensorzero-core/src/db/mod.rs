@@ -71,6 +71,7 @@ pub trait EpisodeQueries: Send + Sync {
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -112,9 +113,11 @@ impl TimeWindow {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelUsageTimePoint {
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub period_start: DateTime<Utc>,
     pub model_name: String,
     #[serde(deserialize_with = "deserialize_option_u64")]
@@ -125,12 +128,14 @@ pub struct ModelUsageTimePoint {
     pub count: Option<u64>,
     #[serde(default, with = "rust_decimal::serde::float_option")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<f64>))]
     pub cost: Option<Decimal>,
     #[serde(default, deserialize_with = "deserialize_option_u64")]
     pub count_with_cost: Option<u64>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelLatencyDatapoint {
@@ -142,6 +147,7 @@ pub struct ModelLatencyDatapoint {
     pub count: u64,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -150,11 +156,14 @@ pub struct EpisodeByIdRow {
     #[serde(deserialize_with = "deserialize_u64")]
     #[sqlx(try_from = "i64")]
     pub count: u64,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub start_time: DateTime<Utc>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub end_time: DateTime<Utc>,
     pub last_inference_id: Uuid,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -176,6 +185,7 @@ impl<T: EpisodeQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Se
 {
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]

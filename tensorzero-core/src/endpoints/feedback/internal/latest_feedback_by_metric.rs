@@ -12,6 +12,7 @@ use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -20,6 +21,18 @@ pub struct LatestFeedbackIdByMetricResponse {
 }
 
 /// HTTP handler for getting the latest feedback ID for each metric for a target
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/feedback/{target_id}/latest_id_by_metric",
+    params(
+        ("target_id" = String, Path, description = "The target ID"),
+    ),
+    responses(
+        (status = 200, description = "Latest feedback ID per metric", body = LatestFeedbackIdByMetricResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_latest_feedback_id_by_metric_handler",

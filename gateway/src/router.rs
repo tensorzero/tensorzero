@@ -3,13 +3,13 @@
 //! This module builds the final Axum router with all layers (auth, tracing, metrics)
 //! and defines authentication and version header middlewares.
 
-use crate::routes::build_api_routes;
 use axum::{
     Router,
     extract::{DefaultBodyLimit, Request},
     middleware::{self, Next},
     response::Response,
 };
+use gateway::routes::build_api_routes;
 use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
 use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;

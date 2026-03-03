@@ -10,6 +10,7 @@ use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -18,6 +19,18 @@ pub struct CountFeedbackByTargetIdResponse {
 }
 
 /// HTTP handler for counting feedback by target ID
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/feedback/{target_id}/count",
+    params(
+        ("target_id" = String, Path, description = "The target ID"),
+    ),
+    responses(
+        (status = 200, description = "Feedback count for target", body = CountFeedbackByTargetIdResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "count_feedback_by_target_id_handler",

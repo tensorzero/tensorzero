@@ -25,12 +25,14 @@ tokio-util.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
 url.workspace = true
+utoipa = { workspace = true, optional = true }
 uuid.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
 tensorzero-types = { path = "../tensorzero-types" }
 
 [features]
 ts-bindings = ["dep:ts-rs", "tensorzero-types/ts-bindings"]
+openapi = ["dep:utoipa", "tensorzero-types/openapi"]
 
 [lints]
 workspace = true

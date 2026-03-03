@@ -128,6 +128,7 @@ pub struct ChainOfThoughtConfigPyClass {
 /// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

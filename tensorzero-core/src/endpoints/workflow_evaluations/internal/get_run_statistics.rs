@@ -12,6 +12,7 @@ use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting workflow evaluation run statistics.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetWorkflowEvaluationRunStatisticsParams {
     /// The run ID to get statistics for
@@ -24,6 +25,15 @@ pub struct GetWorkflowEvaluationRunStatisticsParams {
 ///
 /// Gets aggregated statistics (count, mean, stdev, confidence intervals) for a workflow
 /// evaluation run, grouped by metric name.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/workflow_evaluations/run_statistics",
+    responses(
+        (status = 200, description = "Workflow evaluation run statistics", body = GetWorkflowEvaluationRunStatisticsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "workflow_evaluations.get_run_statistics", skip_all)]
 pub async fn get_workflow_evaluation_run_statistics_handler(

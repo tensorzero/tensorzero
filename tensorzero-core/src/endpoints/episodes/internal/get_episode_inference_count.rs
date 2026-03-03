@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -20,6 +21,18 @@ pub struct GetEpisodeInferenceCountResponse {
 }
 
 /// HTTP handler for getting inference counts for an episode
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/episodes/{episode_id}/inference_count",
+    params(
+        ("episode_id" = String, Path, description = "The episode ID"),
+    ),
+    responses(
+        (status = 200, description = "Episode inference count", body = GetEpisodeInferenceCountResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(
     name = "get_episode_inference_count_handler",

@@ -11,6 +11,7 @@ use uuid::Uuid;
 // =============================================================================
 
 /// Response containing a list of workflow evaluation projects.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -19,12 +20,14 @@ pub struct GetWorkflowEvaluationProjectsResponse {
 }
 
 /// Information about a single workflow evaluation project.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct WorkflowEvaluationProject {
     pub name: String,
     pub count: u32,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub last_updated: DateTime<Utc>,
 }
 
@@ -33,6 +36,7 @@ pub struct WorkflowEvaluationProject {
 // =============================================================================
 
 /// Response containing the count of workflow evaluation projects.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -45,6 +49,7 @@ pub struct GetWorkflowEvaluationProjectCountResponse {
 // =============================================================================
 
 /// Response containing a list of workflow evaluation runs from search.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -53,6 +58,7 @@ pub struct SearchWorkflowEvaluationRunsResponse {
 }
 
 /// Information about a single workflow evaluation run.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -64,6 +70,7 @@ pub struct WorkflowEvaluationRun {
     pub tags: HashMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_name: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
 }
 
@@ -72,6 +79,7 @@ pub struct WorkflowEvaluationRun {
 // =============================================================================
 
 /// Response containing a list of workflow evaluation runs with episode counts.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -80,6 +88,7 @@ pub struct ListWorkflowEvaluationRunsResponse {
 }
 
 /// Information about a single workflow evaluation run with episode count.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -92,6 +101,7 @@ pub struct WorkflowEvaluationRunWithEpisodeCount {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_name: Option<String>,
     pub num_episodes: u32,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
 }
 
@@ -100,6 +110,7 @@ pub struct WorkflowEvaluationRunWithEpisodeCount {
 // =============================================================================
 
 /// Response containing the count of workflow evaluation runs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -112,6 +123,7 @@ pub struct CountWorkflowEvaluationRunsResponse {
 // =============================================================================
 
 /// Response containing a list of workflow evaluation runs by IDs.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -124,6 +136,7 @@ pub struct GetWorkflowEvaluationRunsResponse {
 // =============================================================================
 
 /// Statistics for a single metric within a workflow evaluation run.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -140,6 +153,7 @@ pub struct WorkflowEvaluationRunStatistics {
 }
 
 /// Response containing statistics for a workflow evaluation run grouped by metric.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -155,6 +169,7 @@ pub struct GetWorkflowEvaluationRunStatisticsResponse {
 ///
 /// Each inner Vec contains all episodes that share the same task_name (or NULL task_name).
 /// Episodes with NULL task_name are grouped individually.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -167,6 +182,7 @@ pub struct ListWorkflowEvaluationRunEpisodesByTaskNameResponse {
 // =============================================================================
 
 /// Response containing the count of distinct episodes by task_name.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -179,6 +195,7 @@ pub struct CountWorkflowEvaluationRunEpisodesByTaskNameResponse {
 // =============================================================================
 
 /// Response containing a list of workflow evaluation run episodes with feedback.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -187,11 +204,13 @@ pub struct GetWorkflowEvaluationRunEpisodesWithFeedbackResponse {
 }
 
 /// Information about a single workflow evaluation run episode with feedback.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct WorkflowEvaluationRunEpisodeWithFeedback {
     pub episode_id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub timestamp: DateTime<Utc>,
     pub run_id: Uuid,
     pub tags: HashMap<String, String>,
@@ -208,6 +227,7 @@ pub struct WorkflowEvaluationRunEpisodeWithFeedback {
 // =============================================================================
 
 /// Response containing the count of episodes for a workflow evaluation run.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

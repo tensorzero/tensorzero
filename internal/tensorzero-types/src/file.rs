@@ -15,6 +15,7 @@ use url::Url;
 
 /// Detail level for input images (affects fidelity and token cost)
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -27,6 +28,7 @@ pub enum Detail {
 
 /// A file already encoded as base64
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -39,6 +41,7 @@ pub struct Base64File {
     pub source_url: Option<Url>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     #[schemars(with = "String")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub mime_type: MediaType,
     // This field contains *unprefixed* base64-encoded data.
     // It's private and validated by the constructor.
@@ -201,6 +204,7 @@ impl Base64File {
 
 /// Like `Base64File`, but without the data field.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
@@ -209,6 +213,7 @@ pub struct Base64FileMetadata {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub source_url: Option<Url>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub mime_type: MediaType,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
@@ -256,6 +261,7 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
 
 /// A file that can be located at a URL
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -264,6 +270,7 @@ pub struct UrlFile {
     pub url: Url,
     #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
     #[schemars(with = "Option<String>")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>))]
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
@@ -303,6 +310,7 @@ impl<'de> Deserialize<'de> for UrlFile {
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -313,6 +321,7 @@ pub struct ObjectStoragePointer {
     pub source_url: Option<Url>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     #[schemars(with = "String")]
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub mime_type: MediaType,
     pub storage_path: StoragePath,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -365,6 +374,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 /// This struct can NOT be stored in the database.
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -377,6 +387,7 @@ pub struct ObjectStorageFile {
 /// A file that we failed to read from object storage.
 /// This struct can NOT be stored in the database.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -389,20 +400,26 @@ pub struct ObjectStorageError {
 
 /// A file for an inference or a datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub enum File {
     #[schemars(title = "FileUrlFile")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileUrlFile"))]
     Url(UrlFile),
     #[schemars(title = "FileBase64")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileBase64"))]
     Base64(Base64File),
     #[schemars(title = "FileObjectStoragePointer")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileObjectStoragePointer"))]
     ObjectStoragePointer(ObjectStoragePointer),
     #[schemars(title = "FileObjectStorage")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileObjectStorage"))]
     ObjectStorage(ObjectStorageFile),
     #[schemars(title = "FileObjectStorageError")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileObjectStorageError"))]
     ObjectStorageError(ObjectStorageError),
 }
 

@@ -12,6 +12,7 @@ use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for the variant sampling probabilities endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct GetVariantSamplingProbabilitiesParams {
     /// The name of the function to get probabilities for
@@ -19,6 +20,7 @@ pub struct GetVariantSamplingProbabilitiesParams {
 }
 
 /// Response containing variant sampling probabilities
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -29,6 +31,15 @@ pub struct GetVariantSamplingProbabilitiesResponse {
 }
 
 /// HTTP handler for the variant sampling probabilities endpoint (query-based)
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/variant_sampling_probabilities",
+    responses(
+        (status = 200, description = "Variant sampling probabilities", body = GetVariantSamplingProbabilitiesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 pub async fn get_variant_sampling_probabilities_handler(
     State(app_state): AppState,
@@ -45,6 +56,18 @@ pub async fn get_variant_sampling_probabilities_handler(
 }
 
 /// HTTP handler for the variant sampling probabilities endpoint (path-based)
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/functions/{function_name}/variant_sampling_probabilities",
+    params(
+        ("function_name" = String, Path, description = "The function name"),
+    ),
+    responses(
+        (status = 200, description = "Variant sampling probabilities", body = GetVariantSamplingProbabilitiesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 pub async fn get_variant_sampling_probabilities_by_function_handler(
     State(app_state): AppState,

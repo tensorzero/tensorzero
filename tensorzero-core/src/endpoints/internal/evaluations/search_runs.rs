@@ -12,6 +12,15 @@ use crate::utils::gateway::{AppState, AppStateData};
 /// Handler for `GET /internal/evaluations/runs/search`
 ///
 /// Searches evaluation runs by ID or variant name.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/evaluations/runs/search",
+    responses(
+        (status = 200, description = "Search results", body = SearchEvaluationRunsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "evaluations.search_runs", skip_all)]
 pub async fn search_evaluation_runs_handler(

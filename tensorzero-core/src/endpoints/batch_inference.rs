@@ -61,6 +61,7 @@ use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 /// The expected payload to the `/start_batch_inference` endpoint.
 /// It will be a JSON object with the following fields:
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StartBatchInferenceParams {
@@ -69,6 +70,7 @@ pub struct StartBatchInferenceParams {
     // the episode IDs for each inference (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Vec<Option<String>>>))]
     pub episode_ids: Option<BatchEpisodeIdInput>,
     // the inputs for the inferences
     pub inputs: Vec<Input>,
@@ -81,6 +83,7 @@ pub struct StartBatchInferenceParams {
     pub variant_name: Option<String>,
     // the tags to add to the inference
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Vec<Option<Object>>>))]
     pub tags: Option<BatchTags>,
     // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
     #[serde(flatten)]
@@ -97,8 +100,10 @@ pub struct StartBatchInferenceParams {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Vec<Option<Object>>>))]
     pub output_schemas: Option<BatchOutputSchemas>,
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub credentials: InferenceCredentials,
 }
 
@@ -110,6 +115,16 @@ pub type BatchOutputSchemas = Vec<Option<Value>>;
 /// The entire batch must use the same function and variant.
 /// It will fail if we fail to kick off the batch request for any reason.
 /// However, the batch request might still fail for other reasons after it has been started.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/batch_inference",
+    request_body = inline(StartBatchInferenceParams),
+    responses(
+        (status = 200, description = "Batch inference started", body = PrepareBatchInferenceOutput),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Batch Inference"
+))]
 #[instrument(
     name="start_batch_inference",
     skip_all,
@@ -489,6 +504,7 @@ async fn start_variant_batch_inference(
 }
 
 // Determines the return type of the `/start_batch_inference` endpoint upon success
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize)]
 pub struct PrepareBatchInferenceOutput {
     pub batch_id: Uuid,
@@ -506,6 +522,18 @@ pub struct PollPathParams {
 /// Semantics: if the batch is pending, it will actually poll the model provider
 /// If the batch is failed, it will return a failed response immediately
 /// If the batch is completed, it will return the appropriate response immediately from the database
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/batch_inference/{batch_id}",
+    params(
+        ("batch_id" = String, Path, description = "The batch inference ID"),
+    ),
+    responses(
+        (status = 200, description = "Batch inference result", body = CompletedBatchInferenceResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Batch Inference"
+))]
 #[instrument(name = "poll_batch_inference", skip_all, fields(query))]
 #[debug_handler(state = AppStateData)]
 pub async fn poll_batch_inference_handler(
@@ -578,6 +606,40 @@ pub async fn poll_batch_inference_handler(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PollByInferencePathParams {
+    pub batch_id: Uuid,
+    pub inference_id: Uuid,
+}
+
+/// Polls a single inference within a batch inference request.
+/// This is a thin wrapper around `poll_batch_inference_handler` that converts the path params.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/batch_inference/{batch_id}/inference/{inference_id}",
+    params(
+        ("batch_id" = String, Path, description = "The batch inference ID"),
+        ("inference_id" = String, Path, description = "A specific inference ID within the batch"),
+    ),
+    responses(
+        (status = 200, description = "Single batch inference result", body = CompletedBatchInferenceResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Batch Inference"
+))]
+#[debug_handler(state = AppStateData)]
+pub async fn poll_batch_inference_by_inference_handler(
+    state: AppState,
+    Path(path_params): Path<PollByInferencePathParams>,
+) -> Result<Response<Body>, Error> {
+    let poll_params = PollPathParams {
+        batch_id: path_params.batch_id,
+        inference_id: Some(path_params.inference_id),
+    };
+    poll_batch_inference_handler(state, Path(poll_params)).await
+}
+
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum PollInferenceResponse {
@@ -600,6 +662,7 @@ impl PollInferenceResponse {
     }
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Serialize)]
 pub struct CompletedBatchInferenceResponse {
     pub batch_id: Uuid,

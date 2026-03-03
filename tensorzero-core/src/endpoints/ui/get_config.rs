@@ -24,13 +24,18 @@ use crate::{
 ///
 /// Contains only UI-safe fields from the gateway config, excluding sensitive
 /// information like provider credentials, API keys, and internal settings.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UiConfig {
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub functions: HashMap<String, Arc<FunctionConfig>>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub metrics: HashMap<String, MetricConfig>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub tools: HashMap<String, Arc<StaticToolConfig>>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>,
     pub model_names: Vec<String>,
     pub config_hash: String,
@@ -132,6 +137,14 @@ impl UiConfig {
 /// Handler for GET /internal/ui_config
 ///
 /// Returns a UI-safe subset of the Config.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/ui_config",
+    responses(
+        (status = 200, description = "UI config", body = UiConfig),
+    ),
+    tag = "Internal"
+))]
 #[expect(clippy::unused_async)]
 pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
     Json(UiConfig::from_config(&app_state.config))
@@ -140,6 +153,18 @@ pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
 /// Handler for GET /internal/ui_config/{hash}
 ///
 /// Returns a UI-safe subset of the Config for a historical config snapshot.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/ui_config/{hash}",
+    params(
+        ("hash" = String, Path, description = "Config snapshot hash"),
+    ),
+    responses(
+        (status = 200, description = "UI config by hash", body = UiConfig),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[axum::debug_handler(state = AppStateData)]
 pub async fn ui_config_by_hash_handler(
     State(app_state): AppState,

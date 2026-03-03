@@ -10,6 +10,7 @@ use serde_json::Value;
 use tensorzero_derive::export_schema;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraBodyConfig {
@@ -17,6 +18,7 @@ pub struct ExtraBodyConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
@@ -25,11 +27,13 @@ pub struct ExtraBodyReplacement {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[export_schema]
 #[serde(rename_all = "snake_case")]
 pub enum ExtraBodyReplacementKind {
     #[schemars(title = "ExtraBodyReplacementKindValue")]
+    #[cfg_attr(feature = "openapi", schema(title = "ExtraBodyReplacementKindValue", value_type = Object))]
     Value(Value),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
     #[serde(
@@ -185,6 +189,7 @@ pub fn prepare_relay_extra_headers(
 /// The 'InferenceExtraBody' options provided directly in an inference request.
 /// These have not yet been filtered by variant name
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraBody {
@@ -239,12 +244,14 @@ pub mod dynamic {
     use tensorzero_derive::export_schema;
 
     #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+    #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
     #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
     #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
     #[export_schema]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraBody {
         #[schemars(title = "ProviderExtraBody")]
+        #[cfg_attr(feature = "openapi", schema(title = "ProviderExtraBody"))]
         #[deprecated(note = "Migrate to `ModelProvider` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProvider` instead.
         Provider {
@@ -253,9 +260,11 @@ pub mod dynamic {
             /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
             /// The value to set the field to
+            #[cfg_attr(feature = "openapi", schema(value_type = Object))]
             value: serde_json::Value,
         },
         #[schemars(title = "ProviderExtraBodyDelete")]
+        #[cfg_attr(feature = "openapi", schema(title = "ProviderExtraBodyDelete"))]
         #[deprecated(note = "Migrate to `ModelProviderDelete` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProviderDelete` instead.
         ProviderDelete {
@@ -278,6 +287,7 @@ pub mod dynamic {
             /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
             /// The value to set the field to
+            #[cfg_attr(feature = "openapi", schema(value_type = Object))]
             value: serde_json::Value,
         },
         #[schemars(title = "VariantExtraBodyDelete")]
@@ -303,6 +313,7 @@ pub mod dynamic {
             /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
             /// The value to set the field to
+            #[cfg_attr(feature = "openapi", schema(value_type = Object))]
             value: serde_json::Value,
         },
         #[schemars(title = "ModelProviderExtraBodyDelete")]
@@ -326,6 +337,7 @@ pub mod dynamic {
             /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
             /// The value to set the field to
+            #[cfg_attr(feature = "openapi", schema(value_type = Object))]
             value: serde_json::Value,
         },
         #[schemars(title = "AlwaysExtraBodyDelete")]

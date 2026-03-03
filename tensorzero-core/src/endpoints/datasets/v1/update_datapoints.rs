@@ -39,6 +39,19 @@ pub struct UpdateDatapointsPathParams {
     pub dataset_name: String,
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    patch,
+    path = "/v1/datasets/{dataset_name}/datapoints",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    request_body = inline(UpdateDatapointsRequest),
+    responses(
+        (status = 200, description = "Datapoints updated", body = UpdateDatapointsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Datasets"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "datasets.v1.update_datapoints", skip(app_state, request))]
 pub async fn update_datapoints_handler(
@@ -388,6 +401,19 @@ pub struct UpdateDatapointsMetadataPathParams {
     pub dataset_name: String,
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    patch,
+    path = "/v1/datasets/{dataset_name}/datapoints/metadata",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    request_body = inline(UpdateDatapointsMetadataRequest),
+    responses(
+        (status = 200, description = "Metadata updated", body = UpdateDatapointsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Datasets"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(
     name = "datasets.v1.update_datapoints_metadata",

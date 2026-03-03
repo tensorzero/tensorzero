@@ -328,11 +328,13 @@ impl TryFrom<BatchEpisodeIdsWithSize> for BatchEpisodeIds {
 
 /// InferenceParams is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct BatchInferenceParams {
     pub chat_completion: BatchChatCompletionInferenceParams,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct BatchChatCompletionInferenceParams {
     #[serde(default)]

@@ -15,6 +15,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 /// Query parameters for the GET episode table endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Debug, Deserialize)]
 pub struct ListEpisodesParams {
     /// Maximum number of episodes to return
@@ -28,6 +29,7 @@ pub struct ListEpisodesParams {
 }
 
 /// Request body for the POST episode table endpoint
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -50,6 +52,7 @@ pub struct ListEpisodesRequest {
     pub filters: Option<InferenceFilter>,
 }
 
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -58,6 +61,15 @@ pub struct ListEpisodesResponse {
 }
 
 /// HTTP handler for querying episodes (GET)
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/episodes",
+    responses(
+        (status = 200, description = "List of episodes", body = ListEpisodesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(name = "list_episodes_handler", skip_all)]
 pub async fn list_episodes_handler(
@@ -79,6 +91,16 @@ pub async fn list_episodes_handler(
 }
 
 /// HTTP handler for querying episodes (POST with filters)
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/internal/episodes",
+    request_body = inline(ListEpisodesRequest),
+    responses(
+        (status = 200, description = "List of episodes (with filters)", body = ListEpisodesResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(name = "list_episodes_post_handler", skip_all)]
 pub async fn list_episodes_post_handler(
@@ -127,6 +149,15 @@ pub async fn list_episodes(
 }
 
 /// HTTP handler for querying episode table bounds
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/internal/episodes/bounds",
+    responses(
+        (status = 200, description = "Episode table bounds", body = inline(crate::db::TableBoundsWithCount)),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Internal"
+))]
 #[debug_handler(state = AppStateData)]
 #[instrument(name = "query_episode_table_bounds_handler", skip_all)]
 pub async fn query_episode_table_bounds_handler(

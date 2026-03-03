@@ -16,6 +16,19 @@ use super::types::{CreateDatapointRequest, CreateDatapointsRequest, CreateDatapo
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/datapoints` endpoint.
 /// Creates manual datapoints in a dataset.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/datasets/{dataset_name}/datapoints",
+    params(
+        ("dataset_name" = String, Path, description = "The dataset name"),
+    ),
+    request_body = inline(CreateDatapointsRequest),
+    responses(
+        (status = 200, description = "Datapoints created", body = CreateDatapointsResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Datasets"
+))]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "datasets.v1.create_datapoints", skip(app_state, request))]
 pub async fn create_datapoints_handler(

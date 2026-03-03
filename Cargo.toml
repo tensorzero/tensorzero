@@ -27,6 +27,7 @@ members = [
     "internal/config-applier",
     "internal/tensorzero-config-paths",
     "internal/tensorzero-ts-types",
+    "internal/generate-openapi-spec",
 ]
 resolver = "2"
 
@@ -136,6 +137,8 @@ rust_decimal = { version = "1.37", features = ["serde-float", "serde-with-float"
 walkdir = "2.5.0"
 tempfile = "3.26.0"
 toml_edit = "0.25"
+utoipa = { version = "5.4", features = ["uuid", "chrono", "url", "decimal_float", "preserve_order"] }
+utoipa-axum = "0.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

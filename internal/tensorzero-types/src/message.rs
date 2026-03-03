@@ -15,6 +15,7 @@ use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 /// prior to any processing into LLM representations below.
 /// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -24,6 +25,7 @@ pub struct InputMessage {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -34,20 +36,27 @@ pub struct InputMessage {
 #[export_schema]
 pub enum InputMessageContent {
     #[schemars(title = "InputMessageContentText")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentText"))]
     Text(Text),
     #[schemars(title = "InputMessageContentTemplate")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentTemplate"))]
     Template(Template),
     // `ToolCallWrapper` is `serde(untagged)` so no need to name it.
     #[schemars(with = "ToolCallWrapperJsonSchema")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentToolCall"))]
     ToolCall(ToolCallWrapper),
     #[schemars(title = "InputMessageContentToolResult")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentToolResult"))]
     ToolResult(ToolResult),
     #[schemars(title = "InputMessageContentRawText")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentRawText"))]
     RawText(RawText),
     #[schemars(title = "InputMessageContentThought")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentThought"))]
     Thought(Thought),
     #[serde(alias = "image")]
     #[schemars(title = "InputMessageContentFile")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentFile"))]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
@@ -55,11 +64,13 @@ pub enum InputMessageContent {
     /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
     #[schemars(title = "InputMessageContentUnknown")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentUnknown"))]
     Unknown(Unknown),
 }
 
 /// API representation of an input to a model.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
