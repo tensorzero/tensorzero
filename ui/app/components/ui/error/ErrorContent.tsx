@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Database,
@@ -79,6 +79,12 @@ function GatewayAuthContent() {
   const [apiKey, setApiKey] = useState("");
   const isBusy = fetcher.state !== "idle";
   const error = fetcher.data?.error;
+
+  useEffect(() => {
+    if (fetcher.data?.success) {
+      window.location.reload();
+    }
+  }, [fetcher.data]);
 
   const handleSubmit = () => {
     if (apiKey.trim()) {
