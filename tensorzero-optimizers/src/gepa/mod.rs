@@ -45,11 +45,12 @@ use pareto::{Candidate, ParetoFrontier, is_improvement};
 use validate::{get_uninitialized_variant_configs, validate_examples, validate_gepa_config};
 
 pub use types::{
-    GepaAnalyzeParams, GepaAnalyzeResult, GepaCleanupParams, GepaEvalAndUpdateParams,
-    GepaEvalParentParams, GepaEvalParentResult, GepaIterUpdateResult, GepaIterationParams,
-    GepaIterationResult, GepaMutateParams, GepaMutateResult, GepaSampleParams, GepaSampleResult,
-    GepaSetupParams, GepaSetupResult, GepaSideInfo, GepaToolOutput, GepaToolParams,
-    ParetoCheckpoint, SelectedVariant,
+    GepaAnalyzeContinue, GepaAnalyzeParams, GepaAnalyzeResult, GepaCleanupParams,
+    GepaEvalAndUpdateParams, GepaEvalParentContinue, GepaEvalParentParams, GepaEvalParentResult,
+    GepaIterUpdateResult, GepaIterationParams, GepaIterationResult, GepaMutateContinue,
+    GepaMutateParams, GepaMutateResult, GepaSampleContinue, GepaSampleParams, GepaSampleResult,
+    GepaSetupParams, GepaSetupResult, GepaSideInfo, GepaSkipIteration, GepaToolOutput,
+    GepaToolParams, ParetoCheckpoint, SelectedVariant,
 };
 
 /// A GEPA variant with its name and configuration
@@ -74,7 +75,7 @@ impl Optimizer for GEPAConfig {
     ) -> Result<Self::Handle, Error> {
         let spawn_client = spawn_client.ok_or_else(|| {
             Error::new(ErrorDetails::Config {
-                message: "GEPA optimization requires a durable task runtime (`spawn_client`). GEPA is not supported in embedded gateway mode.".to_string(),
+                message: "GEPA optimization requires a durable task runtime (`spawn_client`). Ensure Postgres is configured.".to_string(),
             })
         })?;
 
@@ -533,25 +534,17 @@ pub async fn run_gepa_iteration(
     )
     .await?;
 
-    let (parent, mutation_dataset_name, temporary_datasets, checkpoint) = match sample_result {
-        GepaSampleResult::Continue {
-            parent,
-            mutation_dataset_name,
-            temporary_datasets,
-            checkpoint,
-        } => (
-            parent,
-            mutation_dataset_name,
-            temporary_datasets,
-            checkpoint,
-        ),
-        GepaSampleResult::SkipIteration {
-            checkpoint,
-            temporary_datasets,
-        } => {
+    let GepaSampleContinue {
+        parent,
+        mutation_dataset_name,
+        temporary_datasets,
+        checkpoint,
+    } = match sample_result {
+        GepaSampleResult::Continue(data) => *data,
+        GepaSampleResult::SkipIteration(skip) => {
             return Ok(GepaIterationResult {
-                checkpoint,
-                temporary_datasets,
+                checkpoint: skip.checkpoint,
+                temporary_datasets: skip.temporary_datasets,
             });
         }
     };
@@ -574,37 +567,20 @@ pub async fn run_gepa_iteration(
     )
     .await?;
 
-    let (
+    let GepaEvalParentContinue {
         parent,
         parent_evaluation_infos,
         parent_evaluation_stats,
         mutation_dataset_name,
         checkpoint,
         temporary_datasets,
-    ) = match eval_parent_result {
-        GepaEvalParentResult::Continue {
-            parent,
-            parent_evaluation_infos,
-            parent_evaluation_stats,
-            mutation_dataset_name,
-            checkpoint,
-            temporary_datasets,
-            ..
-        } => (
-            parent,
-            parent_evaluation_infos,
-            parent_evaluation_stats,
-            mutation_dataset_name,
-            checkpoint,
-            temporary_datasets,
-        ),
-        GepaEvalParentResult::SkipIteration {
-            checkpoint,
-            temporary_datasets,
-        } => {
+        ..
+    } = match eval_parent_result {
+        GepaEvalParentResult::Continue(data) => *data,
+        GepaEvalParentResult::SkipIteration(skip) => {
             return Ok(GepaIterationResult {
-                checkpoint,
-                temporary_datasets,
+                checkpoint: skip.checkpoint,
+                temporary_datasets: skip.temporary_datasets,
             });
         }
     };
@@ -628,37 +604,20 @@ pub async fn run_gepa_iteration(
     )
     .await?;
 
-    let (
+    let GepaAnalyzeContinue {
         parent,
         parent_analyses,
         parent_evaluation_stats,
         mutation_dataset_name,
         checkpoint,
         temporary_datasets,
-    ) = match analyze_result {
-        GepaAnalyzeResult::Continue {
-            parent,
-            parent_analyses,
-            parent_evaluation_stats,
-            mutation_dataset_name,
-            checkpoint,
-            temporary_datasets,
-            ..
-        } => (
-            parent,
-            parent_analyses,
-            parent_evaluation_stats,
-            mutation_dataset_name,
-            checkpoint,
-            temporary_datasets,
-        ),
-        GepaAnalyzeResult::SkipIteration {
-            checkpoint,
-            temporary_datasets,
-        } => {
+        ..
+    } = match analyze_result {
+        GepaAnalyzeResult::Continue(data) => *data,
+        GepaAnalyzeResult::SkipIteration(skip) => {
             return Ok(GepaIterationResult {
-                checkpoint,
-                temporary_datasets,
+                checkpoint: skip.checkpoint,
+                temporary_datasets: skip.temporary_datasets,
             });
         }
     };
@@ -682,32 +641,22 @@ pub async fn run_gepa_iteration(
     )
     .await?;
 
-    let (child, parent_evaluation_stats, mutation_dataset_name, checkpoint, temporary_datasets) =
-        match mutate_result {
-            GepaMutateResult::Continue {
-                child,
-                parent_evaluation_stats,
-                mutation_dataset_name,
-                checkpoint,
-                temporary_datasets,
-                ..
-            } => (
-                child,
-                parent_evaluation_stats,
-                mutation_dataset_name,
-                checkpoint,
-                temporary_datasets,
-            ),
-            GepaMutateResult::SkipIteration {
-                checkpoint,
-                temporary_datasets,
-            } => {
-                return Ok(GepaIterationResult {
-                    checkpoint,
-                    temporary_datasets,
-                });
-            }
-        };
+    let GepaMutateContinue {
+        child,
+        parent_evaluation_stats,
+        mutation_dataset_name,
+        checkpoint,
+        temporary_datasets,
+        ..
+    } = match mutate_result {
+        GepaMutateResult::Continue(data) => *data,
+        GepaMutateResult::SkipIteration(skip) => {
+            return Ok(GepaIterationResult {
+                checkpoint: skip.checkpoint,
+                temporary_datasets: skip.temporary_datasets,
+            });
+        }
+    };
 
     // Sub-step 5: Evaluate child, compare, conditional val eval, update frontier
     let update_result = run_gepa_iter_eval_and_update(
@@ -771,10 +720,12 @@ pub async fn run_gepa_iter_sample(
                 iteration,
                 err
             );
-            return Ok(GepaSampleResult::SkipIteration {
-                checkpoint: pareto_frontier.to_checkpoint(),
-                temporary_datasets,
-            });
+            return Ok(GepaSampleResult::SkipIteration(Box::new(
+                GepaSkipIteration {
+                    checkpoint: pareto_frontier.to_checkpoint(),
+                    temporary_datasets,
+                },
+            )));
         }
     };
 
@@ -784,8 +735,14 @@ pub async fn run_gepa_iter_sample(
         parent.name
     );
 
+    // Use a different seed derivation than from_checkpoint (which uses seed + iteration)
+    // to avoid correlated sampling between parent selection and minibatch selection.
     let mut rng = match gepa_config.seed {
-        Some(seed) => StdRng::seed_from_u64(seed as u64 + iteration as u64),
+        Some(seed) => StdRng::seed_from_u64(
+            (seed as u64)
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(iteration as u64),
+        ),
         None => {
             let mut thread_rng = rand::rng();
             StdRng::from_rng(&mut thread_rng)
@@ -821,7 +778,7 @@ pub async fn run_gepa_iter_sample(
     )
     .await?;
 
-    Ok(GepaSampleResult::Continue {
+    Ok(GepaSampleResult::Continue(Box::new(GepaSampleContinue {
         parent: SelectedVariant {
             name: parent.name,
             config: parent.config,
@@ -829,7 +786,7 @@ pub async fn run_gepa_iter_sample(
         mutation_dataset_name,
         temporary_datasets,
         checkpoint: pareto_frontier.to_checkpoint(),
-    })
+    })))
 }
 
 /// Sub-step 2: Evaluate parent variant on the minibatch dataset.
@@ -881,10 +838,12 @@ pub async fn run_gepa_iter_eval_parent(
                 parent.name,
                 e
             );
-            return Ok(GepaEvalParentResult::SkipIteration {
-                checkpoint,
-                temporary_datasets,
-            });
+            return Ok(GepaEvalParentResult::SkipIteration(Box::new(
+                GepaSkipIteration {
+                    checkpoint,
+                    temporary_datasets,
+                },
+            )));
         }
     };
 
@@ -895,16 +854,18 @@ pub async fn run_gepa_iter_eval_parent(
         parent_evaluation_results.evaluation_stats
     );
 
-    Ok(GepaEvalParentResult::Continue {
-        parent,
-        parent_evaluation_infos: parent_evaluation_results.evaluation_infos().to_vec(),
-        parent_evaluation_stats: parent_evaluation_results.evaluation_stats,
-        mutation_dataset_name,
-        checkpoint,
-        temporary_datasets,
-        val_dataset_name,
-        per_variant_concurrency,
-    })
+    Ok(GepaEvalParentResult::Continue(Box::new(
+        GepaEvalParentContinue {
+            parent,
+            parent_evaluation_infos: parent_evaluation_results.evaluation_infos().to_vec(),
+            parent_evaluation_stats: parent_evaluation_results.evaluation_stats,
+            mutation_dataset_name,
+            checkpoint,
+            temporary_datasets,
+            val_dataset_name,
+            per_variant_concurrency,
+        },
+    )))
 }
 
 /// Sub-step 3: Analyze parent inferences using the judge model.
@@ -954,10 +915,12 @@ pub async fn run_gepa_iter_analyze(
                 parent.name,
                 err
             );
-            return Ok(GepaAnalyzeResult::SkipIteration {
-                checkpoint,
-                temporary_datasets,
-            });
+            return Ok(GepaAnalyzeResult::SkipIteration(Box::new(
+                GepaSkipIteration {
+                    checkpoint,
+                    temporary_datasets,
+                },
+            )));
         }
     };
 
@@ -968,7 +931,7 @@ pub async fn run_gepa_iter_analyze(
         parent.name
     );
 
-    Ok(GepaAnalyzeResult::Continue {
+    Ok(GepaAnalyzeResult::Continue(Box::new(GepaAnalyzeContinue {
         parent,
         parent_analyses,
         parent_evaluation_stats,
@@ -977,7 +940,7 @@ pub async fn run_gepa_iter_analyze(
         temporary_datasets,
         val_dataset_name,
         per_variant_concurrency,
-    })
+    })))
 }
 
 /// Sub-step 4: Mutate the parent variant to produce a child.
@@ -1033,14 +996,16 @@ pub async fn run_gepa_iter_mutate(
                 parent_variant.name,
                 err
             );
-            return Ok(GepaMutateResult::SkipIteration {
-                checkpoint,
-                temporary_datasets,
-            });
+            return Ok(GepaMutateResult::SkipIteration(Box::new(
+                GepaSkipIteration {
+                    checkpoint,
+                    temporary_datasets,
+                },
+            )));
         }
     };
 
-    Ok(GepaMutateResult::Continue {
+    Ok(GepaMutateResult::Continue(Box::new(GepaMutateContinue {
         child: SelectedVariant {
             name: child.name,
             config: child.config,
@@ -1051,7 +1016,7 @@ pub async fn run_gepa_iter_mutate(
         temporary_datasets,
         val_dataset_name,
         per_variant_concurrency,
-    })
+    })))
 }
 
 /// Sub-step 5: Evaluate child on minibatch, compare with parent, conditionally evaluate
