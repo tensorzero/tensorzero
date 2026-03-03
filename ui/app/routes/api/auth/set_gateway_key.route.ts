@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { getEnv } from "~/utils/env.server";
-import { buildApiKeyCookie } from "~/utils/api-key-override.server";
+import { apiKeyCookie } from "~/utils/api-key-override.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -63,6 +63,6 @@ export async function action({ request }: ActionFunctionArgs) {
   // Key is valid — store it in an HTTP-only cookie on the user's browser.
   return data(
     { success: true },
-    { headers: { "Set-Cookie": buildApiKeyCookie(trimmed) } },
+    { headers: { "Set-Cookie": await apiKeyCookie.serialize(trimmed) } },
   );
 }

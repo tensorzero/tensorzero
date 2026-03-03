@@ -45,8 +45,8 @@ import {
   type FeatureFlags,
 } from "./utils/feature_flags.server";
 import {
+  apiKeyCookie,
   getApiKeyFromRequest,
-  buildClearApiKeyCookie,
   runWithRequest,
 } from "./utils/api-key-override.server";
 
@@ -68,7 +68,10 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
-const apiKeyMiddleware: Route.MiddlewareFunction = ({ request }, next) => {
+const apiKeyMiddleware: Route.MiddlewareFunction = async (
+  { request },
+  next,
+) => {
   return runWithRequest(request, next);
 };
 
@@ -125,9 +128,11 @@ export async function loader({ request }: Route.LoaderArgs) {
         infraError: { type: InfraErrorType.GatewayAuthFailed },
       };
       // Clear stale cookie so the auth dialog starts fresh
-      if (getApiKeyFromRequest(request)) {
+      if (await getApiKeyFromRequest(request)) {
         return data(loaderData, {
-          headers: { "Set-Cookie": buildClearApiKeyCookie() },
+          headers: {
+            "Set-Cookie": await apiKeyCookie.serialize("", { maxAge: 0 }),
+          },
         });
       }
       return loaderData;

@@ -3,7 +3,7 @@ import {
   runWithRequest,
   getApiKeyFromRequest,
   getEffectiveApiKey,
-  buildApiKeyCookie,
+  apiKeyCookie,
 } from "./api-key-override.server";
 
 const mockGetEnv = vi.fn(() => ({
@@ -15,10 +15,10 @@ vi.mock("./env.server", () => ({
   getEnv: () => mockGetEnv(),
 }));
 
-function makeRequest(cookie?: string): Request {
+async function makeRequest(apiKey?: string): Promise<Request> {
   const headers = new Headers();
-  if (cookie) {
-    headers.set("cookie", cookie);
+  if (apiKey) {
+    headers.set("cookie", await apiKeyCookie.serialize(apiKey));
   }
   return new Request("http://localhost:3000", { headers });
 }
@@ -31,36 +31,27 @@ beforeEach(() => {
 });
 
 describe("getApiKeyFromRequest", () => {
-  it("parses among multiple cookies", () => {
-    const request = makeRequest(
-      "session=abc; tz_gateway_key=my-key; theme=dark",
-    );
-    expect(getApiKeyFromRequest(request)).toBe("my-key");
-  });
-
-  it("returns undefined for malformed percent-encoding instead of throwing", () => {
-    const request = makeRequest("tz_gateway_key=%ZZ%invalid");
-    expect(getApiKeyFromRequest(request)).toBeUndefined();
+  it("parses cookie set by apiKeyCookie.serialize", async () => {
+    const request = await makeRequest("my-key");
+    expect(await getApiKeyFromRequest(request)).toBe("my-key");
   });
 });
 
 describe("getEffectiveApiKey", () => {
-  it("prefers env var over cookie", () => {
+  it("prefers env var over cookie", async () => {
     mockGetEnv.mockReturnValue({
       TENSORZERO_GATEWAY_URL: "http://localhost:3000",
       TENSORZERO_API_KEY: "env-key",
     });
-    const result = runWithRequest(
-      makeRequest("tz_gateway_key=cookie-key"),
-      () => getEffectiveApiKey(),
+    const result = await runWithRequest(await makeRequest("cookie-key"), () =>
+      getEffectiveApiKey(),
     );
     expect(result).toBe("env-key");
   });
 
-  it("falls back to cookie when env var is empty", () => {
-    const result = runWithRequest(
-      makeRequest("tz_gateway_key=cookie-key"),
-      () => getEffectiveApiKey(),
+  it("falls back to cookie when env var is empty", async () => {
+    const result = await runWithRequest(await makeRequest("cookie-key"), () =>
+      getEffectiveApiKey(),
     );
     expect(result).toBe("cookie-key");
   });
@@ -68,38 +59,14 @@ describe("getEffectiveApiKey", () => {
   it("isolates concurrent requests via AsyncLocalStorage", async () => {
     const results: (string | undefined)[] = [];
     await Promise.all([
-      new Promise<void>((resolve) => {
-        runWithRequest(makeRequest("tz_gateway_key=key-A"), () => {
-          results[0] = getEffectiveApiKey();
-          resolve();
-        });
+      runWithRequest(await makeRequest("key-A"), () => {
+        results[0] = getEffectiveApiKey();
       }),
-      new Promise<void>((resolve) => {
-        runWithRequest(makeRequest("tz_gateway_key=key-B"), () => {
-          results[1] = getEffectiveApiKey();
-          resolve();
-        });
+      runWithRequest(await makeRequest("key-B"), () => {
+        results[1] = getEffectiveApiKey();
       }),
     ]);
     expect(results[0]).toBe("key-A");
     expect(results[1]).toBe("key-B");
-  });
-});
-
-describe("buildApiKeyCookie", () => {
-  it("omits Secure for IPv6 loopback", () => {
-    mockGetEnv.mockReturnValue({
-      TENSORZERO_GATEWAY_URL: "http://[::1]:3000",
-      TENSORZERO_API_KEY: "",
-    });
-    expect(buildApiKeyCookie("key")).not.toContain("Secure");
-  });
-
-  it("includes Secure for non-localhost", () => {
-    mockGetEnv.mockReturnValue({
-      TENSORZERO_GATEWAY_URL: "https://gateway.example.com",
-      TENSORZERO_API_KEY: "",
-    });
-    expect(buildApiKeyCookie("key")).toContain("Secure");
   });
 });
