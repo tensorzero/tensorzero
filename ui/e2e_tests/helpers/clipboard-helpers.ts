@@ -1,12 +1,25 @@
 import type { Page } from "@playwright/test";
 
 /**
- * Mocks navigator.clipboard in the page context.
- * Needed because clipboard API permissions aren't available in CI Docker.
+ * Mocks navigator.clipboard in the page context via addInitScript.
+ * Must be called BEFORE page.goto so the mock is available when React renders.
+ *
+ * Also overrides window.isSecureContext for non-secure origins (e.g. 0.0.0.0
+ * in CI Docker) where the clipboard API would otherwise be unavailable.
  */
 export async function installClipboardMock(page: Page) {
-  await page.evaluate(() => {
+  await page.addInitScript(() => {
     const storage = { text: "" };
+
+    // Override isSecureContext for non-secure origins (CI Docker uses 0.0.0.0)
+    if (!window.isSecureContext) {
+      Object.defineProperty(window, "isSecureContext", {
+        value: true,
+        writable: false,
+        configurable: true,
+      });
+    }
+
     Object.defineProperty(navigator, "clipboard", {
       value: {
         writeText: (text: string) => {

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { installClipboardMock } from "./helpers/clipboard-helpers";
 
 test.describe("Inference Preview Sheet from Episode Page", () => {
   const episodeId = "0196367a-842d-74c2-9e62-67f07369b6ad";
@@ -162,6 +163,7 @@ test.describe("Inference Preview Sheet from Episode Page", () => {
   });
 
   test("should show action buttons in the sheet", async ({ page }) => {
+    await installClipboardMock(page);
     await page.goto(episodeUrl);
     await page.waitForLoadState("networkidle");
 

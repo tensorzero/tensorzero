@@ -697,11 +697,11 @@ test("should not display cost chip when cost data is missing", async ({
 });
 
 test("should copy messages to clipboard as JSON", async ({ page }) => {
+  await installClipboardMock(page);
   await page.goto(
     "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
   );
   await page.waitForLoadState("networkidle");
-  await installClipboardMock(page);
 
   // Wait for the button to render (behind Suspense/Await)
   const copyButton = page.getByRole("button", { name: "Copy Messages" });
@@ -726,11 +726,11 @@ test("should copy messages to clipboard as JSON", async ({ page }) => {
 });
 
 test("should copy messages to clipboard as Markdown", async ({ page }) => {
+  await installClipboardMock(page);
   await page.goto(
     "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
   );
   await page.waitForLoadState("networkidle");
-  await installClipboardMock(page);
 
   // Wait for the button to render (behind Suspense/Await)
   const copyButton = page.getByRole("button", { name: "Copy Messages" });
