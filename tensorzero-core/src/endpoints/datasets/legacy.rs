@@ -62,8 +62,10 @@ impl DatapointKind {
 #[export_schema]
 pub enum Datapoint {
     #[schemars(title = "DatapointChat")]
+    #[cfg_attr(feature = "openapi", schema(title = "DatapointChat"))]
     Chat(ChatInferenceDatapoint),
     #[schemars(title = "DatapointJson")]
+    #[cfg_attr(feature = "openapi", schema(title = "DatapointJson"))]
     Json(JsonInferenceDatapoint),
 }
 

@@ -78,9 +78,11 @@ pub struct UpdateDatapointsRequest {
 pub enum UpdateDatapointRequest {
     /// Request to update a chat datapoint.
     #[schemars(title = "UpdateChatDatapointRequest")]
+    #[cfg_attr(feature = "openapi", schema(title = "UpdateDatapointRequestChat"))]
     Chat(UpdateChatDatapointRequest),
     /// Request to update a JSON datapoint.
     #[schemars(title = "UpdateJsonDatapointRequest")]
+    #[cfg_attr(feature = "openapi", schema(title = "UpdateDatapointRequestJson"))]
     Json(UpdateJsonDatapointRequest),
 }
 
@@ -565,6 +567,7 @@ pub struct CreateDatapointsFromInferenceRequest {
 pub enum CreateDatapointsFromInferenceRequestParams {
     /// Create datapoints from specific inference IDs.
     #[schemars(title = "CreateDatapointsFromInferenceRequestParamsInferenceIds")]
+    #[cfg_attr(feature = "openapi", schema(title = "CreateDatapointsFromInferenceRequestParamsInferenceIds"))]
     InferenceIds {
         /// The inference IDs to create datapoints from.
         inference_ids: Vec<Uuid>,
@@ -578,6 +581,7 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 
     /// Create datapoints from an inference query.
     #[schemars(title = "CreateDatapointsFromInferenceRequestParamsInferenceQuery")]
+    #[cfg_attr(feature = "openapi", schema(title = "CreateDatapointsFromInferenceRequestParamsInferenceQuery"))]
     InferenceQuery {
         /// Flattened inference query parameters.
         #[serde(flatten)]
@@ -622,9 +626,11 @@ pub struct CreateDatapointsRequest {
 pub enum CreateDatapointRequest {
     /// Request to create a chat datapoint.
     #[schemars(title = "CreateDatapointRequestChat")]
+    #[cfg_attr(feature = "openapi", schema(title = "CreateDatapointRequestChat"))]
     Chat(CreateChatDatapointRequest),
     /// Request to create a JSON datapoint.
     #[schemars(title = "CreateDatapointRequestJson")]
+    #[cfg_attr(feature = "openapi", schema(title = "CreateDatapointRequestJson"))]
     Json(CreateJsonDatapointRequest),
 }
 

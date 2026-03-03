@@ -251,21 +251,29 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 #[export_schema]
 pub enum StoredInputMessageContent {
     #[schemars(title = "StoredInputMessageContentText")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentText"))]
     Text(Text),
     #[schemars(title = "StoredInputMessageContentTemplate")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentTemplate"))]
     Template(Template),
     #[schemars(title = "StoredInputMessageContentToolCall")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentToolCall"))]
     ToolCall(ToolCall),
     #[schemars(title = "StoredInputMessageContentToolResult")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentToolResult"))]
     ToolResult(ToolResult),
     #[schemars(title = "StoredInputMessageContentRawText")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentRawText"))]
     RawText(RawText),
     #[schemars(title = "StoredInputMessageContentThought")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentThought"))]
     Thought(Thought),
     #[serde(alias = "image")]
     #[schemars(title = "StoredInputMessageContentFile", with = "ObjectStoragePointer")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentFile"))]
     File(Box<StoredFile>),
     #[schemars(title = "StoredInputMessageContentUnknown")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredInputMessageContentUnknown"))]
     Unknown(Unknown),
 }
 

@@ -883,12 +883,18 @@ impl RateLimitedInputContent for ContentBlock {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum StoredContentBlock {
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockText"))]
     Text(Text),
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockToolCall"))]
     ToolCall(ToolCall),
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockToolResult"))]
     ToolResult(ToolResult),
     #[serde(alias = "image")]
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockFile"))]
     File(Box<StoredFile>),
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockThought"))]
     Thought(Thought),
+    #[cfg_attr(feature = "openapi", schema(title = "StoredContentBlockUnknown"))]
     Unknown(Unknown),
 }
 
@@ -958,9 +964,13 @@ enum ContentBlockOutputType {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum ContentBlockOutput {
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockOutputText"))]
     Text(Text),
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockOutputToolCall"))]
     ToolCall(ToolCall),
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockOutputThought"))]
     Thought(Thought),
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockOutputUnknown"))]
     Unknown(Unknown),
 }
 
@@ -974,12 +984,16 @@ pub enum ContentBlockOutput {
 #[export_schema]
 pub enum ContentBlockChatOutput {
     #[schemars(title = "ContentBlockChatOutputText")]
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockChatOutputText"))]
     Text(Text),
     #[schemars(title = "ContentBlockChatOutputToolCall")]
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockChatOutputToolCall"))]
     ToolCall(InferenceResponseToolCall),
     #[schemars(title = "ContentBlockChatOutputThought")]
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockChatOutputThought"))]
     Thought(Thought),
     #[schemars(title = "ContentBlockChatOutputUnknown")]
+    #[cfg_attr(feature = "openapi", schema(title = "ContentBlockChatOutputUnknown"))]
     Unknown(Unknown),
 }
 

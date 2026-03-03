@@ -174,34 +174,42 @@ pub struct OrderBy {
 pub enum InferenceFilter {
     /// Filter by the value of a float metric
     #[schemars(title = "InferenceFilterFloatMetric")]
+    #[cfg_attr(feature = "openapi", schema(title = "InferenceFilterFloatMetric"))]
     FloatMetric(FloatMetricFilter),
 
     /// Filter by the value of a boolean metric
     #[schemars(title = "InferenceFilterBooleanMetric")]
+    #[cfg_attr(feature = "openapi", schema(title = "InferenceFilterBooleanMetric"))]
     BooleanMetric(BooleanMetricFilter),
 
     /// Filter by whether an inference has a demonstration.
     #[schemars(title = "InferenceFilterDemonstrationFeedback")]
+    #[cfg_attr(feature = "openapi", schema(title = "InferenceFilterDemonstrationFeedback"))]
     DemonstrationFeedback(DemonstrationFeedbackFilter),
 
     /// Filter by tag key-value pair
     #[schemars(title = "InferenceFilterTag")]
+    #[cfg_attr(feature = "openapi", schema(title = "InferenceFilterTag"))]
     Tag(TagFilter),
 
     /// Filter by the timestamp of an inference.
     #[schemars(title = "InferenceFilterTime")]
+    #[cfg_attr(feature = "openapi", schema(title = "InferenceFilterTime"))]
     Time(TimeFilter),
 
     /// Logical AND of multiple filters
     #[schemars(title = "InferenceFilterAnd")]
+    #[cfg_attr(feature = "openapi", schema(title = "InferenceFilterAnd"))]
     And { children: Vec<InferenceFilter> },
 
     /// Logical OR of multiple filters
     #[schemars(title = "InferenceFilterOr")]
+    #[cfg_attr(feature = "openapi", schema(title = "InferenceFilterOr"))]
     Or { children: Vec<InferenceFilter> },
 
     /// Logical NOT of a filter
     #[schemars(title = "InferenceFilterNot")]
+    #[cfg_attr(feature = "openapi", schema(title = "InferenceFilterNot"))]
     Not { child: Box<InferenceFilter> },
 }
 

@@ -45,9 +45,11 @@ use super::config::DynamicToolConfig;
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
     #[schemars(title = "FunctionTool")]
+    #[cfg_attr(feature = "openapi", schema(title = "ToolFunction"))]
     Function(FunctionTool), // Custom deserializer below accepts no type or type="client_side_function" (legacy)
     #[schemars(title = "OpenAICustomTool")]
     #[serde(rename = "openai_custom")]
+    #[cfg_attr(feature = "openapi", schema(title = "ToolOpenAICustom"))]
     OpenAICustom(OpenAICustomTool),
 }
 

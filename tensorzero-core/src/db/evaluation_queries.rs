@@ -234,7 +234,9 @@ pub struct JsonEvaluationResultRow {
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EvaluationResultRow {
+    #[cfg_attr(feature = "openapi", schema(title = "EvaluationResultRowChat"))]
     Chat(ChatEvaluationResultRow),
+    #[cfg_attr(feature = "openapi", schema(title = "EvaluationResultRowJson"))]
     Json(JsonEvaluationResultRow),
 }
 

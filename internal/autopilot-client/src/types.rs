@@ -30,6 +30,7 @@ use uuid::Uuid;
     ts(export, tag = "type", rename_all = "snake_case")
 )]
 pub enum EventPayloadMessageContent {
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadMessageContentText"))]
     Text(Text),
 }
 
@@ -223,17 +224,27 @@ pub struct EventPayloadToolResult {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(tag = "type", rename_all = "snake_case"))]
 pub enum EventPayload {
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadMessage"))]
     Message(EventPayloadMessage),
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadError"))]
     Error(EventPayloadError),
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadStatusUpdate"))]
     StatusUpdate(EventPayloadStatusUpdate),
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadToolCall"))]
     ToolCall(EventPayloadToolCall),
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadToolCallAuthorization"))]
     ToolCallAuthorization(EventPayloadToolCallAuthorization),
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadToolResult"))]
     ToolResult(EventPayloadToolResult),
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadVisualization"))]
     Visualization(EventPayloadVisualization),
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadUserQuestions"))]
     UserQuestions(EventPayloadUserQuestions),
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadUserQuestionsAnswers"))]
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadUnknown"))]
     Unknown,
 }
 
@@ -263,17 +274,27 @@ impl EventPayload {
     ts(export, tag = "type", rename_all = "snake_case")
 )]
 pub enum GatewayEventPayload {
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadMessage"))]
     Message(EventPayloadMessage),
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadError"))]
     Error(EventPayloadError),
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadStatusUpdate"))]
     StatusUpdate(EventPayloadStatusUpdate),
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadToolCall"))]
     ToolCall(EventPayloadToolCall),
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadToolCallAuthorization"))]
     ToolCallAuthorization(GatewayEventPayloadToolCallAuthorization),
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadToolResult"))]
     ToolResult(EventPayloadToolResult),
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadVisualization"))]
     Visualization(EventPayloadVisualization),
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadUserQuestions"))]
     UserQuestions(EventPayloadUserQuestions),
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadUserQuestionsAnswers"))]
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
+    #[cfg_attr(feature = "openapi", schema(title = "GatewayEventPayloadUnknown"))]
     Unknown,
 }
 
@@ -504,15 +525,18 @@ impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutcome {
+    #[cfg_attr(feature = "openapi", schema(title = "ToolOutcomeSuccess"))]
     Success(AutopilotToolResult),
     /// The user rejected the tool call request
     /// Note that this is currently never directly sent by the client - instead,
     /// `ToolCallAuthorizationStatus::Rejected` is sent to the server.
     /// The rejected tool will show in in the events list as `EventPayload::ToolResult`
     /// with `ToolOutcome::Rejected`
+    #[cfg_attr(feature = "openapi", schema(title = "ToolOutcomeRejected"))]
     Rejected {
         reason: String,
     },
+    #[cfg_attr(feature = "openapi", schema(title = "ToolOutcomeFailure"))]
     Failure {
         /// Structured error data from the tool.
         /// For autopilot tools, this is typically a serialized `AutopilotToolError`
@@ -520,9 +544,11 @@ pub enum ToolOutcome {
         #[cfg_attr(feature = "openapi", schema(value_type = Object))]
         error: serde_json::Value,
     },
+    #[cfg_attr(feature = "openapi", schema(title = "ToolOutcomeMissing"))]
     Missing,
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
+    #[cfg_attr(feature = "openapi", schema(title = "ToolOutcomeUnknown"))]
     Unknown,
 }
 
@@ -579,11 +605,12 @@ pub struct TopKEvaluationVisualization {
 )]
 pub enum VisualizationType {
     /// Top-k evaluation results showing variant performance comparisons.
+    #[cfg_attr(feature = "openapi", schema(title = "VisualizationTypeTopKEvaluation"))]
     TopKEvaluation(TopKEvaluationVisualization),
     /// Unknown visualization type for forward compatibility.
     /// Old clients can gracefully handle new visualization types they don't recognize.
     #[serde(untagged)]
-    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
+    #[cfg_attr(feature = "openapi", schema(title = "VisualizationTypeUnknown", value_type = Object))]
     Unknown(serde_json::Value),
 }
 
@@ -636,7 +663,9 @@ pub struct EventPayloadUserQuestion {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EventPayloadUserQuestionInner {
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadUserQuestionInnerMultipleChoice"))]
     MultipleChoice(MultipleChoiceQuestion),
+    #[cfg_attr(feature = "openapi", schema(title = "EventPayloadUserQuestionInnerFreeResponse"))]
     FreeResponse,
 }
 
@@ -683,8 +712,11 @@ pub struct EventPayloadUserQuestionsAnswers {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UserQuestionAnswer {
+    #[cfg_attr(feature = "openapi", schema(title = "UserQuestionAnswerMultipleChoice"))]
     MultipleChoice(MultipleChoiceAnswer),
+    #[cfg_attr(feature = "openapi", schema(title = "UserQuestionAnswerFreeResponse"))]
     FreeResponse(FreeResponseAnswer),
+    #[cfg_attr(feature = "openapi", schema(title = "UserQuestionAnswerSkipped"))]
     Skipped,
 }
 

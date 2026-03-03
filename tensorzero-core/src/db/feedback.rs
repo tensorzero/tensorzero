@@ -340,9 +340,13 @@ pub struct DemonstrationFeedbackRow {
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum FeedbackRow {
+    #[cfg_attr(feature = "openapi", schema(title = "FeedbackRowBoolean"))]
     Boolean(BooleanMetricFeedbackRow),
+    #[cfg_attr(feature = "openapi", schema(title = "FeedbackRowFloat"))]
     Float(FloatMetricFeedbackRow),
+    #[cfg_attr(feature = "openapi", schema(title = "FeedbackRowComment"))]
     Comment(CommentFeedbackRow),
+    #[cfg_attr(feature = "openapi", schema(title = "FeedbackRowDemonstration"))]
     Demonstration(DemonstrationFeedbackRow),
 }
 

@@ -36,20 +36,27 @@ pub struct InputMessage {
 #[export_schema]
 pub enum InputMessageContent {
     #[schemars(title = "InputMessageContentText")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentText"))]
     Text(Text),
     #[schemars(title = "InputMessageContentTemplate")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentTemplate"))]
     Template(Template),
     // `ToolCallWrapper` is `serde(untagged)` so no need to name it.
     #[schemars(with = "ToolCallWrapperJsonSchema")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentToolCall"))]
     ToolCall(ToolCallWrapper),
     #[schemars(title = "InputMessageContentToolResult")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentToolResult"))]
     ToolResult(ToolResult),
     #[schemars(title = "InputMessageContentRawText")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentRawText"))]
     RawText(RawText),
     #[schemars(title = "InputMessageContentThought")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentThought"))]
     Thought(Thought),
     #[serde(alias = "image")]
     #[schemars(title = "InputMessageContentFile")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentFile"))]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
@@ -57,6 +64,7 @@ pub enum InputMessageContent {
     /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
     #[schemars(title = "InputMessageContentUnknown")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentUnknown"))]
     Unknown(Unknown),
 }
 

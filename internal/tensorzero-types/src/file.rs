@@ -407,14 +407,19 @@ pub struct ObjectStorageError {
 #[export_schema]
 pub enum File {
     #[schemars(title = "FileUrlFile")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileUrl"))]
     Url(UrlFile),
     #[schemars(title = "FileBase64")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileBase64"))]
     Base64(Base64File),
     #[schemars(title = "FileObjectStoragePointer")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileObjectStoragePointer"))]
     ObjectStoragePointer(ObjectStoragePointer),
     #[schemars(title = "FileObjectStorage")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileObjectStorage"))]
     ObjectStorage(ObjectStorageFile),
     #[schemars(title = "FileObjectStorageError")]
+    #[cfg_attr(feature = "openapi", schema(title = "FileObjectStorageError"))]
     ObjectStorageError(ObjectStorageError),
 }
 
