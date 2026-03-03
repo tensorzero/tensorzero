@@ -1,14 +1,19 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import {
   getMetricName,
   getDisplayMetricName,
 } from "~/utils/clickhouse/helpers";
-import type { FeedbackRow, MetricConfig } from "~/types/tensorzero";
+import type {
+  FeedbackRow,
+  FeedbackBounds,
+  MetricConfig,
+} from "~/types/tensorzero";
 import { useConfig } from "~/context/config";
 import { getFeedbackConfig } from "~/utils/config/feedback";
 import type { FeedbackConfig } from "~/utils/config/feedback";
-import { TableItemTime } from "~/components/ui/TableItems";
+import { TableItemTime, TableItemShortUuid } from "~/components/ui/TableItems";
+import { ChevronRight } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -101,12 +106,37 @@ function MetricTooltipContent({
   );
 }
 
+interface FeedbackTableProps {
+  feedback: FeedbackRow[];
+  feedbackBounds?: FeedbackBounds;
+  latestByMetric?: Record<string, string>;
+}
+
 export default function FeedbackTable({
   feedback,
-}: {
-  feedback: FeedbackRow[];
-}) {
+  feedbackBounds,
+  latestByMetric,
+}: FeedbackTableProps) {
   const config = useConfig();
+  const [showOverwritten, setShowOverwritten] = useState(false);
+
+  const { latest, overwritten } = useMemo(() => {
+    if (!feedbackBounds || !latestByMetric) {
+      return { latest: feedback, overwritten: [] };
+    }
+    const latestList = feedback.filter((item) => {
+      if (item.type === "comment")
+        return item.id === feedbackBounds.by_type.comment.last_id;
+      if (item.type === "demonstration")
+        return item.id === feedbackBounds.by_type.demonstration.last_id;
+      return latestByMetric[item.metric_name] === item.id;
+    });
+    const latestIds = new Set(latestList.map((f) => f.id));
+    return {
+      latest: latestList,
+      overwritten: feedback.filter((f) => !latestIds.has(f.id)),
+    };
+  }, [feedback, feedbackBounds, latestByMetric]);
 
   if (feedback.length === 0) {
     return (
@@ -123,7 +153,7 @@ export default function FeedbackTable({
     <Table className="table-fixed">
       <FeedbackTableHeaders />
       <TableBody>
-        {feedback.map((item) => (
+        {latest.map((item) => (
           <FeedbackRowItem
             key={item.id}
             item={item}
@@ -131,6 +161,37 @@ export default function FeedbackTable({
             feedbackConfig={getFeedbackConfig(getMetricName(item), config)}
           />
         ))}
+        {overwritten.length > 0 && (
+          <>
+            <TableRow>
+              <TableCell colSpan={5} className="py-1">
+                <button
+                  type="button"
+                  className="text-fg-muted hover:text-fg-secondary flex items-center gap-1 text-xs transition-colors"
+                  onClick={() => setShowOverwritten(!showOverwritten)}
+                >
+                  <ChevronRight
+                    className={`h-3 w-3 transition-transform ${showOverwritten ? "rotate-90" : ""}`}
+                  />
+                  {overwritten.length} overwritten
+                </button>
+              </TableCell>
+            </TableRow>
+            {showOverwritten &&
+              overwritten.map((item) => (
+                <FeedbackRowItem
+                  key={item.id}
+                  item={item}
+                  metricConfig={config.metrics[getMetricName(item)]}
+                  feedbackConfig={getFeedbackConfig(
+                    getMetricName(item),
+                    config,
+                  )}
+                  isOverwritten
+                />
+              ))}
+          </>
+        )}
       </TableBody>
     </Table>
   );
@@ -140,12 +201,14 @@ interface FeedbackRowItemProps {
   item: FeedbackRow;
   metricConfig: MetricConfig | undefined;
   feedbackConfig: FeedbackConfig | undefined;
+  isOverwritten?: boolean;
 }
 
 function FeedbackRowItem({
   item,
   metricConfig,
   feedbackConfig,
+  isOverwritten,
 }: FeedbackRowItemProps) {
   const displayMetric = getDisplayMetricName(item);
 
@@ -154,7 +217,10 @@ function FeedbackRowItem({
   );
 
   return (
-    <TableRow data-testid={`feedback-row-${item.id}`}>
+    <TableRow
+      data-testid={`feedback-row-${item.id}`}
+      className={isOverwritten ? "opacity-50" : undefined}
+    >
       <TableCell>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -184,8 +250,10 @@ function FeedbackRowItem({
         <MetricConfigInfo feedbackConfig={feedbackConfig} item={item} />
       </TableCell>
       <TableCell>
-        <span className="text-fg-tertiary text-xs">
+        <span className="text-fg-tertiary flex items-center gap-1.5 text-xs">
           <TableItemTime timestamp={item.timestamp} />
+          <span className="text-fg-muted">·</span>
+          <TableItemShortUuid id={item.id} />
         </span>
       </TableCell>
     </TableRow>
@@ -221,7 +289,7 @@ function MetricConfigInfo({ feedbackConfig, item }: MetricConfigInfoProps) {
   return (
     <span className="text-fg-tertiary text-xs">
       {parts.map((part, i) => (
-        <span key={part}>
+        <span key={i}>
           {i > 0 && (
             <span className="text-fg-muted mx-1" aria-hidden>
               ·

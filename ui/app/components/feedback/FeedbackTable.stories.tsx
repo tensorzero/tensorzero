@@ -65,7 +65,7 @@ const meta = {
   component: FeedbackTable,
   render: (args) => (
     <StoryWrapper>
-      <FeedbackTable feedback={args.feedback} />
+      <FeedbackTable {...args} />
     </StoryWrapper>
   ),
 } satisfies Meta<typeof FeedbackTable>;

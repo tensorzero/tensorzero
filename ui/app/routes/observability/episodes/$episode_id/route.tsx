@@ -1,8 +1,5 @@
 import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
-import {
-  pollForFeedbackItem,
-  filterToLatest,
-} from "~/utils/clickhouse/feedback";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
@@ -55,6 +52,7 @@ export type InferencesData = {
 export type FeedbackData = {
   feedbacks: FeedbackRow[];
   bounds: FeedbackBounds;
+  latestByMetric: Record<string, string>;
 };
 
 export const handle: RouteHandle = {
@@ -136,17 +134,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? // Sequential case: poll first, then query bounds/metrics
       pollForFeedbackItem(episode_id, newFeedbackId, limit).then(
         async (feedbacks) => {
-          const [bounds, latestFeedbackByMetric] = await Promise.all([
+          const [bounds, latestByMetric] = await Promise.all([
             tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
             tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
           ]);
           return {
-            feedbacks: filterToLatest(
-              feedbacks,
-              bounds,
-              latestFeedbackByMetric,
-            ),
+            feedbacks,
             bounds,
+            latestByMetric,
           };
         },
       )
@@ -159,9 +154,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }),
         tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
         tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
-      ]).then(([feedbacks, bounds, latestFeedbackByMetric]) => ({
-        feedbacks: filterToLatest(feedbacks, bounds, latestFeedbackByMetric),
+      ]).then(([feedbacks, bounds, latestByMetric]) => ({
+        feedbacks,
         bounds,
+        latestByMetric,
       }));
 
   return {
@@ -230,7 +226,7 @@ function FeedbackSectionError() {
 }
 
 function FeedbackSectionContent({ data }: { data: FeedbackData }) {
-  const { feedbacks, bounds } = data;
+  const { feedbacks, bounds, latestByMetric } = data;
   const navigate = useNavigate();
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
@@ -265,7 +261,11 @@ function FeedbackSectionContent({ data }: { data: FeedbackData }) {
 
   return (
     <>
-      <FeedbackTable feedback={feedbacks} />
+      <FeedbackTable
+        feedback={feedbacks}
+        feedbackBounds={bounds}
+        latestByMetric={latestByMetric}
+      />
       <PageButtons
         onPreviousPage={handlePreviousPage}
         onNextPage={handleNextPage}

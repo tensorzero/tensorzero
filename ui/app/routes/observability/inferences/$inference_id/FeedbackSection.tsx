@@ -48,7 +48,7 @@ export function FeedbackSection({
         </Await>
       </Suspense>
       <Suspense fallback={null}>
-        <Await resolve={episodeFeedbackCount}>
+        <Await resolve={episodeFeedbackCount} errorElement={null}>
           {(count) =>
             count > 0 ? (
               <EpisodeFeedbackNotice
@@ -70,7 +70,7 @@ function FeedbackContent({
   data: FeedbackData;
   onCountUpdate: (count: number) => void;
 }) {
-  const { feedback, feedback_bounds } = data;
+  const { feedback, feedback_bounds, latestByMetric } = data;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -112,7 +112,11 @@ function FeedbackContent({
 
   return (
     <>
-      <FeedbackTable feedback={feedback} />
+      <FeedbackTable
+        feedback={feedback}
+        feedbackBounds={feedback_bounds}
+        latestByMetric={latestByMetric}
+      />
       <PageButtons
         onPreviousPage={handlePreviousPage}
         onNextPage={handleNextPage}

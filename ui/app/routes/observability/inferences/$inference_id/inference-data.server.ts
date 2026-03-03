@@ -1,7 +1,4 @@
-import {
-  pollForFeedbackItem,
-  filterToLatest,
-} from "~/utils/clickhouse/feedback";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   resolveModelInferences,
@@ -22,6 +19,7 @@ export type ModelInferencesData = ParsedModelInferenceRow[];
 export type FeedbackData = {
   feedback: FeedbackRow[];
   feedback_bounds: FeedbackBounds;
+  latestByMetric: Record<string, string>;
 };
 
 // Fetch functions for independent streaming
@@ -87,35 +85,31 @@ export async function fetchFeedbackData(
       newFeedbackId,
       limit,
     );
-    const [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
+    const [feedback_bounds, latestByMetric] = await Promise.all([
       tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
       tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);
     return {
-      feedback: filterToLatest(
-        feedback,
-        feedback_bounds,
-        latestFeedbackByMetric,
-      ),
+      feedback,
       feedback_bounds,
+      latestByMetric,
     };
   }
 
   // Normal case: execute all queries in parallel
-  const [feedback, feedback_bounds, latestFeedbackByMetric] = await Promise.all(
-    [
-      tensorZeroClient.getFeedbackByTargetId(inference_id, {
-        before: beforeFeedback || undefined,
-        after: afterFeedback || undefined,
-        limit,
-      }),
-      tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
-      tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
-    ],
-  );
+  const [feedback, feedback_bounds, latestByMetric] = await Promise.all([
+    tensorZeroClient.getFeedbackByTargetId(inference_id, {
+      before: beforeFeedback || undefined,
+      after: afterFeedback || undefined,
+      limit,
+    }),
+    tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
+    tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
+  ]);
   return {
-    feedback: filterToLatest(feedback, feedback_bounds, latestFeedbackByMetric),
+    feedback,
     feedback_bounds,
+    latestByMetric,
   };
 }
 
