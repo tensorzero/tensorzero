@@ -61,7 +61,6 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
         session_id,
         config_snapshot_hash: test_snapshot_hash.to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     // Create mock client with expectations for action()
@@ -125,7 +124,6 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -170,7 +168,6 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -220,7 +217,6 @@ async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -257,7 +253,6 @@ async fn test_list_inferences_tool_error(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -305,7 +300,6 @@ async fn test_get_inferences_tool_basic(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -357,7 +351,6 @@ async fn test_get_inferences_tool_with_function_name(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -405,7 +398,6 @@ async fn test_get_inferences_tool_with_output_source(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -446,7 +438,6 @@ async fn test_get_inferences_tool_error(pool: PgPool) {
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "1234567".to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();

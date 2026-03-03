@@ -20,9 +20,19 @@ use crate::gepa::evaluate::{DatapointId, EvaluatorName, VariantName, VariantScor
 /// Parameters for a durable GEPA optimization task.
 ///
 /// Serialized as JSON and passed to `spawn_tool_by_name("gepa_optimization", ...)`.
+/// Only contains LLM-level configuration; infrastructure data (examples) is in `GepaSideInfo`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GepaToolParams {
     pub gepa_config: UninitializedGEPAConfig,
+}
+
+/// Side info for durable GEPA tasks.
+///
+/// Contains data that is passed at spawn time but is not LLM-generated.
+/// Uses its own type (not `AutopilotSideInfo`) because GEPA is a standalone
+/// tool that bypasses the autopilot result-publishing wrapper.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GepaSideInfo {
     pub train_examples: Vec<RenderedSample>,
     pub val_examples: Vec<RenderedSample>,
 }

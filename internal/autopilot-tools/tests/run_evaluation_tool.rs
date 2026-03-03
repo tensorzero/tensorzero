@@ -67,7 +67,6 @@ async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
         session_id,
         config_snapshot_hash: test_snapshot_hash.to_string(),
         optimization: OptimizationWorkflowSideInfo::default(),
-        skip_publish: false,
     };
 
     // Create mock client with expectations for action()
@@ -136,7 +135,6 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
         session_id,
         config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
-        skip_publish: false,
     };
 
     // Create mock client with expectations
@@ -218,7 +216,6 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
         session_id,
         config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
-        skip_publish: false,
     };
 
     // Create mock client with expectations
@@ -297,7 +294,6 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
         session_id,
         config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
-        skip_publish: false,
     };
 
     // Create mock client with expectations that verify precision_targets and inference_cache
@@ -363,7 +359,6 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
         session_id,
         config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
-        skip_publish: false,
     };
 
     // Create mock client that returns an error
@@ -491,7 +486,6 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
         session_id,
         config_snapshot_hash: "1234567".to_string(),
         optimization: Default::default(),
-        skip_publish: false,
     };
 
     // Create mock client with expectations that verify include_datapoint_results is passed

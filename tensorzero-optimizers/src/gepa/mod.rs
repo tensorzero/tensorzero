@@ -45,8 +45,8 @@ use pareto::{Candidate, ParetoFrontier, is_improvement};
 use validate::{get_uninitialized_variant_configs, validate_examples, validate_gepa_config};
 
 pub use types::{
-    GepaCleanupParams, GepaIterationParams, GepaIterationResult, GepaSetupResult, GepaToolOutput,
-    GepaToolParams, ParetoCheckpoint,
+    GepaCleanupParams, GepaIterationParams, GepaIterationResult, GepaSetupResult, GepaSideInfo,
+    GepaToolOutput, GepaToolParams, ParetoCheckpoint,
 };
 
 /// A GEPA variant with its name and configuration
@@ -84,8 +84,6 @@ impl Optimizer for GEPAConfig {
 
         let llm_params = serde_json::to_value(GepaToolParams {
             gepa_config: self.as_uninitialized(),
-            train_examples,
-            val_examples,
         })
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -94,16 +92,15 @@ impl Optimizer for GEPAConfig {
         })?;
 
         let episode_id = Uuid::now_v7();
-        let side_info = serde_json::json!({
-            "tool_call_event_id": episode_id,
-            "session_id": episode_id,
-            "config_snapshot_hash": "",
-            "optimization": {
-                "poll_interval_secs": 60,
-                "max_wait_secs": 86400
-            },
-            "skip_publish": true
-        });
+        let side_info = serde_json::to_value(GepaSideInfo {
+            train_examples,
+            val_examples,
+        })
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
 
         let spawn_result = spawn_client
             .spawn_tool_by_name(
