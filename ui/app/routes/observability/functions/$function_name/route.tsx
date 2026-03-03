@@ -46,6 +46,7 @@ function FunctionDetailPageHeader({
 
   return (
     <PageHeader
+      banner={<SnapshotBanner />}
       eyebrow={
         <Breadcrumbs
           segments={[{ label: "Functions", href: "/observability/functions" }]}
@@ -62,7 +63,6 @@ function FunctionDetailPageHeader({
       {autopilotAvailable && (
         <AskAutopilotButton message={`Function: ${functionName}\n\n`} />
       )}
-      <SnapshotBanner />
     </PageHeader>
   );
 }

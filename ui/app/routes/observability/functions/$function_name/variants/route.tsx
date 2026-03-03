@@ -349,6 +349,7 @@ function VariantDetailPageHeader({
 
   return (
     <PageHeader
+      banner={<SnapshotBanner />}
       eyebrow={
         <Breadcrumbs
           segments={[
@@ -369,7 +370,6 @@ function VariantDetailPageHeader({
           message={`Variant: ${variantName}\nFunction: ${functionName}\n\n`}
         />
       )}
-      <SnapshotBanner />
     </PageHeader>
   );
 }
