@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
-  ChevronDown,
   Database,
   FileQuestion,
   KeyRound,
@@ -16,11 +15,6 @@ import {
   getPageErrorInfo,
 } from "~/utils/tensorzero/errors";
 import { Button } from "~/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "~/components/ui/collapsible";
 import { Input } from "~/components/ui/input";
 import {
   ErrorContentCard,
@@ -102,50 +96,31 @@ function GatewayAuthContent() {
   };
 
   return (
-    <ErrorContentCard>
-      <ErrorContentHeader
-        icon={KeyRound}
-        title="Authentication Failed"
-        description="The TensorZero Gateway requires authentication. Enter your API key below, or set TENSORZERO_API_KEY on the UI server."
-      />
-      <div className="px-6 pb-2">
-        <Collapsible>
-          <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-full items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-180">
-            Troubleshooting
-            <ChevronDown className="h-4 w-4 transition-transform" />
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <ol className="text-muted-foreground mt-3 space-y-2 text-sm">
-              <li className="flex items-start gap-2">
-                <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
-                  1
-                </span>
-                <span>Ensure the API key has not expired or been revoked</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
-                  2
-                </span>
-                <span>Check Gateway logs for authentication details</span>
-              </li>
-            </ol>
-          </CollapsibleContent>
-        </Collapsible>
+    <ErrorContentCard className="w-[22rem]">
+      <div className="flex flex-col items-center px-6 pt-9 pb-8 text-center">
+        <KeyRound className="mb-5 h-8 w-8 text-orange-500 dark:text-orange-400" />
+        <h2 className="text-foreground text-lg font-medium">
+          Connect to TensorZero
+        </h2>
+        <p className="text-muted-foreground mt-1.5 text-sm">
+          Enter your TensorZero API key or set it as an environment variable on
+          the UI server.
+        </p>
       </div>
       <div className="space-y-4 px-6 pb-6">
-        <div className="space-y-2">
+        <div>
           <label
             htmlFor="gateway-api-key"
-            className="text-foreground text-sm font-medium"
+            className="text-foreground mb-1.5 block text-sm font-medium"
           >
-            Gateway API Key
+            API Key
           </label>
           <Input
             id="gateway-api-key"
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="API key"
+            placeholder=""
             disabled={isBusy}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSubmit();
