@@ -425,6 +425,11 @@ jobs:
         run: |
           uv run stubtest tensorzero.tensorzero
 
+      - name: "Python: PyO3 Client: Sanity check"
+        working-directory: clients/python
+        run: |
+          uv run pytest tests/test_pyo3_sanity.py
+
       - name: "Python: Recipes: Install dependencies"
         working-directory: recipes
         run: |
