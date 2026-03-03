@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { v7 } from "uuid";
 import { insertEvent, queryEventPayloads } from "./helpers/db";
 
@@ -143,7 +144,7 @@ function buildMultiQuestionPayload() {
  * worker to finish processing so the session is quiescent.
  */
 async function createSession(
-  page: import("@playwright/test").Page,
+  page: Page,
   message = `Test question flow ${v7()}`,
 ): Promise<string> {
   await page.goto("/autopilot/sessions/new");
@@ -491,7 +492,7 @@ test.describe("User questions", () => {
 // These tests go through the live autopilot backend: send a message that
 // triggers the LLM to call ask_user_questions, wait for the real worker
 // to write the UserQuestions event, interact with the UI, and verify the
-// tool result.
+// session completes successfully (returns to idle).
 
 test.describe("User questions (full e2e)", () => {
   test("should complete multiple choice flow through live backend", async ({
@@ -516,10 +517,12 @@ test.describe("User questions (full e2e)", () => {
     // Verify "Answered" event appears
     await expect(page.getByText("Answered")).toBeVisible({ timeout: 15000 });
 
-    // Verify tool result appears (confirms the tool unblocked and returned)
-    await expect(page.getByText("Tool Result").first()).toBeVisible({
-      timeout: 60000,
-    });
+    // Wait for session to return to idle after the tool unblocks and the
+    // LLM produces a follow-up response. Note: ask_user_questions is a
+    // direct TaskTool (not wrapped in ClientToolTaskAdapter), so no
+    // ToolCall/ToolResult events are written — we verify completion by
+    // checking the session returns to "Ready" (idle).
+    await expect(page.getByText("Ready")).toBeVisible({ timeout: 60000 });
 
     // Verify the answer was persisted correctly in the database
     const answer = queryFirstAnswerPayload(sessionId);
@@ -549,9 +552,8 @@ test.describe("User questions (full e2e)", () => {
 
     await expect(page.getByText("Answered")).toBeVisible({ timeout: 15000 });
 
-    await expect(page.getByText("Tool Result").first()).toBeVisible({
-      timeout: 60000,
-    });
+    // Wait for session to return to idle (see comment in multiple choice test)
+    await expect(page.getByText("Ready")).toBeVisible({ timeout: 60000 });
 
     // Verify the answer was persisted correctly in the database
     const answer = queryFirstAnswerPayload(sessionId);
