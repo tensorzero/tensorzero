@@ -172,7 +172,13 @@ function serializeJsonValue(value: JsonValue): string {
 
   if (Array.isArray(value)) {
     if (value.length === 0) return "*(empty)*";
-    return value.map((item) => `- ${serializeJsonValue(item)}`).join("\n");
+    return value
+      .map((item) => {
+        const serialized = serializeJsonValue(item);
+        // Indent continuation lines so they stay under the bullet
+        return `- ${serialized.replace(/\n/g, "\n  ")}`;
+      })
+      .join("\n");
   }
 
   // Object
