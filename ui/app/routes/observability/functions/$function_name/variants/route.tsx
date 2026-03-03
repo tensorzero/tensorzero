@@ -349,7 +349,7 @@ function VariantDetailPageHeader({
 
   return (
     <PageHeader
-      banner={<SnapshotBanner />}
+      banner={snapshotHash ? <SnapshotBanner /> : undefined}
       eyebrow={
         <Breadcrumbs
           segments={[

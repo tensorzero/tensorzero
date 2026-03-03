@@ -8,6 +8,7 @@ import {
   getConfigFromRequest,
   getFunctionConfig,
 } from "~/utils/config/index.server";
+import { useSnapshotHash } from "~/context/snapshot";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import {
@@ -43,10 +44,11 @@ function FunctionDetailPageHeader({
   functionConfig: FunctionConfig | null;
 }) {
   const autopilotAvailable = useAutopilotAvailable();
+  const snapshotHash = useSnapshotHash();
 
   return (
     <PageHeader
-      banner={<SnapshotBanner />}
+      banner={snapshotHash ? <SnapshotBanner /> : undefined}
       eyebrow={
         <Breadcrumbs
           segments={[{ label: "Functions", href: "/observability/functions" }]}
