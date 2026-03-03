@@ -23,7 +23,7 @@ pub struct EvaluationRunInfoRow {
     pub function_name: String,
     pub variant_name: String,
     pub dataset_name: String,
-    pub last_inference_timestamp: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     #[serde(default)]
     pub snapshot_hash: Option<String>,
 }
@@ -83,7 +83,7 @@ pub struct InferenceEvaluationRunInsert {
 pub struct EvaluationRunInfoByIdRow {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
-    pub most_recent_inference_date: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Database struct for deserializing evaluation statistics from ClickHouse.

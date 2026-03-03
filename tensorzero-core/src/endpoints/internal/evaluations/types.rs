@@ -52,7 +52,7 @@ pub struct EvaluationRunInfo {
     pub dataset_name: String,
     pub function_name: String,
     pub variant_name: String,
-    pub last_inference_timestamp: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<String>,
 }

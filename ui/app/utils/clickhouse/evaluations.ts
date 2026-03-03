@@ -5,7 +5,7 @@ import type { EvaluationResultRow } from "~/types/tensorzero";
 export const EvaluationRunInfoSchema = z.object({
   evaluation_run_id: z.string(),
   variant_name: z.string(),
-  most_recent_inference_date: z.string().datetime(),
+  created_at: z.string().datetime(),
 });
 
 export type EvaluationRunInfo = z.infer<typeof EvaluationRunInfoSchema>;
@@ -39,7 +39,7 @@ export const evaluationInfoResultSchema = z.object({
   dataset_name: z.string(),
   function_name: z.string(),
   variant_name: z.string(),
-  last_inference_timestamp: z.string().datetime(),
+  created_at: z.string().datetime(),
 });
 
 export type EvaluationInfoResult = z.infer<typeof evaluationInfoResultSchema>;

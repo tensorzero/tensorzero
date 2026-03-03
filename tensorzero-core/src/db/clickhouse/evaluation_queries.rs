@@ -211,7 +211,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     ''
                 ) AS variant_name,
                 argMax(dataset_name, updated_at) AS dataset_name,
-                formatDateTime(min(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp,
+                formatDateTime(argMin(created_at, updated_at), '%Y-%m-%dT%H:%i:%SZ') AS created_at,
                 argMax(snapshot_hash, updated_at) AS snapshot_hash
             FROM InferenceEvaluationRuns
             GROUP BY run_id_uint
@@ -346,7 +346,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     argMax(variant_names, updated_at)[1],
                     ''
                 ) as variant_name,
-                formatDateTime(min(created_at), '%Y-%m-%dT%H:%i:%SZ') as most_recent_inference_date
+                formatDateTime(argMin(created_at, updated_at), '%Y-%m-%dT%H:%i:%SZ') as created_at
             FROM InferenceEvaluationRuns
             WHERE run_id_uint IN (
                 SELECT arrayJoin(arrayMap(x -> toUInt128(toUUID(x)), {evaluation_run_ids:Array(String)}))
@@ -391,7 +391,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 formatDateTime(
                     max(UUIDv7ToDateTime(id)),
                     '%Y-%m-%dT%H:%i:%SZ'
-                ) as most_recent_inference_date
+                ) as created_at
             FROM {inference_table_name}
             WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
             AND function_name = {{function_name:String}}
@@ -751,7 +751,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"test_eval","function_name":"test_func","variant_name":"test_variant","dataset_name":"test_dataset","last_inference_timestamp":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"test_eval","function_name":"test_func","variant_name":"test_variant","dataset_name":"test_dataset","created_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -807,9 +807,9 @@ mod tests {
             .expect_run_query_synchronous()
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"eval1","function_name":"func1","variant_name":"variant1","dataset_name":"dataset1","last_inference_timestamp":"2025-05-20T16:52:58Z"}
-{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluation_name":"eval2","function_name":"func2","variant_name":"variant2","dataset_name":"dataset2","last_inference_timestamp":"2025-05-20T17:52:58Z"}
-{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","evaluation_name":"eval3","function_name":"func3","variant_name":"variant3","dataset_name":"dataset3","last_inference_timestamp":"2025-05-20T18:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"eval1","function_name":"func1","variant_name":"variant1","dataset_name":"dataset1","created_at":"2025-05-20T16:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluation_name":"eval2","function_name":"func2","variant_name":"variant2","dataset_name":"dataset2","created_at":"2025-05-20T17:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","evaluation_name":"eval3","function_name":"func3","variant_name":"variant3","dataset_name":"dataset3","created_at":"2025-05-20T18:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 3,
                         written_rows: 0,
@@ -991,13 +991,13 @@ mod tests {
                 assert_query_contains(
                     query,
                     "positionCaseInsensitive(
-                        if(
-                            length(argMax(variant_names, updated_at)) > 0,
-                            argMax(variant_names, updated_at)[1],
-                            ''
-                        ),
-                        {query:String}
-                    ) > 0",
+                    if(
+                        length(argMax(variant_names, updated_at)) > 0,
+                        argMax(variant_names, updated_at)[1],
+                        ''
+                    ),
+                    {query:String}
+                ) > 0",
                 );
                 assert_query_contains(
                     query,
@@ -1087,7 +1087,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"test_variant","created_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -1127,8 +1127,8 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","most_recent_inference_date":"2025-05-20T16:52:58Z"}
-{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","most_recent_inference_date":"2025-05-20T17:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","created_at":"2025-05-20T16:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","created_at":"2025-05-20T17:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 2,
                         written_rows: 0,
@@ -1202,7 +1202,7 @@ mod tests {
                         formatDateTime(
                             max(UUIDv7ToDateTime(id)),
                             '%Y-%m-%dT%H:%i:%SZ'
-                        ) as most_recent_inference_date
+                        ) as created_at
                     FROM ChatInference
                     WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
                     AND function_name = {function_name:String}
@@ -1219,7 +1219,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","created_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -1266,7 +1266,7 @@ mod tests {
                         formatDateTime(
                             max(UUIDv7ToDateTime(id)),
                             '%Y-%m-%dT%H:%i:%SZ'
-                        ) as most_recent_inference_date
+                        ) as created_at
                     FROM JsonInference
                     WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
                     AND function_name = {function_name:String}
@@ -1283,7 +1283,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","created_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -1317,8 +1317,8 @@ mod tests {
             .expect_run_query_synchronous()
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","most_recent_inference_date":"2025-05-20T16:52:58Z"}
-{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","most_recent_inference_date":"2025-05-20T17:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","created_at":"2025-05-20T16:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","created_at":"2025-05-20T17:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 2,
                         written_rows: 0,

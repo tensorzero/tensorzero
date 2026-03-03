@@ -41,7 +41,7 @@ pub async fn list_evaluation_runs(
             dataset_name: run.dataset_name,
             function_name: run.function_name,
             variant_name: run.variant_name,
-            last_inference_timestamp: run.last_inference_timestamp,
+            created_at: run.created_at,
             snapshot_hash: run.snapshot_hash,
         })
         .collect();
@@ -64,7 +64,7 @@ mod tests {
             dataset_name: "test_dataset".to_string(),
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
-            last_inference_timestamp: Utc::now(),
+            created_at: Utc::now(),
             snapshot_hash: None,
         }
     }
@@ -183,7 +183,7 @@ mod tests {
                     dataset_name: "my_dataset".to_string(),
                     function_name: "my_function".to_string(),
                     variant_name: "my_variant".to_string(),
-                    last_inference_timestamp: timestamp,
+                    created_at: timestamp,
                     snapshot_hash: Some("abc123".to_string()),
                 };
                 Box::pin(async move { Ok(vec![run_info]) })
@@ -200,7 +200,7 @@ mod tests {
         assert_eq!(run.dataset_name, "my_dataset");
         assert_eq!(run.function_name, "my_function");
         assert_eq!(run.variant_name, "my_variant");
-        assert_eq!(run.last_inference_timestamp, timestamp);
+        assert_eq!(run.created_at, timestamp);
         assert_eq!(
             run.snapshot_hash.as_deref(),
             Some("abc123"),
