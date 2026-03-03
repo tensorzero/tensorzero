@@ -18,8 +18,10 @@ use tracing::instrument;
 
 use crate::cache::CacheManager;
 use crate::config::{
-    BatchWritesConfig, Config, ConfigFileGlob, snapshot::SnapshotHash, unwritten::UnwrittenConfig,
+    BatchWritesConfig, Config, ConfigFileGlob, RuntimeOverlay, snapshot::ConfigSnapshot,
+    snapshot::SnapshotHash, unwritten::UnwrittenConfig,
 };
+use crate::db::ConfigQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
@@ -511,6 +513,23 @@ impl AppStateData {
             primary_datastore: self.primary_datastore,
             _private: (),
         }
+    }
+
+    /// Validate a config snapshot and write it to the database.
+    ///
+    /// This is the single entry point for writing config snapshots. It validates
+    /// the config by running the full loading pipeline (with credential validation
+    /// disabled) before persisting, ensuring invalid configs (e.g. missing templates
+    /// for JSON schema functions) are rejected.
+    pub async fn validate_and_write_config_snapshot(
+        &self,
+        snapshot: &ConfigSnapshot,
+    ) -> Result<(), crate::error::Error> {
+        let runtime_overlay = RuntimeOverlay::from_config(&self.config);
+        Config::load_from_snapshot(snapshot.clone(), runtime_overlay, false).await?;
+
+        let db = self.get_delegating_database();
+        db.write_config_snapshot(snapshot).await
     }
 
     pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
