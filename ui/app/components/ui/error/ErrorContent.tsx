@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AlertTriangle,
   Database,
@@ -80,12 +80,6 @@ function GatewayAuthContent() {
   const isBusy = fetcher.state !== "idle";
   const error = fetcher.data?.error;
 
-  useEffect(() => {
-    if (fetcher.data?.success) {
-      window.location.reload();
-    }
-  }, [fetcher.data]);
-
   const handleSubmit = () => {
     if (apiKey.trim()) {
       fetcher.submit(
@@ -120,7 +114,6 @@ function GatewayAuthContent() {
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder=""
             disabled={isBusy}
             onKeyDown={(e) => {
               if (e.key === "Enter") handleSubmit();

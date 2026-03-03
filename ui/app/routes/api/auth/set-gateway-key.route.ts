@@ -11,6 +11,10 @@ export async function action({ request }: { request: Request }) {
   }
 
   const trimmed = apiKey.trim();
+
+  if (trimmed.length > 512) {
+    return data({ error: "API key is too long" }, { status: 400 });
+  }
   const env = getEnv();
 
   if (env.TENSORZERO_API_KEY) {

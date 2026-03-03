@@ -7,6 +7,8 @@
  * use it as a fallback.
  *
  * The key lives only in process memory — it dies on server restart.
+ * This is designed for single-user deployments; in multi-user setups
+ * the last key submitted wins for all users.
  */
 
 let _apiKeyOverride: string | undefined;
