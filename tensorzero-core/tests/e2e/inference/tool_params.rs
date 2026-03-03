@@ -11,13 +11,17 @@
 
 use std::collections::HashSet;
 
+use googletest::prelude::*;
+use googletest_matchers::{matches_json_literal, partially};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tensorzero::ClientExt;
 use tensorzero::test_helpers::make_embedded_gateway;
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse,
-};
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::stored_inference::StoredInferenceDatabase;
+use tensorzero_core::test_helpers::get_e2e_config;
 use tensorzero_core::tool::ToolChoice;
 use uuid::Uuid;
 
@@ -33,9 +37,10 @@ use crate::utils::skip_for_postgres;
 /// - parallel_tool_calls: Some(false)
 ///
 /// Verifies:
-/// - Inference stores correctly in ClickHouse
+/// - Inference stores correctly in the database
 /// - Retrieved inference correctly reconstructs DynamicToolParams
 /// - Tool partitioning works: static tools in allowed_tools, dynamic in additional_tools
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_inference_full_tool_params_round_trip() {
     skip_for_postgres!();
@@ -97,47 +102,54 @@ async fn test_inference_full_tool_params_round_trip() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep to allow ClickHouse writes to complete
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for database writes to complete
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Step 2: Retrieve from ClickHouse and verify storage format (ToolCallConfigDatabaseInsert)
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Step 2: Retrieve from database and verify storage format (ToolCallConfigDatabaseInsert)
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_eq!(inferences.len(), 1);
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    let tool_params = serde_json::to_value(&chat.tool_params).unwrap();
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    // Verify top-level fields
+    expect_that!(
+        &tool_params,
+        partially(matches_json_literal!({
+            "tool_choice": {"specific": "get_temperature"},
+            "parallel_tool_calls": false
+        }))
+    );
 
-    // In storage, all tools are in tools_available (merged)
-    let tools_available = tool_params
-        .get("tools_available")
-        .unwrap()
+    // In storage, all tools are in the legacy tool_params.tools_available (merged)
+    let tools_available = tool_params["tool_params"]["tools_available"]
         .as_array()
-        .unwrap();
+        .expect("tools_available should be an array");
     assert_eq!(
         tools_available.len(),
         2,
         "Should have both static and dynamic tools"
     );
-
-    // Verify tool names are present
     let tool_names: Vec<&str> = tools_available
         .iter()
-        .map(|t| t.get("name").unwrap().as_str().unwrap())
+        .map(|t| t["name"].as_str().unwrap())
         .collect();
     assert!(tool_names.contains(&"get_temperature"));
     assert!(tool_names.contains(&"custom_weather_tool"));
-
-    // Verify other fields
-    assert_eq!(
-        tool_params.get("tool_choice").unwrap(),
-        &json!({"specific": "get_temperature"})
-    );
-    assert_eq!(
-        tool_params.get("parallel_tool_calls").unwrap(),
-        &json!(false)
-    );
 
     // Step 3: Retrieve via get_inferences API (wire format with DynamicToolParams)
     let client = make_embedded_gateway().await;
@@ -358,6 +370,7 @@ async fn test_inference_only_dynamic_tools() {
 /// Empty tool params (None/default behavior)
 ///
 /// Tests what happens when no tool_params are provided - should use function config defaults.
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_inference_no_tool_params() {
     skip_for_postgres!();
@@ -391,33 +404,39 @@ async fn test_inference_no_tool_params() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for database writes to complete
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Retrieve from ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Retrieve from database
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_eq!(inferences.len(), 1);
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    let tool_params = serde_json::to_value(&chat.tool_params).unwrap();
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
-
-    // Should have function config tools
-    let tools_available = tool_params
-        .get("tools_available")
-        .unwrap()
-        .as_array()
-        .unwrap();
-    assert_eq!(tools_available.len(), 1);
-    assert_eq!(
-        tools_available[0].get("name").unwrap().as_str().unwrap(),
-        "get_temperature"
-    );
-
-    // Should have function config tool_choice
-    assert_eq!(
-        tool_params.get("tool_choice").unwrap().as_str().unwrap(),
-        "auto"
+    expect_that!(
+        &tool_params,
+        partially(matches_json_literal!({
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [{"name": "get_temperature"}],
+                "tool_choice": "auto"
+            }
+        }))
     );
 }
 
@@ -576,29 +595,40 @@ async fn test_allowed_tools_restriction() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for database writes to complete
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Retrieve from ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Retrieve from database
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_eq!(inferences.len(), 1);
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    let tool_params = serde_json::to_value(&chat.tool_params).unwrap();
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
-
-    // We still send all tools as available
-    let tools_available = tool_params
-        .get("tools_available")
-        .unwrap()
+    // We still send all tools as available in the legacy tool_params
+    let tools_available = tool_params["tool_params"]["tools_available"]
         .as_array()
-        .unwrap();
+        .expect("tools_available should be an array");
     assert_eq!(tools_available.len(), 2);
 
     // Verify both tools are present in some order
     let tool_names: HashSet<&str> = tools_available
         .iter()
-        .map(|t| t.get("name").unwrap().as_str().unwrap())
+        .map(|t| t["name"].as_str().unwrap())
         .collect();
     assert!(tool_names.contains(&"get_temperature"));
     assert!(tool_names.contains(&"get_humidity"));
@@ -645,6 +675,7 @@ async fn test_allowed_tools_restriction() {
 /// - Tool config key: "get_temperature_with_name"
 /// - Tool display name: "get_temperature"
 /// - Function: "weather_helper_aliased_tool" uses this tool
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_allowed_tools_uses_key_not_display_name() {
     skip_for_postgres!();
@@ -707,29 +738,38 @@ async fn test_allowed_tools_uses_key_not_display_name() {
         "Raw name should be the display name"
     );
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for database writes to complete
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
     // Verify the tool was available and stored correctly
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_eq!(inferences.len(), 1);
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    let tool_params = serde_json::to_value(&chat.tool_params).unwrap();
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
-
-    // The tool should be in tools_available with the DISPLAY NAME (what's sent to LLM)
-    let tools_available = tool_params
-        .get("tools_available")
-        .unwrap()
-        .as_array()
-        .unwrap();
-    assert_eq!(tools_available.len(), 1);
-    // The name stored/sent to LLM is the display name "get_temperature", not the key
-    assert_eq!(
-        tools_available[0].get("name").unwrap().as_str().unwrap(),
-        "get_temperature",
-        "Tool should be stored with display name, not config key"
+    // The tool should be in legacy tool_params.tools_available with the DISPLAY NAME (what's sent to LLM)
+    expect_that!(
+        &tool_params,
+        partially(matches_json_literal!({
+            "tool_params": {
+                "tools_available": [{"name": "get_temperature"}]
+            }
+        }))
     );
 
     // Test 2: Using the DISPLAY NAME should fail validation

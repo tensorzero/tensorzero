@@ -29,7 +29,7 @@ use crate::serde_util::{
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
 };
-use crate::tool::{ToolCallConfigDatabaseInsert, deserialize_tool_info};
+use crate::tool::{ToolCallConfigDatabaseInsert, deserialize_optional_tool_info};
 
 pub(crate) const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
@@ -46,8 +46,8 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<String>,
-    #[serde(flatten, deserialize_with = "deserialize_tool_info")]
-    pub tool_params: ToolCallConfigDatabaseInsert,
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub tags: HashMap<String, String>,
     #[serde(default, deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
@@ -84,7 +84,7 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
             dispreferred_outputs,
             episode_id: value.episode_id,
             inference_id: value.inference_id,
-            tool_params: Some(value.tool_params),
+            tool_params: value.tool_params,
             tags: value.tags,
             timestamp: value.timestamp,
             extra_body: Some(value.extra_body),

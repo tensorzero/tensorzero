@@ -348,16 +348,6 @@ where
     deserializer.deserialize_map(ToolInfoVisitor)
 }
 
-/// Non-optional deserializer that uses the optional deserializer and defaults to empty if None
-pub fn deserialize_tool_info<'de, D>(
-    deserializer: D,
-) -> Result<ToolCallConfigDatabaseInsert, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    deserialize_optional_tool_info(deserializer).map(Option::unwrap_or_default)
-}
-
 impl std::fmt::Display for ToolCallConfigDatabaseInsert {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
