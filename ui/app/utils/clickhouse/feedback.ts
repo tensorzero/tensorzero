@@ -1,5 +1,5 @@
 import { logger } from "~/utils/logger";
-import type { FeedbackRow } from "~/types/tensorzero";
+import type { FeedbackRow, FeedbackBounds } from "~/types/tensorzero";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 /**
@@ -41,4 +41,22 @@ export async function pollForFeedbackItem(
     );
   }
   return feedback;
+}
+
+/**
+ * Filters a feedback list to only the latest entry per metric/comment/demonstration.
+ * Uses feedback bounds for comment/demonstration and a per-metric latest ID map for metrics.
+ */
+export function filterToLatest(
+  feedback: FeedbackRow[],
+  bounds: FeedbackBounds,
+  latestByMetric: Record<string, string>,
+): FeedbackRow[] {
+  return feedback.filter((item) => {
+    if (item.type === "comment")
+      return item.id === bounds.by_type.comment.last_id;
+    if (item.type === "demonstration")
+      return item.id === bounds.by_type.demonstration.last_id;
+    return latestByMetric[item.metric_name] === item.id;
+  });
 }

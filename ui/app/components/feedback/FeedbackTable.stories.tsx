@@ -28,6 +28,21 @@ const config: UiConfig = {
       optimize: "min" as const,
       level: "inference" as const,
     },
+    revenue: {
+      type: "float" as const,
+      optimize: "max" as const,
+      level: "inference" as const,
+    },
+    relevance: {
+      type: "float" as const,
+      optimize: "max" as const,
+      level: "inference" as const,
+    },
+    hallucination: {
+      type: "boolean" as const,
+      optimize: "min" as const,
+      level: "inference" as const,
+    },
     "tensorzero::evaluation_name::haiku::evaluator_name::exact_match": {
       type: "boolean" as const,
       optimize: "max" as const,
@@ -50,12 +65,7 @@ const meta = {
   component: FeedbackTable,
   render: (args) => (
     <StoryWrapper>
-      <FeedbackTable
-        feedback={args.feedback}
-        latestCommentId={args.latestCommentId}
-        latestDemonstrationId={args.latestDemonstrationId}
-        latestFeedbackIdByMetric={args.latestFeedbackIdByMetric}
-      />
+      <FeedbackTable feedback={args.feedback} />
     </StoryWrapper>
   ),
 } satisfies Meta<typeof FeedbackTable>;
@@ -74,9 +84,6 @@ const StoryWrapper = ({ children }: { children: React.ReactNode }) => (
 export const Empty: Story = {
   args: {
     feedback: [],
-    latestCommentId: makeOrderedUuid(0),
-    latestDemonstrationId: makeOrderedUuid(0),
-    latestFeedbackIdByMetric: {},
   },
 };
 
@@ -169,15 +176,6 @@ export const WithData: Story = {
         timestamp: "2024-03-20T10:06:00Z",
       },
     ],
-    latestCommentId: makeOrderedUuid(3),
-    latestDemonstrationId: makeOrderedUuid(2),
-    latestFeedbackIdByMetric: {
-      accuracy: makeOrderedUuid(10),
-      exact_match: makeOrderedUuid(9),
-      nsfw_detected: makeOrderedUuid(100000), // Both `nsfw_detected` feedback in table will show "Overwritten"
-      unknown_float_metric: makeOrderedUuid(6),
-      unknown_boolean_metric: makeOrderedUuid(4),
-    },
   },
 };
 
@@ -199,9 +197,6 @@ export const WithLongComment: Story = {
         timestamp: "2024-03-20T10:00:00Z",
       },
     ],
-    latestCommentId: makeOrderedUuid(0),
-    latestDemonstrationId: makeOrderedUuid(0),
-    latestFeedbackIdByMetric: {},
   },
 };
 
@@ -222,9 +217,6 @@ export const WithLongDemonstration: Story = {
         timestamp: "2024-03-20T10:00:00Z",
       },
     ],
-    latestCommentId: undefined,
-    latestDemonstrationId: makeOrderedUuid(0),
-    latestFeedbackIdByMetric: {},
   },
 };
 
@@ -311,13 +303,6 @@ export const WithHumanFeedback: Story = {
         timestamp: "2024-03-20T10:00:00Z",
       },
     ],
-    latestCommentId: makeOrderedUuid(2),
-    latestDemonstrationId: makeOrderedUuid(6),
-    latestFeedbackIdByMetric: {
-      accuracy: makeOrderedUuid(3),
-      revenue: makeOrderedUuid(4),
-      nsfw_detected: makeOrderedUuid(5),
-    },
   },
 };
 
@@ -406,15 +391,6 @@ export const WithVariousTags: Story = {
         timestamp: "2024-03-20T10:06:00Z",
       },
     ],
-    latestCommentId: makeOrderedUuid(6),
-    latestDemonstrationId: makeOrderedUuid(5),
-    latestFeedbackIdByMetric: {
-      accuracy: makeOrderedUuid(10),
-      exact_match: makeOrderedUuid(9),
-      nsfw_detected: makeOrderedUuid(8),
-      relevance: makeOrderedUuid(7),
-      hallucination: makeOrderedUuid(4),
-    },
   },
 };
 
@@ -480,14 +456,5 @@ export const WithEvaluationMetrics: Story = {
         timestamp: "2024-03-20T10:02:00Z",
       },
     ],
-    latestCommentId: undefined,
-    latestDemonstrationId: undefined,
-    latestFeedbackIdByMetric: {
-      "tensorzero::evaluation_name::haiku::evaluator_name::exact_match":
-        makeOrderedUuid(10),
-      "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f":
-        makeOrderedUuid(9),
-      accuracy: makeOrderedUuid(7),
-    },
   },
 };

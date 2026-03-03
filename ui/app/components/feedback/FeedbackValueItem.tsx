@@ -39,7 +39,7 @@ function ValueItem({ iconType, children, onClick }: ValueItemProps) {
 
 function ValueItemText({ children }: { children: ReactNode }) {
   return (
-    <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+    <span className="overflow-hidden text-ellipsis whitespace-nowrap">
       {children}
     </span>
   );

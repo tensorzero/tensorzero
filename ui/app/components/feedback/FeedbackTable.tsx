@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import {
   getMetricName,
@@ -7,7 +6,9 @@ import {
 } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow, MetricConfig } from "~/types/tensorzero";
 import { useConfig } from "~/context/config";
-import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
+import { getFeedbackConfig } from "~/utils/config/feedback";
+import type { FeedbackConfig } from "~/utils/config/feedback";
+import { TableItemTime } from "~/components/ui/TableItems";
 import {
   Table,
   TableBody,
@@ -22,16 +23,29 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import { Skeleton } from "~/components/ui/skeleton";
-import { cn } from "~/utils/common";
+
+function formatTagKey(key: string): string {
+  if (key.startsWith("tensorzero::")) {
+    return key.slice("tensorzero::".length);
+  }
+  return key;
+}
 
 export function FeedbackTableHeaders() {
   return (
     <TableHeader>
       <TableRow>
-        <TableHead>Metric</TableHead>
-        <TableHead>Value</TableHead>
-        <TableHead className="text-right">Time</TableHead>
+        <TableHead className="w-[20%]">Metric</TableHead>
+        <TableHead className="w-[36%]">Value</TableHead>
+        <TableHead className="w-[8%]">Tags</TableHead>
+        <TableHead className="w-[18%]">Config</TableHead>
+        <TableHead className="w-[18%]">Time</TableHead>
       </TableRow>
     </TableHeader>
   );
@@ -39,7 +53,7 @@ export function FeedbackTableHeaders() {
 
 export function FeedbackTableSkeleton() {
   return (
-    <Table>
+    <Table className="table-fixed">
       <FeedbackTableHeaders />
       <TableBody>
         {Array.from({ length: 3 }).map((_, i) => (
@@ -50,8 +64,14 @@ export function FeedbackTableSkeleton() {
             <TableCell>
               <Skeleton className="h-4 w-20" />
             </TableCell>
-            <TableCell className="text-right">
-              <Skeleton className="ml-auto h-4 w-28" />
+            <TableCell>
+              <Skeleton className="h-4 w-16" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-24" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-28" />
             </TableCell>
           </TableRow>
         ))}
@@ -61,98 +81,36 @@ export function FeedbackTableSkeleton() {
 }
 
 interface MetricTooltipContentProps {
+  id: string;
   rawMetricName: string | null;
-  metricConfig: MetricConfig | undefined;
-  tags: Record<string, string | undefined>;
 }
 
 function MetricTooltipContent({
+  id,
   rawMetricName,
-  metricConfig,
-  tags,
 }: MetricTooltipContentProps) {
-  const userTags = Object.entries(tags).filter(
-    (entry): entry is [string, string] =>
-      !entry[0].startsWith("tensorzero::") && typeof entry[1] === "string",
-  );
-
-  if (!rawMetricName && !metricConfig && userTags.length === 0) {
-    return null;
-  }
-
   return (
-    <div className="max-w-xs space-y-1.5 text-xs">
+    <div className="max-w-xs space-y-2 text-xs">
       {rawMetricName && (
-        <div className="break-all font-mono text-white/70">{rawMetricName}</div>
-      )}
-      {metricConfig && (
-        <div className="flex gap-1.5 text-white/90">
-          <span>Type: {metricConfig.type}</span>
-          {metricConfig.optimize && (
-            <span>· Optimize: {metricConfig.optimize}</span>
-          )}
-          <span>· Level: {metricConfig.level}</span>
+        <div className="break-all font-mono text-xs text-white/70">
+          {rawMetricName}
         </div>
       )}
-      {userTags.length > 0 && (
-        <div>
-          <div className="mb-0.5 text-white/60">Tags</div>
-          {userTags.map(([key, val]) => (
-            <div key={key} className="font-mono text-white/90">
-              {key}={val}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="break-all font-mono text-xs text-white/40">ID: {id}</div>
     </div>
   );
 }
 
 export default function FeedbackTable({
   feedback,
-  latestCommentId,
-  latestDemonstrationId,
-  latestFeedbackIdByMetric,
 }: {
   feedback: FeedbackRow[];
-  latestCommentId?: string;
-  latestDemonstrationId?: string;
-  latestFeedbackIdByMetric?: Record<string, string>;
 }) {
   const config = useConfig();
-  const metrics = config.metrics;
-  const [showOverwritten, setShowOverwritten] = useState(false);
-
-  const { latestFeedback, overwrittenFeedback } = useMemo(() => {
-    const latest: FeedbackRow[] = [];
-    const overwritten: FeedbackRow[] = [];
-
-    for (const item of feedback) {
-      const isLatest =
-        item.type === "comment"
-          ? item.id === latestCommentId
-          : item.type === "demonstration"
-            ? item.id === latestDemonstrationId
-            : latestFeedbackIdByMetric?.[item.metric_name] === item.id;
-
-      if (isLatest) {
-        latest.push(item);
-      } else {
-        overwritten.push(item);
-      }
-    }
-
-    return { latestFeedback: latest, overwrittenFeedback: overwritten };
-  }, [
-    feedback,
-    latestCommentId,
-    latestDemonstrationId,
-    latestFeedbackIdByMetric,
-  ]);
 
   if (feedback.length === 0) {
     return (
-      <Table>
+      <Table className="table-fixed">
         <FeedbackTableHeaders />
         <TableBody>
           <TableEmptyState message="No feedback found" />
@@ -162,43 +120,17 @@ export default function FeedbackTable({
   }
 
   return (
-    <Table>
+    <Table className="table-fixed">
       <FeedbackTableHeaders />
       <TableBody>
-        {latestFeedback.map((item) => (
-          <FeedbackRowItem key={item.id} item={item} metrics={metrics} />
+        {feedback.map((item) => (
+          <FeedbackRowItem
+            key={item.id}
+            item={item}
+            metricConfig={config.metrics[getMetricName(item)]}
+            feedbackConfig={getFeedbackConfig(getMetricName(item), config)}
+          />
         ))}
-        {overwrittenFeedback.length > 0 && (
-          <>
-            <TableRow>
-              <TableCell colSpan={3} className="py-1.5">
-                <button
-                  type="button"
-                  aria-expanded={showOverwritten}
-                  onClick={() => setShowOverwritten(!showOverwritten)}
-                  className="text-fg-muted hover:text-fg-secondary flex cursor-pointer items-center gap-1 text-xs"
-                >
-                  <ChevronRight
-                    className={cn(
-                      "h-3 w-3 transition-transform",
-                      showOverwritten && "rotate-90",
-                    )}
-                  />
-                  {overwrittenFeedback.length} overwritten
-                </button>
-              </TableCell>
-            </TableRow>
-            {showOverwritten &&
-              overwrittenFeedback.map((item) => (
-                <FeedbackRowItem
-                  key={item.id}
-                  item={item}
-                  metrics={metrics}
-                  className="opacity-50"
-                />
-              ))}
-          </>
-        )}
       </TableBody>
     </Table>
   );
@@ -206,57 +138,169 @@ export default function FeedbackTable({
 
 interface FeedbackRowItemProps {
   item: FeedbackRow;
-  metrics: { [key in string]: MetricConfig };
-  className?: string;
+  metricConfig: MetricConfig | undefined;
+  feedbackConfig: FeedbackConfig | undefined;
 }
 
-function FeedbackRowItem({ item, metrics, className }: FeedbackRowItemProps) {
-  const rawMetricName = getMetricName(item);
-  const metricConfig = metrics[rawMetricName];
+function FeedbackRowItem({
+  item,
+  metricConfig,
+  feedbackConfig,
+}: FeedbackRowItemProps) {
   const displayMetric = getDisplayMetricName(item);
 
-  const tooltipContent = (
-    <MetricTooltipContent
-      rawMetricName={displayMetric.raw}
-      metricConfig={metricConfig}
-      tags={item.tags}
-    />
+  const allTags = Object.entries(item.tags).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
   );
 
-  const hasTooltip =
-    displayMetric.raw ||
-    metricConfig ||
-    Object.keys(item.tags).some((k) => !k.startsWith("tensorzero::"));
-
   return (
-    <TableRow data-testid={`feedback-row-${item.id}`} className={className}>
+    <TableRow data-testid={`feedback-row-${item.id}`}>
       <TableCell>
-        {hasTooltip ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="cursor-default font-mono text-sm underline decoration-dotted underline-offset-4">
-                {displayMetric.display}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent sideOffset={5}>{tooltipContent}</TooltipContent>
-          </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-default font-mono text-sm underline decoration-dotted decoration-border underline-offset-4">
+              {displayMetric.display}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent sideOffset={5}>
+            <MetricTooltipContent
+              id={item.id}
+              rawMetricName={displayMetric.raw}
+            />
+          </TooltipContent>
+        </Tooltip>
+      </TableCell>
+      <TableCell className="max-w-0 truncate">
+        <FeedbackValue feedback={item} metric={metricConfig} />
+      </TableCell>
+      <TableCell>
+        {allTags.length > 0 ? (
+          <TagsPopover tags={allTags} />
         ) : (
-          <span className="font-mono text-sm">{displayMetric.display}</span>
+          <span className="text-fg-muted text-xs">—</span>
         )}
       </TableCell>
       <TableCell>
-        <FeedbackValue feedback={item} metric={metricConfig} />
+        <MetricConfigInfo feedbackConfig={feedbackConfig} item={item} />
       </TableCell>
-      <TableCell className="text-right">
-        <div className="flex items-center justify-end gap-2">
-          <span className="text-fg-tertiary text-xs">
-            <TableItemTime timestamp={item.timestamp} />
-          </span>
-          <span className="text-fg-muted text-xs">
-            <TableItemShortUuid id={item.id} />
-          </span>
-        </div>
+      <TableCell>
+        <span className="text-fg-tertiary text-xs">
+          <TableItemTime timestamp={item.timestamp} />
+        </span>
       </TableCell>
     </TableRow>
+  );
+}
+
+interface MetricConfigInfoProps {
+  feedbackConfig: FeedbackConfig | undefined;
+  item: FeedbackRow;
+}
+
+function MetricConfigInfo({ feedbackConfig, item }: MetricConfigInfoProps) {
+  if (!feedbackConfig) {
+    return <span className="text-fg-muted text-xs">—</span>;
+  }
+
+  const parts: string[] = [];
+
+  if (feedbackConfig.type === "comment") {
+    parts.push("comment");
+    if (item.type === "comment" && item.target_type) {
+      parts.push(item.target_type);
+    }
+  } else if (feedbackConfig.type === "demonstration") {
+    parts.push("demonstration");
+    parts.push("inference");
+  } else {
+    parts.push(feedbackConfig.type);
+    parts.push(feedbackConfig.optimize);
+    parts.push(feedbackConfig.level);
+  }
+
+  return (
+    <span className="text-fg-tertiary text-xs">
+      {parts.map((part, i) => (
+        <span key={part}>
+          {i > 0 && (
+            <span className="text-fg-muted mx-1" aria-hidden>
+              ·
+            </span>
+          )}
+          {part}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+interface TagsPopoverProps {
+  tags: [string, string][];
+}
+
+function TagsPopover({ tags }: TagsPopoverProps) {
+  const [open, setOpen] = useState(false);
+  const closeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleClose = useCallback(() => {
+    closeTimeout.current = setTimeout(() => setOpen(false), 150);
+  }, []);
+
+  const cancelClose = useCallback(() => {
+    if (closeTimeout.current) {
+      clearTimeout(closeTimeout.current);
+      closeTimeout.current = null;
+    }
+  }, []);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <span
+          className="text-fg-tertiary cursor-default text-xs underline decoration-dotted decoration-border underline-offset-4"
+          onPointerEnter={() => {
+            cancelClose();
+            setOpen(true);
+          }}
+          onPointerLeave={scheduleClose}
+        >
+          {tags.length} tag{tags.length !== 1 ? "s" : ""}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="center"
+        className="w-auto max-w-md p-3"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        onPointerEnter={cancelClose}
+        onPointerLeave={scheduleClose}
+      >
+        <div className="space-y-1.5">
+          {tags.map(([key, val]) => (
+            <div key={key} className="flex gap-2 font-mono text-xs">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-fg-secondary w-40 shrink-0 truncate">
+                    {formatTagKey(key)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <span className="font-mono text-xs">{key}</span>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-fg-primary truncate">{val}</span>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <span className="font-mono text-xs break-all">{val}</span>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

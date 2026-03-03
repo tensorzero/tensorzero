@@ -1,10 +1,10 @@
 import { Suspense, useEffect } from "react";
-import { Await, useAsyncError, useNavigate } from "react-router";
+import { Await, Link, useAsyncError, useNavigate } from "react-router";
 import {
   TableErrorNotice,
   getErrorMessage,
 } from "~/components/ui/error/ErrorContentPrimitives";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, ArrowRight } from "lucide-react";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
 import FeedbackTable, {
@@ -17,6 +17,8 @@ interface FeedbackSectionProps {
   locationKey: string;
   count: number | undefined;
   onCountUpdate: (count: number) => void;
+  episodeId: string;
+  episodeFeedbackCount: Promise<number>;
 }
 
 export function FeedbackSection({
@@ -24,6 +26,8 @@ export function FeedbackSection({
   locationKey,
   count,
   onCountUpdate,
+  episodeId,
+  episodeFeedbackCount,
 }: FeedbackSectionProps) {
   return (
     <SectionLayout>
@@ -43,6 +47,18 @@ export function FeedbackSection({
           )}
         </Await>
       </Suspense>
+      <Suspense fallback={null}>
+        <Await resolve={episodeFeedbackCount}>
+          {(count) =>
+            count > 0 ? (
+              <EpisodeFeedbackNotice
+                episodeId={episodeId}
+                feedbackCount={count}
+              />
+            ) : null
+          }
+        </Await>
+      </Suspense>
     </SectionLayout>
   );
 }
@@ -54,7 +70,7 @@ function FeedbackContent({
   data: FeedbackData;
   onCountUpdate: (count: number) => void;
 }) {
-  const { feedback, feedback_bounds, latestFeedbackByMetric } = data;
+  const { feedback, feedback_bounds } = data;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -96,12 +112,7 @@ function FeedbackContent({
 
   return (
     <>
-      <FeedbackTable
-        feedback={feedback}
-        latestCommentId={feedback_bounds.by_type.comment.last_id}
-        latestDemonstrationId={feedback_bounds.by_type.demonstration.last_id}
-        latestFeedbackIdByMetric={latestFeedbackByMetric}
-      />
+      <FeedbackTable feedback={feedback} />
       <PageButtons
         onPreviousPage={handlePreviousPage}
         onNextPage={handleNextPage}
@@ -139,5 +150,26 @@ function FeedbackError() {
       </div>
       <PageButtons disabled />
     </>
+  );
+}
+
+interface EpisodeFeedbackNoticeProps {
+  episodeId: string;
+  feedbackCount: number;
+}
+
+function EpisodeFeedbackNotice({
+  episodeId,
+  feedbackCount,
+}: EpisodeFeedbackNoticeProps) {
+  return (
+    <Link
+      to={`/observability/episodes/${episodeId}`}
+      className="text-fg-muted hover:text-fg-secondary mt-2 flex items-center gap-1.5 text-sm transition-colors"
+    >
+      This episode has {feedbackCount} feedback{" "}
+      {feedbackCount === 1 ? "entry" : "entries"}
+      <ArrowRight className="h-3.5 w-3.5" />
+    </Link>
   );
 }

@@ -1,4 +1,7 @@
-import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
+import {
+  pollForFeedbackItem,
+  filterToLatest,
+} from "~/utils/clickhouse/feedback";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import {
   resolveModelInferences,
@@ -19,7 +22,6 @@ export type ModelInferencesData = ParsedModelInferenceRow[];
 export type FeedbackData = {
   feedback: FeedbackRow[];
   feedback_bounds: FeedbackBounds;
-  latestFeedbackByMetric: Record<string, string>;
 };
 
 // Fetch functions for independent streaming
@@ -89,7 +91,14 @@ export async function fetchFeedbackData(
       tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
       tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);
-    return { feedback, feedback_bounds, latestFeedbackByMetric };
+    return {
+      feedback: filterToLatest(
+        feedback,
+        feedback_bounds,
+        latestFeedbackByMetric,
+      ),
+      feedback_bounds,
+    };
   }
 
   // Normal case: execute all queries in parallel
@@ -104,5 +113,15 @@ export async function fetchFeedbackData(
       tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ],
   );
-  return { feedback, feedback_bounds, latestFeedbackByMetric };
+  return {
+    feedback: filterToLatest(feedback, feedback_bounds, latestFeedbackByMetric),
+    feedback_bounds,
+  };
+}
+
+export async function fetchEpisodeFeedbackCount(
+  episodeId: string,
+): Promise<number> {
+  const tensorZeroClient = getTensorZeroClient();
+  return tensorZeroClient.countFeedbackByTargetId(episodeId);
 }

@@ -32,6 +32,7 @@ import {
   fetchHasDemonstration,
   fetchInput,
   fetchFeedbackData,
+  fetchEpisodeFeedbackCount,
 } from "./inference-data.server";
 import { BasicInfoStreaming } from "./BasicInfo";
 import { InferenceActionBar } from "./InferenceActionBar";
@@ -110,6 +111,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       afterFeedback,
       limit,
     }),
+    episodeFeedbackCount: fetchEpisodeFeedbackCount(inference.episode_id),
   };
 }
 
@@ -123,6 +125,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     hasDemonstration,
     input,
     feedbackData,
+    episodeFeedbackCount,
   } = loaderData;
   const location = useLocation();
   const navigate = useNavigate();
@@ -212,6 +215,8 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           locationKey={location.key}
           count={feedbackCount}
           onCountUpdate={setFeedbackCount}
+          episodeId={inference.episode_id}
+          episodeFeedbackCount={episodeFeedbackCount}
         />
 
         <SectionLayout>

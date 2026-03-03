@@ -1,5 +1,10 @@
 import { DollarSign, RefreshCw, UserPen } from "lucide-react";
 import React from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 export interface IconProps {
   className?: string | undefined;
@@ -654,7 +659,16 @@ export const SequenceChecks: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
-export const UserFeedback: React.FC = () => <UserPen size={12} />;
+export const UserFeedback: React.FC = () => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span className="text-fg-muted ml-1 cursor-default">
+        <UserPen size={14} />
+      </span>
+    </TooltipTrigger>
+    <TooltipContent>Human feedback</TooltipContent>
+  </Tooltip>
+);
 
 export const Cost: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>

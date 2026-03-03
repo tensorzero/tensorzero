@@ -1,5 +1,8 @@
 import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
-import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
+import {
+  pollForFeedbackItem,
+  filterToLatest,
+} from "~/utils/clickhouse/feedback";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import {
@@ -52,7 +55,6 @@ export type InferencesData = {
 export type FeedbackData = {
   feedbacks: FeedbackRow[];
   bounds: FeedbackBounds;
-  latestFeedbackByMetric: Record<string, string>;
 };
 
 export const handle: RouteHandle = {
@@ -128,7 +130,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table and materialized views as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but time out and log a warning.
-  // When polling for new feedback, we also need to query feedbackBounds and latestFeedbackByMetric
+  // When polling for new feedback, we also need to query feedbackBounds
   // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise: Promise<FeedbackData> = newFeedbackId
     ? // Sequential case: poll first, then query bounds/metrics
@@ -138,7 +140,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
             tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
           ]);
-          return { feedbacks, bounds, latestFeedbackByMetric };
+          return {
+            feedbacks: filterToLatest(
+              feedbacks,
+              bounds,
+              latestFeedbackByMetric,
+            ),
+            bounds,
+          };
         },
       )
     : // Normal case: execute all queries in parallel
@@ -151,9 +160,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
         tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
       ]).then(([feedbacks, bounds, latestFeedbackByMetric]) => ({
-        feedbacks,
+        feedbacks: filterToLatest(feedbacks, bounds, latestFeedbackByMetric),
         bounds,
-        latestFeedbackByMetric,
       }));
 
   return {
@@ -222,7 +230,7 @@ function FeedbackSectionError() {
 }
 
 function FeedbackSectionContent({ data }: { data: FeedbackData }) {
-  const { feedbacks, bounds, latestFeedbackByMetric } = data;
+  const { feedbacks, bounds } = data;
   const navigate = useNavigate();
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
@@ -257,12 +265,7 @@ function FeedbackSectionContent({ data }: { data: FeedbackData }) {
 
   return (
     <>
-      <FeedbackTable
-        feedback={feedbacks}
-        latestCommentId={bounds.by_type.comment.last_id}
-        latestDemonstrationId={bounds.by_type.demonstration.last_id}
-        latestFeedbackIdByMetric={latestFeedbackByMetric}
-      />
+      <FeedbackTable feedback={feedbacks} />
       <PageButtons
         onPreviousPage={handlePreviousPage}
         onNextPage={handleNextPage}

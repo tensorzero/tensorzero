@@ -1,9 +1,5 @@
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
-import type {
-  FeedbackRow,
-  FeedbackBounds,
-  StoredInference,
-} from "~/types/tensorzero";
+import type { FeedbackRow, StoredInference } from "~/types/tensorzero";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useConfig, useFunctionConfig } from "~/context/config";
@@ -49,9 +45,7 @@ export interface InferenceDetailData {
   input?: Input;
   model_inferences: ParsedModelInferenceRow[];
   feedback: FeedbackRow[];
-  feedback_bounds: FeedbackBounds;
   hasDemonstration: boolean;
-  latestFeedbackByMetric: Record<string, string>;
   usedVariants: string[];
 }
 
@@ -94,9 +88,7 @@ export function InferenceDetailContent({
     input,
     model_inferences,
     feedback,
-    feedback_bounds,
     hasDemonstration,
-    latestFeedbackByMetric,
     usedVariants,
   } = data;
 
@@ -383,14 +375,7 @@ export function InferenceDetailContent({
                 "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
             }}
           />
-          <FeedbackTable
-            feedback={feedback}
-            latestCommentId={feedback_bounds.by_type.comment.last_id!}
-            latestDemonstrationId={
-              feedback_bounds.by_type.demonstration.last_id!
-            }
-            latestFeedbackIdByMetric={latestFeedbackByMetric}
-          />
+          <FeedbackTable feedback={feedback} />
           {feedbackFooter}
         </SectionLayout>
 
