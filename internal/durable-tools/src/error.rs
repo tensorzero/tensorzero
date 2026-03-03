@@ -167,6 +167,12 @@ impl From<TaskError> for ToolError {
             TaskError::Timeout { step_name } => {
                 ToolError::NonControl(NonControlToolError::Timeout { step_name })
             }
+            TaskError::Step { base_name, error } => {
+                ToolError::NonControl(NonControlToolError::Step {
+                    base_name,
+                    error: error.to_string(),
+                })
+            }
             TaskError::User {
                 message,
                 error_data,
@@ -177,20 +183,14 @@ impl From<TaskError> for ToolError {
             TaskError::Validation { message } => {
                 ToolError::NonControl(NonControlToolError::Validation { message })
             }
+            TaskError::TaskPanicked { message } => {
+                ToolError::NonControl(NonControlToolError::TaskPanicked { message })
+            }
             TaskError::ChildFailed { step_name, message } => {
                 ToolError::NonControl(NonControlToolError::ChildFailed { step_name, message })
             }
             TaskError::ChildCancelled { step_name } => {
                 ToolError::NonControl(NonControlToolError::ChildCancelled { step_name })
-            }
-            TaskError::Step { base_name, error } => {
-                ToolError::NonControl(NonControlToolError::Step {
-                    base_name,
-                    error: error.to_string(),
-                })
-            }
-            TaskError::TaskPanicked { message } => {
-                ToolError::NonControl(NonControlToolError::TaskPanicked { message })
             }
             TaskError::SubtaskSpawnFailed { name, error } => {
                 ToolError::NonControl(NonControlToolError::SubtaskSpawnFailed {
