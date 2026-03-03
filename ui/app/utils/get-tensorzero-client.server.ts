@@ -1,24 +1,21 @@
 import { TensorZeroClient } from "~/utils/tensorzero/tensorzero";
 import { getEnv } from "./env.server";
-import {
-  getEffectiveApiKey,
-  getApiKeyOverrideVersion,
-} from "./api-key-override.server";
+import { getEffectiveApiKey } from "./api-key-override.server";
 
-let _tensorZeroClient: TensorZeroClient | undefined;
-let _lastOverrideVersion = -1;
+let _envClient: TensorZeroClient | undefined;
 
 export function getTensorZeroClient(): TensorZeroClient {
-  const overrideVersion = getApiKeyOverrideVersion();
+  const env = getEnv();
 
-  if (_tensorZeroClient && _lastOverrideVersion === overrideVersion) {
-    return _tensorZeroClient;
+  // Env var path: cached singleton (same key every request)
+  if (env.TENSORZERO_API_KEY) {
+    _envClient ??= new TensorZeroClient(
+      env.TENSORZERO_GATEWAY_URL,
+      env.TENSORZERO_API_KEY,
+    );
+    return _envClient;
   }
 
-  _tensorZeroClient = new TensorZeroClient(
-    getEnv().TENSORZERO_GATEWAY_URL,
-    getEffectiveApiKey(),
-  );
-  _lastOverrideVersion = overrideVersion;
-  return _tensorZeroClient;
+  // Cookie path: fresh client per call (construction is trivial)
+  return new TensorZeroClient(env.TENSORZERO_GATEWAY_URL, getEffectiveApiKey());
 }

@@ -1,24 +1,21 @@
 import { AutopilotClient } from "~/utils/tensorzero/autopilot-client";
 import { getEnv } from "./env.server";
-import {
-  getEffectiveApiKey,
-  getApiKeyOverrideVersion,
-} from "./api-key-override.server";
+import { getEffectiveApiKey } from "./api-key-override.server";
 
-let _autopilotClient: AutopilotClient | undefined;
-let _lastOverrideVersion = -1;
+let _envClient: AutopilotClient | undefined;
 
 export function getAutopilotClient(): AutopilotClient {
-  const overrideVersion = getApiKeyOverrideVersion();
+  const env = getEnv();
 
-  if (_autopilotClient && _lastOverrideVersion === overrideVersion) {
-    return _autopilotClient;
+  // Env var path: cached singleton (same key every request)
+  if (env.TENSORZERO_API_KEY) {
+    _envClient ??= new AutopilotClient(
+      env.TENSORZERO_GATEWAY_URL,
+      env.TENSORZERO_API_KEY,
+    );
+    return _envClient;
   }
 
-  _autopilotClient = new AutopilotClient(
-    getEnv().TENSORZERO_GATEWAY_URL,
-    getEffectiveApiKey(),
-  );
-  _lastOverrideVersion = overrideVersion;
-  return _autopilotClient;
+  // Cookie path: fresh client per call (construction is trivial)
+  return new AutopilotClient(env.TENSORZERO_GATEWAY_URL, getEffectiveApiKey());
 }

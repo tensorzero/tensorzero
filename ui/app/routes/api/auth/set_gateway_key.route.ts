@@ -1,6 +1,6 @@
 import { data } from "react-router";
 import { getEnv } from "~/utils/env.server";
-import { setApiKeyOverride } from "~/utils/api-key-override.server";
+import { buildApiKeyCookie } from "~/utils/api-key-override.server";
 
 export async function action({ request }: { request: Request }) {
   const formData = await request.formData();
@@ -60,9 +60,9 @@ export async function action({ request }: { request: Request }) {
     );
   }
 
-  // Key is valid — store it in the shared module-level override.
-  // Both getTensorZeroClient() and getAutopilotClient() read from this.
-  setApiKeyOverride(trimmed);
-
-  return data({ success: true });
+  // Key is valid — store it in an HTTP-only cookie on the user's browser.
+  return data(
+    { success: true },
+    { headers: { "Set-Cookie": buildApiKeyCookie(trimmed) } },
+  );
 }
