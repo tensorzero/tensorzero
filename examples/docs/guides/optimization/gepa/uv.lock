@@ -646,37 +646,13 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-source = { editable = "../../../../../clients/python" }
+version = "2026.2.2"
+source = { git = "https://github.com/tensorzero/tensorzero?subdirectory=clients%2Fpython&rev=beca3fd03#beca3fd0338407ee045f3bb1b31986c27171f377" }
 dependencies = [
     { name = "dacite" },
     { name = "httpx" },
     { name = "typing-extensions" },
     { name = "uuid-utils" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "dacite", specifier = ">=1.9.2" },
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "typing-extensions", specifier = ">=4.12.2" },
-    { name = "uuid-utils", specifier = ">=0.9.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "clickhouse-connect" },
-    { name = "maturin" },
-    { name = "mypy" },
-    { name = "openai" },
-    { name = "pandas" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-httpserver" },
-    { name = "pytest-rerunfailures" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-    { name = "requests" },
 ]
 
 [[package]]
@@ -699,7 +675,7 @@ dev = [
 requires-dist = [
     { name = "openai", specifier = ">=2.6.1" },
     { name = "pandas", specifier = ">=2.3.3" },
-    { name = "tensorzero", editable = "../../../../../clients/python" },
+    { name = "tensorzero", git = "https://github.com/tensorzero/tensorzero?subdirectory=clients%2Fpython&rev=beca3fd03" },
     { name = "tqdm", specifier = ">=4.66.0" },
 ]
 
