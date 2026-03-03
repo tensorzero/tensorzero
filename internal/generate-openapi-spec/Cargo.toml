@@ -9,6 +9,8 @@ workspace = true
 
 [dependencies]
 autopilot-client = { path = "../autopilot-client", features = ["openapi"] }
+axum.workspace = true
 serde_json.workspace = true
 tensorzero-core = { path = "../../tensorzero-core", features = ["openapi"] }
 utoipa = { workspace = true }
+utoipa-axum = { workspace = true }

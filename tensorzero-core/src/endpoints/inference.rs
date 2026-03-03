@@ -207,6 +207,16 @@ struct InferenceMetadata {
 pub type InferenceCredentials = HashMap<String, SecretString>;
 
 /// A handler for the inference endpoint
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/inference",
+    request_body = inline(Params),
+    responses(
+        (status = 200, description = "Inference response (non-streaming)", body = InferenceResponse),
+        (status = 400, description = "Bad request"),
+    ),
+    tag = "Inference"
+))]
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
     State(AppStateData {
