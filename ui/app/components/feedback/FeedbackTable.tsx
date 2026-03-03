@@ -224,7 +224,10 @@ function FeedbackRowItem({
       <TableCell>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="cursor-default font-mono text-sm underline decoration-dotted decoration-border underline-offset-4">
+            <span
+              className="cursor-default font-mono text-sm underline decoration-dotted decoration-border underline-offset-4"
+              tabIndex={0}
+            >
               {displayMetric.display}
             </span>
           </TooltipTrigger>
