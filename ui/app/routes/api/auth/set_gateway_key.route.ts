@@ -29,10 +29,12 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   // Validate the key by making a test request to the gateway
-  const baseUrl = env.TENSORZERO_GATEWAY_URL.replace(/\/+$/, "");
+  const validateUrl = new URL(
+    "/internal/ui_config",
+    env.TENSORZERO_GATEWAY_URL,
+  );
   try {
-    const response = await fetch(`${baseUrl}/internal/ui_config`, {
-      method: "GET",
+    const response = await fetch(validateUrl, {
       headers: {
         authorization: `Bearer ${trimmed}`,
       },
