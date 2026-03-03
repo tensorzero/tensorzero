@@ -5,7 +5,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { Component, type RefObject, useMemo, useState } from "react";
+import { Component, type RefObject, useEffect, useMemo, useState } from "react";
 import {
   AnimatedEllipsis,
   EllipsisMode,
@@ -295,6 +295,15 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
   }
 }
 
+function ToolNameBadge({ name }: { name: string }) {
+  return (
+    <>
+      <DotSeparator />
+      <span className="font-mono font-medium">{name}</span>
+    </>
+  );
+}
+
 function renderEventTitle(event: GatewayEvent, toolName?: string) {
   const { payload } = event;
 
@@ -351,12 +360,7 @@ function renderEventTitle(event: GatewayEvent, toolName?: string) {
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && (
-                <>
-                  <DotSeparator />
-                  <span className="font-mono font-medium">{toolName}</span>
-                </>
-              )}
+              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Success
             </span>
@@ -365,12 +369,7 @@ function renderEventTitle(event: GatewayEvent, toolName?: string) {
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && (
-                <>
-                  <DotSeparator />
-                  <span className="font-mono font-medium">{toolName}</span>
-                </>
-              )}
+              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Failure
             </span>
@@ -379,12 +378,7 @@ function renderEventTitle(event: GatewayEvent, toolName?: string) {
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && (
-                <>
-                  <DotSeparator />
-                  <span className="font-mono font-medium">{toolName}</span>
-                </>
-              )}
+              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Rejected
               <Tooltip>
@@ -406,12 +400,7 @@ function renderEventTitle(event: GatewayEvent, toolName?: string) {
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && (
-                <>
-                  <DotSeparator />
-                  <span className="font-mono font-medium">{toolName}</span>
-                </>
-              )}
+              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Missing Tool
               <Tooltip>
@@ -433,12 +422,7 @@ function renderEventTitle(event: GatewayEvent, toolName?: string) {
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && (
-                <>
-                  <DotSeparator />
-                  <span className="font-mono font-medium">{toolName}</span>
-                </>
-              )}
+              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Unknown
               <Tooltip>
@@ -691,6 +675,13 @@ function EventItem({
   const [isExpanded, setIsExpanded] = useState(
     event.payload.type === "visualization" || feedbackChartData != null,
   );
+  // Auto-expand when feedbackChartData becomes available after mount
+  // (tool_call may load after tool_result due to newest-first pagination)
+  useEffect(() => {
+    if (feedbackChartData != null) {
+      setIsExpanded(true);
+    }
+  }, [feedbackChartData]);
   const shouldShowDetails = !isExpandable || isExpanded;
   const label = <span className="text-sm font-medium">{title}</span>;
 
