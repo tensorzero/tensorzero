@@ -930,33 +930,6 @@ impl TensorZeroGateway {
         }
     }
 
-    /// DEPRECATED: Use workflow_evaluation_run instead.
-    /// Make a request to the /dynamic_evaluation_run endpoint.
-    ///
-    /// :param variants: A dictionary mapping function names to pinned variant names.
-    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
-    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
-    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
-    /// :return: A `WorkflowEvaluationRunResponse` object.
-    #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
-    fn dynamic_evaluation_run(
-        this: PyRef<'_, Self>,
-        variants: HashMap<String, String>,
-        tags: Option<HashMap<String, String>>,
-        project_name: Option<String>,
-        display_name: Option<String>,
-    ) -> PyResult<Py<PyAny>> {
-        let warnings = PyModule::import(this.py(), "warnings")?;
-        warnings.call_method1(
-            "warn",
-            (
-                "The dynamic_evaluation_run method is deprecated. Please use workflow_evaluation_run instead. Support for dynamic_evaluation_run will be removed in a future version.",
-                this.py().get_type::<PyDeprecationWarning>(),
-            ),
-        )?;
-        Self::workflow_evaluation_run(this, variants, tags, project_name, display_name)
-    }
-
     /// Make a request to the /workflow_evaluation_run_episode endpoint.
     ///
     /// :param run_id: The run ID to use for the workflow evaluation run.
@@ -982,31 +955,6 @@ impl TensorZeroGateway {
             Ok(resp) => parse_workflow_evaluation_run_episode_response(this.py(), resp),
             Err(e) => Err(convert_error(this.py(), e)),
         }
-    }
-
-    /// DEPRECATED: Use workflow_evaluation_run_episode instead.
-    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
-    ///
-    /// :param run_id: The run ID to use for the dynamic evaluation run.
-    /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
-    /// :return: A `WorkflowEvaluationRunEpisodeResponse` object.
-    #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
-    fn dynamic_evaluation_run_episode(
-        this: PyRef<'_, Self>,
-        run_id: Bound<'_, PyAny>,
-        task_name: Option<String>,
-        tags: Option<HashMap<String, String>>,
-    ) -> PyResult<Py<PyAny>> {
-        let warnings = PyModule::import(this.py(), "warnings")?;
-        warnings.call_method1(
-            "warn",
-            (
-                "The dynamic_evaluation_run_episode method is deprecated. Please use workflow_evaluation_run_episode instead. Support for dynamic_evaluation_run_episode will be removed in a future version.",
-                this.py().get_type::<PyDeprecationWarning>(),
-            ),
-        )?;
-        Self::workflow_evaluation_run_episode(this, run_id, task_name, tags)
     }
 
     /// Create one or more datapoints in a dataset.
@@ -2024,33 +1972,6 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    /// DEPRECATED: Use workflow_evaluation_run instead.
-    /// Make a request to the /dynamic_evaluation_run endpoint.
-    ///
-    /// :param variants: A dictionary mapping function names to pinned variant names.
-    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
-    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
-    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
-    /// :return: A `WorkflowEvaluationRunResponse` object.
-    #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
-    fn dynamic_evaluation_run(
-        this: PyRef<'_, Self>,
-        variants: HashMap<String, String>,
-        tags: Option<HashMap<String, String>>,
-        project_name: Option<String>,
-        display_name: Option<String>,
-    ) -> PyResult<Bound<'_, PyAny>> {
-        let warnings = PyModule::import(this.py(), "warnings")?;
-        warnings.call_method1(
-            "warn",
-            (
-                "The dynamic_evaluation_run method is deprecated. Please use workflow_evaluation_run instead. Support for dynamic_evaluation_run will be removed in a future version.",
-                this.py().get_type::<PyDeprecationWarning>(),
-            ),
-        )?;
-        Self::workflow_evaluation_run(this, variants, tags, project_name, display_name)
-    }
-
     /// Make a request to the /workflow_evaluation_run_episode endpoint.
     ///
     /// :param run_id: The run ID to use for the workflow evaluation run.
@@ -2078,31 +1999,6 @@ impl AsyncTensorZeroGateway {
                 Err(e) => Err(convert_error(py, e)),
             })
         })
-    }
-
-    /// DEPRECATED: Use workflow_evaluation_run_episode instead.
-    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
-    ///
-    /// :param run_id: The run ID to use for the dynamic evaluation run.
-    /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
-    /// :return: A `WorkflowEvaluationRunEpisodeResponse` object.
-    #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
-    fn dynamic_evaluation_run_episode<'a>(
-        this: PyRef<'a, Self>,
-        run_id: Bound<'_, PyAny>,
-        task_name: Option<String>,
-        tags: Option<HashMap<String, String>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let warnings = PyModule::import(this.py(), "warnings")?;
-        warnings.call_method1(
-            "warn",
-            (
-                "The dynamic_evaluation_run_episode method is deprecated. Please use workflow_evaluation_run_episode instead. Support for dynamic_evaluation_run_episode will be removed in a future version.",
-                this.py().get_type::<PyDeprecationWarning>(),
-            ),
-        )?;
-        Self::workflow_evaluation_run_episode(this, run_id, task_name, tags)
     }
 
     /// Create one or more datapoints in a dataset.

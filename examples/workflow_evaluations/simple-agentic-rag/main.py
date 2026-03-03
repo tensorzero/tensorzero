@@ -43,7 +43,7 @@ async def evaluate_variant_pins(
 ):
     display_name = f"agent-{variant_pins['multi_hop_rag_agent']}-compact_context-{variant_pins['compact_context']}"
 
-    run_info = await t0.dynamic_evaluation_run(
+    run_info = await t0.workflow_evaluation_run(
         variants=variant_pins,
         project_name="beerqa-agentic-rag",
         display_name=display_name,
@@ -66,7 +66,7 @@ async def evaluate_question(
     run_id: UUID,
 ):
     try:
-        episode_info = await t0.dynamic_evaluation_run_episode(
+        episode_info = await t0.workflow_evaluation_run_episode(
             run_id=run_id, task_name=question["id"], tags={"foo": "bar"}
         )
         episode_id = episode_info.episode_id
