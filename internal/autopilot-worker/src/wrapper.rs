@@ -123,10 +123,8 @@ where
         let tool_name = self.inner.name().to_string();
         let outcome = match result {
             Ok(output) => {
-                let result_json = serde_json::to_string(&output)?;
-                ToolOutcome::Success(AutopilotToolResult {
-                    result: result_json,
-                })
+                let result_value = serde_json::to_value(&output)?;
+                ToolOutcome::Success(AutopilotToolResult::typed(result_value))
             }
             Err(e) => ToolOutcome::Failure {
                 error: ToolFailure::Tool { error: e },
@@ -289,10 +287,8 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
         // Prepare the outcome for the autopilot API
         let outcome = match step_result {
             Ok(output) => {
-                let result_json = serde_json::to_string(&output)?;
-                ToolOutcome::Success(AutopilotToolResult {
-                    result: result_json,
-                })
+                let result_value = serde_json::to_value(&output)?;
+                ToolOutcome::Success(AutopilotToolResult::typed(result_value))
             }
             Err(error) => ToolOutcome::Failure { error },
         };
@@ -687,9 +683,9 @@ mod tests {
             session_id,
             tool_call_event_id,
             tool_name,
-            outcome: ToolOutcome::Success(AutopilotToolResult {
-                result: r#"{"result":"success"}"#.to_string(),
-            }),
+            outcome: ToolOutcome::Success(AutopilotToolResult::typed(
+                serde_json::json!({"result": "success"}),
+            )),
         };
 
         let result = publish_result(params, &mock_client).await;
@@ -756,9 +752,7 @@ mod tests {
             session_id: Uuid::now_v7(),
             tool_call_event_id: Uuid::now_v7(),
             tool_name: "some_tool".to_string(),
-            outcome: ToolOutcome::Success(AutopilotToolResult {
-                result: "{}".to_string(),
-            }),
+            outcome: ToolOutcome::Success(AutopilotToolResult::typed(serde_json::json!({}))),
         };
 
         let result = publish_result(params, &mock_client).await;
