@@ -40,7 +40,6 @@ async fn test_get_config_tool_with_hash(pool: PgPool) {
             poll_interval_secs: 10,
             max_wait_secs: 10,
         },
-        skip_publish: false,
     };
 
     let mut mock_client = MockTensorZeroClient::new();
@@ -79,7 +78,6 @@ async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
             poll_interval_secs: 10,
             max_wait_secs: 10,
         },
-        skip_publish: false,
     };
 
     let mut extra_templates = HashMap::new();

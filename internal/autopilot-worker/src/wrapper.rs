@@ -110,7 +110,6 @@ where
     ) -> DurableToolResult<Self::Output> {
         let session_id = side_info.session_id;
         let tool_call_event_id = side_info.tool_call_event_id;
-        let skip_publish = side_info.skip_publish;
         // Execute the underlying tool
         let result = self
             .inner
@@ -120,48 +119,34 @@ where
 
         // Prepare the outcome for the autopilot API
         let tool_name = self.inner.name().to_string();
-        match result {
+        let (outcome, output_value) = match result {
             Ok(output) => {
                 let value = serde_json::to_value(&output)?;
-
-                if !skip_publish {
-                    let result_json = serde_json::to_string(&output)?;
-                    let outcome = ToolOutcome::Success(AutopilotToolResult {
-                        result: result_json,
-                    });
-                    let publish_params = PublishResultParams {
-                        session_id,
-                        tool_call_event_id,
-                        tool_name,
-                        outcome,
-                    };
-                    ctx.step("publish_result", publish_params, publish_result_step)
-                        .await?;
-                }
-
-                Ok(value)
+                let result_json = serde_json::to_string(&output)?;
+                let outcome = ToolOutcome::Success(AutopilotToolResult {
+                    result: result_json,
+                });
+                (outcome, value)
             }
             Err(e) => {
-                if skip_publish {
-                    // Propagate error so durable marks the task as failed
-                    Err(ToolError::NonControl(e))
-                } else {
-                    let outcome = ToolOutcome::Failure {
-                        error: tool_error_to_json(ToolError::NonControl(e)),
-                    };
-                    let publish_params = PublishResultParams {
-                        session_id,
-                        tool_call_event_id,
-                        tool_name,
-                        outcome,
-                    };
-                    ctx.step("publish_result", publish_params, publish_result_step)
-                        .await?;
-                    // Error was published to autopilot API; return success to durable
-                    Ok(serde_json::Value::Null)
-                }
+                let outcome = ToolOutcome::Failure {
+                    error: tool_error_to_json(ToolError::NonControl(e)),
+                };
+                (outcome, serde_json::Value::Null)
             }
-        }
+        };
+
+        // Publish result to autopilot API (checkpointed)
+        let publish_params = PublishResultParams {
+            session_id,
+            tool_call_event_id,
+            tool_name,
+            outcome,
+        };
+        ctx.step("publish_result", publish_params, publish_result_step)
+            .await?;
+
+        Ok(output_value)
     }
 }
 
@@ -284,7 +269,6 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
         let tool_name = self.inner.name().to_string();
         let tool_call_event_id = side_info.tool_call_event_id;
         let session_id = side_info.session_id;
-        let skip_publish = side_info.skip_publish;
 
         // Execute the underlying simple tool within a checkpointed step.
         // The step returns Ok(Result<output, ToolFailure>) so tool errors are
@@ -302,54 +286,33 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
             )
             .await?;
 
-        match step_result {
+        // Prepare the outcome for the autopilot API
+        let (outcome, output_value) = match step_result {
             Ok(output) => {
                 let value = serde_json::to_value(&output)?;
-
-                if !skip_publish {
-                    let result_json = serde_json::to_string(&output)?;
-                    let outcome = ToolOutcome::Success(AutopilotToolResult {
-                        result: result_json,
-                    });
-                    let publish_params = PublishResultParams {
-                        session_id,
-                        tool_call_event_id,
-                        tool_name,
-                        outcome,
-                    };
-                    ctx.step("publish_result", publish_params, publish_result_step)
-                        .await?;
-                }
-
-                Ok(value)
+                let result_json = serde_json::to_string(&output)?;
+                let outcome = ToolOutcome::Success(AutopilotToolResult {
+                    result: result_json,
+                });
+                (outcome, value)
             }
             Err(error) => {
-                if skip_publish {
-                    // Propagate error so durable marks the task as failed
-                    let message = error
-                        .get("message")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("tool execution failed")
-                        .to_string();
-                    Err(ToolError::NonControl(NonControlToolError::User {
-                        message,
-                        error_data: error,
-                    }))
-                } else {
-                    let outcome = ToolOutcome::Failure { error };
-                    let publish_params = PublishResultParams {
-                        session_id,
-                        tool_call_event_id,
-                        tool_name,
-                        outcome,
-                    };
-                    ctx.step("publish_result", publish_params, publish_result_step)
-                        .await?;
-                    // Error was published to autopilot API; return success to durable
-                    Ok(serde_json::Value::Null)
-                }
+                let outcome = ToolOutcome::Failure { error };
+                (outcome, serde_json::Value::Null)
             }
-        }
+        };
+
+        // Publish result to autopilot API (checkpointed)
+        let publish_params = PublishResultParams {
+            session_id,
+            tool_call_event_id,
+            tool_name,
+            outcome,
+        };
+        ctx.step("publish_result", publish_params, publish_result_step)
+            .await?;
+
+        Ok(output_value)
     }
 }
 
