@@ -5,14 +5,12 @@ use std::borrow::Cow;
 use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, EventPayloadToolResult, NonControlToolError,
-    SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient, ToolAppState, ToolContext,
-    ToolError, ToolMetadata, ToolOutcome, ToolResult as DurableToolResult, ToolResultExt,
+    CreateEventGatewayRequest, EventPayload, EventPayloadToolResult, SimpleTool, SimpleToolContext,
+    TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolFailure, ToolMetadata, ToolOutcome,
+    ToolResult as DurableToolResult, ToolResultExt,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
-use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
-use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
@@ -131,7 +129,7 @@ where
                 })
             }
             Err(e) => ToolOutcome::Failure {
-                error: tool_error_to_json(ToolError::NonControl(e)),
+                error: ToolFailure::Tool { error: e },
             },
         };
 
@@ -273,9 +271,9 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
         let session_id = side_info.session_id;
 
         // Execute the underlying simple tool within a checkpointed step.
-        // The step returns Ok(Result<output, error_json>) so tool errors are
+        // The step returns Ok(Result<output, ToolFailure>) so tool errors are
         // checkpointed, not retried.
-        let step_result: Result<T::Output, serde_json::Value> = ctx
+        let step_result: Result<T::Output, ToolFailure> = ctx
             .step(
                 "execute_simple_tool",
                 SimpleToolStepParams {
@@ -316,14 +314,13 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
 
 /// Step function to execute a simple tool.
 ///
-/// Returns `Ok(Result<output, error_json>)` where the inner result is either
+/// Returns `Ok(Result<output, ToolFailure>)` where the inner result is either
 /// success or failure. This ensures tool errors are checkpointed rather than
-/// causing step retries. The error is converted to structured JSON for
-/// programmatic parsing by the autopilot API.
+/// causing step retries.
 async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo>>(
     params: SimpleToolStepParams<T::LlmParams, AutopilotSideInfo>,
     state: ToolAppState,
-) -> anyhow::Result<Result<T::Output, serde_json::Value>> {
+) -> anyhow::Result<Result<T::Output, ToolFailure>> {
     let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client());
     let idempotency_key = format!(
         "simple_tool:{}:{}",
@@ -331,7 +328,6 @@ async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo>>(
     );
 
     // Wrap the result in Ok so tool errors are checkpointed, not retried.
-    // Convert ToolError to structured JSON for programmatic error handling.
     Ok(T::execute(
         params.llm_params,
         params.side_info,
@@ -339,68 +335,13 @@ async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo>>(
         &idempotency_key,
     )
     .await
-    .map_err(tool_error_to_json))
-}
-
-/// Convert a `ToolError` to structured JSON for the autopilot API.
-///
-/// For `ToolError::Error`, serializes the `SerializableToolError` directly.
-/// For `ToolError::Control`, returns a control flow error (this should not
-/// normally happen as control flow errors are internal).
-fn tool_error_to_json(e: ToolError) -> serde_json::Value {
-    match e {
-        ToolError::Control(cf) => {
-            // Control flow errors should not be serialized - this is a bug if it happens
-            let failure = ToolFailure::Control {
-                message: format!(
-                    "Unexpected control flow signal: {cf:?}. {IMPOSSIBLE_ERROR_MESSAGE}"
-                ),
-            };
-            serde_json::to_value(failure).unwrap_or_else(|e| {
-                serde_json::json!({
-                    "kind": "serialization",
-                    "message": format!("Failed to serialize control flow error: {e}"),
-                })
-            })
-        }
-        ToolError::Database(db_error) => {
-            let failure = ToolFailure::Database {
-                message: db_error.to_string(),
-            };
-            serde_json::to_value(failure).unwrap_or_else(|e| {
-                serde_json::json!({
-                    "kind": "serialization",
-                    "message": format!("Failed to serialize database error: {e}"),
-                })
-            })
-        }
-        ToolError::NonControl(non_control_error) => {
-            let failure = ToolFailure::Tool {
-                error: non_control_error,
-            };
-            serde_json::to_value(failure).unwrap_or_else(|e| {
-                serde_json::json!({
-                    "kind": "serialization",
-                    "message": format!("Failed to serialize tool error: {e}"),
-                })
-            })
-        }
-    }
-}
-
-/// This is the type that we write in ToolOutcome::Failure for tool errors.
-#[derive(Debug, Serialize, TensorZeroDeserialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "kind")]
-pub enum ToolFailure {
-    Control { message: String },
-    Tool { error: NonControlToolError },
-    Database { message: String },
+    .map_err(ToolFailure::from))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use durable_tools::NonControlToolError;
     use durable_tools::{ActionInput, ActionResponse, CreateEventResponse, TensorZeroClientError};
     use mockall::mock;
     use schemars::JsonSchema;
@@ -771,8 +712,12 @@ mod tests {
                     &request.payload,
                     EventPayload::ToolResult(EventPayloadToolResult {
                         tool_call_event_id: tceid,
-                        outcome: ToolOutcome::Failure { error },
-                    }) if *tceid == expected_tool_call_event_id && error.get("message") == Some(&serde_json::json!("Tool execution failed"))
+                        outcome: ToolOutcome::Failure {
+                            error: ToolFailure::Tool {
+                                error: NonControlToolError::Internal { message },
+                            },
+                        },
+                    }) if *tceid == expected_tool_call_event_id && message == "Tool execution failed"
                 )
             })
             .returning(|sid, _| {
@@ -787,7 +732,11 @@ mod tests {
             tool_call_event_id,
             tool_name: "failing_tool".to_string(),
             outcome: ToolOutcome::Failure {
-                error: serde_json::json!({ "kind": "TestError", "message": "Tool execution failed" }),
+                error: ToolFailure::Tool {
+                    error: NonControlToolError::Internal {
+                        message: "Tool execution failed".to_string(),
+                    },
+                },
             },
         };
 

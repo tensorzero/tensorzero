@@ -485,9 +485,7 @@ pub enum ToolOutcome {
     },
     Failure {
         /// Structured error data from the tool.
-        /// For autopilot tools, this is typically a serialized `AutopilotToolError`
-        /// with a `kind` field discriminator (e.g., "ClientError", "Validation").
-        error: serde_json::Value,
+        error: tensorzero_types::ToolFailure,
     },
     Missing,
     #[serde(other)]

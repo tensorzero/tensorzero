@@ -2217,6 +2217,7 @@ dependencies = [
  "tensorzero-derive",
  "tensorzero-optimizers",
  "tensorzero-ts-types",
+ "tensorzero-types",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
