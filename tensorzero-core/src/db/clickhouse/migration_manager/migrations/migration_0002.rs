@@ -47,7 +47,8 @@ impl Migration for Migration0002<'_> {
                 id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
-                namespace String,
+                namespace String, -- deprecated: unused in application layer
+
                 input String,
                 output String,
                 embedding Array(Float32),

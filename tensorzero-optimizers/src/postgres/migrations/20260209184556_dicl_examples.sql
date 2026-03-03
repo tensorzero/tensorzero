@@ -11,7 +11,7 @@ CREATE TABLE tensorzero.dicl_examples (
     id UUID PRIMARY KEY,
     function_name TEXT NOT NULL,
     variant_name TEXT NOT NULL,
-    namespace TEXT NOT NULL DEFAULT '',
+    namespace TEXT NOT NULL DEFAULT '', -- deprecated: unused in application layer
     input TEXT NOT NULL,
     output TEXT NOT NULL,
     embedding vector NOT NULL,
@@ -19,6 +19,7 @@ CREATE TABLE tensorzero.dicl_examples (
 );
 
 -- Index for filtering by function/variant/namespace before similarity search
+-- Note: namespace column is deprecated and unused in application layer
 CREATE INDEX idx_dicl_examples_function_variant_namespace
     ON tensorzero.dicl_examples(function_name, variant_name, namespace);
 
