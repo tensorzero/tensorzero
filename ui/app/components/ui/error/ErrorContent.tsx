@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ChevronDown,
   Database,
   FileQuestion,
   KeyRound,
@@ -15,8 +16,12 @@ import {
   getPageErrorInfo,
 } from "~/utils/tensorzero/errors";
 import { Button } from "~/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "~/components/ui/collapsible";
 import { Input } from "~/components/ui/input";
-import { CardContent } from "~/components/ui/card";
 import {
   ErrorContentCard,
   ErrorContentHeader,
@@ -101,51 +106,62 @@ function GatewayAuthContent() {
       <ErrorContentHeader
         icon={KeyRound}
         title="Authentication Failed"
-        description="Unable to authenticate with the TensorZero Gateway."
+        description="The TensorZero Gateway requires authentication. Enter your API key below, or set TENSORZERO_API_KEY on the UI server."
       />
-      <CardContent className="border-t p-6">
-        <div className="space-y-3">
+      <div className="px-6 pb-2">
+        <Collapsible>
+          <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-full items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-180">
+            Troubleshooting
+            <ChevronDown className="h-4 w-4 transition-transform" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ol className="text-muted-foreground mt-3 space-y-2 text-sm">
+              <li className="flex items-start gap-2">
+                <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
+                  1
+                </span>
+                <span>Ensure the API key has not expired or been revoked</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
+                  2
+                </span>
+                <span>Check Gateway logs for authentication details</span>
+              </li>
+            </ol>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+      <div className="space-y-4 px-6 pb-6">
+        <div className="space-y-2">
           <label
             htmlFor="gateway-api-key"
             className="text-foreground text-sm font-medium"
           >
             Gateway API Key
           </label>
-          <div className="flex gap-2">
-            <Input
-              id="gateway-api-key"
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter API key"
-              disabled={isBusy}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSubmit();
-              }}
-            />
-            <Button
-              type="button"
-              disabled={isBusy || !apiKey.trim()}
-              onClick={handleSubmit}
-            >
-              {isBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Connect"
-              )}
-            </Button>
-          </div>
-          {error && <p className="text-destructive text-sm">{error}</p>}
+          <Input
+            id="gateway-api-key"
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="API key"
+            disabled={isBusy}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSubmit();
+            }}
+          />
         </div>
-      </CardContent>
-      <TroubleshootingSection>
-        <>
-          Or set <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode> on the UI
-          server
-        </>
-        <>Ensure the API key has not expired or been revoked</>
-        <>Check Gateway logs for authentication details</>
-      </TroubleshootingSection>
+        <Button
+          type="button"
+          className="w-full"
+          disabled={isBusy || !apiKey.trim()}
+          onClick={handleSubmit}
+        >
+          {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
+        </Button>
+        {error && <p className="text-destructive text-sm">{error}</p>}
+      </div>
     </ErrorContentCard>
   );
 }
