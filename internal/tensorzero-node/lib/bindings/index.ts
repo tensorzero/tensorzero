@@ -468,8 +468,6 @@ export * from "./VariantConfig";
 export * from "./VariantInfo";
 export * from "./VariantPerformanceRow";
 export * from "./VariantPerformancesResponse";
-export * from "./VariantPerformancesVisualization";
-export * from "./VariantPerformancesVisualizationRow";
 export * from "./VariantSummary";
 export * from "./VariantThroughput";
 export * from "./VisualizationType";
