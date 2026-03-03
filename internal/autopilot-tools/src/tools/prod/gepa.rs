@@ -13,6 +13,13 @@ use tensorzero_optimizers::gepa::{
     GepaSideInfo, GepaToolOutput, GepaToolParams,
 };
 
+/// Heartbeat duration for long-running GEPA steps (setup, eval).
+///
+/// These steps run evaluations across many datapoints and can exceed the default
+/// worker claim timeout (120s). We extend the lease before each such step so the
+/// durable worker doesn't abort mid-execution.
+const GEPA_STEP_HEARTBEAT: Duration = Duration::from_secs(600);
+
 /// Tool for running GEPA optimization with per-iteration sub-step checkpointing.
 ///
 /// Each phase (setup, 5 sub-steps per iteration, cleanup) is a checkpointed step
@@ -102,6 +109,7 @@ impl TaskTool for GepaTool {
             val_examples: side_info.val_examples,
         };
 
+        ctx.heartbeat(Some(GEPA_STEP_HEARTBEAT)).await?;
         let setup_result: GepaSetupResult = ctx
             .step("setup", setup_params, |params, state| async move {
                 state
@@ -167,6 +175,7 @@ impl TaskTool for GepaTool {
                 per_variant_concurrency: setup_result.per_variant_concurrency,
             };
 
+            ctx.heartbeat(Some(GEPA_STEP_HEARTBEAT)).await?;
             let eval_parent_result = ctx
                 .step(
                     &format!("iter_{iteration}_eval_parent"),
@@ -277,6 +286,7 @@ impl TaskTool for GepaTool {
                 per_variant_concurrency: setup_result.per_variant_concurrency,
             };
 
+            ctx.heartbeat(Some(GEPA_STEP_HEARTBEAT)).await?;
             let update_result: GepaIterUpdateResult = ctx
                 .step(
                     &format!("iter_{iteration}_update"),
