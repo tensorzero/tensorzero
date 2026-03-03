@@ -70,11 +70,9 @@ impl BestOfNSamplingConfig {
     }
 
     /// Converts this initialized config back to its uninitialized form.
-    #[expect(deprecated)]
     pub fn as_uninitialized(&self) -> UninitializedBestOfNSamplingConfig {
         UninitializedBestOfNSamplingConfig {
             weight: self.weight,
-            timeout_s: None,
             candidates: self.candidates.clone(),
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: self.evaluator.inner.as_uninitialized(),
@@ -90,9 +88,6 @@ impl BestOfNSamplingConfig {
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
     pub weight: Option<f64>,
-    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout_s: Option<f64>,
     pub candidates: Vec<String>,
     pub evaluator: UninitializedBestOfNEvaluatorConfig,
 }
@@ -135,12 +130,6 @@ impl UninitializedBestOfNSamplingConfig {
                 )?,
             },
         })
-    }
-
-    /// Returns the deprecated `timeout_s` value if set.
-    #[expect(deprecated)]
-    pub fn timeout_s(&self) -> Option<f64> {
-        self.timeout_s
     }
 }
 
@@ -1798,11 +1787,9 @@ mod tests {
     }
 
     #[test]
-    #[expect(deprecated)]
     fn test_as_uninitialized_preserves_basic_fields() {
         let uninitialized = UninitializedBestOfNSamplingConfig {
             weight: Some(1.0),
-            timeout_s: Some(60.0), // deprecated, will be None in exported
             candidates: vec!["variant1".to_string(), "variant2".to_string()],
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1820,11 +1807,6 @@ mod tests {
         let exported = config.as_uninitialized();
 
         assert_eq!(exported.weight, Some(1.0));
-        // timeout_s is deprecated and not stored in initialized config, so it's None in exported
-        assert_eq!(
-            exported.timeout_s, None,
-            "timeout_s should be None in exported config"
-        );
         assert_eq!(
             exported.candidates,
             vec!["variant1".to_string(), "variant2".to_string()]
@@ -1834,11 +1816,9 @@ mod tests {
     }
 
     #[test]
-    #[expect(deprecated)]
     fn test_as_uninitialized_preserves_nested_evaluator() {
         let uninitialized = UninitializedBestOfNSamplingConfig {
             weight: None,
-            timeout_s: None,
             candidates: vec!["v1".to_string()],
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1867,11 +1847,9 @@ mod tests {
     }
 
     #[test]
-    #[expect(deprecated)]
     fn test_as_uninitialized_with_empty_candidates() {
         let uninitialized = UninitializedBestOfNSamplingConfig {
             weight: None,
-            timeout_s: None,
             candidates: vec![],
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {
@@ -1891,11 +1869,9 @@ mod tests {
     }
 
     #[test]
-    #[expect(deprecated)]
     fn test_as_uninitialized_serialization_round_trip() {
         let original = UninitializedBestOfNSamplingConfig {
             weight: Some(0.7),
-            timeout_s: None, // deprecated field
             candidates: vec!["a".to_string(), "b".to_string()],
             evaluator: UninitializedBestOfNEvaluatorConfig {
                 inner: UninitializedChatCompletionConfig {

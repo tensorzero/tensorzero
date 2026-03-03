@@ -3,7 +3,6 @@ import type { UninitializedLLMJudgeChatCompletionVariantConfig } from "./Uniniti
 
 export type UninitializedLLMJudgeMixtureOfNVariantConfig = {
   active?: boolean;
-  timeout_s?: number;
   candidates: Array<string>;
   fuser: UninitializedLLMJudgeChatCompletionVariantConfig;
 };

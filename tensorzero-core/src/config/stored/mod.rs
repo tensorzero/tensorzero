@@ -10,11 +10,16 @@
 
 mod cache_config;
 mod embedding_model_config;
+mod evaluation_config;
+mod function_config;
 mod gateway_config;
 mod observability_config;
+mod variant_config;
 
 pub use cache_config::StoredCacheConfig;
 pub use embedding_model_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
+pub use evaluation_config::StoredEvaluationConfig;
+pub use function_config::StoredFunctionConfig;
 pub use gateway_config::StoredGatewayConfig;
 pub use observability_config::StoredObservabilityConfig;
 
@@ -26,9 +31,8 @@ use crate::config::gateway::UninitializedGatewayConfig;
 use crate::config::provider_types::ProviderTypesConfig;
 use crate::config::{
     AutopilotConfig, ClickHouseConfig, MetricConfig, PostgresConfig, UninitializedConfig,
-    UninitializedFunctionConfig, UninitializedToolConfig,
+    UninitializedToolConfig,
 };
-use crate::evaluations::UninitializedEvaluationConfig;
 use crate::inference::types::storage::StorageKind;
 use crate::model::UninitializedModelConfig;
 use crate::optimization::UninitializedOptimizerInfo;
@@ -54,13 +58,13 @@ pub struct StoredConfig {
     #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>,
     #[serde(default)]
-    pub functions: HashMap<String, UninitializedFunctionConfig>,
+    pub functions: HashMap<String, StoredFunctionConfig>,
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>,
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>,
     #[serde(default)]
-    pub evaluations: HashMap<String, UninitializedEvaluationConfig>,
+    pub evaluations: HashMap<String, StoredEvaluationConfig>,
     #[serde(default)]
     pub provider_types: ProviderTypesConfig,
     #[serde(default)]
@@ -101,10 +105,13 @@ impl From<UninitializedConfig> for StoredConfig {
             postgres,
             object_storage,
             models,
-            functions,
+            functions: functions.into_iter().map(|(k, v)| (k, v.into())).collect(),
             metrics,
             tools,
-            evaluations,
+            evaluations: evaluations
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
             provider_types,
             optimizers,
             rate_limiting,
@@ -154,10 +161,16 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
             postgres,
             object_storage,
             models,
-            functions,
+            functions: functions
+                .into_iter()
+                .map(|(k, v)| v.try_into().map(|u| (k, u)))
+                .collect::<Result<HashMap<_, _>, _>>()?,
             metrics,
             tools,
-            evaluations,
+            evaluations: evaluations
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
             provider_types,
             optimizers,
             rate_limiting,
@@ -173,7 +186,11 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{
+        UninitializedFunctionConfig, UninitializedVariantConfig, UninitializedVariantInfo,
+    };
     use crate::embeddings::UninitializedEmbeddingModelConfig;
+    use crate::evaluations::UninitializedEvaluationConfig;
 
     /// Old snapshot with deprecated `gateway.observability.disable_automatic_migrations`
     /// should silently migrate to `clickhouse.disable_automatic_migrations`.
@@ -411,5 +428,191 @@ mod tests {
         assert_eq!(uninit.gateway.observability.enabled, Some(true));
         assert!(uninit.gateway.observability.async_writes);
         assert!(uninit.gateway.debug);
+    }
+
+    /// Stored config snapshot with deprecated `timeout_s` on a best_of_n variant
+    /// should parse and migrate the value to candidate variant `timeouts`.
+    #[test]
+    fn test_stored_best_of_n_with_timeout_s_migrates() {
+        let toml_str = r#"
+            type = "chat"
+
+            [variants.candidate1]
+            type = "chat_completion"
+            model = "gpt-4"
+
+            [variants.best_of_n_v]
+            type = "experimental_best_of_n_sampling"
+            timeout_s = 30.0
+            candidates = ["candidate1"]
+
+            [variants.best_of_n_v.evaluator]
+            model = "gpt-4"
+            json_mode = "on"
+        "#;
+
+        let stored: function_config::StoredFunctionConfig =
+            toml::from_str(toml_str).expect("should parse stored config with timeout_s");
+
+        let uninit: UninitializedFunctionConfig = stored
+            .try_into()
+            .expect("should convert stored config to uninitialized");
+
+        match uninit {
+            UninitializedFunctionConfig::Chat(chat) => {
+                // The candidate variant should have timeouts propagated from timeout_s
+                let candidate = chat
+                    .variants
+                    .get("candidate1")
+                    .expect("candidate1 should exist");
+                let timeouts = candidate
+                    .timeouts
+                    .as_ref()
+                    .expect("candidate should have timeouts after migration");
+                assert_eq!(
+                    timeouts.non_streaming.total_ms,
+                    Some(30000),
+                    "non_streaming total_ms should be 30000 (30.0 * 1000)"
+                );
+                assert_eq!(
+                    timeouts.streaming.ttft_ms,
+                    Some(30000),
+                    "streaming ttft_ms should be 30000 (30.0 * 1000)"
+                );
+
+                // The best_of_n variant itself should NOT have timeout_s anymore
+                let best_of_n = chat
+                    .variants
+                    .get("best_of_n_v")
+                    .expect("best_of_n_v should exist");
+                match &best_of_n.inner {
+                    UninitializedVariantConfig::BestOfNSampling(config) => {
+                        assert_eq!(
+                            config.candidates,
+                            vec!["candidate1"],
+                            "candidates should be preserved"
+                        );
+                    }
+                    other => panic!("expected BestOfNSampling, got {other:?}"),
+                }
+            }
+            other @ UninitializedFunctionConfig::Json(_) => {
+                panic!("expected Chat function, got {other:?}")
+            }
+        }
+    }
+
+    /// Stored config snapshot with deprecated `timeout_s` on a mixture_of_n variant
+    /// should parse and migrate the value to candidate variant `timeouts`.
+    #[test]
+    fn test_stored_mixture_of_n_with_timeout_s_migrates() {
+        let toml_str = r#"
+            type = "chat"
+
+            [variants.candidate1]
+            type = "chat_completion"
+            model = "gpt-4"
+
+            [variants.mixture_v]
+            type = "experimental_mixture_of_n"
+            timeout_s = 15.5
+            candidates = ["candidate1"]
+
+            [variants.mixture_v.fuser]
+            model = "gpt-4"
+            json_mode = "on"
+        "#;
+
+        let stored: function_config::StoredFunctionConfig =
+            toml::from_str(toml_str).expect("should parse stored config with timeout_s");
+
+        let uninit: UninitializedFunctionConfig = stored
+            .try_into()
+            .expect("should convert stored config to uninitialized");
+
+        match uninit {
+            UninitializedFunctionConfig::Chat(chat) => {
+                let candidate = chat
+                    .variants
+                    .get("candidate1")
+                    .expect("candidate1 should exist");
+                let timeouts = candidate
+                    .timeouts
+                    .as_ref()
+                    .expect("candidate should have timeouts after migration");
+                assert_eq!(
+                    timeouts.non_streaming.total_ms,
+                    Some(15500),
+                    "non_streaming total_ms should be 15500 (15.5 * 1000)"
+                );
+            }
+            other @ UninitializedFunctionConfig::Json(_) => {
+                panic!("expected Chat function, got {other:?}")
+            }
+        }
+    }
+
+    /// Stored evaluation config with deprecated `timeout_s` on LLM judge
+    /// best_of_n variant should parse and silently drop the field.
+    #[test]
+    fn test_stored_evaluation_with_timeout_s_parses() {
+        let toml_str = r#"
+            type = "inference"
+            function_name = "my_function"
+
+            [evaluators.my_judge]
+            type = "llm_judge"
+            output_type = "float"
+            optimize = "max"
+
+            [evaluators.my_judge.variants.judge_v]
+            type = "experimental_best_of_n_sampling"
+            timeout_s = 30.0
+            candidates = ["c1"]
+
+            [evaluators.my_judge.variants.judge_v.evaluator]
+            model = "gpt-4"
+            json_mode = "on"
+
+            [evaluators.my_judge.variants.judge_v.evaluator.system_instructions]
+            __tensorzero_remapped_path = "fake/path"
+            __data = "You are a judge."
+        "#;
+
+        let stored: evaluation_config::StoredEvaluationConfig =
+            toml::from_str(toml_str).expect("should parse stored evaluation with timeout_s");
+
+        let uninit: UninitializedEvaluationConfig = stored.into();
+
+        // Verify it converted successfully (timeout_s was silently dropped)
+        match uninit {
+            UninitializedEvaluationConfig::Inference(config) => {
+                assert_eq!(
+                    config.function_name, "my_function",
+                    "function_name should be preserved"
+                );
+            }
+        }
+    }
+
+    /// Fresh configs should reject `timeout_s` on best_of_n variants via
+    /// `deny_unknown_fields`.
+    #[test]
+    fn test_fresh_config_rejects_timeout_s() {
+        let toml_str = r#"
+            type = "experimental_best_of_n_sampling"
+            timeout_s = 30.0
+            candidates = ["candidate1"]
+
+            [evaluator]
+            model = "gpt-4"
+            json_mode = "on"
+        "#;
+
+        let result: Result<UninitializedVariantInfo, _> = toml::from_str(toml_str);
+        assert!(
+            result.is_err(),
+            "fresh config should reject unknown field `timeout_s`"
+        );
     }
 }
