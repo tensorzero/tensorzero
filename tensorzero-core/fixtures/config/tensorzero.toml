@@ -47,15 +47,17 @@ model_name = "text-embedding-3-small"
 type = "chat"
 system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
 
+[functions.generate_draft.experimentation]
+type = "static"
+candidate_variants = { "openai_promptA" = 0.9, "openai_promptB" = 0.1 }
+
 [functions.generate_draft.variants.openai_promptA]
 type = "chat_completion"
-weight = 0.9
 model = "gpt-5-mini"
 system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
 
 [functions.generate_draft.variants.openai_promptB]
 type = "chat_completion"
-weight = 0.1
 model = "gpt-5-mini"
 system_template = "fixtures/config/functions/generate_draft/promptB/system_template.minijinja"
 
@@ -64,16 +66,18 @@ type = "json"
 system_schema = "fixtures/config/functions/json_with_schemas/system_schema.json"
 output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 
+[functions.json_with_schemas.experimentation]
+type = "static"
+candidate_variants = { "openai_promptA" = 0.9, "openai_promptB" = 0.1 }
+
 [functions.json_with_schemas.variants.openai_promptA]
 type = "chat_completion"
-weight = 0.9
 model = "gpt-5-mini"
 system_template = "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
 json_mode = "tool"
 
 [functions.json_with_schemas.variants.openai_promptB]
 type = "chat_completion"
-weight = 0.1
 model = "gpt-5-mini"
 system_template = "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
 json_mode = "strict"
@@ -83,9 +87,12 @@ type = "chat"
 tools = ["get_temperature"]
 tool_choice = { specific = "get_temperature" }
 
+[functions.weather_helper.experimentation]
+type = "static"
+candidate_variants = { "openai_promptA" = 1.0 }
+
 [functions.weather_helper.variants.openai_promptA]
 type = "chat_completion"
-weight = 1.0
 model = "gpt-5-mini"
 
 # This function uses a tool where the config key differs from the display name
@@ -96,17 +103,23 @@ type = "chat"
 tools = ["get_temperature_with_name"]
 tool_choice = "auto"
 
+[functions.weather_helper_aliased_tool.experimentation]
+type = "static"
+candidate_variants = { "openai" = 1.0 }
+
 [functions.weather_helper_aliased_tool.variants.openai]
 type = "chat_completion"
-weight = 1.0
 model = "gpt-5-mini"
 
 [functions.templates_without_variables_chat]
 type = "chat"
 
+[functions.templates_without_variables_chat.experimentation]
+type = "static"
+candidate_variants = { "variant_without_templates" = 1.0 }
+
 [functions.templates_without_variables_chat.variants.variant_without_templates]
 type = "chat_completion"
-weight = 1.0
 model = "gpt-5-mini"
 system_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
@@ -118,9 +131,12 @@ system_schema = "fixtures/config/functions/templates_with_variables/system_schem
 user_schema = "fixtures/config/functions/templates_with_variables/user_schema.json"
 assistant_schema = "fixtures/config/functions/templates_with_variables/assistant_schema.json"
 
+[functions.templates_with_variables_chat.experimentation]
+type = "static"
+candidate_variants = { "variant_with_variables" = 1.0, "best_of_n" = 1.0 }
+
 [functions.templates_with_variables_chat.variants.variant_with_variables]
 type = "chat_completion"
-weight = 1.0
 model = "gpt-5-mini"
 system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
@@ -128,7 +144,6 @@ assistant_template = "fixtures/config/functions/templates_with_variables/variant
 
 [functions.templates_with_variables_chat.variants.best_of_n]
 type = "experimental_best_of_n_sampling"
-weight = 1.0
 candidates = ["variant_with_variables", "variant_with_variables"]
 
 [functions.templates_with_variables_chat.variants.best_of_n.evaluator]
@@ -141,9 +156,12 @@ assistant_template = "fixtures/config/functions/templates_with_variables/variant
 type = "json"
 output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 
+[functions.templates_without_variables_json.experimentation]
+type = "static"
+candidate_variants = { "variant_without_templates" = 1.0 }
+
 [functions.templates_without_variables_json.variants.variant_without_templates]
 type = "chat_completion"
-weight = 1.0
 model = "gpt-5-mini"
 system_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
 user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
