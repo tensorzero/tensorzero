@@ -65,7 +65,6 @@ fn create_test_side_info() -> AutopilotSideInfo {
         tool_call_event_id: Uuid::now_v7(),
         session_id: Uuid::now_v7(),
         config_snapshot_hash: "test-config-hash".to_string(),
-        skip_publish: false,
     }
 }
 
