@@ -17,6 +17,7 @@ use crate::db::evaluation_queries::EvaluationStatisticsRow;
 use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
 use crate::db::evaluation_queries::InferenceEvaluationRunInsert;
 use crate::db::evaluation_queries::RawEvaluationResultRow;
+use crate::endpoints::inference::InferenceResponse;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
 use crate::statistics_util::{wald_confint, wilson_confint};
@@ -637,6 +638,21 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 FunctionConfigType::Json => row.into_json().map(EvaluationResultRow::Json),
             })
             .collect()
+    }
+
+    fn serialize_output_for_feedback(
+        &self,
+        inference_response: &InferenceResponse,
+    ) -> Result<String, Error> {
+        match inference_response {
+            InferenceResponse::Chat(c) => serde_json::to_string(&c.content),
+            InferenceResponse::Json(j) => serde_json::to_string(&j.output),
+        }
+        .map_err(|e| {
+            Error::new(ErrorDetails::Inference {
+                message: format!("Failed to serialize inference response: {e:?}"),
+            })
+        })
     }
 
     async fn get_inference_evaluation_human_feedback(

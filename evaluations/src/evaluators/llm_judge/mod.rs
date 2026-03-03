@@ -72,7 +72,9 @@ pub async fn run_llm_judge_evaluator(
         external_tags,
     } = params;
     debug!("Checking for existing human feedback");
-    let serialized_output = inference_response.get_serialized_output()?;
+    let serialized_output = clients
+        .db
+        .serialize_output_for_feedback(inference_response)?;
     if let Some(human_feedback) = clients
         .db
         .get_inference_evaluation_human_feedback(
