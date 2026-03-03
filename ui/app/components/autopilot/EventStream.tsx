@@ -44,7 +44,7 @@ import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
 import FeedbackByVariantChart, {
-  parseFeedbackByVariant,
+  parseFeedbackChartData,
 } from "./FeedbackByVariantChart";
 
 /**
@@ -626,25 +626,10 @@ function EventItem({
     if (toolCallInfo?.name !== "get_feedback_by_variant") return null;
     if (event.payload.type !== "tool_result") return null;
     if (event.payload.outcome.type !== "success") return null;
-    try {
-      const raw: unknown = JSON.parse(event.payload.outcome.result);
-      const data = parseFeedbackByVariant(raw);
-      if (!data) return null;
-      const params =
-        typeof toolCallInfo.arguments === "object" &&
-        toolCallInfo.arguments !== null
-          ? (toolCallInfo.arguments as Record<string, unknown>)
-          : null;
-      const metricName =
-        typeof params?.metric_name === "string" ? params.metric_name : "metric";
-      const functionName =
-        typeof params?.function_name === "string"
-          ? params.function_name
-          : "function";
-      return { data, metricName, functionName };
-    } catch {
-      return null;
-    }
+    return parseFeedbackChartData(
+      event.payload.outcome.result,
+      toolCallInfo.arguments,
+    );
   }, [event, toolCallInfo]);
 
   const summary = summarizeEvent(event);

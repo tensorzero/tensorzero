@@ -44,6 +44,40 @@ export function parseFeedbackByVariant(
   return data;
 }
 
+export interface FeedbackChartData {
+  data: ParsedFeedbackByVariant[];
+  metricName: string;
+  functionName: string;
+}
+
+/**
+ * Extracts chart data from a successful get_feedback_by_variant tool result.
+ * Returns null if the tool result is not a valid feedback chart payload.
+ */
+export function parseFeedbackChartData(
+  toolResult: string,
+  toolArguments: unknown,
+): FeedbackChartData | null {
+  try {
+    const raw: unknown = JSON.parse(toolResult);
+    const data = parseFeedbackByVariant(raw);
+    if (!data) return null;
+    const params =
+      typeof toolArguments === "object" && toolArguments !== null
+        ? (toolArguments as Record<string, unknown>)
+        : null;
+    const metricName =
+      typeof params?.metric_name === "string" ? params.metric_name : "metric";
+    const functionName =
+      typeof params?.function_name === "string"
+        ? params.function_name
+        : "function";
+    return { data, metricName, functionName };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Converts FeedbackByVariant[] (aggregate stats per variant) into
  * VariantPerformanceRow[] for rendering with the shared chart component.
