@@ -6,7 +6,14 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { Component, type RefObject, useEffect, useMemo, useState } from "react";
+import {
+  Component,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AnimatedEllipsis,
   EllipsisMode,
@@ -650,10 +657,12 @@ function EventItem({
   const [isExpanded, setIsExpanded] = useState(
     event.payload.type === "visualization" || feedbackChartData != null,
   );
-  // Auto-expand when feedbackChartData becomes available after mount
+  // Auto-expand once when feedbackChartData becomes available after mount
   // (tool_call may load after tool_result due to newest-first pagination)
+  const hasAutoExpanded = useRef(false);
   useEffect(() => {
-    if (feedbackChartData != null) {
+    if (feedbackChartData != null && !hasAutoExpanded.current) {
+      hasAutoExpanded.current = true;
       setIsExpanded(true);
     }
   }, [feedbackChartData]);
