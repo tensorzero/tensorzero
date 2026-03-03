@@ -15,6 +15,6 @@ dev = [
     "pyright>=1.1.0",
 ]
 
-# TODO: Remove [tool.uv.sources] and pin tensorzero to a released version once andrew/gepa-python-workflow-method lands
+# TODO: Pin tensorzero to a released version once one is available with experimental_launch_optimization_workflow
 [tool.uv.sources]
-tensorzero = { path = "../../../../../clients/python", editable = true }
+tensorzero = { git = "https://github.com/tensorzero/tensorzero", rev = "beca3fd03", subdirectory = "clients/python" }
