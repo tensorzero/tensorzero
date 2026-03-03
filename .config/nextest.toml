@@ -30,11 +30,12 @@ slow-timeout = { period = "20s", terminate-after = 5 }
 # - clickhouse tests
 # - optimization mock tests run separately in mock-optimization-tests with the mock gateway config
 # - binding generation
+# - evaluation tests run separately with a database matrix in the evaluation-tests CI job
 [profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 slow-timeout = { period = "30s", terminate-after = 2 }
 default-filter = '''
-not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !test(postgres) & !test(valkey)) | test(export_bindings_) | test(export_schema_) | binary(optimization-mock) | package(tensorzero-derive))
+not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !test(postgres) & !test(valkey)) | test(export_bindings_) | test(export_schema_) | binary(optimization-mock) | package(tensorzero-derive) | package(evaluations))
 '''
 junit.path = "junit.xml"
 
@@ -63,6 +64,12 @@ junit.path = "junit.xml"
 default-filter = 'binary(e2e) and test(endpoints::)'
 junit.path = "junit.xml"
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
+
+# Run only evaluation tests. These run against both ClickHouse and Postgres in CI.
+[profile.evaluations]
+default-filter = 'package(evaluations)'
+retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
+slow-timeout = { period = "30s", terminate-after = 2 }
 
 [profile.optimization]
 default-filter = 'binary(optimization-live)'
