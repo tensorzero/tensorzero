@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+import {
+  installClipboardMock,
+  readMockClipboard,
+} from "./helpers/clipboard-helpers";
 import { createDatapointFromInference } from "./helpers/datapoint-helpers";
 
 test("should show the inference detail page", async ({ page }) => {
@@ -690,6 +694,63 @@ test("should not display cost chip when cost data is missing", async ({
 
   // Verify no cost chip in the sheet either
   await expect(sheet.getByText(/^\$\d/)).not.toBeVisible();
+});
+
+test("should copy messages to clipboard as JSON", async ({ page }) => {
+  await installClipboardMock(page);
+  await page.goto(
+    "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
+  );
+  await page.waitForLoadState("networkidle");
+
+  // Wait for the button to render (behind Suspense/Await)
+  const copyButton = page.getByRole("button", { name: "Copy Messages" });
+  await expect(copyButton).toBeVisible({ timeout: 10000 });
+  await copyButton.click();
+
+  // Select "JSON" from the dropdown
+  await page.getByRole("menuitem", { name: "JSON" }).click();
+
+  // Verify the success toast appears
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("Copied to clipboard"),
+  ).toBeVisible();
+
+  // Verify clipboard contains valid JSON with input and output
+  const clipboardText = await readMockClipboard(page);
+  const data = JSON.parse(clipboardText);
+  expect(data).toHaveProperty("input");
+  expect(data).toHaveProperty("output");
+});
+
+test("should copy messages to clipboard as Markdown", async ({ page }) => {
+  await installClipboardMock(page);
+  await page.goto(
+    "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
+  );
+  await page.waitForLoadState("networkidle");
+
+  // Wait for the button to render (behind Suspense/Await)
+  const copyButton = page.getByRole("button", { name: "Copy Messages" });
+  await expect(copyButton).toBeVisible({ timeout: 10000 });
+  await copyButton.click();
+
+  // Select "Markdown" from the dropdown
+  await page.getByRole("menuitem", { name: "Markdown" }).click();
+
+  // Verify the success toast appears
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("Copied to clipboard"),
+  ).toBeVisible();
+
+  // Verify clipboard contains markdown with role headers
+  const clipboardText = await readMockClipboard(page);
+  expect(clipboardText).toContain("## user");
+  expect(clipboardText).toContain("## assistant");
 });
 
 // TODO(#5691): Run all UI e2e tests against Postgres-backed gateway too.
