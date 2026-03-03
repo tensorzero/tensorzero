@@ -74,7 +74,6 @@ pub fn prepare_relay_extra_body(extra_body: &FullExtraBodyConfig) -> UnfilteredI
         })
         .unwrap_or_default();
 
-    #[expect(deprecated)]
     new_extra_body.extend(
         inference_extra_body
             .data
@@ -106,8 +105,6 @@ pub fn prepare_relay_extra_body(extra_body: &FullExtraBodyConfig) -> UnfilteredI
                 // since the models are actually invoked on the downstream gateway
                 ExtraBody::ModelProvider { .. }
                 | ExtraBody::ModelProviderDelete { .. }
-                | ExtraBody::Provider { .. }
-                | ExtraBody::ProviderDelete { .. }
                 | ExtraBody::Always { .. }
                 | ExtraBody::AlwaysDelete { .. } => replacement.clone(),
             }),
@@ -147,7 +144,6 @@ pub fn prepare_relay_extra_headers(
 
     // The variant/model/model-provider handling for extra_header is identical to that of extra_body
     // See `prepare_relay_extra_body` for more details
-    #[expect(deprecated)]
     new_extra_headers.extend(
         inference_extra_headers
             .data
@@ -169,9 +165,7 @@ pub fn prepare_relay_extra_headers(
                     name: name.clone(),
                     delete: (),
                 },
-                DynamicExtraHeader::Provider { .. }
-                | DynamicExtraHeader::ProviderDelete { .. }
-                | DynamicExtraHeader::ModelProvider { .. }
+                DynamicExtraHeader::ModelProvider { .. }
                 | DynamicExtraHeader::ModelProviderDelete { .. }
                 | DynamicExtraHeader::Always { .. }
                 | DynamicExtraHeader::AlwaysDelete { .. } => header.clone(),
@@ -216,7 +210,7 @@ impl UnfilteredInferenceExtraBody {
 
 /// The result of filtering `InferenceExtraBody` by variant name.
 /// All `InferenceExtraBody::Variant` options with a non-matching variant have
-/// been removed, while all `InferenceExtraBody::Provider` options have been retained.
+/// been removed, while all other options have been retained.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
@@ -244,33 +238,6 @@ pub mod dynamic {
     #[export_schema]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraBody {
-        #[schemars(title = "ProviderExtraBody")]
-        #[deprecated(note = "Migrate to `ModelProvider` and remove in 2026.2+. (#4640)")]
-        /// DEPRECATED: Use `ModelProvider` instead.
-        Provider {
-            /// A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-            model_provider_name: String,
-            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
-            pointer: String,
-            /// The value to set the field to
-            value: serde_json::Value,
-        },
-        #[schemars(title = "ProviderExtraBodyDelete")]
-        #[deprecated(note = "Migrate to `ModelProviderDelete` and remove in 2026.2+. (#4640)")]
-        /// DEPRECATED: Use `ModelProviderDelete` instead.
-        ProviderDelete {
-            /// A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-            model_provider_name: String,
-            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
-            pointer: String,
-            #[serde(
-                serialize_with = "super::super::serialize_delete_field",
-                deserialize_with = "super::super::deserialize_delete_field"
-            )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
-            /// Set to true to remove the field from the model provider request's body
-            delete: (),
-        },
         #[schemars(title = "VariantExtraBody")]
         Variant {
             /// A variant name in your configuration (e.g. `my_variant`)
@@ -345,8 +312,6 @@ pub mod dynamic {
     impl ExtraBody {
         pub fn should_apply_variant(&self, variant_name: &str) -> bool {
             match self {
-                #[expect(deprecated)]
-                ExtraBody::Provider { .. } | ExtraBody::ProviderDelete { .. } => true,
                 ExtraBody::Variant {
                     variant_name: v, ..
                 }
@@ -410,20 +375,6 @@ mod tests {
     }
 
     #[test]
-    fn test_should_apply_variant_provider() {
-        #[expect(deprecated)]
-        let provider_variant = DynamicExtraBody::Provider {
-            model_provider_name: "openai".to_string(),
-            pointer: "/test".to_string(),
-            value: json!(1),
-        };
-
-        // Provider should apply to any variant
-        assert!(provider_variant.should_apply_variant("variant1"));
-        assert!(provider_variant.should_apply_variant("variant2"));
-    }
-
-    #[test]
     fn test_should_apply_variant_variant_match() {
         let variant = DynamicExtraBody::Variant {
             variant_name: "variant1".to_string(),
@@ -484,9 +435,9 @@ mod tests {
     fn test_filter_mixed_variants() {
         let unfiltered = UnfilteredInferenceExtraBody {
             extra_body: vec![
-                #[expect(deprecated)]
-                DynamicExtraBody::Provider {
-                    model_provider_name: "openai".to_string(),
+                DynamicExtraBody::ModelProvider {
+                    model_name: "gpt-4o".to_string(),
+                    provider_name: Some("openai".to_string()),
                     pointer: "/provider".to_string(),
                     value: json!("provider"),
                 },
@@ -508,18 +459,15 @@ mod tests {
         };
 
         let filtered = unfiltered.filter("variant1");
-        // Should include: Provider, Variant(variant1), All
+        // Should include: ModelProvider, Variant(variant1), Always
         assert_eq!(filtered.data.len(), 3);
 
-        #[expect(deprecated)]
-        {
-            assert!(
-                filtered
-                    .data
-                    .iter()
-                    .any(|item| matches!(item, DynamicExtraBody::Provider { .. }))
-            );
-        }
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraBody::ModelProvider { .. }))
+        );
         assert!(
             filtered
                 .data
