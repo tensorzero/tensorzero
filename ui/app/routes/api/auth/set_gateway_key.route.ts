@@ -1,8 +1,9 @@
+import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { getEnv } from "~/utils/env.server";
 import { buildApiKeyCookie } from "~/utils/api-key-override.server";
 
-export async function action({ request }: { request: Request }) {
+export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const apiKey = formData.get("apiKey");
 
@@ -33,7 +34,6 @@ export async function action({ request }: { request: Request }) {
     const response = await fetch(`${baseUrl}/internal/ui_config`, {
       method: "GET",
       headers: {
-        "content-type": "application/json",
         authorization: `Bearer ${trimmed}`,
       },
     });

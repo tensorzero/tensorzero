@@ -28,8 +28,13 @@ function parseCookieValue(
 ): string | undefined {
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
   if (!match) return undefined;
-  const decoded = decodeURIComponent(match[1]);
-  return decoded || undefined;
+  try {
+    const decoded = decodeURIComponent(match[1]);
+    return decoded || undefined;
+  } catch {
+    // Malformed percent-encoding — treat as absent
+    return undefined;
+  }
 }
 
 /** Read API key from the current request's HTTP-only cookie. */
@@ -49,14 +54,13 @@ export function getEffectiveApiKey(): string | undefined {
   return getApiKeyFromRequest(request);
 }
 
-/** Build a Set-Cookie header value to store the API key. */
-export function buildApiKeyCookie(apiKey: string): string {
+function buildCookieHeader(value: string, maxAge: number): string {
   const parts = [
-    `${COOKIE_NAME}=${encodeURIComponent(apiKey)}`,
+    `${COOKIE_NAME}=${value}`,
     "HttpOnly",
     "SameSite=Strict",
     "Path=/",
-    `Max-Age=${MAX_AGE_SECONDS}`,
+    `Max-Age=${maxAge}`,
   ];
 
   if (!isLocalhost()) {
@@ -66,28 +70,25 @@ export function buildApiKeyCookie(apiKey: string): string {
   return parts.join("; ");
 }
 
+/** Build a Set-Cookie header value to store the API key. */
+export function buildApiKeyCookie(apiKey: string): string {
+  return buildCookieHeader(encodeURIComponent(apiKey), MAX_AGE_SECONDS);
+}
+
 /** Build a Set-Cookie header value to clear the cookie. */
 export function buildClearApiKeyCookie(): string {
-  const parts = [
-    `${COOKIE_NAME}=`,
-    "HttpOnly",
-    "SameSite=Strict",
-    "Path=/",
-    "Max-Age=0",
-  ];
-
-  if (!isLocalhost()) {
-    parts.push("Secure");
-  }
-
-  return parts.join("; ");
+  return buildCookieHeader("", 0);
 }
 
 function isLocalhost(): boolean {
   const url = getEnv().TENSORZERO_GATEWAY_URL;
   try {
     const hostname = new URL(url).hostname;
-    return hostname === "localhost" || hostname === "127.0.0.1";
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]"
+    );
   } catch {
     return false;
   }
