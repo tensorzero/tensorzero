@@ -21,24 +21,22 @@ export async function action({ request }: { request: Request }) {
     return data(
       {
         error:
-          "TENSORZERO_API_KEY is already configured on the server. Update the environment variable instead.",
+          "`TENSORZERO_API_KEY` is already configured on the server. Update the environment variable instead.",
       },
       { status: 409 },
     );
   }
 
   // Validate the key by making a test request to the gateway
+  const baseUrl = env.TENSORZERO_GATEWAY_URL.replace(/\/+$/, "");
   try {
-    const response = await fetch(
-      `${env.TENSORZERO_GATEWAY_URL}/api/ui_config`,
-      {
-        method: "GET",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${trimmed}`,
-        },
+    const response = await fetch(`${baseUrl}/internal/ui_config`, {
+      method: "GET",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${trimmed}`,
       },
-    );
+    });
 
     if (response.status === 401) {
       return data(
