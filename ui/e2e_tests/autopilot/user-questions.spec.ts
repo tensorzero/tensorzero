@@ -499,8 +499,6 @@ test.describe("User questions (full e2e)", () => {
       `Use the ask_user_questions tool to ask me exactly one multiple choice question. Use header "Auth", question "Which auth method?", type "multiple_choice", multi_select false, and two options: label "JWT" description "JSON Web Tokens" and label "OAuth" description "OAuth 2.0 flow". Call the tool directly without using any other tools first. ${v7()}`,
     );
 
-    // Wait for the question card's Submit button (unique to question cards —
-    // the user message also contains "JWT" so we can't use getByText("JWT"))
     const submitButton = page.getByRole("button", { name: /submit/i });
     await expect(submitButton).toBeVisible({ timeout: 90000 });
 
@@ -511,11 +509,6 @@ test.describe("User questions (full e2e)", () => {
     // Verify "Answered" event appears
     await expect(page.getByText("Answered")).toBeVisible({ timeout: 15000 });
 
-    // Wait for session to return to idle after the tool unblocks and the
-    // LLM produces a follow-up response. Note: ask_user_questions is a
-    // direct TaskTool (not wrapped in ClientToolTaskAdapter), so no
-    // ToolCall/ToolResult events are written — we verify completion by
-    // checking the session returns to "Ready" (idle).
     await expect(page.getByText("Ready")).toBeVisible({ timeout: 60000 });
 
     // Verify the answer was persisted correctly in the database
@@ -546,7 +539,6 @@ test.describe("User questions (full e2e)", () => {
 
     await expect(page.getByText("Answered")).toBeVisible({ timeout: 15000 });
 
-    // Wait for session to return to idle (see comment in multiple choice test)
     await expect(page.getByText("Ready")).toBeVisible({ timeout: 60000 });
 
     // Verify the answer was persisted correctly in the database
