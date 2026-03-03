@@ -11,6 +11,8 @@
  * the last key submitted wins for all users.
  */
 
+import { getEnv } from "./env.server";
+
 let _apiKeyOverride: string | undefined;
 let _version = 0;
 
@@ -19,8 +21,9 @@ export function setApiKeyOverride(key: string): void {
   _version++;
 }
 
-export function getApiKeyOverride(): string | undefined {
-  return _apiKeyOverride;
+/** Returns the env var if set, otherwise the browser-entered override. */
+export function getEffectiveApiKey(): string | undefined {
+  return getEnv().TENSORZERO_API_KEY ?? _apiKeyOverride;
 }
 
 /** Monotonically increasing counter so consumers can detect changes. */

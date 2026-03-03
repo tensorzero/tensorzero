@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { getApiKeyOverride } from "~/utils/api-key-override.server";
+import { getEffectiveApiKey } from "~/utils/api-key-override.server";
 import { getEnv } from "~/utils/env.server";
 
 /**
@@ -31,7 +31,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     Accept: "text/event-stream",
   };
 
-  const effectiveKey = env.TENSORZERO_API_KEY ?? getApiKeyOverride();
+  const effectiveKey = getEffectiveApiKey();
   if (effectiveKey) {
     headers["Authorization"] = `Bearer ${effectiveKey}`;
   }
