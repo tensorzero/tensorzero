@@ -3,6 +3,7 @@ import type { UninitializedLLMJudgeChatCompletionVariantConfig } from "./Uniniti
 
 export type UninitializedLLMJudgeBestOfNVariantConfig = {
   active?: boolean;
+  timeout_s?: number;
   candidates: Array<string>;
   evaluator: UninitializedLLMJudgeChatCompletionVariantConfig;
 };

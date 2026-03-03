@@ -3,6 +3,7 @@ import type { UninitializedBestOfNEvaluatorConfig } from "./UninitializedBestOfN
 
 export type UninitializedBestOfNSamplingConfig = {
   weight?: number;
+  timeout_s?: number;
   candidates: Array<string>;
   evaluator: UninitializedBestOfNEvaluatorConfig;
 };
