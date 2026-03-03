@@ -34,6 +34,12 @@ use tensorzero_core::endpoints::feedback::internal::{
 pub use tensorzero_core::optimization::OptimizationJobHandle;
 pub use tensorzero_core::optimization::OptimizationJobInfo;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
+use tensorzero_optimizers::gepa::{
+    GepaAnalyzeParams, GepaAnalyzeResult, GepaCleanupParams, GepaEvalAndUpdateParams,
+    GepaEvalParentParams, GepaEvalParentResult, GepaIterUpdateResult, GepaMutateParams,
+    GepaMutateResult, GepaSampleParams, GepaSampleResult, GepaSetupParams, GepaSetupResult,
+    GepaToolOutput,
+};
 use url::Url;
 use uuid::Uuid;
 
@@ -326,6 +332,50 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         params: RunEvaluationParams,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError>;
+
+    // ========== GEPA Sub-step Operations ==========
+
+    /// Run the GEPA setup step (validate, create val dataset, evaluate initial variants).
+    async fn gepa_setup(
+        &self,
+        params: GepaSetupParams,
+    ) -> Result<GepaSetupResult, TensorZeroClientError>;
+
+    /// GEPA iteration sub-step 1: sample parent and create minibatch dataset.
+    async fn gepa_iter_sample(
+        &self,
+        params: GepaSampleParams,
+    ) -> Result<GepaSampleResult, TensorZeroClientError>;
+
+    /// GEPA iteration sub-step 2: evaluate parent variant on minibatch.
+    async fn gepa_iter_eval_parent(
+        &self,
+        params: GepaEvalParentParams,
+    ) -> Result<GepaEvalParentResult, TensorZeroClientError>;
+
+    /// GEPA iteration sub-step 3: analyze parent inferences with judge model.
+    async fn gepa_iter_analyze(
+        &self,
+        params: GepaAnalyzeParams,
+    ) -> Result<GepaAnalyzeResult, TensorZeroClientError>;
+
+    /// GEPA iteration sub-step 4: mutate parent to produce child variant.
+    async fn gepa_iter_mutate(
+        &self,
+        params: GepaMutateParams,
+    ) -> Result<GepaMutateResult, TensorZeroClientError>;
+
+    /// GEPA iteration sub-step 5: evaluate child, compare, update frontier.
+    async fn gepa_iter_eval_and_update(
+        &self,
+        params: GepaEvalAndUpdateParams,
+    ) -> Result<GepaIterUpdateResult, TensorZeroClientError>;
+
+    /// GEPA cleanup step: delete temporary datasets and extract final variants.
+    async fn gepa_cleanup(
+        &self,
+        params: GepaCleanupParams,
+    ) -> Result<GepaToolOutput, TensorZeroClientError>;
 }
 
 /// Create a TensorZero client from an existing TensorZero `Client`.

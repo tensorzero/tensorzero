@@ -15,6 +15,9 @@ use tensorzero_core::{
     stored_inference::RenderedSample, variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
+use evaluations::stats::{EvaluationInfo, EvaluatorStats};
+
+use crate::gepa::analyze::Analysis;
 use crate::gepa::evaluate::{DatapointId, EvaluatorName, VariantName, VariantScores};
 
 /// Parameters for a durable GEPA optimization task.
@@ -123,4 +126,177 @@ pub struct GepaCleanupParams {
     pub checkpoint: ParetoCheckpoint,
     pub temporary_datasets: Vec<String>,
     pub original_variant_names: Vec<String>,
+}
+
+/// Serializable variant reference for passing between sub-steps.
+///
+/// Equivalent to `GEPAVariant` but with `Serialize`/`Deserialize` for checkpointing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectedVariant {
+    pub name: VariantName,
+    pub config: UninitializedChatCompletionConfig,
+}
+
+/// Parameters for the GEPA setup step (replaces individual args).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GepaSetupParams {
+    pub gepa_config: UninitializedGEPAConfig,
+    pub train_examples: Vec<RenderedSample>,
+    pub val_examples: Vec<RenderedSample>,
+}
+
+// ============================================================================
+// Sub-step types for breaking GEPA iteration into checkpointable pieces
+// ============================================================================
+
+/// Sub-step 1: Sample parent and create minibatch dataset.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GepaSampleParams {
+    pub checkpoint: ParetoCheckpoint,
+    pub train_examples: Vec<RenderedSample>,
+    pub iteration: usize,
+    pub gepa_config: UninitializedGEPAConfig,
+    pub val_dataset_name: String,
+    pub temporary_datasets: Vec<String>,
+    pub per_variant_concurrency: usize,
+    pub run_id: Uuid,
+}
+
+/// Result of the sample sub-step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[expect(clippy::large_enum_variant)]
+pub enum GepaSampleResult {
+    Continue {
+        parent: SelectedVariant,
+        mutation_dataset_name: String,
+        temporary_datasets: Vec<String>,
+        checkpoint: ParetoCheckpoint,
+    },
+    SkipIteration {
+        checkpoint: ParetoCheckpoint,
+        temporary_datasets: Vec<String>,
+    },
+}
+
+/// Sub-step 2: Evaluate parent variant on minibatch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GepaEvalParentParams {
+    pub parent: SelectedVariant,
+    pub mutation_dataset_name: String,
+    pub gepa_config: UninitializedGEPAConfig,
+    pub iteration: usize,
+    pub checkpoint: ParetoCheckpoint,
+    pub temporary_datasets: Vec<String>,
+    pub val_dataset_name: String,
+    pub per_variant_concurrency: usize,
+}
+
+/// Result of the eval-parent sub-step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[expect(clippy::large_enum_variant)]
+pub enum GepaEvalParentResult {
+    Continue {
+        parent: SelectedVariant,
+        parent_evaluation_infos: Vec<EvaluationInfo>,
+        parent_evaluation_stats: HashMap<EvaluatorName, EvaluatorStats>,
+        mutation_dataset_name: String,
+        checkpoint: ParetoCheckpoint,
+        temporary_datasets: Vec<String>,
+        val_dataset_name: String,
+        per_variant_concurrency: usize,
+    },
+    SkipIteration {
+        checkpoint: ParetoCheckpoint,
+        temporary_datasets: Vec<String>,
+    },
+}
+
+/// Sub-step 3: Analyze parent inferences.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GepaAnalyzeParams {
+    pub parent: SelectedVariant,
+    pub parent_evaluation_infos: Vec<EvaluationInfo>,
+    pub parent_evaluation_stats: HashMap<EvaluatorName, EvaluatorStats>,
+    pub mutation_dataset_name: String,
+    pub gepa_config: UninitializedGEPAConfig,
+    pub iteration: usize,
+    pub checkpoint: ParetoCheckpoint,
+    pub temporary_datasets: Vec<String>,
+    pub val_dataset_name: String,
+    pub per_variant_concurrency: usize,
+}
+
+/// Result of the analyze sub-step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[expect(clippy::large_enum_variant)]
+pub enum GepaAnalyzeResult {
+    Continue {
+        parent: SelectedVariant,
+        parent_analyses: Vec<Analysis>,
+        parent_evaluation_stats: HashMap<EvaluatorName, EvaluatorStats>,
+        mutation_dataset_name: String,
+        checkpoint: ParetoCheckpoint,
+        temporary_datasets: Vec<String>,
+        val_dataset_name: String,
+        per_variant_concurrency: usize,
+    },
+    SkipIteration {
+        checkpoint: ParetoCheckpoint,
+        temporary_datasets: Vec<String>,
+    },
+}
+
+/// Sub-step 4: Mutate parent to produce child variant.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GepaMutateParams {
+    pub parent: SelectedVariant,
+    pub parent_analyses: Vec<Analysis>,
+    pub parent_evaluation_stats: HashMap<EvaluatorName, EvaluatorStats>,
+    pub mutation_dataset_name: String,
+    pub gepa_config: UninitializedGEPAConfig,
+    pub iteration: usize,
+    pub checkpoint: ParetoCheckpoint,
+    pub temporary_datasets: Vec<String>,
+    pub val_dataset_name: String,
+    pub per_variant_concurrency: usize,
+}
+
+/// Result of the mutate sub-step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[expect(clippy::large_enum_variant)]
+pub enum GepaMutateResult {
+    Continue {
+        child: SelectedVariant,
+        parent_evaluation_stats: HashMap<EvaluatorName, EvaluatorStats>,
+        mutation_dataset_name: String,
+        checkpoint: ParetoCheckpoint,
+        temporary_datasets: Vec<String>,
+        val_dataset_name: String,
+        per_variant_concurrency: usize,
+    },
+    SkipIteration {
+        checkpoint: ParetoCheckpoint,
+        temporary_datasets: Vec<String>,
+    },
+}
+
+/// Sub-step 5: Evaluate child, compare, conditionally eval on val set, update frontier.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GepaEvalAndUpdateParams {
+    pub child: SelectedVariant,
+    pub parent_evaluation_stats: HashMap<EvaluatorName, EvaluatorStats>,
+    pub mutation_dataset_name: String,
+    pub gepa_config: UninitializedGEPAConfig,
+    pub iteration: usize,
+    pub checkpoint: ParetoCheckpoint,
+    pub temporary_datasets: Vec<String>,
+    pub val_dataset_name: String,
+    pub per_variant_concurrency: usize,
+}
+
+/// Result of the eval-and-update sub-step (always returned, no enum).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GepaIterUpdateResult {
+    pub checkpoint: ParetoCheckpoint,
+    pub temporary_datasets: Vec<String>,
 }

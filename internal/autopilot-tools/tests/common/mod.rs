@@ -189,6 +189,41 @@ mock! {
             &self,
             params: durable_tools::RunEvaluationParams,
         ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
+
+        async fn gepa_setup(
+            &self,
+            params: tensorzero_optimizers::gepa::GepaSetupParams,
+        ) -> Result<tensorzero_optimizers::gepa::GepaSetupResult, TensorZeroClientError>;
+
+        async fn gepa_iter_sample(
+            &self,
+            params: tensorzero_optimizers::gepa::GepaSampleParams,
+        ) -> Result<tensorzero_optimizers::gepa::GepaSampleResult, TensorZeroClientError>;
+
+        async fn gepa_iter_eval_parent(
+            &self,
+            params: tensorzero_optimizers::gepa::GepaEvalParentParams,
+        ) -> Result<tensorzero_optimizers::gepa::GepaEvalParentResult, TensorZeroClientError>;
+
+        async fn gepa_iter_analyze(
+            &self,
+            params: tensorzero_optimizers::gepa::GepaAnalyzeParams,
+        ) -> Result<tensorzero_optimizers::gepa::GepaAnalyzeResult, TensorZeroClientError>;
+
+        async fn gepa_iter_mutate(
+            &self,
+            params: tensorzero_optimizers::gepa::GepaMutateParams,
+        ) -> Result<tensorzero_optimizers::gepa::GepaMutateResult, TensorZeroClientError>;
+
+        async fn gepa_iter_eval_and_update(
+            &self,
+            params: tensorzero_optimizers::gepa::GepaEvalAndUpdateParams,
+        ) -> Result<tensorzero_optimizers::gepa::GepaIterUpdateResult, TensorZeroClientError>;
+
+        async fn gepa_cleanup(
+            &self,
+            params: tensorzero_optimizers::gepa::GepaCleanupParams,
+        ) -> Result<tensorzero_optimizers::gepa::GepaToolOutput, TensorZeroClientError>;
     }
 }
 

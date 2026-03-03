@@ -45,8 +45,11 @@ use pareto::{Candidate, ParetoFrontier, is_improvement};
 use validate::{get_uninitialized_variant_configs, validate_examples, validate_gepa_config};
 
 pub use types::{
-    GepaCleanupParams, GepaIterationParams, GepaIterationResult, GepaSetupResult, GepaSideInfo,
-    GepaToolOutput, GepaToolParams, ParetoCheckpoint,
+    GepaAnalyzeParams, GepaAnalyzeResult, GepaCleanupParams, GepaEvalAndUpdateParams,
+    GepaEvalParentParams, GepaEvalParentResult, GepaIterUpdateResult, GepaIterationParams,
+    GepaIterationResult, GepaMutateParams, GepaMutateResult, GepaSampleParams, GepaSampleResult,
+    GepaSetupParams, GepaSetupResult, GepaSideInfo, GepaToolOutput, GepaToolParams,
+    ParetoCheckpoint, SelectedVariant,
 };
 
 /// A GEPA variant with its name and configuration
@@ -256,9 +259,11 @@ pub async fn run_gepa(
 ) -> Result<GepaToolOutput, Error> {
     let setup_result = run_gepa_setup(
         variant_executor.clone(),
-        gepa_config,
-        train_examples,
-        val_examples,
+        GepaSetupParams {
+            gepa_config: gepa_config.as_uninitialized(),
+            train_examples,
+            val_examples,
+        },
         db,
         config,
         http_client,
@@ -314,14 +319,19 @@ pub async fn run_gepa(
 /// and build the initial Pareto frontier.
 pub async fn run_gepa_setup(
     variant_executor: Arc<dyn EvaluationsInferenceExecutor>,
-    gepa_config: &GEPAConfig,
-    train_examples: Vec<RenderedSample>,
-    val_examples: Vec<RenderedSample>,
+    params: GepaSetupParams,
     db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
     config: &Arc<Config>,
     http_client: &TensorzeroHttpClient,
 ) -> Result<GepaSetupResult, Error> {
-    let function_context = validate_gepa_config(gepa_config, config)?;
+    let GepaSetupParams {
+        gepa_config: uninitialized_gepa_config,
+        train_examples,
+        val_examples,
+    } = params;
+
+    let gepa_config = uninitialized_gepa_config.clone().load();
+    let function_context = validate_gepa_config(&gepa_config, config)?;
 
     let train_examples = validate_examples(train_examples)?;
     let val_examples = validate_examples(val_examples)?;
@@ -333,7 +343,7 @@ pub async fn run_gepa_setup(
         val_examples.len()
     );
 
-    let original_variants = get_uninitialized_variant_configs(gepa_config, &function_context)?;
+    let original_variants = get_uninitialized_variant_configs(&gepa_config, &function_context)?;
 
     let original_variant_names: Vec<String> = original_variants.keys().cloned().collect();
 
@@ -482,13 +492,16 @@ pub async fn run_gepa_setup(
         val_dataset_name,
         temporary_datasets,
         original_variant_names,
-        gepa_config: gepa_config.as_uninitialized(),
+        gepa_config: uninitialized_gepa_config,
         per_variant_concurrency,
         run_id,
     })
 }
 
-/// Run a single GEPA iteration: sample → analyze → mutate → evaluate → update frontier.
+/// Run a single GEPA iteration: sample → eval parent → analyze → mutate → eval & update.
+///
+/// This is a convenience wrapper that calls the 5 sub-step functions sequentially.
+/// The sub-steps are also available individually for durable checkpointing.
 pub async fn run_gepa_iteration(
     variant_executor: Arc<dyn EvaluationsInferenceExecutor>,
     judge_executor: Arc<dyn EvaluationsInferenceExecutor>,
@@ -497,25 +510,258 @@ pub async fn run_gepa_iteration(
     config: &Arc<Config>,
     http_client: &TensorzeroHttpClient,
 ) -> Result<GepaIterationResult, Error> {
-    let GepaIterationParams {
+    let iteration = params.iteration;
+    let gepa_config = params.gepa_config.clone();
+    let val_dataset_name = params.val_dataset_name.clone();
+    let per_variant_concurrency = params.per_variant_concurrency;
+
+    // Sub-step 1: Sample parent and create minibatch dataset
+    let sample_result = run_gepa_iter_sample(
+        GepaSampleParams {
+            checkpoint: params.checkpoint,
+            train_examples: params.train_examples,
+            iteration,
+            gepa_config: gepa_config.clone(),
+            val_dataset_name: val_dataset_name.clone(),
+            temporary_datasets: params.temporary_datasets,
+            per_variant_concurrency,
+            run_id: params.run_id,
+        },
+        db,
+        config,
+        http_client,
+    )
+    .await?;
+
+    let (parent, mutation_dataset_name, temporary_datasets, checkpoint) = match sample_result {
+        GepaSampleResult::Continue {
+            parent,
+            mutation_dataset_name,
+            temporary_datasets,
+            checkpoint,
+        } => (
+            parent,
+            mutation_dataset_name,
+            temporary_datasets,
+            checkpoint,
+        ),
+        GepaSampleResult::SkipIteration {
+            checkpoint,
+            temporary_datasets,
+        } => {
+            return Ok(GepaIterationResult {
+                checkpoint,
+                temporary_datasets,
+            });
+        }
+    };
+
+    // Sub-step 2: Evaluate parent on minibatch
+    let eval_parent_result = run_gepa_iter_eval_parent(
+        variant_executor.clone(),
+        GepaEvalParentParams {
+            parent,
+            mutation_dataset_name,
+            gepa_config: gepa_config.clone(),
+            iteration,
+            checkpoint,
+            temporary_datasets,
+            val_dataset_name: val_dataset_name.clone(),
+            per_variant_concurrency,
+        },
+        db,
+        config,
+    )
+    .await?;
+
+    let (
+        parent,
+        parent_evaluation_infos,
+        parent_evaluation_stats,
+        mutation_dataset_name,
+        checkpoint,
+        temporary_datasets,
+    ) = match eval_parent_result {
+        GepaEvalParentResult::Continue {
+            parent,
+            parent_evaluation_infos,
+            parent_evaluation_stats,
+            mutation_dataset_name,
+            checkpoint,
+            temporary_datasets,
+            ..
+        } => (
+            parent,
+            parent_evaluation_infos,
+            parent_evaluation_stats,
+            mutation_dataset_name,
+            checkpoint,
+            temporary_datasets,
+        ),
+        GepaEvalParentResult::SkipIteration {
+            checkpoint,
+            temporary_datasets,
+        } => {
+            return Ok(GepaIterationResult {
+                checkpoint,
+                temporary_datasets,
+            });
+        }
+    };
+
+    // Sub-step 3: Analyze parent inferences
+    let analyze_result = run_gepa_iter_analyze(
+        judge_executor.clone(),
+        GepaAnalyzeParams {
+            parent,
+            parent_evaluation_infos,
+            parent_evaluation_stats,
+            mutation_dataset_name,
+            gepa_config: gepa_config.clone(),
+            iteration,
+            checkpoint,
+            temporary_datasets,
+            val_dataset_name: val_dataset_name.clone(),
+            per_variant_concurrency,
+        },
+        config,
+    )
+    .await?;
+
+    let (
+        parent,
+        parent_analyses,
+        parent_evaluation_stats,
+        mutation_dataset_name,
+        checkpoint,
+        temporary_datasets,
+    ) = match analyze_result {
+        GepaAnalyzeResult::Continue {
+            parent,
+            parent_analyses,
+            parent_evaluation_stats,
+            mutation_dataset_name,
+            checkpoint,
+            temporary_datasets,
+            ..
+        } => (
+            parent,
+            parent_analyses,
+            parent_evaluation_stats,
+            mutation_dataset_name,
+            checkpoint,
+            temporary_datasets,
+        ),
+        GepaAnalyzeResult::SkipIteration {
+            checkpoint,
+            temporary_datasets,
+        } => {
+            return Ok(GepaIterationResult {
+                checkpoint,
+                temporary_datasets,
+            });
+        }
+    };
+
+    // Sub-step 4: Mutate parent to produce child
+    let mutate_result = run_gepa_iter_mutate(
+        judge_executor,
+        GepaMutateParams {
+            parent,
+            parent_analyses,
+            parent_evaluation_stats,
+            mutation_dataset_name,
+            gepa_config: gepa_config.clone(),
+            iteration,
+            checkpoint,
+            temporary_datasets,
+            val_dataset_name: val_dataset_name.clone(),
+            per_variant_concurrency,
+        },
+        config,
+    )
+    .await?;
+
+    let (child, parent_evaluation_stats, mutation_dataset_name, checkpoint, temporary_datasets) =
+        match mutate_result {
+            GepaMutateResult::Continue {
+                child,
+                parent_evaluation_stats,
+                mutation_dataset_name,
+                checkpoint,
+                temporary_datasets,
+                ..
+            } => (
+                child,
+                parent_evaluation_stats,
+                mutation_dataset_name,
+                checkpoint,
+                temporary_datasets,
+            ),
+            GepaMutateResult::SkipIteration {
+                checkpoint,
+                temporary_datasets,
+            } => {
+                return Ok(GepaIterationResult {
+                    checkpoint,
+                    temporary_datasets,
+                });
+            }
+        };
+
+    // Sub-step 5: Evaluate child, compare, conditional val eval, update frontier
+    let update_result = run_gepa_iter_eval_and_update(
+        variant_executor,
+        GepaEvalAndUpdateParams {
+            child,
+            parent_evaluation_stats,
+            mutation_dataset_name,
+            gepa_config,
+            iteration,
+            checkpoint,
+            temporary_datasets,
+            val_dataset_name,
+            per_variant_concurrency,
+        },
+        db,
+        config,
+    )
+    .await?;
+
+    Ok(GepaIterationResult {
+        checkpoint: update_result.checkpoint,
+        temporary_datasets: update_result.temporary_datasets,
+    })
+}
+
+// ============================================================================
+// Sub-step functions for checkpointable GEPA iteration
+// ============================================================================
+
+/// Sub-step 1: Sample a parent from the Pareto frontier and create a minibatch dataset.
+///
+/// No LLM calls — fast, local operations only.
+pub async fn run_gepa_iter_sample(
+    params: GepaSampleParams,
+    db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
+    config: &Arc<Config>,
+    http_client: &TensorzeroHttpClient,
+) -> Result<GepaSampleResult, Error> {
+    let GepaSampleParams {
         checkpoint,
         train_examples,
         iteration,
         gepa_config: uninitialized_gepa_config,
-        val_dataset_name,
+        val_dataset_name: _,
         mut temporary_datasets,
-        per_variant_concurrency,
+        per_variant_concurrency: _,
         run_id,
     } = params;
 
     let gepa_config = uninitialized_gepa_config.load();
-    let function_context = validate_gepa_config(&gepa_config, config)?;
+    let _function_context = validate_gepa_config(&gepa_config, config)?;
 
-    let evaluator_configs = match &*function_context.evaluation_config {
-        EvaluationConfig::Inference(cfg) => &cfg.evaluators,
-    };
-
-    let mut pareto_frontier = ParetoFrontier::from_checkpoint(checkpoint, params.iteration as u64);
+    let pareto_frontier = ParetoFrontier::from_checkpoint(checkpoint, iteration as u64);
 
     let parent = match pareto_frontier.sample_by_frequency() {
         Ok(variant) => variant,
@@ -525,7 +771,7 @@ pub async fn run_gepa_iteration(
                 iteration,
                 err
             );
-            return Ok(GepaIterationResult {
+            return Ok(GepaSampleResult::SkipIteration {
                 checkpoint: pareto_frontier.to_checkpoint(),
                 temporary_datasets,
             });
@@ -575,13 +821,47 @@ pub async fn run_gepa_iteration(
     )
     .await?;
 
+    Ok(GepaSampleResult::Continue {
+        parent: SelectedVariant {
+            name: parent.name,
+            config: parent.config,
+        },
+        mutation_dataset_name,
+        temporary_datasets,
+        checkpoint: pareto_frontier.to_checkpoint(),
+    })
+}
+
+/// Sub-step 2: Evaluate parent variant on the minibatch dataset.
+///
+/// This is SLOW — involves N LLM inference calls.
+pub async fn run_gepa_iter_eval_parent(
+    variant_executor: Arc<dyn EvaluationsInferenceExecutor>,
+    params: GepaEvalParentParams,
+    db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
+    config: &Arc<Config>,
+) -> Result<GepaEvalParentResult, Error> {
+    let GepaEvalParentParams {
+        parent,
+        mutation_dataset_name,
+        gepa_config: uninitialized_gepa_config,
+        iteration,
+        checkpoint,
+        temporary_datasets,
+        val_dataset_name,
+        per_variant_concurrency,
+    } = params;
+
+    let gepa_config = uninitialized_gepa_config.load();
+    let function_context = validate_gepa_config(&gepa_config, config)?;
+
     tracing::info!(
         "GEPA iteration {}: evaluating parent variant on minibatch",
         iteration
     );
 
     let parent_evaluation_results = match evaluate_variant(EvaluateVariantParams {
-        inference_executor: variant_executor.clone(),
+        inference_executor: variant_executor,
         db: Arc::clone(db),
         functions: config.functions.clone(),
         evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -601,8 +881,8 @@ pub async fn run_gepa_iteration(
                 parent.name,
                 e
             );
-            return Ok(GepaIterationResult {
-                checkpoint: pareto_frontier.to_checkpoint(),
+            return Ok(GepaEvalParentResult::SkipIteration {
+                checkpoint,
                 temporary_datasets,
             });
         }
@@ -615,15 +895,51 @@ pub async fn run_gepa_iteration(
         parent_evaluation_results.evaluation_stats
     );
 
+    Ok(GepaEvalParentResult::Continue {
+        parent,
+        parent_evaluation_infos: parent_evaluation_results.evaluation_infos().to_vec(),
+        parent_evaluation_stats: parent_evaluation_results.evaluation_stats,
+        mutation_dataset_name,
+        checkpoint,
+        temporary_datasets,
+        val_dataset_name,
+        per_variant_concurrency,
+    })
+}
+
+/// Sub-step 3: Analyze parent inferences using the judge model.
+///
+/// This is SLOW — involves LLM judge calls for each inference.
+pub async fn run_gepa_iter_analyze(
+    judge_executor: Arc<dyn EvaluationsInferenceExecutor>,
+    params: GepaAnalyzeParams,
+    config: &Arc<Config>,
+) -> Result<GepaAnalyzeResult, Error> {
+    let GepaAnalyzeParams {
+        parent,
+        parent_evaluation_infos,
+        parent_evaluation_stats,
+        mutation_dataset_name,
+        gepa_config: uninitialized_gepa_config,
+        iteration,
+        checkpoint,
+        temporary_datasets,
+        val_dataset_name,
+        per_variant_concurrency,
+    } = params;
+
+    let gepa_config = uninitialized_gepa_config.load();
+    let function_context = validate_gepa_config(&gepa_config, config)?;
+
     tracing::info!(
         "GEPA iteration {}: analyzing {} parent inferences",
         iteration,
-        parent_evaluation_results.evaluation_infos().len()
+        parent_evaluation_infos.len()
     );
 
     let parent_analyses = match analyze_inferences(
         judge_executor.as_ref(),
-        parent_evaluation_results.evaluation_infos(),
+        &parent_evaluation_infos,
         &function_context,
         &parent.config,
         &gepa_config,
@@ -638,8 +954,8 @@ pub async fn run_gepa_iteration(
                 parent.name,
                 err
             );
-            return Ok(GepaIterationResult {
-                checkpoint: pareto_frontier.to_checkpoint(),
+            return Ok(GepaAnalyzeResult::SkipIteration {
+                checkpoint,
                 temporary_datasets,
             });
         }
@@ -652,11 +968,52 @@ pub async fn run_gepa_iteration(
         parent.name
     );
 
+    Ok(GepaAnalyzeResult::Continue {
+        parent,
+        parent_analyses,
+        parent_evaluation_stats,
+        mutation_dataset_name,
+        checkpoint,
+        temporary_datasets,
+        val_dataset_name,
+        per_variant_concurrency,
+    })
+}
+
+/// Sub-step 4: Mutate the parent variant to produce a child.
+///
+/// This is SLOW — involves an LLM call to generate new templates.
+pub async fn run_gepa_iter_mutate(
+    judge_executor: Arc<dyn EvaluationsInferenceExecutor>,
+    params: GepaMutateParams,
+    config: &Arc<Config>,
+) -> Result<GepaMutateResult, Error> {
+    let GepaMutateParams {
+        parent,
+        parent_analyses,
+        parent_evaluation_stats,
+        mutation_dataset_name,
+        gepa_config: uninitialized_gepa_config,
+        iteration,
+        checkpoint,
+        temporary_datasets,
+        val_dataset_name,
+        per_variant_concurrency,
+    } = params;
+
+    let gepa_config = uninitialized_gepa_config.load();
+    let function_context = validate_gepa_config(&gepa_config, config)?;
+
+    let parent_variant = GEPAVariant {
+        name: parent.name.clone(),
+        config: parent.config,
+    };
+
     let child = match mutate_variant(
         judge_executor.as_ref(),
         &parent_analyses,
         &function_context,
-        &parent,
+        &parent_variant,
         &gepa_config,
         iteration,
     )
@@ -673,15 +1030,60 @@ pub async fn run_gepa_iteration(
             tracing::warn!(
                 "GEPA iteration {}: mutation failed for parent '{}': {}",
                 iteration,
-                parent.name,
+                parent_variant.name,
                 err
             );
-            return Ok(GepaIterationResult {
-                checkpoint: pareto_frontier.to_checkpoint(),
+            return Ok(GepaMutateResult::SkipIteration {
+                checkpoint,
                 temporary_datasets,
             });
         }
     };
+
+    Ok(GepaMutateResult::Continue {
+        child: SelectedVariant {
+            name: child.name,
+            config: child.config,
+        },
+        parent_evaluation_stats,
+        mutation_dataset_name,
+        checkpoint,
+        temporary_datasets,
+        val_dataset_name,
+        per_variant_concurrency,
+    })
+}
+
+/// Sub-step 5: Evaluate child on minibatch, compare with parent, conditionally evaluate
+/// on validation dataset, and update the Pareto frontier.
+///
+/// This is SLOW — involves LLM inference calls for child evaluation.
+pub async fn run_gepa_iter_eval_and_update(
+    variant_executor: Arc<dyn EvaluationsInferenceExecutor>,
+    params: GepaEvalAndUpdateParams,
+    db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
+    config: &Arc<Config>,
+) -> Result<GepaIterUpdateResult, Error> {
+    let GepaEvalAndUpdateParams {
+        child,
+        parent_evaluation_stats,
+        mutation_dataset_name,
+        gepa_config: uninitialized_gepa_config,
+        iteration,
+        checkpoint,
+        temporary_datasets,
+        val_dataset_name,
+        per_variant_concurrency,
+    } = params;
+
+    let gepa_config = uninitialized_gepa_config.load();
+    let function_context = validate_gepa_config(&gepa_config, config)?;
+
+    let evaluator_configs = match &*function_context.evaluation_config {
+        EvaluationConfig::Inference(cfg) => &cfg.evaluators,
+    };
+
+    let mut pareto_frontier = ParetoFrontier::from_checkpoint(checkpoint, iteration as u64);
 
     tracing::info!(
         "GEPA iteration {}: evaluating child variant '{}' on minibatch",
@@ -710,7 +1112,7 @@ pub async fn run_gepa_iteration(
                 child.name,
                 e
             );
-            return Ok(GepaIterationResult {
+            return Ok(GepaIterUpdateResult {
                 checkpoint: pareto_frontier.to_checkpoint(),
                 temporary_datasets,
             });
@@ -731,7 +1133,7 @@ pub async fn run_gepa_iteration(
     );
 
     let child_improves = is_improvement(
-        &parent_evaluation_results.evaluation_stats,
+        &parent_evaluation_stats,
         &child_evaluation_results.evaluation_stats,
         evaluator_configs,
     );
@@ -744,7 +1146,7 @@ pub async fn run_gepa_iteration(
         );
 
         match evaluate_variant(EvaluateVariantParams {
-            inference_executor: variant_executor.clone(),
+            inference_executor: variant_executor,
             db: Arc::clone(db),
             functions: config.functions.clone(),
             evaluation_config: Arc::clone(&function_context.evaluation_config),
@@ -807,7 +1209,7 @@ pub async fn run_gepa_iteration(
         }
     }
 
-    Ok(GepaIterationResult {
+    Ok(GepaIterUpdateResult {
         checkpoint: pareto_frontier.to_checkpoint(),
         temporary_datasets,
     })
