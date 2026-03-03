@@ -90,19 +90,15 @@ export const getTimestampTooltipData = (timestamp: string | number | Date) => {
 };
 
 /**
- * Time window units for time series granularity.
- * The array is the single source of truth — the type is derived from it.
+ * Time window units for time series granularity
  */
-export const TIME_WINDOWS = [
-  "minute",
-  "hour",
-  "day",
-  "week",
-  "month",
-  "cumulative",
-] as const;
-
-export type TimeWindow = (typeof TIME_WINDOWS)[number];
+export type TimeWindow =
+  | "minute"
+  | "hour"
+  | "day"
+  | "week"
+  | "month"
+  | "cumulative";
 
 /**
  * Normalize a date to match a specific time period granularity by truncating
