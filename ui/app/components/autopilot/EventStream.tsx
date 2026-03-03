@@ -1,7 +1,6 @@
 import {
   AlertCircle,
   AlertTriangle,
-  BarChart3,
   ChevronRight,
   RotateCcw,
 } from "lucide-react";
@@ -454,12 +453,7 @@ function renderEventTitle(event: GatewayEvent) {
       // TODO: handle errors better
       return "Error";
     case "visualization":
-      return (
-        <span className="inline-flex items-center gap-2">
-          <BarChart3 className="h-4 w-4" />
-          <span>{getVisualizationTitle(payload.visualization)}</span>
-        </span>
-      );
+      return getVisualizationTitle(payload.visualization);
     case "user_questions": {
       const questionCount = payload.questions.length;
       return (
@@ -636,7 +630,9 @@ function EventItem({
     (event.payload.type === "tool_result" &&
       (event.payload.outcome.type === "success" ||
         event.payload.outcome.type === "failure"));
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(
+    event.payload.type === "visualization",
+  );
   const shouldShowDetails = !isExpandable || isExpanded;
   const label = <span className="text-sm font-medium">{title}</span>;
 

@@ -63,12 +63,10 @@ test.describe("Variant Performance Visualization", () => {
     const { payload } = buildVariantPerformancesVisualization();
     insertEvent(eventId, sessionId, payload);
 
-    // Wait for the visualization card to appear in the event stream
-    const vizCard = page.getByText("Variant Performance");
-    await expect(vizCard).toBeVisible({ timeout: 15000 });
-
-    // Click on the card to expand it
-    await vizCard.click();
+    // Wait for the visualization card to appear (auto-expanded)
+    await expect(page.getByText("Variant Performance")).toBeVisible({
+      timeout: 15000,
+    });
 
     // Verify the metric and function name labels are shown
     await expect(page.getByText("exact_match")).toBeVisible({ timeout: 5000 });
@@ -118,9 +116,10 @@ test.describe("Variant Performance Visualization", () => {
     };
     insertEvent(eventId, sessionId, payload);
 
-    const vizCard = page.getByText("Variant Performance");
-    await expect(vizCard).toBeVisible({ timeout: 15000 });
-    await vizCard.click();
+    // Wait for the visualization card to appear (auto-expanded)
+    await expect(page.getByText("Variant Performance")).toBeVisible({
+      timeout: 15000,
+    });
 
     // Single variant should render one bar
     await expect(page.locator("[data-chart]")).toHaveCount(1);
