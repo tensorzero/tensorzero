@@ -141,11 +141,11 @@ function tryParseAndSerialize(raw: string): string {
 
 /**
  * Recursively renders a JSON value as readable markdown.
- * - Objects → **key**: value lines (nested objects indent)
+ * - Objects → **key**: value lines
  * - Arrays → bulleted lists
  * - Scalars → plain text
  */
-function serializeJsonValue(value: JsonValue, depth: number = 0): string {
+function serializeJsonValue(value: JsonValue): string {
   if (value === null || value === undefined) {
     return "null";
   }
@@ -157,7 +157,7 @@ function serializeJsonValue(value: JsonValue, depth: number = 0): string {
       try {
         const parsed: unknown = JSON.parse(value);
         if (typeof parsed === "object" && parsed !== null) {
-          return serializeJsonValue(parsed as JsonValue, depth);
+          return serializeJsonValue(parsed as JsonValue);
         }
       } catch {
         // Not valid JSON — fall through to return raw string
@@ -172,9 +172,7 @@ function serializeJsonValue(value: JsonValue, depth: number = 0): string {
 
   if (Array.isArray(value)) {
     if (value.length === 0) return "*(empty)*";
-    return value
-      .map((item) => `- ${serializeJsonValue(item, depth + 1)}`)
-      .join("\n");
+    return value.map((item) => `- ${serializeJsonValue(item)}`).join("\n");
   }
 
   // Object
@@ -183,7 +181,7 @@ function serializeJsonValue(value: JsonValue, depth: number = 0): string {
 
   return entries
     .map(([key, val]) => {
-      const serialized = serializeJsonValue(val, depth + 1);
+      const serialized = serializeJsonValue(val);
       // If the value is multi-line (nested object/array), put it on the next line
       if (serialized.includes("\n")) {
         return `**${key}**:\n${serialized}`;
