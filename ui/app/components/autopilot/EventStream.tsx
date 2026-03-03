@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   AlertTriangle,
+  BarChart3,
   ChevronRight,
   RotateCcw,
 } from "lucide-react";
@@ -203,16 +204,13 @@ function VisualizationRenderer({
   if (
     typeof visualization === "object" &&
     visualization !== null &&
-    "type" in visualization
+    "type" in visualization &&
+    visualization.type === "top_k_evaluation"
   ) {
-    if (visualization.type === "top_k_evaluation") {
-      // Type assertion needed because TypeScript can't narrow through the untagged union
-      return (
-        <TopKEvaluationViz
-          data={visualization as TopKEvaluationVisualization}
-        />
-      );
-    }
+    // Type assertion needed because TypeScript can't narrow through the untagged union
+    return (
+      <TopKEvaluationViz data={visualization as TopKEvaluationVisualization} />
+    );
   }
 
   // Unknown or malformed visualization - show raw JSON with a warning
@@ -295,16 +293,7 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
   }
 }
 
-function ToolNameBadge({ name }: { name: string }) {
-  return (
-    <>
-      <DotSeparator />
-      <span className="font-mono font-medium">{name}</span>
-    </>
-  );
-}
-
-function renderEventTitle(event: GatewayEvent, toolName?: string) {
+function renderEventTitle(event: GatewayEvent) {
   const { payload } = event;
 
   switch (payload.type) {
@@ -357,28 +346,28 @@ function renderEventTitle(event: GatewayEvent, toolName?: string) {
     case "tool_result":
       switch (payload.outcome.type) {
         case "success":
+          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Success
             </span>
           );
         case "failure":
+          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Failure
             </span>
           );
         case "rejected":
+          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Rejected
               <Tooltip>
@@ -397,10 +386,10 @@ function renderEventTitle(event: GatewayEvent, toolName?: string) {
             </span>
           );
         case "missing":
+          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Missing Tool
               <Tooltip>
@@ -419,10 +408,10 @@ function renderEventTitle(event: GatewayEvent, toolName?: string) {
             </span>
           );
         case "unknown":
+          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
-              {toolName && <ToolNameBadge name={toolName} />}
               <DotSeparator />
               Unknown
               <Tooltip>
@@ -447,14 +436,19 @@ function renderEventTitle(event: GatewayEvent, toolName?: string) {
             const _exhaustiveCheck: never = payload.outcome; // TS compiler should yell if this branch is reachable
           }
           throw new Error(
-            "Unknown tool result outcome. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+            "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
           );
       }
     case "error":
       // TODO: handle errors better
       return "Error";
     case "visualization":
-      return getVisualizationTitle(payload.visualization);
+      return (
+        <span className="inline-flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          <span>{getVisualizationTitle(payload.visualization)}</span>
+        </span>
+      );
     case "user_questions": {
       const questionCount = payload.questions.length;
       return (
@@ -658,7 +652,7 @@ function EventItem({
   }, [event, toolCallInfo]);
 
   const summary = summarizeEvent(event);
-  const title = renderEventTitle(event, toolCallInfo?.name);
+  const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
   const isConfigWrite = isConfigWriteEvent(event);
   const isExpandable =
