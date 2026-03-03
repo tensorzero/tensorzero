@@ -200,7 +200,7 @@ inferences = await original_client.experimental_list_inferences(
     output_source="demonstration",  # or "inference"
     filters=None,
     # You can also filter by the value of metrics here (e.g.
-    # FloatMetricFilter(
+    # InferenceFilterFloatMetric(
     # metric_name="jaccard_similarity",
     # value=0.5,
     # comparison_operator=">",

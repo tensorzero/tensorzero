@@ -42,7 +42,6 @@ from tensorzero import (
     AlwaysExtraBodyDelete,
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
-    DynamicEvaluationRunResponse,
     FeedbackResponse,
     FileBase64,
     FileUrl,
@@ -64,6 +63,7 @@ from tensorzero import (
     ToolResult,
     VariantExtraBody,
     VariantExtraBodyDelete,
+    WorkflowEvaluationRunResponse,
 )
 from tensorzero.types import (
     ChatChunk,
@@ -3282,7 +3282,7 @@ def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
         variants={"basic_test": "test2"},
         tags={"foo": "bar"},
     )
-    assert isinstance(response, DynamicEvaluationRunResponse)
+    assert isinstance(response, WorkflowEvaluationRunResponse)
     run_id = response.run_id
     assert isinstance(run_id, UUID)
     assert run_id is not None
@@ -3317,7 +3317,7 @@ async def test_async_dynamic_evaluation_run(
         variants={"basic_test": "test2"},
         tags={"foo": "bar"},
     )
-    assert isinstance(response, DynamicEvaluationRunResponse)
+    assert isinstance(response, WorkflowEvaluationRunResponse)
     run_id = response.run_id
     assert isinstance(run_id, UUID)
     assert run_id is not None
