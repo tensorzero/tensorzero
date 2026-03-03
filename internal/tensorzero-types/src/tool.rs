@@ -112,9 +112,11 @@ impl InferenceResponseToolCall {
 pub enum ToolCallWrapper {
     // The format we store in the database
     #[schemars(title = "InputMessageContentToolCall")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentToolCall"))]
     ToolCall(ToolCall),
     // The format we send on an inference response, with parsed name and arguments
     #[schemars(title = "InputMessageContentInferenceResponseToolCall")]
+    #[cfg_attr(feature = "openapi", schema(title = "InputMessageContentInferenceResponseToolCall"))]
     InferenceResponseToolCall(InferenceResponseToolCall),
 }
 
@@ -207,5 +209,6 @@ pub enum ToolChoice {
     Required,
     /// Forces the LLM to call a specific tool. The String is the name of the tool.
     #[schemars(title = "ToolChoiceSpecific")]
+    #[cfg_attr(feature = "openapi", schema(title = "ToolChoiceSpecific"))]
     Specific(String),
 }

@@ -19,17 +19,17 @@ use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 pub enum DatapointFilter {
     /// Filter by tag key-value pair
     #[schemars(title = "TagDatapointFilter")]
-    #[cfg_attr(feature = "openapi", schema(title = "DatapointFilterTag"))]
+    #[cfg_attr(feature = "openapi", schema(title = "TagDatapointFilter"))]
     Tag(TagFilter),
 
     /// Filter by datapoint update time
     #[schemars(title = "TimeDatapointFilter")]
-    #[cfg_attr(feature = "openapi", schema(title = "DatapointFilterTime"))]
+    #[cfg_attr(feature = "openapi", schema(title = "TimeDatapointFilter"))]
     Time(TimeFilter),
 
     /// Logical AND of multiple filters
     #[schemars(title = "AndDatapointFilter")]
-    #[cfg_attr(feature = "openapi", schema(title = "DatapointFilterAnd"))]
+    #[cfg_attr(feature = "openapi", schema(title = "AndDatapointFilter"))]
     And { children: Vec<DatapointFilter> },
 
     /// Logical OR of multiple filters

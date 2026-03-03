@@ -244,6 +244,7 @@ impl Unknown {
 #[export_schema]
 pub enum ThoughtSummaryBlock {
     #[schemars(title = "ThoughtSummaryBlockSummaryText")]
+    #[cfg_attr(feature = "openapi", schema(title = "ThoughtSummaryBlockSummaryText"))]
     SummaryText { text: String },
 }
 

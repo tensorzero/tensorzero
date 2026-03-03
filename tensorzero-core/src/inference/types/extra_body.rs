@@ -33,7 +33,7 @@ pub struct ExtraBodyReplacement {
 #[serde(rename_all = "snake_case")]
 pub enum ExtraBodyReplacementKind {
     #[schemars(title = "ExtraBodyReplacementKindValue")]
-    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
+    #[cfg_attr(feature = "openapi", schema(title = "ExtraBodyReplacementKindValue", value_type = Object))]
     Value(Value),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
     #[serde(
@@ -251,6 +251,7 @@ pub mod dynamic {
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraBody {
         #[schemars(title = "ProviderExtraBody")]
+        #[cfg_attr(feature = "openapi", schema(title = "ProviderExtraBody"))]
         #[deprecated(note = "Migrate to `ModelProvider` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProvider` instead.
         Provider {
@@ -263,6 +264,7 @@ pub mod dynamic {
             value: serde_json::Value,
         },
         #[schemars(title = "ProviderExtraBodyDelete")]
+        #[cfg_attr(feature = "openapi", schema(title = "ProviderExtraBodyDelete"))]
         #[deprecated(note = "Migrate to `ModelProviderDelete` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProviderDelete` instead.
         ProviderDelete {

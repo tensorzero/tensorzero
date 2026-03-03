@@ -130,10 +130,12 @@ pub enum OrderByTerm {
     // schema, because it's flattened.
     /// Creation timestamp of the item.
     #[schemars(title = "OrderByTimestamp")]
+    #[cfg_attr(feature = "openapi", schema(title = "OrderByTimestamp"))]
     Timestamp,
 
     /// Value of a metric.
     #[schemars(title = "OrderByMetric")]
+    #[cfg_attr(feature = "openapi", schema(title = "OrderByMetric"))]
     Metric {
         /// The name of the metric to order by.
         name: String,

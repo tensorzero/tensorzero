@@ -96,6 +96,7 @@ pub mod dynamic {
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraHeader {
         #[schemars(title = "ProviderExtraHeader")]
+        #[cfg_attr(feature = "openapi", schema(title = "ProviderExtraHeader"))]
         #[deprecated(note = "Migrate to `ModelProvider` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProvider` instead.
         Provider {
@@ -107,6 +108,7 @@ pub mod dynamic {
             value: String,
         },
         #[schemars(title = "ProviderExtraHeaderDelete")]
+        #[cfg_attr(feature = "openapi", schema(title = "ProviderExtraHeaderDelete"))]
         #[deprecated(note = "Migrate to `ModelProviderDelete` and remove in 2026.2+. (#4640)")]
         /// DEPRECATED: Use `ModelProviderDelete` instead.
         ProviderDelete {

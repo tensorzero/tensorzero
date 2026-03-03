@@ -21,6 +21,7 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StorageKind {
     #[schemars(title = "StorageKindS3Compatible")]
+    #[cfg_attr(feature = "openapi", schema(title = "StorageKindS3Compatible"))]
     S3Compatible {
         bucket_name: Option<String>,
         region: Option<String>,
@@ -34,6 +35,7 @@ pub enum StorageKind {
         prefix: String,
     },
     #[schemars(title = "StorageKindFilesystem")]
+    #[cfg_attr(feature = "openapi", schema(title = "StorageKindFilesystem"))]
     Filesystem { path: String },
     // This must be set explicitly in `tensorzero.toml` to allow image requests to succeed
     // By default, requests will fail (we'll have a `None` for the outer `ObjectStoreData`)

@@ -27,6 +27,7 @@ use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
 pub enum DatapointOrderByTerm {
     /// Creation timestamp of the datapoint.
     #[schemars(title = "DatapointOrderByTimestamp")]
+    #[cfg_attr(feature = "openapi", schema(rename = "DatapointOrderByTimestamp"))]
     Timestamp,
 
     /// Relevance score of the search query in the input and output of the datapoint.
@@ -35,6 +36,7 @@ pub enum DatapointOrderByTerm {
     /// NOTE: Relevance ordering is not yet implemented for Postgres and currently
     /// falls back to id ordering. See TODO(#6441).
     #[schemars(title = "DatapointOrderBySearchRelevance")]
+    #[cfg_attr(feature = "openapi", schema(rename = "DatapointOrderBySearchRelevance"))]
     SearchRelevance,
 }
 
@@ -78,11 +80,11 @@ pub struct UpdateDatapointsRequest {
 pub enum UpdateDatapointRequest {
     /// Request to update a chat datapoint.
     #[schemars(title = "UpdateChatDatapointRequest")]
-    #[cfg_attr(feature = "openapi", schema(title = "UpdateDatapointRequestChat"))]
+    #[cfg_attr(feature = "openapi", schema(title = "UpdateChatDatapointRequest"))]
     Chat(UpdateChatDatapointRequest),
     /// Request to update a JSON datapoint.
     #[schemars(title = "UpdateJsonDatapointRequest")]
-    #[cfg_attr(feature = "openapi", schema(title = "UpdateDatapointRequestJson"))]
+    #[cfg_attr(feature = "openapi", schema(title = "UpdateJsonDatapointRequest"))]
     Json(UpdateJsonDatapointRequest),
 }
 
@@ -93,6 +95,7 @@ pub enum UpdateDatapointRequest {
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 #[schemars(title = "UpdateChatDatapointRequestInternal")]
+#[cfg_attr(feature = "openapi", schema(title = "UpdateChatDatapointRequestInternal"))]
 pub struct UpdateChatDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -302,6 +305,7 @@ parallel tool calls). If specified as a value, it will be set to the provided va
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 #[schemars(title = "UpdateJsonDatapointRequestInternal")]
+#[cfg_attr(feature = "openapi", schema(title = "UpdateJsonDatapointRequestInternal"))]
 pub struct UpdateJsonDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,

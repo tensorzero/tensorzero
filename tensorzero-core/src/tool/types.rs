@@ -45,11 +45,11 @@ use super::config::DynamicToolConfig;
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
     #[schemars(title = "FunctionTool")]
-    #[cfg_attr(feature = "openapi", schema(title = "ToolFunction"))]
+    #[cfg_attr(feature = "openapi", schema(title = "FunctionTool"))]
     Function(FunctionTool), // Custom deserializer below accepts no type or type="client_side_function" (legacy)
     #[schemars(title = "OpenAICustomTool")]
     #[serde(rename = "openai_custom")]
-    #[cfg_attr(feature = "openapi", schema(title = "ToolOpenAICustom"))]
+    #[cfg_attr(feature = "openapi", schema(title = "OpenAICustomTool"))]
     OpenAICustom(OpenAICustomTool),
 }
 
@@ -293,8 +293,10 @@ impl fmt::Display for OpenAICustomTool {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {
     #[schemars(title = "OpenAICustomToolFormatText")]
+    #[cfg_attr(feature = "openapi", schema(title = "OpenAICustomToolFormatText"))]
     Text,
     #[schemars(title = "OpenAICustomToolFormatGrammar")]
+    #[cfg_attr(feature = "openapi", schema(title = "OpenAICustomToolFormatGrammar"))]
     Grammar { grammar: OpenAIGrammarDefinition },
 }
 
@@ -347,6 +349,7 @@ impl OpenAICustomTool {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[schemars(title = "ProviderToolScopeModelProvider")]
+#[cfg_attr(feature = "openapi", schema(title = "ProviderToolScopeModelProvider"))]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
 pub struct ProviderToolScopeModelProvider {
     pub model_name: String,

@@ -407,7 +407,7 @@ pub struct ObjectStorageError {
 #[export_schema]
 pub enum File {
     #[schemars(title = "FileUrlFile")]
-    #[cfg_attr(feature = "openapi", schema(title = "FileUrl"))]
+    #[cfg_attr(feature = "openapi", schema(title = "FileUrlFile"))]
     Url(UrlFile),
     #[schemars(title = "FileBase64")]
     #[cfg_attr(feature = "openapi", schema(title = "FileBase64"))]
