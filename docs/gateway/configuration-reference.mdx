@@ -439,6 +439,29 @@ The specified timeouts apply to the scope of an entire model inference request, 
 You can also set timeouts at the variant level and provider level.
 Multiple timeouts can be active simultaneously.
 
+### `namespace`
+
+- **Type:** string
+- **Required:** no
+
+Scopes this model to a specific namespace.
+When set, the model can only be used by variants that are reachable from a matching namespace experimentation config.
+This is validated at both config time and inference time.
+
+This is useful for per-customer fine-tuned models that should only be served when the correct namespace is provided at inference time.
+
+```toml title="tensorzero.toml"
+[models.customer-a-ft]
+routing = ["fireworks"]
+namespace = "customer_a"
+
+[models.customer-a-ft.providers.fireworks]
+type = "fireworks"
+model_name = "accounts/customer-a/models/ft-v1"
+```
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
+
 ## `[models.model_name.providers.provider_name]`
 
 The `providers` sub-section defines the behavior of a specific provider for a model.
@@ -4583,6 +4606,34 @@ update_period_s = 300
 ```
 
 </Accordion>
+
+### Namespace-Specific Experimentation
+
+You can override the base experimentation config for specific namespaces using the `namespaces` sub-section.
+Each namespace key maps to an experimentation config that follows the same schema as the base config (i.e. `type`, `candidate_variants`, etc.).
+
+When a request provides a namespace, the gateway uses the matching namespace config if one exists.
+If no matching namespace config is found, the base experimentation config is used as a fallback.
+
+```toml title="tensorzero.toml"
+# Base config: used when no namespace is provided or namespace has no specific config
+[functions.draft-email.experimentation]
+type = "static"
+candidate_variants = ["variant-a", "variant-b"]
+
+# Mobile namespace: always serve variant-a
+[functions.draft-email.experimentation.namespaces.mobile]
+type = "static"
+candidate_variants = {"variant-a" = 1.0}
+
+# Web namespace: run an adaptive experiment
+[functions.draft-email.experimentation.namespaces.web]
+type = "adaptive"
+candidate_variants = ["variant-a", "variant-b"]
+metric = "user-rating"
+```
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
 
 ## `[metrics]`
 
