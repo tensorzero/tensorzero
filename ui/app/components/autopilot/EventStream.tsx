@@ -33,7 +33,6 @@ import type {
   EventPayloadUserQuestion,
   GatewayEvent,
   GatewayEventPayload,
-  TopKEvaluationVisualization,
   UserQuestionAnswer,
   VisualizationType,
 } from "~/types/tensorzero";
@@ -41,11 +40,9 @@ import { formatResponse } from "~/components/autopilot/question-cards/formatResp
 import { hasAnsweredResponse } from "~/components/autopilot/question-cards/responseStatus";
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
-import TopKEvaluationViz from "./TopKEvaluationViz";
-import FeedbackByVariantChart, {
-  type ParsedFeedbackByVariant,
-  parseFeedbackChartData,
-} from "./FeedbackByVariantChart";
+import EventVisualization, {
+  detectEventVisualization,
+} from "./EventVisualization";
 
 /**
  * Max height for expandable tool content (tool call arguments, tool results, errors).
@@ -190,76 +187,6 @@ function getVisualizationTitle(visualization: VisualizationType): string {
     return `Visualization (${String(visualization.type)})`;
   }
   return "Visualization";
-}
-
-export type EventVisualizationData =
-  | { type: "top_k_evaluation"; data: TopKEvaluationVisualization }
-  | { type: "feedback_by_variant"; data: ParsedFeedbackByVariant[] }
-  | { type: "unknown"; raw: unknown };
-
-function isTopKEvaluation(
-  viz: VisualizationType,
-): viz is { type: "top_k_evaluation" } & TopKEvaluationVisualization {
-  return (
-    typeof viz === "object" &&
-    viz !== null &&
-    "type" in viz &&
-    viz.type === "top_k_evaluation"
-  );
-}
-
-export function detectEventVisualization(
-  event: GatewayEvent,
-): EventVisualizationData | null {
-  if (event.payload.type === "visualization") {
-    const viz = event.payload.visualization;
-    if (isTopKEvaluation(viz)) {
-      return { type: "top_k_evaluation", data: viz };
-    }
-    return { type: "unknown", raw: viz };
-  }
-
-  if (
-    event.payload.type === "tool_result" &&
-    event.payload.outcome.type === "success"
-  ) {
-    const feedbackData = parseFeedbackChartData(event.payload.outcome.result);
-    if (feedbackData) {
-      return { type: "feedback_by_variant", data: feedbackData };
-    }
-  }
-
-  return null;
-}
-
-function UnknownVisualizationFallback({ raw }: { raw: unknown }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="text-fg-muted flex items-center gap-2 text-sm">
-        <AlertTriangle className="h-4 w-4 text-yellow-600" />
-        <span>
-          Unknown visualization type. Your TensorZero deployment may be
-          outdated.
-        </span>
-      </div>
-      <ReadOnlyCodeBlock code={JSON.stringify(raw, null, 2)} language="json" />
-    </div>
-  );
-}
-
-function EventVisualization({ data }: { data: EventVisualizationData }) {
-  switch (data.type) {
-    case "top_k_evaluation":
-      return <TopKEvaluationViz data={data.data} />;
-    case "feedback_by_variant":
-      return <FeedbackByVariantChart data={data.data} />;
-    case "unknown":
-      return <UnknownVisualizationFallback raw={data.raw} />;
-    default: {
-      const _exhaustiveCheck: never = data;
-      return _exhaustiveCheck;
-    }
-  }
 }
 
 /**

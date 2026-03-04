@@ -1,6 +1,6 @@
 import { expect, test, describe } from "vitest";
 import type { GatewayEvent } from "~/types/tensorzero";
-import { detectEventVisualization } from "./EventStream";
+import { detectEventVisualization } from "./EventVisualization";
 
 function makeEvent(payload: GatewayEvent["payload"]): GatewayEvent {
   return {
