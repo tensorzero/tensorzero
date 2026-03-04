@@ -9,7 +9,6 @@ use tracing::instrument;
 use crate::config::Config;
 use crate::db::TimeWindow;
 use crate::db::clickhouse::query_builder::InferenceFilter;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::{
     CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
     CountInferencesWithFeedbackParams, FunctionInferenceCount,
@@ -17,7 +16,6 @@ use crate::db::inferences::{
 };
 use crate::endpoints::stored_inferences::v1::types::DemonstrationFeedbackFilter;
 use crate::error::{Error, ErrorDetails};
-use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::function::DEFAULT_FUNCTION_NAME;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -140,10 +138,7 @@ pub async fn get_inference_count_handler(
     Path(function_name): Path<String>,
     Query(params): Query<InferenceCountQueryParams>,
 ) -> Result<Json<InferenceCountResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response =
         get_inference_count(&app_state.config, &database, &function_name, params).await?;
     Ok(Json(response))
@@ -164,10 +159,7 @@ pub async fn get_inference_with_feedback_count_handler(
     Path((function_name, metric_name)): Path<(String, String)>,
     Query(params): Query<InferenceWithFeedbackCountQueryParams>,
 ) -> Result<Json<InferenceWithFeedbackCountResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
 
     let response = get_inference_with_feedback_count(
         &app_state.config,
@@ -307,10 +299,7 @@ pub async fn get_function_throughput_by_variant_handler(
     Path(function_name): Path<String>,
     Query(params): Query<FunctionThroughputByVariantQueryParams>,
 ) -> Result<Json<GetFunctionThroughputByVariantResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        state.clickhouse_connection_info.clone(),
-        state.postgres_connection_info.clone(),
-    );
+    let database = state.get_delegating_database();
 
     let response =
         get_function_throughput_by_variant(&state.config, &database, &function_name, params)
@@ -347,13 +336,8 @@ pub async fn get_function_throughput_by_variant(
 pub async fn list_functions_with_inference_count_handler(
     State(state): State<AppStateData>,
 ) -> Result<Json<ListFunctionsWithInferenceCountResponse>, Error> {
-    let database: &(dyn InferenceQueries + Sync) = if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-        &state.postgres_connection_info
-    } else {
-        &state.clickhouse_connection_info
-    };
-
-    let response = list_functions_with_inference_count(database).await?;
+    let database = state.get_delegating_database();
+    let response = list_functions_with_inference_count(&database).await?;
     Ok(Json(response))
 }
 
@@ -627,9 +611,9 @@ mod tests {
         assert_eq!(result.inference_count, 10);
     }
 
-    // Tests for ENABLE_POSTGRES_AS_PRIMARY_DATASTORE flag dispatch
-    // Note: The business logic functions take `&impl InferenceCountQueries` and are database-agnostic.
-    // The flag only affects which connection the handlers pass to the business logic.
+    // Tests for Postgres primary datastore dispatch.
+    // The business logic functions take `&impl InferenceCountQueries` and are database-agnostic.
+    // The primary datastore setting only affects which connection the handlers pass to the business logic.
     // These tests verify the Postgres implementation can be invoked through the same interface.
 
     #[tokio::test]

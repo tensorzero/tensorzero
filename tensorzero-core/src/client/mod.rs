@@ -966,7 +966,7 @@ impl Client {
     }
 
     /// Assigns feedback for a TensorZero inference.
-    /// See https://www.tensorzero.com/docs/gateway/api-reference#post-feedback
+    /// See https://www.tensorzero.com/docs/gateway/api-reference
     pub async fn feedback(
         &self,
         params: FeedbackParams,
@@ -1170,6 +1170,7 @@ impl Client {
                         gateway.handle.app_state.cache_manager.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
                         gateway.handle.app_state.rate_limiting_manager.clone(),
+                        gateway.handle.app_state.primary_datastore,
                         params.try_into().map_err(err_to_http)?,
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
@@ -1297,8 +1298,7 @@ mod tests {
     use tempfile::NamedTempFile;
     #[tokio::test]
     async fn test_gateway_fails_to_start_with_observability_and_missing_clickhouse_url() {
-        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
-        // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
+        // This config file requires ClickHouse (backend = "clickhouse"), so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
             clickhouse_url: None,
@@ -1321,11 +1321,12 @@ mod tests {
     #[tokio::test]
     async fn test_gateway_fails_to_start_with_observability_and_missing_postgres_url_and_postgres_primary()
      {
-        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
-        // With Postgres as primary datastore and observability enabled,
+        // This config file uses backend = "postgres" and observability enabled,
         // the gateway should fail to start without a Postgres connection.
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
+            config_file: Some(PathBuf::from(
+                "../clients/rust/tests/test_config_postgres.toml",
+            )),
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
@@ -1338,18 +1339,19 @@ mod tests {
         .expect_err("Should fail without Postgres when it is the primary datastore and observability is enabled");
         let err_msg = err.to_string();
         assert!(
-            err_msg.contains("ENABLE_POSTGRES_AS_PRIMARY_DATASTORE"),
-            "error should mention the feature flag: {err_msg}"
+            err_msg.contains("Postgres") && err_msg.contains("primary datastore"),
+            "error should mention Postgres as primary datastore: {err_msg}"
         );
     }
 
     #[tokio::test]
     async fn test_gateway_starts_with_observability_and_postgres_connection_and_postgres_primary() {
-        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(true);
-        // With Postgres as primary datastore and a Postgres connection provided,
+        // With Postgres backend and a Postgres connection provided,
         // the gateway should start even without ClickHouse.
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
+            config_file: Some(PathBuf::from(
+                "../clients/rust/tests/test_config_postgres.toml",
+            )),
             clickhouse_url: None,
             postgres_config: Some(PostgresConfig::ExistingConnectionInfo(
                 PostgresConnectionInfo::new_mock(true),
@@ -1501,7 +1503,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_log_no_clickhouse() {
-        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
@@ -1520,13 +1521,12 @@ mod tests {
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
         assert!(logs_contain(
-            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+            "`gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
         ));
     }
 
     #[tokio::test]
     async fn test_log_no_config() {
-        feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.override_for_test(false);
         let logs_contain = crate::utils::testing::capture_logs();
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,
@@ -1547,7 +1547,7 @@ mod tests {
             "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
         ));
         assert!(logs_contain(
-            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+            "`gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
         ));
     }
 

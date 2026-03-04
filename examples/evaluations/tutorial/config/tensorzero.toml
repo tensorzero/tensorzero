@@ -31,7 +31,6 @@ type = "exact_match"
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
-cutoff = 0.95
 
 [evaluations.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_mini_judge]
 type = "chat_completion"
@@ -50,7 +49,6 @@ json_mode = "strict"
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
-cutoff = 1
 
 [evaluations.haiku_eval.evaluators.metaphor_count.variants.gpt_4o_mini_judge]
 type = "chat_completion"

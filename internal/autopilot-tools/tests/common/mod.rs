@@ -21,7 +21,9 @@ use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::EpisodeByIdRow;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::endpoints::datasets::{ChatInferenceDatapoint, Datapoint};
-use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+use tensorzero_core::endpoints::feedback::internal::{
+    GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+};
 use tensorzero_core::endpoints::inference::ChatInferenceResponse;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, Input, InputMessage, StoredInput, StoredInputMessage,
@@ -42,6 +44,11 @@ mock! {
             &self,
             params: ClientInferenceParams,
         ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+        async fn embeddings(
+            &self,
+            params: durable_tools::EmbeddingsParams,
+        ) -> Result<durable_tools::EmbeddingResponse, TensorZeroClientError>;
 
         async fn feedback(
             &self,
@@ -162,6 +169,14 @@ mock! {
             &self,
             target_id: Uuid,
         ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+        async fn get_feedback_by_target_id(
+            &self,
+            target_id: Uuid,
+            before: Option<Uuid>,
+            after: Option<Uuid>,
+            limit: Option<u32>,
+        ) -> Result<GetFeedbackByTargetIdResponse, TensorZeroClientError>;
 
         async fn get_feedback_by_variant(
             &self,

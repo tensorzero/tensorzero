@@ -393,6 +393,20 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
     format!("{e:?}").contains("BadScheme")
 }
 
+/// Selects the primary datastore used for observability writes (inferences, feedback).
+///
+/// - `Auto` (default): prefers ClickHouse if available, falls back to Postgres.
+/// - `ClickHouse`: explicitly use ClickHouse.
+/// - `Postgres`: explicitly use Postgres.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ObservabilityBackend {
+    #[default]
+    Auto,
+    ClickHouse,
+    Postgres,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservabilityConfig {
@@ -402,6 +416,9 @@ pub struct ObservabilityConfig {
     /// - `None` (default): observability is opportunistic — enabled if a backend is available, otherwise warns and continues.
     /// - `Some(false)`: observability is disabled — no data is written regardless of backend availability.
     pub enabled: Option<bool>,
+    /// Selects the observability backend (and primary datastore).
+    #[serde(default)]
+    pub backend: ObservabilityBackend,
     #[serde(default)]
     pub async_writes: bool,
     #[serde(default)]
@@ -1794,7 +1811,7 @@ impl UninitializedConfig {
     /// This does NOT migrate values from old fields to new ones. Value migration
     /// is handled by `From<Stored*Config>` impls (for stored snapshots) and by
     /// the consumer (for TOML configs).
-    pub(crate) fn resolve_deprecations(&mut self) -> Result<(), Error> {
+    pub(crate) fn warn_on_deprecations(&mut self) -> Result<(), Error> {
         self.resolve_clickhouse_config_deprecation()
     }
 
@@ -1902,7 +1919,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
                 })
             })?;
         let mut config: UninitializedConfig = toml_config.try_into()?;
-        config.resolve_deprecations()?;
+        config.warn_on_deprecations()?;
         Ok(config)
     }
 }
@@ -2436,6 +2453,13 @@ impl PathWithContents {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct PostgresConfig {
+    /// DEPRECATED (2026.3+): Postgres connectivity is now determined by the
+    /// `TENSORZERO_POSTGRES_URL` environment variable. This field is accepted
+    /// for backward compatibility but will be removed in a future release.
+    #[deprecated(
+        note = "Postgres connectivity is now determined by the `TENSORZERO_POSTGRES_URL` environment variable. Remove `postgres.enabled` from your config."
+    )]
+    #[serde(default, skip_serializing)]
     pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
@@ -2463,6 +2487,7 @@ fn default_connection_pool_size() -> u32 {
 
 impl Default for PostgresConfig {
     fn default() -> Self {
+        #[expect(deprecated)]
         Self {
             enabled: None,
             connection_pool_size: 20,

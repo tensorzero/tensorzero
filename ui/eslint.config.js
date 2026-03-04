@@ -1,8 +1,10 @@
-import pluginJs from "@eslint/js";
 import tseslint from "typescript-eslint";
-import pluginReact from "eslint-plugin-react";
-import pluginReactHooks from "eslint-plugin-react-hooks";
+import oxlint from "eslint-plugin-oxlint";
 
+// Slim ESLint config: only rules that oxlint cannot handle yet.
+// All standard rules (recommended, react, react-hooks, TS, etc.) are in .oxlintrc.json.
+// When oxlint adds no-restricted-syntax and type-aware linting stabilizes,
+// this file can be deleted entirely.
 export default [
   {
     ignores: [
@@ -16,39 +18,25 @@ export default [
       "**/.storybook/**",
     ],
   },
+  ...tseslint.configs.recommended,
   {
-    files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"],
-    plugins: {
-      react: pluginReact,
-    },
+    files: ["**/*.{ts,tsx}"],
     languageOptions: {
-      globals: {
-        document: true,
-        window: true,
-        process: true,
-        require: true,
-        module: true,
-        __dirname: true,
-        console: true,
-      },
       parserOptions: {
         project: "./tsconfig.json",
         tsconfigRootDir: import.meta.dirname,
-        ecmaFeatures: {
-          jsx: true,
-        },
       },
     },
-    settings: {
-      react: {
-        version: "detect",
-      },
+    linterOptions: {
+      // Rules like react-hooks/exhaustive-deps and no-console are now enforced by oxlint,
+      // but code still has eslint-disable comments for them. Don't report these as errors.
+      reportUnusedDisableDirectives: "off",
     },
     rules: {
-      "react/jsx-uses-react": "error",
-      "react/jsx-uses-vars": "error",
-      "react/react-in-jsx-scope": "off",
-      "no-console": ["warn"],
+      // Type-aware: oxlint's tsgolint is alpha and incompatible with our tsconfig (baseUrl)
+      "@typescript-eslint/switch-exhaustiveness-check": "error",
+
+      // AST selector rules: oxlint does not implement no-restricted-syntax
       "no-restricted-syntax": [
         "error",
         {
@@ -95,21 +83,7 @@ export default [
       ],
     },
   },
-  pluginReactHooks.configs["recommended-latest"],
-  pluginJs.configs.recommended,
-  ...tseslint.configs.recommended,
-  {
-    rules: {
-      "@typescript-eslint/switch-exhaustiveness-check": "error",
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        {
-          argsIgnorePattern: "^_",
-          varsIgnorePattern: "^_",
-          destructuredArrayIgnorePattern: "^_",
-          ignoreRestSiblings: true,
-        },
-      ],
-    },
-  },
+  // Disable all ESLint rules that oxlint already covers
+  ...oxlint.configs["flat/recommended"],
+  ...oxlint.configs["flat/typescript"],
 ];

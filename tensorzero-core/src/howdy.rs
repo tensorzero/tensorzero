@@ -31,12 +31,12 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
+use crate::db::delegating_connection::{DelegatingDatabaseConnection, PrimaryDatastore};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::{DeploymentIdQueries, HowdyQueries};
 use crate::{config::Config, utils::spawn_ignoring_shutdown};
-use crate::{db::clickhouse::ClickHouseConnectionInfo, feature_flags};
 
 lazy_static! {
     /// The URL to send usage data to.
@@ -51,6 +51,7 @@ pub fn setup_howdy(
     config: &Config,
     clickhouse: ClickHouseConnectionInfo,
     postgres: PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
     token: CancellationToken,
 ) {
     if config.gateway.disable_pseudonymous_usage_analytics
@@ -60,23 +61,23 @@ pub fn setup_howdy(
         return;
     }
 
-    // TODO(#5691): Support reading deployment ID when ClickHouse is disabled.
-    let clickhouse_disabled = clickhouse.client_type() == ClickHouseClientType::Disabled;
-    if clickhouse_disabled {
+    if primary_datastore == PrimaryDatastore::Disabled {
         return;
     }
-    spawn_ignoring_shutdown(howdy_loop(clickhouse, postgres, token));
+    spawn_ignoring_shutdown(howdy_loop(clickhouse, postgres, primary_datastore, token));
 }
 
 /// Loops and sends usage data to the Howdy service every 6 hours.
 pub async fn howdy_loop(
     clickhouse: ClickHouseConnectionInfo,
     postgres: PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
     token: CancellationToken,
 ) {
-    let db = DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone());
+    let db =
+        DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone(), primary_datastore);
     let client = Client::new();
-    let deployment_id = match get_deployment_id(&clickhouse, &postgres).await {
+    let deployment_id = match get_deployment_id(&clickhouse, &postgres, primary_datastore).await {
         Ok(deployment_id) => deployment_id,
         Err(()) => {
             return;
@@ -94,7 +95,14 @@ pub async fn howdy_loop(
             _ = interval.tick() => {}
         }
         spawn_ignoring_shutdown(async move {
-            if let Err(e) = send_howdy(&copied_db, &copied_client, &copied_deployment_id).await {
+            if let Err(e) = send_howdy(
+                &copied_db,
+                &copied_client,
+                &copied_deployment_id,
+                primary_datastore,
+            )
+            .await
+            {
                 debug!("{e}");
             }
         });
@@ -106,9 +114,10 @@ async fn send_howdy(
     db: &DelegatingDatabaseConnection,
     client: &Client,
     deployment_id: &str,
+    primary_datastore: PrimaryDatastore,
 ) -> Result<(), String> {
     let howdy_url = HOWDY_URL.clone();
-    let howdy_report = get_howdy_report(db, deployment_id).await?;
+    let howdy_report = get_howdy_report(db, deployment_id, primary_datastore).await?;
     if let Err(e) = client.post(&howdy_url).json(&howdy_report).send().await {
         return Err(format!("Failed to send howdy: {e}"));
     }
@@ -121,8 +130,9 @@ async fn send_howdy(
 async fn synchronize_deployment_id(
     clickhouse: &ClickHouseConnectionInfo,
     postgres: &PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
 ) -> Result<(), ()> {
-    if !feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
+    if primary_datastore != PrimaryDatastore::Postgres {
         return Ok(());
     }
     if clickhouse.client_type() != ClickHouseClientType::Production {
@@ -148,11 +158,12 @@ async fn synchronize_deployment_id(
 pub async fn get_deployment_id(
     clickhouse: &ClickHouseConnectionInfo,
     postgres: &PostgresConnectionInfo,
+    primary_datastore: PrimaryDatastore,
 ) -> Result<String, ()> {
     // Make sure deployment ID is consistent between ClickHouse and Postgres
-    synchronize_deployment_id(clickhouse, postgres).await?;
+    synchronize_deployment_id(clickhouse, postgres, primary_datastore).await?;
 
-    DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone())
+    DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone(), primary_datastore)
         .get_deployment_id()
         .await
         .map_err(|e| {
@@ -167,6 +178,7 @@ pub async fn get_deployment_id(
 pub async fn get_howdy_report<'a>(
     db: &(dyn HowdyQueries + Sync),
     deployment_id: &'a str,
+    primary_datastore: PrimaryDatastore,
 ) -> Result<HowdyReportBody<'a>, String> {
     let dryrun = cfg!(any(test, feature = "e2e_tests"));
     let (inference_counts, feedback_counts, token_totals) = try_join!(
@@ -201,6 +213,7 @@ pub async fn get_howdy_report<'a>(
         demonstration_feedback_count: Some(
             feedback_counts.demonstration_feedback_count.to_string(),
         ),
+        observability_backend: primary_datastore,
         dryrun,
     })
 }
@@ -220,6 +233,7 @@ pub struct HowdyReportBody<'a> {
     pub boolean_metric_feedback_count: Option<String>,
     pub comment_feedback_count: Option<String>,
     pub demonstration_feedback_count: Option<String>,
+    pub observability_backend: PrimaryDatastore,
     #[serde(default)]
     pub dryrun: bool,
 }

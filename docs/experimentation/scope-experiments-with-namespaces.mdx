@@ -1,0 +1,117 @@
+---
+title: Scope experiments with namespaces
+sidebarTitle: Scope with namespaces
+description: Customize experimentation, models, and credentials per customer, tenant, or any other context.
+---
+
+Namespaces let you scope experimentation and model usage to specific contexts, such as a customer, tenant, or platform.
+They support two key use cases:
+
+- **Run different experiments per namespace:** override a function's default A/B test for specific contexts (e.g. customers).
+- **Restrict models and credentials to a namespace:** limit a model or API key to a specific context (e.g. a per-customer fine-tune that should only be served to that customer).
+
+## Run different experiments per namespace
+
+### Configure
+
+By default, a function's experimentation configuration applies to all inference requests.
+With namespaces, you can override this for specific customers or contexts.
+
+For example, imagine you're A/B testing prompts and models across your customer base, but an enterprise customer (`acme_corp`) needs a variant with a prompt tailored to their brand voice.
+You can define separate variants with custom prompts for that customer and route them using a namespace:
+
+```toml title="tensorzero.toml"
+[functions.draft_email]
+type = "chat"
+
+# Two general-purpose variants
+[functions.draft_email.variants.default_gpt]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+templates.system.path = "functions/draft_email/default_gpt/system.minijinja"
+
+[functions.draft_email.variants.default_claude]
+type = "chat_completion"
+model = "anthropic::claude-haiku-4-5"
+templates.system.path = "functions/draft_email/default_claude/system.minijinja"
+
+# Two variants tailored for `acme_corp`
+[functions.draft_email.variants.acme_corp_gpt]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+templates.system.path = "functions/draft_email/acme_corp/system.minijinja"
+
+[functions.draft_email.variants.acme_corp_claude]
+type = "chat_completion"
+model = "anthropic::claude-haiku-4-5"
+templates.system.path = "functions/draft_email/acme_corp/system.minijinja"
+
+# Default: A/B test across all customers
+[functions.draft_email.experimentation]
+type = "static"
+candidate_variants = ["default_gpt", "default_claude"]
+
+# acme_corp: A/B test their custom variants
+[functions.draft_email.experimentation.namespaces.acme_corp]
+type = "static"
+candidate_variants = ["acme_corp_gpt", "acme_corp_claude"]
+```
+
+This pattern also works for [adaptive experiments](/experimentation/run-adaptive-ab-tests).
+Here's an example of a `support_agent` function that runs independent adaptive experiments for different customers:
+
+```toml title="tensorzero.toml"
+# Default: optimize using feedback from all inferences
+[functions.support_agent.experimentation]
+type = "adaptive"
+candidate_variants = ["prompt_A", "prompt_B"]
+metric = "user_rating"
+
+# acme_corp: optimize using feedback from `acme_corp` inferences only
+[functions.support_agent.experimentation.namespaces.acme_corp]
+type = "adaptive"
+candidate_variants = ["prompt_A", "prompt_B"]
+metric = "user_rating"
+```
+
+Both experiments optimize for `user_rating`, but the default experiment uses feedback from all inferences while the `acme_corp` experiment only uses feedback from `acme_corp` inferences.
+This means each can converge on a different variant.
+
+### Run inference
+
+To use a namespace, pass it at inference time using the `namespace` parameter (or `tensorzero::namespace` in the OpenAI-compatible endpoint).
+For example:
+
+```python
+response = client.chat.completions.create(
+    model="tensorzero::function_name=draft_email",
+    messages=[...],
+    extra_body={
+        "tensorzero::namespace": "acme_corp",
+    },
+)
+```
+
+The namespace is automatically stored as the `tensorzero::namespace` tag on the inference record.
+This lets you filter and query inferences by namespace in the TensorZero UI and directly in the database.
+
+If a request provides a namespace that doesn't have a specific configuration (e.g. `"some_other_customer"`), the default experimentation configuration is used.
+In other words, unknown namespaces don't cause errors; they simply fall back to the default configuration.
+
+## Restrict models and credentials to a namespace
+
+Namespaces can also restrict which [models](/gateway/configure-models-and-providers) and [credentials (API keys)](/operations/manage-credentials) are available in a given context.
+This is particularly helpful when you have per-customer fine-tuned models or API keys that should only be used for the correct customer's inferences.
+
+```toml title="tensorzero.toml" {3}
+[models.acme_corp_ft]
+routing = ["fireworks"]
+namespace = "acme_corp"
+
+[models.acme_corp_ft.providers.fireworks]
+type = "fireworks"
+model_name = "accounts/acme-corp/models/ft-v1"
+```
+
+TensorZero enforces that a namespaced model can only appear in experimentation configurations for its own namespace.
+Any inference request that uses a namespaced model without providing the matching namespace (or with a different namespace) will be rejected.

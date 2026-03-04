@@ -508,7 +508,7 @@ jobs:
       - name: Typecheck tensorzero-node package
         run: pnpm --filter=tensorzero-node run typecheck
 
-      - name: Run ESLint
+      - name: Run oxlint + ESLint
         run: pnpm --filter=tensorzero-ui run lint:check
 
       - name: Run oxfmt
@@ -931,7 +931,7 @@ jobs:
       - name: Set Postgres as primary datastore
         if: matrix.database == 'postgres'
         run: |
-          echo "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=1" >> $GITHUB_ENV
+          echo "TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres" >> $GITHUB_ENV
 
       - name: Launch dependency services
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
@@ -941,7 +941,11 @@ jobs:
 
       - name: Launch the gateway for E2E tests
         run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
+          if [ "${{ matrix.database }}" = "postgres" ]; then
+            cargo run-e2e-postgres > e2e_logs.txt 2>&1 &
+          else
+            cargo run-e2e > e2e_logs.txt 2>&1 &
+          fi
           count=0
           max_attempts=20
           while ! curl http://localhost:3000/health; do
@@ -1299,44 +1303,75 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
+  check-docs-broken-links:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "24.13.0"
+
+      - name: Install Mintlify CLI
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g mint@4.2.390; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Mintlify CLI after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+
+      - name: Check for broken links
+        working-directory: docs
+        run: mint broken-links --check-anchors
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
-        check-version-consistency,
-        check-production-deployment-docker-compose,
-        check-docker-compose-released,
-        check-docker-compose-commit,
-        check-python-client-build,
-        check-node-bindings,
-        check-python-schemas,
-        build-windows,
-        build-ui-container,
+        autopilot-e2e,
         build-gateway-container,
         build-gateway-e2e-container,
-        build-provider-proxy-container,
         build-live-tests-container,
         build-mock-provider-api-container,
-        mocked-batch-tests,
-        publish-dev-docker-hub-images,
+        build-provider-proxy-container,
+        build-ui-container,
+        build-windows,
+        check-docker-compose-commit,
+        check-docker-compose-released,
+        check-docs-broken-links,
+        check-node-bindings,
+        check-production-deployment-docker-compose,
+        check-python-client-build,
+        check-python-schemas,
+        check-version-consistency,
+        clickhouse-tests,
+        client-tests,
+        endpoint-tests,
+        lint-rust,
+        live-tests,
         minikube,
+        mock-optimization-tests,
+        mocked-batch-tests,
+        postgres-tests,
+        publish-dev-docker-hub-images,
         rust-build,
         rust-test,
+        ui-tests,
+        ui-tests-e2e,
         validate,
         validate-node,
         validate-python,
-        lint-rust,
-        clickhouse-tests,
-        postgres-tests,
-        endpoint-tests,
-        ui-tests,
-        ui-tests-e2e,
-        mock-optimization-tests,
-        live-tests,
-        client-tests,
-        autopilot-e2e,
       ]
     runs-on: ubuntu-latest
     steps:

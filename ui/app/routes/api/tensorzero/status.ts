@@ -29,7 +29,7 @@ export function useTensorZeroStatusFetcher() {
     if (statusFetcher.state === "idle" && !statusFetcher.data) {
       statusFetcher.load("/api/tensorzero/status");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run on mount
 
   return useMemo(() => ({ status, isLoading }), [status, isLoading]);

@@ -7,10 +7,12 @@ For developing Postgres features (writing queries, testing locally):
 ```bash
 # 1. Set environment variables
 export TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@localhost:5432/postgres_migration_dev"
-export TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=1
 
 # 2. Reset Postgres and load fixture data
 ./ui/fixtures/reset-dev-postgres.sh
+
+# 3. Start gateway with postgres
+cargo run-e2e-postgres
 ```
 
 ### Rebuilding SQLx Cache
@@ -47,7 +49,7 @@ TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e
 
 # 6. Run Postgres E2E tests
 TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests \
-  cargo test --package tensorzero-core --features e2e_tests postgres::inference_count_queries
+  TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres cargo test-e2e postgres::inference_count_queries
 ```
 
 ### Without New Migrations (Full Docker Compose)
@@ -64,7 +66,7 @@ docker compose -f tensorzero-core/tests/e2e/docker-compose.yml ps  # Check healt
 # 3. Run tests
 TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests \
 TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests \
-  cargo test --package tensorzero-core --features e2e_tests
+  TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres cargo test-e2e
 ```
 
 ### With New Migrations (Slow Alternative)

@@ -53,6 +53,26 @@ impl ToolMetadata for SlowTool {
             "Sleeps for the specified duration before returning. Used for testing timeout behavior.",
         )
     }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
 }
 
 #[async_trait]
@@ -62,7 +82,7 @@ impl TaskTool for SlowTool {
         &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         let start = Instant::now();
         tokio::time::sleep(tokio::time::Duration::from_millis(llm_params.delay_ms)).await;

@@ -1170,16 +1170,11 @@ async fn test_namespace_feedback_query_filters_correctly_clickhouse() {
 /// Test that the namespace-filtered `get_feedback_by_variant` query correctly
 /// returns only feedback for inferences tagged with the specified namespace (Postgres).
 ///
-/// Sets `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=true` so the embedded gateway writes to Postgres.
+/// Uses `observability.backend = "postgres"` so the embedded gateway writes to Postgres.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_namespace_feedback_query_filters_correctly_postgres() {
-    // Must be set before the first flag access (OnceLock caches on first read)
-    tensorzero_unsafe_helpers::set_env_var_tests_only(
-        "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE",
-        "true",
-    );
-
-    let config = make_namespace_track_and_stop_config();
+    let mut config = make_namespace_track_and_stop_config();
+    config.push_str("\n[gateway.observability]\nbackend = \"postgres\"\n");
     let (client, clickhouse, postgres, _guard) =
         Box::pin(make_embedded_gateway_with_clean_clickhouse(&config)).await;
 

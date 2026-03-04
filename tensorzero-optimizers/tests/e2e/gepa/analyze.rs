@@ -388,25 +388,23 @@ pub fn create_test_evaluation_config_with_evaluators() -> EvaluationConfig {
     let mut evaluators = HashMap::new();
 
     // Add ExactMatch evaluator
-    evaluators.insert(
-        "exact_match".to_string(),
-        EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.8) }),
-    );
+    #[expect(deprecated)]
+    let exact_match = EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.8) });
+    evaluators.insert("exact_match".to_string(), exact_match);
 
     // Add fluency evaluator (Float type)
-    evaluators.insert(
-        "fluency".to_string(),
-        EvaluatorConfig::LLMJudge(LLMJudgeConfig {
-            input_format: LLMJudgeInputFormat::Serialized,
-            output_type: LLMJudgeOutputType::Float,
-            include: LLMJudgeIncludeConfig {
-                reference_output: false,
-            },
-            optimize: LLMJudgeOptimize::Max,
-            cutoff: Some(0.5),
-            description: Some("fluency evaluation".to_string()),
-        }),
-    );
+    #[expect(deprecated)]
+    let fluency = EvaluatorConfig::LLMJudge(LLMJudgeConfig {
+        input_format: LLMJudgeInputFormat::Serialized,
+        output_type: LLMJudgeOutputType::Float,
+        include: LLMJudgeIncludeConfig {
+            reference_output: false,
+        },
+        optimize: LLMJudgeOptimize::Max,
+        cutoff: Some(0.5),
+        description: Some("fluency evaluation".to_string()),
+    });
+    evaluators.insert("fluency".to_string(), fluency);
 
     EvaluationConfig::Inference(InferenceEvaluationConfig {
         evaluators,
@@ -882,45 +880,42 @@ async fn test_analyze_input_format_scenarios() {
     };
 
     let mut evaluators = HashMap::new();
-    evaluators.insert(
-        "numeric_score".to_string(),
-        EvaluatorConfig::LLMJudge(LLMJudgeConfig {
-            input_format: LLMJudgeInputFormat::Serialized,
-            output_type: LLMJudgeOutputType::Float,
-            include: LLMJudgeIncludeConfig {
-                reference_output: false,
-            },
-            optimize: LLMJudgeOptimize::Max,
-            cutoff: None,
-            description: Some("numeric evaluator".to_string()),
-        }),
-    );
-    evaluators.insert(
-        "bool_true".to_string(),
-        EvaluatorConfig::LLMJudge(LLMJudgeConfig {
-            input_format: LLMJudgeInputFormat::Serialized,
-            output_type: LLMJudgeOutputType::Boolean,
-            include: LLMJudgeIncludeConfig {
-                reference_output: false,
-            },
-            optimize: LLMJudgeOptimize::Max,
-            cutoff: None,
-            description: Some("bool evaluator".to_string()),
-        }),
-    );
-    evaluators.insert(
-        "null_value".to_string(),
-        EvaluatorConfig::LLMJudge(LLMJudgeConfig {
-            input_format: LLMJudgeInputFormat::Serialized,
-            output_type: LLMJudgeOutputType::Float,
-            include: LLMJudgeIncludeConfig {
-                reference_output: false,
-            },
-            optimize: LLMJudgeOptimize::Max,
-            cutoff: None,
-            description: Some("null evaluator".to_string()),
-        }),
-    );
+    #[expect(deprecated)]
+    let numeric_score = EvaluatorConfig::LLMJudge(LLMJudgeConfig {
+        input_format: LLMJudgeInputFormat::Serialized,
+        output_type: LLMJudgeOutputType::Float,
+        include: LLMJudgeIncludeConfig {
+            reference_output: false,
+        },
+        optimize: LLMJudgeOptimize::Max,
+        cutoff: None,
+        description: Some("numeric evaluator".to_string()),
+    });
+    evaluators.insert("numeric_score".to_string(), numeric_score);
+    #[expect(deprecated)]
+    let bool_true = EvaluatorConfig::LLMJudge(LLMJudgeConfig {
+        input_format: LLMJudgeInputFormat::Serialized,
+        output_type: LLMJudgeOutputType::Boolean,
+        include: LLMJudgeIncludeConfig {
+            reference_output: false,
+        },
+        optimize: LLMJudgeOptimize::Max,
+        cutoff: None,
+        description: Some("bool evaluator".to_string()),
+    });
+    evaluators.insert("bool_true".to_string(), bool_true);
+    #[expect(deprecated)]
+    let null_value = EvaluatorConfig::LLMJudge(LLMJudgeConfig {
+        input_format: LLMJudgeInputFormat::Serialized,
+        output_type: LLMJudgeOutputType::Float,
+        include: LLMJudgeIncludeConfig {
+            reference_output: false,
+        },
+        optimize: LLMJudgeOptimize::Max,
+        cutoff: None,
+        description: Some("null evaluator".to_string()),
+    });
+    evaluators.insert("null_value".to_string(), null_value);
     let score_eval_config = EvaluationConfig::Inference(InferenceEvaluationConfig {
         evaluators,
         function_name: "test_function".to_string(),

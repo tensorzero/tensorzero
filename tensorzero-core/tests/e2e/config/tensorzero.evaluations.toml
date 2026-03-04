@@ -125,15 +125,12 @@ function_name = "extract_entities"
 
 [evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
-# expected to fail
-cutoff = 0.6
 
 [evaluations.entity_extraction.evaluators.count_sports]
 type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = false }
-cutoff = 0.5
 
 [evaluations.entity_extraction.evaluators.count_sports.variants.mini]
 type = "chat_completion"
@@ -167,7 +164,6 @@ type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
 include = { reference_output = false }
-cutoff = 0.5
 
 [evaluations.haiku.evaluators.topic_starts_with_f.variants.mini]
 type = "chat_completion"
@@ -197,7 +193,6 @@ type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
 include = { reference_output = false }
-cutoff = 0.5
 
 [evaluations.haiku_without_outputs.evaluators.topic_starts_with_f.variants.mini]
 type = "chat_completion"
@@ -220,7 +215,6 @@ input_format = "messages"
 output_type = "boolean"
 optimize = "max"
 include = { reference_output = false }
-cutoff = 0.2
 
 [evaluations.images.evaluators.honest_answer.variants.mini]
 type = "chat_completion"
@@ -235,7 +229,6 @@ input_format = "messages"
 output_type = "boolean"
 optimize = "max"
 include = { reference_output = true }
-cutoff = 0.5
 
 [evaluations.images.evaluators.matches_reference.variants.mini]
 type = "chat_completion"
@@ -255,7 +248,6 @@ input_format = "serialized"
 output_type = "boolean"
 optimize = "max"
 include = { reference_output = false }
-cutoff = 0.2
 
 [evaluations.bad_images.evaluators.honest_answer.variants.mini]
 type = "chat_completion"

@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfigType, get_function};
@@ -33,7 +32,7 @@ pub struct GetEvaluationRunInfosForDatapointParams {
 pub struct EvaluationRunInfoById {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
-    pub most_recent_inference_date: String,
+    pub created_at: String,
 }
 
 /// Response containing evaluation run infos.
@@ -67,10 +66,7 @@ pub async fn get_evaluation_run_infos_handler(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response =
         get_evaluation_run_infos(&database, &evaluation_run_ids, &params.function_name).await?;
 
@@ -92,7 +88,7 @@ pub async fn get_evaluation_run_infos(
         .map(|row| EvaluationRunInfoById {
             evaluation_run_id: row.evaluation_run_id,
             variant_name: row.variant_name,
-            most_recent_inference_date: row.most_recent_inference_date.to_rfc3339(),
+            created_at: row.created_at.to_rfc3339(),
         })
         .collect();
 
@@ -113,10 +109,7 @@ pub async fn get_evaluation_run_infos_for_datapoint_handler(
     let function_config = get_function(&app_state.config.functions, &params.function_name)?;
     let function_type = function_config.config_type();
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response = get_evaluation_run_infos_for_datapoint(
         &database,
         &datapoint_id,
@@ -144,7 +137,7 @@ pub async fn get_evaluation_run_infos_for_datapoint(
         .map(|row| EvaluationRunInfoById {
             evaluation_run_id: row.evaluation_run_id,
             variant_name: row.variant_name,
-            most_recent_inference_date: row.most_recent_inference_date.to_rfc3339(),
+            created_at: row.created_at.to_rfc3339(),
         })
         .collect();
 
@@ -175,12 +168,12 @@ mod tests {
                         EvaluationRunInfoByIdRow {
                             evaluation_run_id: id1,
                             variant_name: "variant1".to_string(),
-                            most_recent_inference_date: timestamp,
+                            created_at: timestamp,
                         },
                         EvaluationRunInfoByIdRow {
                             evaluation_run_id: id2,
                             variant_name: "variant2".to_string(),
-                            most_recent_inference_date: timestamp,
+                            created_at: timestamp,
                         },
                     ])
                 })
@@ -229,7 +222,7 @@ mod tests {
                     Ok(vec![EvaluationRunInfoByIdRow {
                         evaluation_run_id: id,
                         variant_name: "my_variant".to_string(),
-                        most_recent_inference_date: timestamp,
+                        created_at: timestamp,
                     }])
                 })
             });
@@ -265,12 +258,12 @@ mod tests {
                         EvaluationRunInfoByIdRow {
                             evaluation_run_id: eval_run_id1,
                             variant_name: "variant1".to_string(),
-                            most_recent_inference_date: timestamp,
+                            created_at: timestamp,
                         },
                         EvaluationRunInfoByIdRow {
                             evaluation_run_id: eval_run_id2,
                             variant_name: "variant2".to_string(),
-                            most_recent_inference_date: timestamp,
+                            created_at: timestamp,
                         },
                     ])
                 })
@@ -334,7 +327,7 @@ mod tests {
                     Ok(vec![EvaluationRunInfoByIdRow {
                         evaluation_run_id: eval_run_id,
                         variant_name: "my_variant".to_string(),
-                        most_recent_inference_date: timestamp,
+                        created_at: timestamp,
                     }])
                 })
             });

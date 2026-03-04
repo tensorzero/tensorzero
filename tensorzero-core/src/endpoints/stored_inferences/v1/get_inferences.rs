@@ -3,7 +3,6 @@ use axum::extract::State;
 use tracing::instrument;
 
 use crate::config::Config;
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
 use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::StoredInferenceDatabase;
@@ -19,10 +18,7 @@ pub async fn get_inferences_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<GetInferencesRequest>,
 ) -> Result<Json<GetInferencesResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response = get_inferences(&app_state.config, &database, request).await?;
     Ok(Json(response))
 }
@@ -71,10 +67,7 @@ pub async fn list_inferences_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<ListInferencesRequest>,
 ) -> Result<Json<GetInferencesResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
     let response = list_inferences(&app_state.config, &database, request).await?;
     Ok(Json(response))
 }
