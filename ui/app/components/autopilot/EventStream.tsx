@@ -192,14 +192,14 @@ function getVisualizationTitle(visualization: VisualizationType): string {
   return "Visualization";
 }
 
-type EventVisualization =
+type EventVisualizationData =
   | { type: "top_k_evaluation"; data: TopKEvaluationVisualization }
   | { type: "feedback_by_variant"; data: ParsedFeedbackByVariant[] }
   | { type: "unknown"; raw: unknown };
 
 function detectEventVisualization(
   event: GatewayEvent,
-): EventVisualization | null {
+): EventVisualizationData | null {
   if (event.payload.type === "visualization") {
     const viz = event.payload.visualization;
     if (
@@ -244,20 +244,16 @@ function UnknownVisualizationFallback({ raw }: { raw: unknown }) {
   );
 }
 
-function EventVisualizationRenderer({
-  visualization,
-}: {
-  visualization: EventVisualization;
-}) {
-  switch (visualization.type) {
+function EventVisualization({ data }: { data: EventVisualizationData }) {
+  switch (data.type) {
     case "top_k_evaluation":
-      return <TopKEvaluationViz data={visualization.data} />;
+      return <TopKEvaluationViz data={data.data} />;
     case "feedback_by_variant":
-      return <FeedbackByVariantChart data={visualization.data} />;
+      return <FeedbackByVariantChart data={data.data} />;
     case "unknown":
-      return <UnknownVisualizationFallback raw={visualization.raw} />;
+      return <UnknownVisualizationFallback raw={data.raw} />;
     default: {
-      const _exhaustiveCheck: never = visualization;
+      const _exhaustiveCheck: never = data;
       return _exhaustiveCheck;
     }
   }
@@ -643,7 +639,10 @@ function EventItem({
 }: EventItemProps) {
   const { yoloMode } = useAutopilotSession();
 
-  const visualization = useMemo(() => detectEventVisualization(event), [event]);
+  const visualizationData = useMemo(
+    () => detectEventVisualization(event),
+    [event],
+  );
 
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
@@ -660,7 +659,7 @@ function EventItem({
     (event.payload.type === "tool_result" &&
       (event.payload.outcome.type === "success" ||
         event.payload.outcome.type === "failure"));
-  const [isExpanded, setIsExpanded] = useState(visualization != null);
+  const [isExpanded, setIsExpanded] = useState(visualizationData != null);
   const shouldShowDetails = !isExpandable || isExpanded;
   const label = <span className="text-sm font-medium">{title}</span>;
 
@@ -710,7 +709,7 @@ function EventItem({
       </div>
       {shouldShowDetails && (
         <>
-          {summary.description && !visualization && (
+          {summary.description && !visualizationData && (
             <>
               {event.payload.type === "message" ? (
                 <Markdown
@@ -741,9 +740,7 @@ function EventItem({
               )}
             </>
           )}
-          {visualization && (
-            <EventVisualizationRenderer visualization={visualization} />
-          )}
+          {visualizationData && <EventVisualization data={visualizationData} />}
           {event.payload.type === "user_questions" && (
             <UserQuestionsContent questions={event.payload.questions} />
           )}
