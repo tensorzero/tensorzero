@@ -392,6 +392,11 @@ def close_patched_openai_client_gateway(client: t.Any) -> None:
         )
 
 
+@deprecated(
+    "`patch_openai_client` will be removed in a future release (2026.6+). "
+    "Please deploy a standalone TensorZero Gateway and point to it using `base_url`. "
+    "See https://www.tensorzero.com/docs/deployment/tensorzero-gateway for more information."
+)
 def patch_openai_client(
     client: T,
     *,
