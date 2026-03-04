@@ -125,36 +125,6 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 - [x] **[Export OpenTelemetry traces (OTLP)](https://www.tensorzero.com/docs/operations/export-opentelemetry-traces)** and **[export Prometheus metrics](https://www.tensorzero.com/docs/observability/export-prometheus-metrics)** to your favorite application observability tools
 - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
 
-<table>
-<tr></tr> <!-- flip highlight order -->
-<tr>
-<td width="50%" align="center" valign="middle"><b>Observability » UI</b></td>
-<td width="50%" align="center" valign="middle"><b>Observability » Programmatic</b></td>
-</tr>
-<tr>
-<td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/a23e4c95-18fa-482c-8423-6078fb4cf285"></video></td>
-<td width="50%" align="left" valign="middle">
-
-```python
-t0.list_inferences(
-  request=ListInferencesRequest(
-    function_name="sales_agent",
-    filters=BooleanMetricFilter(
-        metric_name="converted_sale",
-        value=True,
-    ),
-    # + compound filters
-    # + search
-    # + pagination
-    # ... and more ...
-  )
-)
-```
-
-</td>
-</tr>
-</table>
-
 ### 📈 LLM Optimization
 
 > **Send production metrics and human feedback to easily optimize your prompts, models, and inference strategies &mdash; using the UI or programmatically.**
