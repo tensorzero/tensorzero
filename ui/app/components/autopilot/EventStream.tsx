@@ -192,12 +192,12 @@ function getVisualizationTitle(visualization: VisualizationType): string {
   return "Visualization";
 }
 
-type EventVisualizationData =
+export type EventVisualizationData =
   | { type: "top_k_evaluation"; data: TopKEvaluationVisualization }
   | { type: "feedback_by_variant"; data: ParsedFeedbackByVariant[] }
   | { type: "unknown"; raw: unknown };
 
-function detectEventVisualization(
+export function detectEventVisualization(
   event: GatewayEvent,
 ): EventVisualizationData | null {
   if (event.payload.type === "visualization") {
