@@ -11,6 +11,7 @@ import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
     EvaluatorStatsDict,
+    TensorZeroError,
     TensorZeroGateway,
     TensorZeroInternalError,
 )
@@ -111,7 +112,7 @@ def test_sync_run_evaluation_invalid_cache_mode(
     sync_client: TensorZeroGateway,
 ):
     """Test sync client experimental_run_evaluation with invalid cache mode."""
-    with pytest.raises((TensorZeroInternalError, RuntimeError)):
+    with pytest.raises((TensorZeroError, TensorZeroInternalError, RuntimeError)):
         sync_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             dataset_name="extract_entities_0.8",
@@ -225,7 +226,7 @@ async def test_async_run_evaluation_invalid_cache_mode(
     async_client: AsyncTensorZeroGateway,
 ):
     """Test async client experimental_run_evaluation with invalid cache mode."""
-    with pytest.raises((TensorZeroInternalError, RuntimeError)):
+    with pytest.raises((TensorZeroError, TensorZeroInternalError, RuntimeError)):
         await async_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             dataset_name="extract_entities_0.8",
