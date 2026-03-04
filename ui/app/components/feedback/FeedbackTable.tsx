@@ -37,6 +37,7 @@ import {
 import { Sheet, SheetContent } from "~/components/ui/sheet";
 import { CommentModal, DemonstrationModal } from "./FeedbackTableModal";
 import { Skeleton } from "~/components/ui/skeleton";
+import { Card } from "~/components/ui/card";
 
 function formatTagKey(key: string): string {
   if (key.startsWith("tensorzero::")) {
@@ -180,10 +181,27 @@ export default function FeedbackTable({
         </Table>
       )}
 
-      {comments.length > 0 && <CommentsList comments={comments} />}
+      {comments.length > 0 && (
+        <FeedbackCard
+          label="Comment"
+          value={comments[0].value}
+          tags={comments[0].tags}
+          timestamp={comments[0].timestamp}
+          testId={`feedback-row-${comments[0].id}`}
+          modal={<CommentModal feedback={comments[0]} />}
+        />
+      )}
 
       {demonstrations.length > 0 && (
-        <DemonstrationsList demonstrations={demonstrations} />
+        <FeedbackCard
+          label="Demonstration"
+          value={demonstrations[0].value}
+          tags={demonstrations[0].tags}
+          timestamp={demonstrations[0].timestamp}
+          testId={`feedback-row-${demonstrations[0].id}`}
+          mono
+          modal={<DemonstrationModal feedback={demonstrations[0]} />}
+        />
       )}
     </div>
   );
@@ -294,123 +312,65 @@ function MetricConfigInfo({ feedbackConfig }: MetricConfigInfoProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Comments list
+// Feedback card (shared by comments and demonstrations)
 // ---------------------------------------------------------------------------
 
-interface CommentsListProps {
-  comments: (CommentFeedbackRow & { type: "comment" })[];
+interface FeedbackCardProps {
+  label: string;
+  value: string;
+  tags: Record<string, unknown>;
+  timestamp: string;
+  testId: string;
+  modal: React.ReactNode;
+  mono?: boolean;
 }
 
-function CommentsList({ comments }: CommentsListProps) {
-  return (
-    <div className="space-y-2">
-      <h4 className="text-fg-tertiary text-xs font-medium">
-        Comments ({comments.length})
-      </h4>
-      <div className="divide-border divide-y">
-        {comments.map((comment) => (
-          <CommentRow key={comment.id} comment={comment} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-interface CommentRowProps {
-  comment: CommentFeedbackRow & { type: "comment" };
-}
-
-function CommentRow({ comment }: CommentRowProps) {
+function FeedbackCard({
+  label,
+  value,
+  tags,
+  timestamp,
+  testId,
+  modal,
+  mono,
+}: FeedbackCardProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-  const allTags = Object.entries(comment.tags).filter(
+  const allTags = Object.entries(tags).filter(
     (entry): entry is [string, string] => typeof entry[1] === "string",
   );
 
   return (
-    <div
-      data-testid={`feedback-row-${comment.id}`}
-      className="hover:bg-bg-secondary flex cursor-pointer items-start justify-between gap-4 py-2.5"
-      onClick={() => setIsSheetOpen(true)}
-    >
-      <p className="text-fg-primary line-clamp-2 min-w-0 flex-1 text-sm">
-        {comment.value}
-      </p>
-      <div className="text-fg-tertiary flex shrink-0 items-center gap-2 text-xs">
-        {allTags.length > 0 && (
-          <span onClick={(e) => e.stopPropagation()}>
-            <TagsPopover tags={allTags} />
-          </span>
+    <div className="space-y-2">
+      <h4 className="text-fg-tertiary text-xs font-medium">{label}</h4>
+      <Card
+        data-testid={testId}
+        className="hover:bg-bg-secondary cursor-pointer p-4"
+        onClick={() => setIsSheetOpen(true)}
+      >
+        {value ? (
+          <p
+            className={`text-fg-primary line-clamp-2 text-sm ${mono ? "font-mono" : ""}`}
+          >
+            {value}
+          </p>
+        ) : (
+          <p className="text-fg-muted text-sm italic">No data</p>
         )}
-        <TableItemTime timestamp={comment.timestamp} />
-        <span className="text-fg-muted">&middot;</span>
-        <TableItemShortUuid id={comment.id} />
-      </div>
+        <div className="text-fg-tertiary mt-2 flex items-center gap-2 text-xs">
+          {allTags.length > 0 && (
+            <span onClick={(e) => e.stopPropagation()}>
+              <TagsPopover tags={allTags} />
+            </span>
+          )}
+          <span>
+            Last updated <TableItemTime timestamp={timestamp} />
+          </span>
+        </div>
+      </Card>
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
-          <CommentModal feedback={comment} />
-        </SheetContent>
-      </Sheet>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Demonstrations list
-// ---------------------------------------------------------------------------
-
-interface DemonstrationsListProps {
-  demonstrations: (DemonstrationFeedbackRow & { type: "demonstration" })[];
-}
-
-function DemonstrationsList({ demonstrations }: DemonstrationsListProps) {
-  return (
-    <div className="space-y-2">
-      <h4 className="text-fg-tertiary text-xs font-medium">
-        Demonstrations ({demonstrations.length})
-      </h4>
-      <div className="divide-border divide-y">
-        {demonstrations.map((demo) => (
-          <DemonstrationRow key={demo.id} demonstration={demo} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-interface DemonstrationRowProps {
-  demonstration: DemonstrationFeedbackRow & { type: "demonstration" };
-}
-
-function DemonstrationRow({ demonstration }: DemonstrationRowProps) {
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-
-  const allTags = Object.entries(demonstration.tags).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string",
-  );
-
-  return (
-    <div
-      data-testid={`feedback-row-${demonstration.id}`}
-      className="hover:bg-bg-secondary flex cursor-pointer items-start justify-between gap-4 py-2.5"
-      onClick={() => setIsSheetOpen(true)}
-    >
-      <p className="text-fg-primary line-clamp-2 min-w-0 flex-1 font-mono text-sm">
-        {demonstration.value}
-      </p>
-      <div className="text-fg-tertiary flex shrink-0 items-center gap-2 text-xs">
-        {allTags.length > 0 && (
-          <span onClick={(e) => e.stopPropagation()}>
-            <TagsPopover tags={allTags} />
-          </span>
-        )}
-        <TableItemTime timestamp={demonstration.timestamp} />
-        <span className="text-fg-muted">&middot;</span>
-        <TableItemShortUuid id={demonstration.id} />
-      </div>
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
-          <DemonstrationModal feedback={demonstration} />
+          {modal}
         </SheetContent>
       </Sheet>
     </div>
