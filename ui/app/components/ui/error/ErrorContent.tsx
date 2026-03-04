@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AlertTriangle,
   Database,
@@ -80,11 +80,9 @@ function GatewayAuthContent() {
   const isBusy = fetcher.state !== "idle";
   const error = fetcher.data?.error;
 
-  useEffect(() => {
-    if (fetcher.data?.success) {
-      window.location.reload();
-    }
-  }, [fetcher.data]);
+  // On success the fetcher's Set-Cookie response stores the key in the
+  // browser. React Router then auto-revalidates the root loader, which
+  // succeeds with the cookie → infraError becomes null → dialog disappears.
 
   const handleSubmit = () => {
     if (apiKey.trim()) {
