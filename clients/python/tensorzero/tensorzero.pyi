@@ -112,6 +112,16 @@ class EvaluationJobHandler:
         """
         ...
 
+    def check_cutoffs(self) -> None:
+        """
+        Check if evaluator results meet the cutoff thresholds.
+
+        Must be called after consuming all results (via iteration).
+        Raises RuntimeError if any evaluator fails its cutoff threshold.
+        Only meaningful if cutoffs were provided to experimental_run_evaluation().
+        """
+        ...
+
     def __repr__(self) -> str: ...
 
 @final
@@ -153,6 +163,16 @@ class AsyncEvaluationJobHandler:
         Uses cached results collected during iteration.
         Returns dict mapping evaluator names to
         {"mean": float, "stderr": float, "count": int}.
+        """
+        ...
+
+    async def check_cutoffs(self) -> None:
+        """
+        Check if evaluator results meet the cutoff thresholds.
+
+        Must be called after consuming all results (via iteration).
+        Raises RuntimeError if any evaluator fails its cutoff threshold.
+        Only meaningful if cutoffs were provided to experimental_run_evaluation().
         """
         ...
 
@@ -935,6 +955,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
         max_datapoints: Optional[int] = None,
         adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
+        cutoffs: Optional[Dict[str, float]] = None,
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset or specific datapoints.
@@ -949,6 +970,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
         :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
         :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
+        :param cutoffs: Optional per-evaluator cutoff thresholds for pass/fail. Example: {"exact_match": 0.95, "llm_judge": 0.8}. After consuming all results, call handler.check_cutoffs() to verify.
         :return: An EvaluationJobHandler for iterating over evaluation results
         """
         ...
@@ -1454,6 +1476,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
         max_datapoints: Optional[int] = None,
         adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
+        cutoffs: Optional[Dict[str, float]] = None,
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset or specific datapoints.
@@ -1468,6 +1491,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
         :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
         :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
+        :param cutoffs: Optional per-evaluator cutoff thresholds for pass/fail. Example: {"exact_match": 0.95, "llm_judge": 0.8}. After consuming all results, call handler.check_cutoffs() to verify.
         :return: An AsyncEvaluationJobHandler for iterating over evaluation results
         """
         ...

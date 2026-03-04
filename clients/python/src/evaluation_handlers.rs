@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use evaluations::{
-    OutputFormat, RunInfo,
+    OutputFormat, RunInfo, check_evaluator_cutoffs, format_cutoff_failures,
+    resolve_effective_cutoffs,
     stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate},
 };
 use pyo3::{
@@ -48,6 +50,54 @@ fn compute_evaluation_stats(
     serialize_to_dict(py, &computed_stats)
 }
 
+/// Shared implementation for checking cutoffs on evaluation results.
+///
+/// This mirrors the CLI's cutoff checking logic:
+/// 1. Compute stats from collected evaluation results
+/// 2. Resolve effective cutoffs (merging provided cutoffs with any config-level cutoffs)
+/// 3. Check if stats meet the cutoff thresholds
+fn check_cutoffs_impl(
+    _py: Python<'_>,
+    evaluation_infos: &Arc<Mutex<Vec<EvaluationInfo>>>,
+    evaluation_errors: &Arc<Mutex<Vec<EvaluationError>>>,
+    evaluation_config: &Arc<EvaluationConfig>,
+    cutoffs: &HashMap<String, f32>,
+) -> PyResult<()> {
+    if cutoffs.is_empty() {
+        return Ok(());
+    }
+
+    let infos = evaluation_infos.blocking_lock().clone();
+    let errors = evaluation_errors.blocking_lock().clone();
+
+    let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+
+    let stats_obj = EvaluationStats {
+        output_format: OutputFormat::Jsonl,
+        evaluation_infos: infos,
+        evaluation_errors: errors,
+        progress_bar: None,
+    };
+    let stats = stats_obj.compute_stats(&inference_config.evaluators);
+
+    let effective_cutoffs = resolve_effective_cutoffs(&inference_config.evaluators, cutoffs)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid cutoffs: {e}")))?;
+
+    let failures =
+        check_evaluator_cutoffs(&stats, &inference_config.evaluators, &effective_cutoffs).map_err(
+            |e| pyo3::exceptions::PyRuntimeError::new_err(format!("Error checking cutoffs: {e}")),
+        )?;
+
+    if !failures.is_empty() {
+        let failure_messages = format_cutoff_failures(&failures);
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+            "Failed cutoffs for evaluators:\n{failure_messages}"
+        )));
+    }
+
+    Ok(())
+}
+
 /// Job handler for streaming evaluation results (synchronous)
 #[pyclass(frozen, str)]
 pub struct EvaluationJobHandler {
@@ -56,6 +106,7 @@ pub struct EvaluationJobHandler {
     pub(crate) evaluation_config: Arc<EvaluationConfig>,
     pub(crate) evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
     pub(crate) evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
+    pub(crate) cutoffs: HashMap<String, f32>,
 }
 
 #[pymethods]
@@ -121,6 +172,20 @@ impl EvaluationJobHandler {
         })
     }
 
+    /// Check if evaluator results meet the cutoff thresholds.
+    ///
+    /// Must be called after consuming all results (via iteration).
+    /// Raises `RuntimeError` if any evaluator fails its cutoff threshold.
+    fn check_cutoffs(&self, py: Python<'_>) -> PyResult<()> {
+        check_cutoffs_impl(
+            py,
+            &self.evaluation_infos,
+            &self.evaluation_errors,
+            &self.evaluation_config,
+            &self.cutoffs,
+        )
+    }
+
     fn __repr__(&self) -> PyResult<String> {
         serde_json::to_string_pretty(&self.run_info).map_err(|e| {
             pyo3::exceptions::PyRuntimeError::new_err(format!("Serialization error: {e}"))
@@ -143,6 +208,7 @@ pub struct AsyncEvaluationJobHandler {
     pub(crate) evaluation_config: Arc<EvaluationConfig>,
     pub(crate) evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
     pub(crate) evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
+    pub(crate) cutoffs: HashMap<String, f32>,
 }
 
 #[pymethods]
@@ -203,6 +269,30 @@ impl AsyncEvaluationJobHandler {
             let infos = evaluation_infos.lock().await.clone();
             let errors = evaluation_errors.lock().await.clone();
             Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluation_config))
+        })
+    }
+
+    /// Check if evaluator results meet the cutoff thresholds.
+    ///
+    /// Must be called after consuming all results (via iteration).
+    /// Raises `RuntimeError` if any evaluator fails its cutoff threshold.
+    fn check_cutoffs<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+        let evaluation_infos = self.evaluation_infos.clone();
+        let evaluation_errors = self.evaluation_errors.clone();
+        let evaluation_config = self.evaluation_config.clone();
+        let cutoffs = self.cutoffs.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            Python::attach(|py| {
+                check_cutoffs_impl(
+                    py,
+                    &evaluation_infos,
+                    &evaluation_errors,
+                    &evaluation_config,
+                    &cutoffs,
+                )
+                .map(|()| py.None())
+            })
         })
     }
 

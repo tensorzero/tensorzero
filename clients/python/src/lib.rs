@@ -576,6 +576,28 @@ impl BaseTensorZeroGateway {
     }
 }
 
+/// Parse an optional Python `Dict[str, float]` into a `HashMap<String, f32>`.
+fn parse_float_dict(
+    _py: Python<'_>,
+    dict: Option<&Bound<'_, PyDict>>,
+) -> PyResult<HashMap<String, f32>> {
+    let Some(dict) = dict else {
+        return Ok(HashMap::new());
+    };
+    let mut map = HashMap::new();
+    for (key, value) in dict.iter() {
+        let key_str: String = key.extract()?;
+        let value_f64: f64 = value.extract()?;
+        if value_f64 < 0.0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Cutoff value for `{key_str}` must be non-negative, got {value_f64}"
+            )));
+        }
+        map.insert(key_str, value_f64 as f32);
+    }
+    Ok(map)
+}
+
 /// Helper function to construct an EvaluationVariant from the optional variant_name and internal_dynamic_variant_config parameters.
 /// Deserializes the internal_dynamic_variant_config if provided and validates that exactly one of the two is provided.
 fn construct_evaluation_variant(
@@ -1269,6 +1291,9 @@ impl TensorZeroGateway {
     ///                         Evaluation for a given evaluator stops when it achieves its precision target,
     ///                         i.e. the width of the larger of the two halves of its confidence interval
     ///                         is <= the precision target.
+    /// * `cutoffs` - Optional per-evaluator cutoff thresholds for pass/fail.
+    ///               Example: `{"exact_match": 0.95, "llm_judge": 0.8}`
+    ///               After consuming all results, call `handler.check_cutoffs()` to verify.
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name=None,
@@ -1278,9 +1303,10 @@ impl TensorZeroGateway {
                         inference_cache="on".to_string(),
                         internal_dynamic_variant_config=None,
                         max_datapoints=None,
-                        adaptive_stopping=None
+                        adaptive_stopping=None,
+                        cutoffs=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None, cutoffs=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
@@ -1294,6 +1320,7 @@ impl TensorZeroGateway {
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
         max_datapoints: Option<u32>,
         adaptive_stopping: Option<&Bound<'_, PyDict>>,
+        cutoffs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
@@ -1336,6 +1363,9 @@ impl TensorZeroGateway {
         } else {
             HashMap::new()
         };
+
+        // Parse cutoffs from Python dict
+        let cutoffs_map = parse_float_dict(this.py(), cutoffs)?;
 
         // Parse datapoint_ids from strings to UUIDs (keeping as Option)
         let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
@@ -1405,6 +1435,7 @@ impl TensorZeroGateway {
             evaluation_config: result.evaluation_config,
             evaluation_infos: Arc::new(Mutex::new(Vec::new())),
             evaluation_errors: Arc::new(Mutex::new(Vec::new())),
+            cutoffs: cutoffs_map,
         })
     }
 
@@ -2447,6 +2478,9 @@ impl AsyncTensorZeroGateway {
     ///                         Evaluation for a given evaluator stops when it achieves its precision target,
     ///                         i.e. the width of the larger of the two halves of its confidence interval
     ///                         is <= the precision target.
+    /// * `cutoffs` - Optional per-evaluator cutoff thresholds for pass/fail.
+    ///               Example: `{"exact_match": 0.95, "llm_judge": 0.8}`
+    ///               After consuming all results, call `handler.check_cutoffs()` to verify.
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name=None,
@@ -2456,9 +2490,10 @@ impl AsyncTensorZeroGateway {
                         inference_cache="on".to_string(),
                         internal_dynamic_variant_config=None,
                         max_datapoints=None,
-                        adaptive_stopping=None
+                        adaptive_stopping=None,
+                        cutoffs=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None, cutoffs=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
@@ -2472,6 +2507,7 @@ impl AsyncTensorZeroGateway {
         internal_dynamic_variant_config: Option<&Bound<'py, PyDict>>,
         max_datapoints: Option<u32>,
         adaptive_stopping: Option<&Bound<'py, PyDict>>,
+        cutoffs: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
@@ -2507,6 +2543,9 @@ impl AsyncTensorZeroGateway {
         } else {
             HashMap::new()
         };
+
+        // Parse cutoffs from Python dict
+        let cutoffs_map = parse_float_dict(this.py(), cutoffs)?;
 
         // Parse datapoint_ids from strings to UUIDs
         let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
@@ -2584,6 +2623,7 @@ impl AsyncTensorZeroGateway {
                     evaluation_config: result.evaluation_config,
                     evaluation_infos: Arc::new(Mutex::new(Vec::new())),
                     evaluation_errors: Arc::new(Mutex::new(Vec::new())),
+                    cutoffs: cutoffs_map,
                 };
                 Py::new(py, handler).map(Py::into_any)
             })

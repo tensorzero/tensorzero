@@ -720,6 +720,176 @@ async def test_async_run_evaluation_neither_dataset_nor_datapoint_ids_error(
         )
 
 
+# TESTS FOR CUTOFFS PARAMETER
+
+
+def test_sync_cutoffs_negative_value_error(
+    embedded_sync_client: TensorZeroGateway,
+    evaluation_datasets: Dict[str, str],
+):
+    """Test that negative cutoff values are rejected at parse time."""
+    with pytest.raises(ValueError, match="non-negative"):
+        embedded_sync_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            dataset_name=evaluation_datasets["extract_entities_0.8"],
+            variant_name="gpt_4o_mini",
+            concurrency=1,
+            inference_cache="on",
+            cutoffs={"exact_match": -0.5},
+        )
+
+
+@pytest.mark.asyncio
+async def test_async_cutoffs_negative_value_error(
+    embedded_async_client: AsyncTensorZeroGateway,
+    evaluation_datasets: Dict[str, str],
+):
+    """Test that negative cutoff values are rejected at parse time (async)."""
+    with pytest.raises(ValueError, match="non-negative"):
+        await embedded_async_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            dataset_name=evaluation_datasets["extract_entities_0.8"],
+            variant_name="gpt_4o_mini",
+            concurrency=1,
+            inference_cache="on",
+            cutoffs={"exact_match": -0.5},
+        )
+
+
+def test_sync_cutoffs_unknown_evaluator_error(
+    embedded_sync_client: TensorZeroGateway,
+    evaluation_datasets: Dict[str, str],
+):
+    """Test that check_cutoffs raises for unknown evaluator names."""
+    job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="gpt_4o_mini",
+        concurrency=1,
+        inference_cache="on",
+        cutoffs={"nonexistent_evaluator": 0.5},
+    )
+
+    # Consume all results
+    for _ in job.results():
+        pass
+
+    with pytest.raises(ValueError, match="nonexistent_evaluator"):
+        job.check_cutoffs()
+
+
+@pytest.mark.asyncio
+async def test_async_cutoffs_unknown_evaluator_error(
+    embedded_async_client: AsyncTensorZeroGateway,
+    evaluation_datasets: Dict[str, str],
+):
+    """Test that check_cutoffs raises for unknown evaluator names (async)."""
+    job = await embedded_async_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="gpt_4o_mini",
+        concurrency=1,
+        inference_cache="on",
+        cutoffs={"nonexistent_evaluator": 0.5},
+    )
+
+    # Consume all results
+    async for _ in job.results():
+        pass
+
+    with pytest.raises(ValueError, match="nonexistent_evaluator"):
+        await job.check_cutoffs()
+
+
+def test_sync_cutoffs_passing(
+    embedded_sync_client: TensorZeroGateway,
+    evaluation_datasets: Dict[str, str],
+):
+    """Test that check_cutoffs succeeds when the evaluator meets the threshold.
+
+    count_sports mean is ~0.50, so a cutoff of 0.01 should pass.
+    """
+    job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="gpt_4o_mini",
+        concurrency=1,
+        inference_cache="on",
+        cutoffs={"count_sports": 0.01},
+    )
+
+    for _ in job.results():
+        pass
+
+    # Should not raise
+    job.check_cutoffs()
+
+
+def test_sync_cutoffs_failing(
+    embedded_sync_client: TensorZeroGateway,
+    evaluation_datasets: Dict[str, str],
+):
+    """Test that check_cutoffs raises when the evaluator fails the threshold.
+
+    count_sports mean is ~0.50, so a cutoff of 0.99 should fail.
+    """
+    job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="gpt_4o_mini",
+        concurrency=1,
+        inference_cache="on",
+        cutoffs={"count_sports": 0.99},
+    )
+
+    for _ in job.results():
+        pass
+
+    with pytest.raises(RuntimeError, match="Failed cutoffs"):
+        job.check_cutoffs()
+
+
+def test_sync_cutoffs_empty_dict_is_noop(
+    embedded_sync_client: TensorZeroGateway,
+    evaluation_datasets: Dict[str, str],
+):
+    """Test that passing an empty cutoffs dict is a no-op."""
+    job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="gpt_4o_mini",
+        concurrency=1,
+        inference_cache="on",
+        cutoffs={},
+    )
+
+    for _ in job.results():
+        pass
+
+    # Should not raise
+    job.check_cutoffs()
+
+
+def test_sync_cutoffs_none_is_noop(
+    embedded_sync_client: TensorZeroGateway,
+    evaluation_datasets: Dict[str, str],
+):
+    """Test that check_cutoffs is a no-op when cutoffs is None."""
+    job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="gpt_4o_mini",
+        concurrency=1,
+        inference_cache="on",
+    )
+
+    for _ in job.results():
+        pass
+
+    # Should not raise
+    job.check_cutoffs()
+
+
 def test_sync_run_evaluation_datapoint_ids_and_max_datapoints_error(
     embedded_sync_client: TensorZeroGateway,
 ):
