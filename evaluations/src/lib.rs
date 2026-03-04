@@ -247,7 +247,9 @@ pub async fn run_evaluation(
         }
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
-            postgres_config: postgres_url.map(PostgresConfig::Url),
+            postgres_config: Some(PostgresConfig::ExistingConnectionInfo(
+                postgres_connection.clone(),
+            )),
             clickhouse_url: clickhouse_url.clone(),
             valkey_url,
             timeout: None,

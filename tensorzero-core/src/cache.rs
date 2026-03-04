@@ -649,6 +649,9 @@ mod tests {
 
     use std::borrow::Cow;
 
+    use std::panic::{RefUnwindSafe, UnwindSafe};
+
+    use googletest::prelude::*;
     use uuid::Uuid;
 
     use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
@@ -666,163 +669,108 @@ mod tests {
 
     use super::*;
 
+    #[gtest]
     #[tokio::test]
     async fn test_disabled_returns_none() {
         let cache = CacheManager::disabled();
         let key = CacheKey::from(blake3::hash(b"test"));
         let result = cache.cache_lookup(&key, None).await.unwrap();
-        assert!(result.is_none(), "disabled backend should return None");
+        expect_that!(result, none());
     }
 
+    #[gtest]
     #[tokio::test]
     async fn test_disabled_write_succeeds() {
         let cache = CacheManager::disabled();
         let key = CacheKey::from(blake3::hash(b"test"));
-        cache
-            .cache_write(&key, r#"{"output":"test"}"#)
-            .await
-            .expect("disabled backend write should succeed");
+        let result = cache.cache_write(&key, r#"{"output":"test"}"#).await;
+        expect_that!(
+            result,
+            ok(anything()),
+            "disabled backend write should succeed"
+        );
     }
 
-    /// This test ensures that if we make a small change to the ModelInferenceRequest,
-    /// the cache key will change.
-    #[test]
-    fn test_get_cache_key() {
-        let model_inference_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![],
-            system: None,
-            tool_config: None,
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
-            fetch_and_encode_input_files_before_inference: false,
-            extra_cache_key: None,
-            stop_sequences: None,
-            ..Default::default()
-        };
-        let model_provider_request = ModelProviderRequest {
-            request: &model_inference_request,
-            model_name: "test_model",
-            provider_name: "test_provider",
-            otlp_config: &Default::default(),
-            model_inference_id: Uuid::now_v7(),
-        };
-        let cache_key = model_provider_request.get_cache_key().unwrap();
-        let model_inference_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![],
-            system: None,
-            tool_config: None,
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            fetch_and_encode_input_files_before_inference: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
-            extra_cache_key: None,
-            stop_sequences: None,
-            ..Default::default()
-        };
-        let model_provider_request = ModelProviderRequest {
-            request: &model_inference_request,
-            model_name: "test_model",
-            provider_name: "test_provider",
-            otlp_config: &Default::default(),
-            model_inference_id: Uuid::now_v7(),
-        };
-        let new_cache_key = model_provider_request.get_cache_key().unwrap();
-        // Make sure the first two get the same cache key (and that we ignore the inference_id)
-        assert_eq!(cache_key, new_cache_key);
-        let streaming_model_inference_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![],
-            system: None,
-            tool_config: None,
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stream: true,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            fetch_and_encode_input_files_before_inference: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
-            extra_cache_key: None,
-            stop_sequences: None,
-            ..Default::default()
-        };
-        let model_provider_request = ModelProviderRequest {
-            request: &streaming_model_inference_request,
-            model_name: "test_model",
-            provider_name: "test_provider",
-            otlp_config: &Default::default(),
-            model_inference_id: Uuid::now_v7(),
-        };
-        let streaming_cache_key = model_provider_request.get_cache_key().unwrap();
-        assert_ne!(cache_key, streaming_cache_key);
-    }
-
-    static BASELINE_OUTPUT_SCHEMA: std::sync::LazyLock<serde_json::Value> =
-        std::sync::LazyLock::new(|| serde_json::json!({"type": "object"}));
-
-    /// Returns a baseline request with all cache-relevant fields set to non-default values.
+    /// Fixture providing a baseline `ModelInferenceRequest` with all cache-relevant
+    /// fields set to non-default values, plus its precomputed cache key.
     ///
-    /// The exhaustive destructure ensures a compile error when a new field is added
-    /// to `ModelInferenceRequest`, forcing the author to decide whether it affects
-    /// the cache key and add a corresponding test.
-    fn get_baseline_request() -> ModelInferenceRequest<'static> {
-        let request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec![ContentBlock::from("hello".to_string())],
-            }],
-            system: Some("you are helpful".to_string()),
-            tool_config: None,
-            temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
-            seed: Some(42),
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: Some(&*BASELINE_OUTPUT_SCHEMA),
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
-            fetch_and_encode_input_files_before_inference: false,
-            extra_cache_key: Some("baseline".to_string()),
-            stop_sequences: Some(Cow::Owned(vec!["stop".to_string()])),
-            inference_params_v2: ChatCompletionInferenceParamsV2 {
-                reasoning_effort: Some("high".to_string()),
-                service_tier: None,
-                thinking_budget_tokens: Some(1000),
-                verbosity: Some("verbose".to_string()),
-            },
-        };
+    /// The exhaustive destructure in `set_up` ensures a compile error when a new field
+    /// is added to `ModelInferenceRequest`, forcing the author to decide whether it
+    /// affects the cache key and add a corresponding test.
+    struct CacheKeyFixture {
+        request: ModelInferenceRequest<'static>,
+        key: CacheKey,
+    }
 
+    // ModelInferenceRequest contains Vec/String which aren't UnwindSafe by default,
+    // but our fixture is read-only so this is safe.
+    impl UnwindSafe for CacheKeyFixture {}
+    impl RefUnwindSafe for CacheKeyFixture {}
+
+    impl Fixture for CacheKeyFixture {
+        fn set_up() -> googletest::Result<Self> {
+            static BASELINE_OUTPUT_SCHEMA: std::sync::LazyLock<serde_json::Value> =
+                std::sync::LazyLock::new(|| serde_json::json!({"type": "object"}));
+
+            let request = ModelInferenceRequest {
+                inference_id: Uuid::now_v7(),
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::from("hello".to_string())],
+                }],
+                system: Some("you are helpful".to_string()),
+                tool_config: None,
+                temperature: Some(0.5),
+                top_p: Some(0.9),
+                presence_penalty: Some(0.1),
+                frequency_penalty: Some(0.2),
+                max_tokens: Some(100),
+                seed: Some(42),
+                stream: false,
+                json_mode: ModelInferenceRequestJsonMode::Off,
+                function_type: FunctionType::Chat,
+                output_schema: Some(&*BASELINE_OUTPUT_SCHEMA),
+                extra_body: Default::default(),
+                extra_headers: Default::default(),
+                fetch_and_encode_input_files_before_inference: false,
+                extra_cache_key: Some("baseline".to_string()),
+                stop_sequences: Some(Cow::Owned(vec!["stop".to_string()])),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: Some("high".to_string()),
+                    service_tier: None,
+                    thinking_budget_tokens: Some(1000),
+                    verbosity: Some("verbose".to_string()),
+                },
+            };
+
+            let key = cache_key_for(&request, "model", "provider");
+            Ok(Self { request, key })
+        }
+
+        fn tear_down(self) -> googletest::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn cache_key_for(
+        request: &ModelInferenceRequest,
+        model_name: &str,
+        provider_name: &str,
+    ) -> CacheKey {
+        let otlp_config = OtlpConfig::default();
+        ModelProviderRequest {
+            request,
+            model_name,
+            provider_name,
+            otlp_config: &otlp_config,
+            model_inference_id: Uuid::now_v7(),
+        }
+        .get_cache_key()
+        .expect("get_cache_key should not fail for a valid request")
+    }
+
+    #[gtest]
+    fn test_all_fields_are_considered_for_cache(fixture: &CacheKeyFixture) {
         // Exhaustive destructure: a compile error here means a new field was added
         // and must be classified as cache-relevant or explicitly excluded.
         let ModelInferenceRequest {
@@ -848,358 +796,210 @@ mod tests {
             extra_cache_key: _,
             stop_sequences: _,
             inference_params_v2: _,
-        } = &request;
+        } = fixture.request;
 
-        request
+        // Expect a compile time error if this is incorrect.
     }
 
-    fn get_baseline_key(request: &ModelInferenceRequest) -> CacheKey {
-        let otlp_config = OtlpConfig::default();
-        ModelProviderRequest {
-            request,
-            model_name: "model",
-            provider_name: "provider",
-            otlp_config: &otlp_config,
-            model_inference_id: Uuid::now_v7(),
-        }
-        .get_cache_key()
-        .unwrap()
-    }
-
-    #[test]
-    fn test_cache_key_ignores_inference_id() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_ignores_inference_id(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.inference_id = Uuid::now_v7();
-        let key = get_baseline_key(&req);
-        assert_eq!(
-            baseline_key, key,
-            "inference_id should not affect cache key"
-        );
+        expect_that!(cache_key_for(&req, "model", "provider"), eq(fixture.key));
     }
 
-    #[test]
-    fn test_cache_key_ignores_model_inference_id() {
-        let baseline = get_baseline_request();
-        let otlp_config = OtlpConfig::default();
-
-        let key_a = ModelProviderRequest {
-            request: &baseline,
-            model_name: "model",
-            provider_name: "provider",
-            otlp_config: &otlp_config,
-            model_inference_id: Uuid::now_v7(),
-        }
-        .get_cache_key()
-        .unwrap();
-        let key_b = ModelProviderRequest {
-            request: &baseline,
-            model_name: "model",
-            provider_name: "provider",
-            otlp_config: &otlp_config,
-            model_inference_id: Uuid::now_v7(),
-        }
-        .get_cache_key()
-        .unwrap();
-        assert_eq!(
-            key_a, key_b,
-            "model_inference_id should not affect cache key"
-        );
+    #[gtest]
+    fn test_cache_key_ignores_model_inference_id(fixture: &CacheKeyFixture) {
+        // cache_key_for uses a fresh model_inference_id each time
+        let key = cache_key_for(&fixture.request, "model", "provider");
+        expect_that!(key, eq(fixture.key));
     }
 
-    #[test]
-    fn test_cache_key_changes_with_model_name() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-        let otlp_config = OtlpConfig::default();
-
-        let key = ModelProviderRequest {
-            request: &baseline,
-            model_name: "other_model",
-            provider_name: "provider",
-            otlp_config: &otlp_config,
-            model_inference_id: Uuid::now_v7(),
-        }
-        .get_cache_key()
-        .unwrap();
-        assert_ne!(
-            baseline_key, key,
-            "different model_name should change cache key"
-        );
+    #[gtest]
+    fn test_cache_key_changes_with_model_name(fixture: &CacheKeyFixture) {
+        let key = cache_key_for(&fixture.request, "other_model", "provider");
+        expect_that!(key, not(eq(fixture.key)));
     }
 
-    #[test]
-    fn test_cache_key_changes_with_provider_name() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-        let otlp_config = OtlpConfig::default();
-
-        let key = ModelProviderRequest {
-            request: &baseline,
-            model_name: "model",
-            provider_name: "other_provider",
-            otlp_config: &otlp_config,
-            model_inference_id: Uuid::now_v7(),
-        }
-        .get_cache_key()
-        .unwrap();
-        assert_ne!(
-            baseline_key, key,
-            "different provider_name should change cache key"
-        );
+    #[gtest]
+    fn test_cache_key_changes_with_provider_name(fixture: &CacheKeyFixture) {
+        let key = cache_key_for(&fixture.request, "model", "other_provider");
+        expect_that!(key, not(eq(fixture.key)));
     }
 
-    #[test]
-    fn test_cache_key_prefix_free_encoding() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-        let otlp_config = OtlpConfig::default();
-
-        let key = ModelProviderRequest {
-            request: &baseline,
-            model_name: "modelp",
-            provider_name: "rovider",
-            otlp_config: &otlp_config,
-            model_inference_id: Uuid::now_v7(),
-        }
-        .get_cache_key()
-        .unwrap();
-        assert_ne!(
-            baseline_key, key,
-            "model/provider name boundary shift should change cache key"
-        );
+    #[gtest]
+    fn test_cache_key_prefix_free_encoding(fixture: &CacheKeyFixture) {
+        let key = cache_key_for(&fixture.request, "modelp", "rovider");
+        expect_that!(key, not(eq(fixture.key)));
     }
 
-    #[test]
-    fn test_cache_key_changes_with_messages() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_messages(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.messages = vec![RequestMessage {
             role: Role::User,
             content: vec![ContentBlock::from("goodbye".to_string())],
         }];
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different messages should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_system() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_system(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.system = Some("different system".to_string());
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different system should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_tool_config() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_tool_config(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.tool_config = Some(Cow::Owned(ToolCallConfig::default()));
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different tool_config should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_temperature() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_temperature(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.temperature = Some(0.9);
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different temperature should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_top_p() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_top_p(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.top_p = Some(0.1);
-        let key = get_baseline_key(&req);
-        assert_ne!(baseline_key, key, "different top_p should change cache key");
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_presence_penalty() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_presence_penalty(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.presence_penalty = Some(0.9);
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different presence_penalty should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_frequency_penalty() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_frequency_penalty(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.frequency_penalty = Some(0.9);
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different frequency_penalty should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_max_tokens() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_max_tokens(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.max_tokens = Some(200);
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different max_tokens should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_seed() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_seed(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.seed = Some(99);
-        let key = get_baseline_key(&req);
-        assert_ne!(baseline_key, key, "different seed should change cache key");
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_stream() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_stream(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.stream = true;
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different stream should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_json_mode() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_json_mode(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.json_mode = ModelInferenceRequestJsonMode::On;
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different json_mode should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_function_type() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_function_type(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.function_type = FunctionType::Json;
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different function_type should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_output_schema() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
+    #[gtest]
+    fn test_cache_key_changes_with_output_schema(fixture: &CacheKeyFixture) {
         let different_schema = serde_json::json!({"type": "string"});
-        let mut req = baseline.clone();
+        let mut req = fixture.request.clone();
         req.output_schema = Some(&different_schema);
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different output_schema should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_extra_cache_key() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_extra_cache_key(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.extra_cache_key = Some("different".to_string());
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different extra_cache_key should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_stop_sequences() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_stop_sequences(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.stop_sequences = Some(Cow::Owned(vec!["different".to_string()]));
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different stop_sequences should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_fetch_and_encode_input_files() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_fetch_and_encode_input_files(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.fetch_and_encode_input_files_before_inference = true;
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different fetch_and_encode_input_files_before_inference should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_extra_body() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_extra_body(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.extra_body = FullExtraBodyConfig {
             extra_body: Some(ExtraBodyConfig {
                 data: vec![ExtraBodyReplacement {
@@ -1209,19 +1009,15 @@ mod tests {
             }),
             inference_extra_body: Default::default(),
         };
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different extra_body should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_extra_headers() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_extra_headers(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.extra_headers = FullExtraHeadersConfig {
             variant_extra_headers: Some(ExtraHeadersConfig {
                 data: vec![ExtraHeader {
@@ -1231,67 +1027,50 @@ mod tests {
             }),
             inference_extra_headers: Default::default(),
         };
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different extra_headers should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_reasoning_effort() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_reasoning_effort(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.inference_params_v2.reasoning_effort = Some("low".to_string());
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different reasoning_effort should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_service_tier() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_service_tier(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.inference_params_v2.service_tier =
             Some(crate::inference::types::chat_completion_inference_params::ServiceTier::Flex);
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different service_tier should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_thinking_budget_tokens() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_thinking_budget_tokens(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.inference_params_v2.thinking_budget_tokens = Some(500);
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different thinking_budget_tokens should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 
-    #[test]
-    fn test_cache_key_changes_with_verbosity() {
-        let baseline = get_baseline_request();
-        let baseline_key = get_baseline_key(&baseline);
-
-        let mut req = baseline.clone();
+    #[gtest]
+    fn test_cache_key_changes_with_verbosity(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
         req.inference_params_v2.verbosity = Some("concise".to_string());
-        let key = get_baseline_key(&req);
-        assert_ne!(
-            baseline_key, key,
-            "different verbosity should change cache key"
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
         );
     }
 }

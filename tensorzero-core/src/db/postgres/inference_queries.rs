@@ -40,6 +40,7 @@ use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, FunctionType, JsonInferenceDatabaseInsert,
 };
+use crate::serde_util::serialize_with_sorted_keys;
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
 };
@@ -349,7 +350,7 @@ impl InferenceQueries for PostgresConnectionInfo {
     }
 
     // TODO(#5691): Change this to return either a Value or a typed output.
-    async fn get_inference_output(
+    async fn get_serialized_inference_output_for_feedback(
         &self,
         function_info: &FunctionInfo,
         inference_id: Uuid,
@@ -377,8 +378,10 @@ impl InferenceQueries for PostgresConnectionInfo {
                 .fetch_optional(pool)
                 .await?;
 
-                // Convert JSONB to string
-                Ok(result.map(|r| r.output.to_string()))
+                // TODO(#6664): Make the lookup order-independent instead of sorting keys.
+                result
+                    .map(|r| serialize_with_sorted_keys(&r.output))
+                    .transpose()
             }
             FunctionType::Json => {
                 let result = sqlx::query!(
@@ -400,8 +403,10 @@ impl InferenceQueries for PostgresConnectionInfo {
                 .fetch_optional(pool)
                 .await?;
 
-                // Convert JSONB to string
-                Ok(result.map(|r| r.output.to_string()))
+                // TODO(#6664): Make the lookup order-independent instead of sorting keys.
+                result
+                    .map(|r| serialize_with_sorted_keys(&r.output))
+                    .transpose()
             }
         }
     }
