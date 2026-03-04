@@ -125,7 +125,7 @@ See the [Inference API Reference](/gateway/api-reference/inference) for more det
 
 <Tab title="Python (OpenAI SDK)">
 
-The TensorZero Python SDK integrates with the OpenAI Python SDK to provide a unified API for calling any LLM.
+You can point the OpenAI Python SDK to a TensorZero Gateway to call any LLM with a unified API.
 
 <Steps>
 
@@ -145,27 +145,45 @@ See the [Integrations](/integrations/model-providers) page to learn how to set u
 
 </Step>
 
-<Step title="Install the OpenAI and TensorZero Python SDKs">
+<Step title="Install the OpenAI Python SDK">
 
-You can install the OpenAI and TensorZero SDKs with a Python package manager like `pip`.
+You can install the OpenAI SDK with a Python package manager like `pip`.
 
 ```bash
-pip install openai tensorzero
+pip install openai
 ```
+
+</Step>
+
+<Step title="Deploy the TensorZero Gateway">
+
+Let's deploy a standalone TensorZero Gateway using Docker.
+For simplicity, we'll use the gateway without observability or custom configuration.
+
+```bash
+docker run \
+  -e OPENAI_API_KEY \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --default-config
+```
+
+<Tip>
+
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
+
+</Tip>
 
 </Step>
 
 <Step title="Initialize the OpenAI client">
 
-Let's initialize the TensorZero Gateway and patch the OpenAI client to use it.
-For simplicity, we'll use an embedded gateway without observability or custom configuration.
+Let's initialize the OpenAI SDK and point it to the gateway we just launched.
 
 ```python
 from openai import OpenAI
-from tensorzero import patch_openai_client
 
-client = OpenAI()
-patch_openai_client(client, async_setup=False)
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 ```
 
 </Step>
@@ -269,7 +287,7 @@ npm i openai
 
 </Step>
 
-<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+<Step title="Deploy the TensorZero Gateway">
 
 Let's deploy a standalone TensorZero Gateway using Docker.
 For simplicity, we'll use the gateway without observability or custom configuration.
@@ -284,7 +302,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
 
 </Tip>
 
@@ -382,7 +400,7 @@ See the [Integrations](/integrations/model-providers) page to learn how to set u
 
 </Step>
 
-<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+<Step title="Deploy the TensorZero Gateway">
 
 Let's deploy a standalone TensorZero Gateway using Docker.
 For simplicity, we'll use the gateway without observability or custom configuration.
@@ -397,7 +415,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
 
 </Tip>
 

@@ -367,12 +367,12 @@ print(call_llm("ceo"))
 ```python
 from openai import OpenAI
 
-oai = OpenAI(base_url="http://localhost:3000/openai/v1")
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 
 def call_llm(user_id):
     try:
-        return oai.chat.completions.create(
+        return client.chat.completions.create(
             model="tensorzero::model_name::openai::gpt-4.1-mini",
             messages=[
                 {

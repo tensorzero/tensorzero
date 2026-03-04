@@ -98,7 +98,7 @@ You can use TensorZero with any OpenAI SDK (Python, Node, Go, etc.) or OpenAI-co
 from openai import OpenAI
 
 # Point the client to the TensorZero Gateway
-client = OpenAI(base_url="http://localhost:3000/openai/v1")
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 response = client.chat.completions.create(
     # Call any model provider (or TensorZero function)
