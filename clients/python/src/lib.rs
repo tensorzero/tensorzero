@@ -678,13 +678,9 @@ fn build_http_evaluation_params(
     max_datapoints: Option<u32>,
     precision_targets_map: HashMap<String, f32>,
 ) -> RunEvaluationHttpParams {
-    let variant_name = match &variant {
-        EvaluationVariant::Name(name) => Some(name.clone()),
-        EvaluationVariant::Info(_) => None,
-    };
-    let internal_dynamic_variant_config = match variant {
-        EvaluationVariant::Info(info) => Some(*info),
-        EvaluationVariant::Name(_) => None,
+    let (variant_name, internal_dynamic_variant_config) = match variant {
+        EvaluationVariant::Name(name) => (Some(name), None),
+        EvaluationVariant::Info(info) => (None, Some(*info)),
     };
 
     let precision_targets = if precision_targets_map.is_empty() {

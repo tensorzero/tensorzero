@@ -296,26 +296,30 @@ pub async fn run_evaluation_handler(
     let dataset_name_for_event = request.dataset_name.clone();
     let evaluation_name_for_event = request.evaluation_name.clone();
 
-    // Track whether configs were server-resolved (for including in start event)
-    let config_was_server_resolved = request.evaluation_config.is_none();
-
-    // Resolve evaluation_config: use provided or look up from app_state
-    let resolved_evaluation_config = match request.evaluation_config {
-        Some(config) => config,
-        None => app_state
-            .config
-            .evaluations
-            .get(&request.evaluation_name)
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "Evaluation `{}` not found in config",
-                        request.evaluation_name
-                    ),
-                })
-            })?
-            .as_ref()
-            .clone(),
+    // Resolve evaluation_config: use provided or look up from app_state.
+    // When the server resolves the config, include it in the start event so
+    // HTTP clients can compute summary_stats without having the config locally.
+    let (resolved_evaluation_config, evaluation_config_for_event) = match request.evaluation_config
+    {
+        Some(config) => (config, None),
+        None => {
+            let config = app_state
+                .config
+                .evaluations
+                .get(&request.evaluation_name)
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!(
+                            "Evaluation `{}` not found in config",
+                            request.evaluation_name
+                        ),
+                    })
+                })?
+                .as_ref()
+                .clone();
+            let config_for_event = config.clone();
+            (config, Some(config_for_event))
+        }
     };
 
     // Resolve function_config: use provided or look up from app_state
@@ -334,14 +338,6 @@ pub async fn run_evaluation_handler(
             })?;
             EvaluationFunctionConfig::from(function.as_ref())
         }
-    };
-
-    // Include evaluation_config in start event when it was server-resolved
-    // (so HTTP clients can use it for summary_stats)
-    let evaluation_config_for_event = if config_was_server_resolved {
-        Some(resolved_evaluation_config.clone())
-    } else {
-        None
     };
 
     // Build the params for run_evaluation_with_app_state
