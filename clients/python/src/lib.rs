@@ -32,7 +32,6 @@ use python_helpers::{
 use crate::gil_helpers::in_tokio_runtime_no_gil;
 use tensorzero_core::{
     config::{ConfigPyClass, FunctionsConfigPyClass, Namespace, UninitializedVariantInfo},
-    db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         ResolvedInput, ResolvedInputMessage,
@@ -66,8 +65,8 @@ use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
     ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceStream, Input, LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
-    ListInferencesParams, OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference,
-    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    OptimizationJobHandle, PostgresConfig, RenderedSample, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -300,8 +299,6 @@ impl Drop for StreamWrapper {
         check_stream_terminated(self.stream.clone());
     }
 }
-
-const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
@@ -1408,93 +1405,6 @@ impl TensorZeroGateway {
         })
     }
 
-    /// Query the Clickhouse database for inferences.
-    ///
-    /// This function is only available in EmbeddedGateway mode.
-    ///
-    /// # Arguments
-    ///
-    /// * `function_name` - The name of the function to query.
-    /// * `variant_name` - The name of the variant to query. Optional
-    /// * `filters` - A filter tree to apply to the query. Optional
-    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
-    /// * `limit` - The maximum number of inferences to return. Optional
-    /// * `offset` - The offset to start from. Optional
-    #[pyo3(signature = (*,
-                        function_name,
-                        variant_name=None,
-                        filters=None,
-                        output_source="inference".to_string(),
-                        order_by=None,
-                        limit=None,
-                        offset=None
-    ),
-    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', order_by=None, limit=None, offset=None)"
-    )]
-    #[pyo3(warn(message = "Please use `list_inferences` instead of `experimental_list_inferences`. In a future release, `experimental_list_inferences` will be removed.", category = PyDeprecationWarning))]
-    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
-    // is written as an ellipsis object.
-    #[expect(clippy::too_many_arguments)]
-    #[expect(deprecated)]
-    fn experimental_list_inferences(
-        this: PyRef<'_, Self>,
-        function_name: String,
-        variant_name: Option<String>,
-        filters: Option<Bound<'_, PyAny>>,
-        output_source: String,
-        order_by: Option<Bound<'_, PyAny>>,
-        limit: Option<u32>,
-        offset: Option<u32>,
-    ) -> PyResult<Py<PyList>> {
-        let client = this.as_super().client.clone();
-        let filters = filters
-            .as_ref()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
-            .transpose()?;
-        let output_source =
-            output_source
-                .as_str()
-                .try_into()
-                .map_err(|e: tensorzero_core::error::Error| {
-                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
-                })?;
-        let order_by: Option<Vec<OrderBy>> = order_by
-            .as_ref()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
-            .transpose()?;
-        let params = ListInferencesParams {
-            function_name: Some(&function_name),
-            variant_name: variant_name.as_deref(),
-            filters: filters.as_ref(),
-            output_source,
-            order_by: order_by.as_deref(),
-            limit: limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
-            offset: offset.unwrap_or(0),
-            ..Default::default()
-        };
-        let fut = client.experimental_list_inferences(params);
-        let wires =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-
-        // Convert each StoredInference to the appropriate Python dataclass
-        let py_objects: Vec<_> = wires
-            .iter()
-            .map(|inference| {
-                convert_response_to_python_dataclass(
-                    this.py(),
-                    inference,
-                    "tensorzero",
-                    match inference {
-                        StoredInference::Chat(_) => "StoredInferenceChat",
-                        StoredInference::Json(_) => "StoredInferenceJson",
-                    },
-                )
-            })
-            .collect::<PyResult<_>>()?;
-
-        Ok(PyList::new(this.py(), py_objects)?.unbind())
-    }
-
     /// Get specific inferences by their IDs.
     ///
     /// :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
@@ -2586,97 +2496,6 @@ impl AsyncTensorZeroGateway {
                     evaluation_errors: Arc::new(Mutex::new(Vec::new())),
                 };
                 Py::new(py, handler).map(Py::into_any)
-            })
-        })
-    }
-
-    /// Query the Clickhouse database for inferences.
-    ///
-    /// This function is only available in EmbeddedGateway mode.
-    ///
-    /// # Arguments
-    ///
-    /// * `function_name` - The name of the function to query.
-    /// * `variant_name` - The name of the variant to query. Optional
-    /// * `filters` - A filter tree to apply to the query. Optional
-    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
-    /// * `limit` - The maximum number of inferences to return. Optional
-    /// * `offset` - The offset to start from. Optional
-    #[pyo3(signature = (*,
-        function_name,
-        variant_name=None,
-        filters=None,
-        output_source="inference".to_string(),
-        order_by=None,
-        limit=None,
-        offset=None
-    ),
-    text_signature = "(self, *, function_name, variant_name=None, filters=None, output_source='inference', order_by=None, limit=None, offset=None)"
-    )]
-    #[pyo3(warn(message = "Please use `list_inferences` instead of `experimental_list_inferences`. In a future release, `experimental_list_inferences` will be removed.", category = PyDeprecationWarning))]
-    // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
-    // is written as an ellipsis object.
-    #[expect(clippy::too_many_arguments)]
-    #[expect(deprecated)]
-    fn experimental_list_inferences<'a>(
-        this: PyRef<'a, Self>,
-        function_name: String,
-        variant_name: Option<String>,
-        filters: Option<Bound<'a, PyAny>>,
-        output_source: String,
-        order_by: Option<Bound<'a, PyAny>>,
-        limit: Option<u32>,
-        offset: Option<u32>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let filters = filters
-            .as_ref()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
-            .transpose()?;
-        let order_by: Option<Vec<OrderBy>> = order_by
-            .as_ref()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
-            .transpose()?;
-        let output_source =
-            output_source
-                .as_str()
-                .try_into()
-                .map_err(|e: tensorzero_core::error::Error| {
-                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
-                })?;
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let params = ListInferencesParams {
-                function_name: Some(&function_name),
-                variant_name: variant_name.as_deref(),
-                filters: filters.as_ref(),
-                output_source,
-                order_by: order_by.as_deref(),
-                limit: limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
-                offset: offset.unwrap_or(0),
-                ..Default::default()
-            };
-            let res = client.experimental_list_inferences(params).await;
-            Python::attach(|py| match res {
-                Ok(wire_inferences) => {
-                    // Convert each StoredInference to the appropriate Python dataclass
-                    let py_objects: Vec<_> = wire_inferences
-                        .iter()
-                        .map(|inference| {
-                            convert_response_to_python_dataclass(
-                                py,
-                                inference,
-                                "tensorzero",
-                                match inference {
-                                    StoredInference::Chat(_) => "StoredInferenceChat",
-                                    StoredInference::Json(_) => "StoredInferenceJson",
-                                },
-                            )
-                        })
-                        .collect::<PyResult<_>>()?;
-
-                    Ok(PyList::new(py, py_objects)?.unbind())
-                }
-                Err(e) => Err(convert_error(py, e)),
             })
         })
     }

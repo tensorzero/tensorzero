@@ -205,6 +205,7 @@ import toml
 import yaml
 from tensorzero import (
     FloatMetricFilter,
+    ListInferencesRequest,
     TensorZeroGateway,
 )
 from tensorzero.util import uuid7
@@ -242,13 +243,15 @@ metric_node
 # Query the inferences and feedback from ClickHouse.
 
 # %%
-stored_inferences = tensorzero_client.experimental_list_inferences(
-    function_name=FUNCTION_NAME,
-    variant_name=None,
-    output_source="inference",  # could also be "demonstration"
-    filters=metric_node,
-    limit=MAX_SAMPLES,
+response = tensorzero_client.list_inferences(
+    request=ListInferencesRequest(
+        function_name=FUNCTION_NAME,
+        output_source="inference",  # could also be "demonstration"
+        filters=metric_node,
+        limit=MAX_SAMPLES,
+    )
 )
+stored_inferences = response.inferences
 
 # %% [markdown]
 # Render the stored inferences

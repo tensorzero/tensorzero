@@ -142,6 +142,7 @@ from tensorzero import (
     ChatInferenceOutput,
     InferenceResponse,
     JsonInferenceResponse,
+    ListInferencesRequest,
     RawText,
     RenderedSample,
     Text,
@@ -195,16 +196,13 @@ model_name = base_variant.model
 #
 
 # %%
-inferences = await original_client.experimental_list_inferences(
-    function_name="extract_entities",
-    output_source="demonstration",  # or "inference"
-    filters=None,
-    # You can also filter by the value of metrics here (e.g.
-    # FloatMetricFilter(
-    # metric_name="jaccard_similarity",
-    # value=0.5,
-    # comparison_operator=">",
+response = await original_client.list_inferences(
+    request=ListInferencesRequest(
+        function_name="extract_entities",
+        output_source="demonstration",  # or "inference"
+    )
 )
+inferences = response.inferences
 
 # %%
 rendered_samples = await original_client.experimental_render_samples(

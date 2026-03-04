@@ -45,7 +45,7 @@ from typing import Any, Dict, List
 import openai
 import toml
 from IPython.display import clear_output
-from tensorzero import ContentBlock, RenderedSample, TensorZeroGateway
+from tensorzero import ContentBlock, ListInferencesRequest, RenderedSample, TensorZeroGateway
 
 # %%
 assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, "TENSORZERO_CLICKHOUSE_URL environment variable not set"
@@ -58,11 +58,14 @@ assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, "TENSORZERO_CLICKHOUSE_URL env
 t0 = TensorZeroGateway.build_embedded(clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"], config_file=CONFIG_PATH)
 
 # %%
-inferences = t0.experimental_list_inferences(
-    function_name=FUNCTION_NAME,
-    output_source="demonstration",  # Since we're using DPO we need pairwise data so we must use demonstrations
-    limit=MAX_SAMPLES,
+response = t0.list_inferences(
+    request=ListInferencesRequest(
+        function_name=FUNCTION_NAME,
+        output_source="demonstration",  # Since we're using DPO we need pairwise data so we must use demonstrations
+        limit=MAX_SAMPLES,
+    )
 )
+inferences = response.inferences
 
 # %% [markdown]
 # OpenAI requires the fine-tuning data (for DPO) to be structured in this [format](https://platform.openai.com/docs/guides/fine-tuning#preference)

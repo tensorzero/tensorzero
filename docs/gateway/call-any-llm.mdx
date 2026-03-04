@@ -168,15 +168,6 @@ client = OpenAI()
 patch_openai_client(client, async_setup=False)
 ```
 
-<Tip>
-
-The TensorZero Python SDK supports both the synchronous `OpenAI` client and the asynchronous `AsyncOpenAI` client.
-Both options support running the gateway embedded in your application with `patch_openai_client` or connecting to a standalone gateway with `base_url`.
-The embedded gateway supports synchronous initialization with `async_setup=False` or asynchronous initialization with `async_setup=True`.
-See [Clients](/gateway/clients/) for more details.
-
-</Tip>
-
 </Step>
 
 <Step title="Call the LLM">

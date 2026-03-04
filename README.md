@@ -136,16 +136,18 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 <td width="50%" align="left" valign="middle">
 
 ```python
-t0.experimental_list_inferences(
-  function_name="sales_agent",
-  filters=BooleanMetricFilter(
-      metric_name="converted_sale",
-      value=True,
-  ),
-  # + compound filters
-  # + search
-  # + pagination
-  # ... and more ...
+t0.list_inferences(
+  request=ListInferencesRequest(
+    function_name="sales_agent",
+    filters=BooleanMetricFilter(
+        metric_name="converted_sale",
+        value=True,
+    ),
+    # + compound filters
+    # + search
+    # + pagination
+    # ... and more ...
+  )
 )
 ```
 

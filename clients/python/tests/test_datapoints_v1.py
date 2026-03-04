@@ -26,6 +26,7 @@ from tensorzero import (
     InputMessageContentText,
     JsonDatapointOutputUpdate,
     ListDatapointsRequest,
+    ListInferencesRequest,
     OrderBy,
     TensorZeroGateway,
     UpdateDatapointMetadataRequest,
@@ -602,15 +603,15 @@ def test_sync_create_datapoints_from_inferences(embedded_sync_client: TensorZero
     """Test creating dataset from inference results."""
     # First, list a few existing inferences
     order_by = [OrderBy(by="timestamp", direction="descending")]
-    inferences = embedded_sync_client.experimental_list_inferences(
-        function_name="extract_entities",
-        variant_name=None,
-        filters=None,
-        output_source="inference",
-        limit=2,
-        offset=None,
-        order_by=order_by,
+    response = embedded_sync_client.list_inferences(
+        request=ListInferencesRequest(
+            function_name="extract_entities",
+            output_source="inference",
+            limit=2,
+            order_by=order_by,
+        )
     )
+    inferences = response.inferences
     assert len(inferences) == 2, "Should be able to find 2 existing stored inferences"
     for inference in inferences:
         assert inference.inference_id is not None, "Inferences should contain IDs"
@@ -645,15 +646,15 @@ def test_sync_create_datapoints_from_inferences(embedded_sync_client: TensorZero
 async def test_async_create_datapoints_from_inferences(embedded_async_client: AsyncTensorZeroGateway):
     """Test async version of create_datapoints_from_inferences."""
     order_by = [OrderBy(by="timestamp", direction="descending")]
-    inferences = await embedded_async_client.experimental_list_inferences(
-        function_name="extract_entities",
-        variant_name=None,
-        filters=None,
-        output_source="inference",
-        limit=2,
-        offset=None,
-        order_by=order_by,
+    response = await embedded_async_client.list_inferences(
+        request=ListInferencesRequest(
+            function_name="extract_entities",
+            output_source="inference",
+            limit=2,
+            order_by=order_by,
+        )
     )
+    inferences = response.inferences
     assert len(inferences) == 2, "Should be able to find 2 existing stored inferences"
     for inference in inferences:
         assert inference.inference_id is not None, "Inferences should contain IDs"
