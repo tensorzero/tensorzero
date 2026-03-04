@@ -26,12 +26,12 @@ export type LaunchOptimizationWorkflowToolParams = {
   filters?: InferenceFilter;
   /**
    * Source of the output data (inference output, demonstration, etc.).
-   * Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
+   * Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
    */
   output_source?: InferenceOutputSource;
   /**
    * Name of the dataset to use as training data.
-   * Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
+   * Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
    */
   dataset_name?: string;
   /**

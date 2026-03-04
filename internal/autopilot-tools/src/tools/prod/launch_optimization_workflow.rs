@@ -437,6 +437,10 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                 }
             },
             "required": ["function_name", "template_variant_name", "optimizer_config"],
+            "oneOf": [
+                { "required": ["output_source"] },
+                { "required": ["dataset_name"] }
+            ],
             "additionalProperties": false
         });
 
