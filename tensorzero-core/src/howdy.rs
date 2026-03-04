@@ -61,9 +61,7 @@ pub fn setup_howdy(
         return;
     }
 
-    // TODO(#5691): Support reading deployment ID when ClickHouse is disabled.
-    let clickhouse_disabled = clickhouse.client_type() == ClickHouseClientType::Disabled;
-    if clickhouse_disabled {
+    if primary_datastore == PrimaryDatastore::Disabled {
         return;
     }
     spawn_ignoring_shutdown(howdy_loop(clickhouse, postgres, primary_datastore, token));

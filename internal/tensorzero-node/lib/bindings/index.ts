@@ -160,6 +160,7 @@ export * from "./GEPAConfig";
 export * from "./GEPAJobHandle";
 export * from "./GatewayEvent";
 export * from "./GatewayEventPayload";
+export * from "./GatewayEventPayloadToolCall";
 export * from "./GatewayEventPayloadToolCallAuthorization";
 export * from "./GatewayListConfigWritesResponse";
 export * from "./GatewayListEventsResponse";
