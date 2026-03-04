@@ -632,8 +632,7 @@ function EventItem({
       (event.payload.outcome.type === "success" ||
         event.payload.outcome.type === "failure"));
   const [isExpanded, setIsExpanded] = useState(
-    event.payload.type === "visualization" ||
-      toolResultVisualizationData != null,
+    toolResultVisualizationData != null,
   );
   const shouldShowDetails = !isExpandable || isExpanded;
   const label = <span className="text-sm font-medium">{title}</span>;
