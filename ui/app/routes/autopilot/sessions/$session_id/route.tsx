@@ -133,12 +133,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
         )
         .slice(hasMoreEvents ? 1 : 0);
-      // Filter to only tool calls that require approval, then sort by creation time (oldest first)
+      // Filter to tool calls, then sort by creation time (oldest first).
+      // Grace period logic in useAutopilotEventStream handles whitelisted vs non-whitelisted.
       const pendingToolCalls = response.pending_tool_calls
-        .filter(
-          (tc) =>
-            tc.payload.type === "tool_call" && tc.payload.requires_approval,
-        )
+        .filter((tc) => tc.payload.type === "tool_call")
         .sort(
           (a, b) =>
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
