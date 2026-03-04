@@ -12,10 +12,7 @@ export type ParsedFeedbackByVariant = Omit<FeedbackByVariant, "count"> & {
   count: number;
 };
 
-/**
- * Validates that a parsed JSON value looks like a FeedbackByVariant entry.
- * Guards against malformed tool result data rendering NaN bars.
- */
+// Guards against malformed tool result data rendering NaN bars.
 function isFeedbackByVariant(v: unknown): v is ParsedFeedbackByVariant {
   if (typeof v !== "object" || v === null) return false;
   const obj = v as Record<string, unknown>;
@@ -27,21 +24,14 @@ function isFeedbackByVariant(v: unknown): v is ParsedFeedbackByVariant {
   );
 }
 
-/**
- * Validates that a parsed JSON array contains FeedbackByVariant entries.
- */
 export function parseFeedbackByVariant(
   data: unknown,
 ): ParsedFeedbackByVariant[] | null {
-  if (!Array.isArray(data)) return null;
+  if (!Array.isArray(data) || data.length === 0) return null;
   if (!data.every(isFeedbackByVariant)) return null;
   return data;
 }
 
-/**
- * Tries to parse a tool result string as FeedbackByVariant chart data.
- * Returns null if the payload doesn't match the expected shape.
- */
 export function parseFeedbackChartData(
   toolResult: string,
 ): ParsedFeedbackByVariant[] | null {
@@ -53,12 +43,7 @@ export function parseFeedbackChartData(
   }
 }
 
-/**
- * Converts FeedbackByVariant[] (aggregate stats per variant) into
- * VariantPerformanceRow[] for rendering with the shared chart component.
- *
- * Computes stdev from variance and derives a 95% confidence interval.
- */
+// Computes stdev from variance and derives a 95% confidence interval.
 function toPerformanceRows(
   feedback: ParsedFeedbackByVariant[],
 ): VariantPerformanceRow[] {

@@ -611,8 +611,7 @@ function EventItem({
 }: EventItemProps) {
   const { yoloMode } = useAutopilotSession();
 
-  // Detect if this tool_result can be rendered as a visualization (e.g. chart)
-  const toolResultVizData = useMemo(
+  const toolResultVisualizationData = useMemo(
     () => detectToolResultVisualization(event),
     [event],
   );
@@ -633,7 +632,8 @@ function EventItem({
       (event.payload.outcome.type === "success" ||
         event.payload.outcome.type === "failure"));
   const [isExpanded, setIsExpanded] = useState(
-    event.payload.type === "visualization" || toolResultVizData != null,
+    event.payload.type === "visualization" ||
+      toolResultVisualizationData != null,
   );
   const shouldShowDetails = !isExpandable || isExpanded;
   const label = <span className="text-sm font-medium">{title}</span>;
@@ -682,40 +682,42 @@ function EventItem({
           <TableItemTime timestamp={event.created_at} />
         </div>
       </div>
-      {shouldShowDetails && toolResultVizData && (
-        <ToolResultVisualization data={toolResultVizData} />
+      {shouldShowDetails && toolResultVisualizationData && (
+        <ToolResultVisualization data={toolResultVisualizationData} />
       )}
-      {shouldShowDetails && summary.description && !toolResultVizData && (
-        <>
-          {event.payload.type === "message" ? (
-            <Markdown
-              remarkPlugins={uuidRemarkPlugins}
-              components={uuidComponents}
-            >
-              {summary.description}
-            </Markdown>
-          ) : event.payload.type === "tool_call" ? (
-            <ReadOnlyCodeBlock code={summary.description} language="json" />
-          ) : (
-            <p
-              className={cn(
-                "text-fg-secondary text-sm whitespace-pre-wrap",
-                (event.payload.type === "tool_result" ||
-                  event.payload.type === "error") &&
-                  "overflow-y-auto font-mono",
-              )}
-              style={
-                event.payload.type === "tool_result" ||
-                event.payload.type === "error"
-                  ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
-                  : undefined
-              }
-            >
-              {summary.description}
-            </p>
-          )}
-        </>
-      )}
+      {shouldShowDetails &&
+        summary.description &&
+        !toolResultVisualizationData && (
+          <>
+            {event.payload.type === "message" ? (
+              <Markdown
+                remarkPlugins={uuidRemarkPlugins}
+                components={uuidComponents}
+              >
+                {summary.description}
+              </Markdown>
+            ) : event.payload.type === "tool_call" ? (
+              <ReadOnlyCodeBlock code={summary.description} language="json" />
+            ) : (
+              <p
+                className={cn(
+                  "text-fg-secondary text-sm whitespace-pre-wrap",
+                  (event.payload.type === "tool_result" ||
+                    event.payload.type === "error") &&
+                    "overflow-y-auto font-mono",
+                )}
+                style={
+                  event.payload.type === "tool_result" ||
+                  event.payload.type === "error"
+                    ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
+                    : undefined
+                }
+              >
+                {summary.description}
+              </p>
+            )}
+          </>
+        )}
       {shouldShowDetails && event.payload.type === "visualization" && (
         <VisualizationRenderer visualization={event.payload.visualization} />
       )}

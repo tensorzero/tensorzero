@@ -16,8 +16,8 @@ describe("parseFeedbackByVariant", () => {
     expect(parseFeedbackByVariant({})).toBeNull();
   });
 
-  test("returns empty array for empty input", () => {
-    expect(parseFeedbackByVariant([])).toEqual([]);
+  test("returns null for empty array", () => {
+    expect(parseFeedbackByVariant([])).toBeNull();
   });
 
   test("returns null when required fields are missing or wrong type", () => {
