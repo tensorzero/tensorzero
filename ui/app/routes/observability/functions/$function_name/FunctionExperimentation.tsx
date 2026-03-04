@@ -62,9 +62,10 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
   }
 
   // Resolve the active experimentation config (namespace-specific or base)
+  const namespaces = functionConfig.experimentation.namespaces;
   const activeExperimentationConfig =
-    namespace && functionConfig.experimentation.namespaces[namespace]
-      ? functionConfig.experimentation.namespaces[namespace]
+    namespace && Object.hasOwn(namespaces, namespace)
+      ? namespaces[namespace]
       : functionConfig.experimentation.base;
 
   // Transform feedback timeseries data once for both charts

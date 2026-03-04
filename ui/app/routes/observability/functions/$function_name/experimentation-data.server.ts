@@ -30,9 +30,10 @@ export async function fetchExperimentationSectionData(params: {
   const client = getTensorZeroClient();
 
   // Resolve the active experimentation config (namespace-specific or base)
+  const namespaces = function_config.experimentation.namespaces;
   const activeConfig =
-    namespace && function_config.experimentation.namespaces[namespace]
-      ? function_config.experimentation.namespaces[namespace]
+    namespace && Object.hasOwn(namespaces, namespace)
+      ? namespaces[namespace]
       : function_config.experimentation.base;
 
   const feedbackParams =
