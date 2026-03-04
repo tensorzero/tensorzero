@@ -166,7 +166,7 @@ test.describe("Browser API Key - Auth Dialog Flow", () => {
     await expect(
       page.getByRole("heading", { name: "Connect to TensorZero" }),
     ).toBeVisible();
-    await expect(page.getByText("Enter your TensorZero API key")).toBeVisible();
+    await expect(page.getByText("Authenticate this browser:")).toBeVisible();
 
     // Enter the API key
     const input = page.getByLabel("API Key");

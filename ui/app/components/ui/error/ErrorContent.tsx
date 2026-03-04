@@ -96,18 +96,37 @@ function GatewayAuthContent() {
   };
 
   return (
-    <ErrorContentCard className="w-[22rem]">
-      <div className="flex flex-col items-center px-6 pt-9 pb-8 text-center">
+    <ErrorContentCard className="w-[24rem]">
+      <div className="flex flex-col items-center px-6 pt-9 pb-6 text-center">
         <KeyRound className="mb-5 h-8 w-8 text-orange-500 dark:text-orange-400" />
         <h2 className="text-foreground text-lg font-medium">
           Connect to TensorZero
         </h2>
         <p className="text-muted-foreground mt-1.5 text-sm">
-          Enter your TensorZero API key or set it as an environment variable on
-          the UI server.
+          The gateway requires an API key. Set it on the UI server:
         </p>
+        <div className="mt-2">
+          <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode>
+        </div>
+        <ul className="text-muted-foreground mt-4 space-y-1 text-left text-sm">
+          <li>• Verify the key is set correctly</li>
+          <li>• Ensure the key has not expired or been revoked</li>
+          <li>• Check Gateway logs for authentication details</li>
+        </ul>
       </div>
-      <div className="space-y-4 px-6 pb-6">
+      <div className="px-6">
+        <div className="flex items-center gap-3">
+          <div className="border-border flex-1 border-t" />
+          <span className="text-muted-foreground text-xs font-medium uppercase">
+            or
+          </span>
+          <div className="border-border flex-1 border-t" />
+        </div>
+      </div>
+      <div className="space-y-4 px-6 pt-4 pb-6">
+        <p className="text-muted-foreground text-sm">
+          Authenticate this browser:
+        </p>
         <div>
           <label
             htmlFor="gateway-api-key"
