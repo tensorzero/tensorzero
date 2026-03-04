@@ -78,6 +78,10 @@ TensorZero offers dozens of features covering inference, observability, optimiza
 But the absolutely minimal setup requires just a simple configuration file: `tensorzero.toml`.
 
 ```toml title="tensorzero.toml"
+[gateway.observability]
+# Use Postgres as the primary data store for observability (instead of ClickHouse)
+backend = "postgres"
+
 # A function defines the task we're tackling (e.g. generating a haiku)...
 [functions.generate_haiku]
 type = "chat"
@@ -106,11 +110,12 @@ Let's launch TensorZero.
 
 1. Set the environment variable `OPENAI_API_KEY`.
 2. Place our `tensorzero.toml` in the `./config` directory.
-3. Download the following sample `docker-compose.yml` file.
-   This Docker Compose configuration sets up a development ClickHouse database (where TensorZero stores data), the TensorZero Gateway, and the TensorZero UI.
+3. Download the following sample `docker-compose.yml` and `Dockerfile.postgres` files.
+   This Docker Compose configuration sets up a development Postgres database (where TensorZero stores data), the TensorZero Gateway, and the TensorZero UI.
 
 ```bash
 curl -LO "https://raw.githubusercontent.com/tensorzero/tensorzero/refs/heads/main/examples/quickstart/docker-compose.yml"
+curl -LO "https://raw.githubusercontent.com/tensorzero/tensorzero/refs/heads/main/examples/quickstart/Dockerfile.postgres"
 ```
 
 <Accordion title="Example: Docker Compose">
@@ -120,21 +125,39 @@ curl -LO "https://raw.githubusercontent.com/tensorzero/tensorzero/refs/heads/mai
 # For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
-  clickhouse:
-    image: clickhouse:lts
+  postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
     environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_PASSWORD=chpassword
+      - POSTGRES_DB=tensorzero
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    command: ["postgres", "-c", "cron.database_name=tensorzero"]
     ports:
-      - "8123:8123"
+      - "5432:5432"
     volumes:
-      - clickhouse-data:/var/lib/clickhouse
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero"]
       start_period: 30s
       start_interval: 1s
       timeout: 1s
+
+  # Run Postgres migrations before starting the gateway.
+  # This service runs once and exits.
+  gateway-migrations:
+    image: tensorzero/gateway
+    environment:
+      - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/tensorzero
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "gateway --run-postgres-migrations",
+      ]
 
   # The TensorZero Python client *doesn't* require a separate gateway service.
   #
@@ -149,29 +172,38 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+      - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/tensorzero
       - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      clickhouse:
+      postgres:
         condition: service_healthy
+      gateway-migrations:
+        condition: service_completed_successfully
 
   ui:
     image: tensorzero/ui
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
       - TENSORZERO_GATEWAY_URL=http://gateway:3000
     ports:
       - "4000:4000"
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-
 volumes:
-  clickhouse-data:
+  postgres-data:
+```
+
+```dockerfile title="Dockerfile.postgres"
+FROM pgvector/pgvector:pg17-trixie
+
+# Install pg_cron (required by TensorZero for scheduled maintenance tasks)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-17-cron \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure postgresql.conf to load pg_cron
+RUN echo "shared_preload_libraries = 'pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample
 ```
 
 </Accordion>
@@ -184,6 +216,7 @@ Our setup should look like:
 - after.py see below
 - before.py
 - docker-compose.yml
+- Dockerfile.postgres
 ```
 
 Let's launch everything!
@@ -213,7 +246,7 @@ Then, you can make a TensorZero API call with:
 from tensorzero import TensorZeroGateway
 
 with TensorZeroGateway.build_embedded(
-    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
+    postgres_url="postgres://postgres:postgres@localhost:5432/tensorzero",
     config_file="config/tensorzero.toml",
 ) as client:
     response = client.inference(
@@ -273,7 +306,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 async def main():
     async with await AsyncTensorZeroGateway.build_embedded(
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
+        postgres_url="postgres://postgres:postgres@localhost:5432/tensorzero",
         config_file="config/tensorzero.toml",
     ) as gateway:
         response = await gateway.inference(
@@ -320,34 +353,23 @@ ChatInferenceResponse(
 
 <Tab title="Python (OpenAI)">
 
-<Tip>
-
-You can run an embedded (in-memory) TensorZero Gateway directly in your OpenAI Python client.
-
-</Tip>
+You can use TensorZero in Python with the OpenAI Python client.
+This approach requires running the TensorZero Gateway as a separate service.
+The `docker-compose.yml` above launched the gateway on port 3000.
 
 ```python title="after_openai.py" "base_url="http://localhost:3000/openai/v1"" "tensorzero::function_name::generate_haiku"
 from openai import OpenAI
-from tensorzero import patch_openai_client
 
-client = OpenAI()
-
-patch_openai_client(
-    client,
-    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
-    config_file="config/tensorzero.toml",
-    async_setup=False,
-)
-
-response = client.chat.completions.create(
-    model="tensorzero::function_name::generate_haiku",
-    messages=[
-        {
-            "role": "user",
-            "content": "Write a haiku about TensorZero.",
-        }
-    ],
-)
+with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
+    response = client.chat.completions.create(
+        model="tensorzero::function_name::generate_haiku",
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about TensorZero.",
+            }
+        ],
+    )
 
 print(response)
 ```

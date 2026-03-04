@@ -1,0 +1,9 @@
+FROM pgvector/pgvector:pg17-trixie
+
+# Install pg_cron (required by TensorZero for scheduled maintenance tasks)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-17-cron \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure postgresql.conf to load pg_cron
+RUN echo "shared_preload_libraries = 'pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample

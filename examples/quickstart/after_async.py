@@ -5,7 +5,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 async def main():
     async with await AsyncTensorZeroGateway.build_embedded(
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
+        postgres_url="postgres://postgres:postgres@localhost:5432/tensorzero",
         config_file="config/tensorzero.toml",
     ) as gateway:
         response = await gateway.inference(

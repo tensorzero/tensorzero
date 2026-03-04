@@ -1,3 +1,7 @@
+[gateway.observability]
+# Use Postgres as the primary data store for observability (instead of ClickHouse)
+backend = "postgres"
+
 # A function defines the task we're tackling (e.g. generating a haiku)...
 [functions.generate_haiku]
 type = "chat"
