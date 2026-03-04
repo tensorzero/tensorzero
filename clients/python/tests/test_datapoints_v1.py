@@ -30,7 +30,7 @@ from tensorzero import (
     TensorZeroGateway,
     UpdateDatapointMetadataRequest,
 )
-from tensorzero.generated_types import OrderByTimestamp
+from tensorzero.generated_types import OrderBy, OrderByTimestamp
 from uuid_utils import uuid7
 
 
@@ -602,7 +602,7 @@ async def test_async_delete_entire_dataset(async_client: AsyncTensorZeroGateway)
 def test_sync_create_datapoints_from_inferences(embedded_sync_client: TensorZeroGateway):
     """Test creating dataset from inference results."""
     # First, list a few existing inferences
-    order_by = [OrderByTimestamp(direction="descending")]
+    order_by: list[OrderBy] = [OrderByTimestamp(direction="descending")]
     response = embedded_sync_client.list_inferences(
         request=ListInferencesRequest(
             function_name="extract_entities",
@@ -645,7 +645,7 @@ def test_sync_create_datapoints_from_inferences(embedded_sync_client: TensorZero
 @pytest.mark.asyncio
 async def test_async_create_datapoints_from_inferences(embedded_async_client: AsyncTensorZeroGateway):
     """Test async version of create_datapoints_from_inferences."""
-    order_by = [OrderByTimestamp(direction="descending")]
+    order_by: list[OrderBy] = [OrderByTimestamp(direction="descending")]
     response = await embedded_async_client.list_inferences(
         request=ListInferencesRequest(
             function_name="extract_entities",
