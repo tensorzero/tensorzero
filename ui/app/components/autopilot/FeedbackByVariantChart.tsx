@@ -56,6 +56,7 @@ function toPerformanceRows(
         : undefined;
 
     return {
+      // Dummy date — displayed as "All time" via timeGranularity="cumulative"
       period_start: "1970-01-01T00:00:00Z",
       variant_name: f.variant_name,
       count: f.count,

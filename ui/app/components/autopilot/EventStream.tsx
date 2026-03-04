@@ -197,21 +197,24 @@ export type EventVisualizationData =
   | { type: "feedback_by_variant"; data: ParsedFeedbackByVariant[] }
   | { type: "unknown"; raw: unknown };
 
+function isTopKEvaluation(
+  viz: VisualizationType,
+): viz is { type: "top_k_evaluation" } & TopKEvaluationVisualization {
+  return (
+    typeof viz === "object" &&
+    viz !== null &&
+    "type" in viz &&
+    viz.type === "top_k_evaluation"
+  );
+}
+
 export function detectEventVisualization(
   event: GatewayEvent,
 ): EventVisualizationData | null {
   if (event.payload.type === "visualization") {
     const viz = event.payload.visualization;
-    if (
-      typeof viz === "object" &&
-      viz !== null &&
-      "type" in viz &&
-      viz.type === "top_k_evaluation"
-    ) {
-      return {
-        type: "top_k_evaluation",
-        data: viz as TopKEvaluationVisualization,
-      };
+    if (isTopKEvaluation(viz)) {
+      return { type: "top_k_evaluation", data: viz };
     }
     return { type: "unknown", raw: viz };
   }
