@@ -1,5 +1,6 @@
 #![expect(clippy::print_stdout, clippy::print_stderr)]
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use crate::{
     otel::{
         CapturingOtelExporter, SpanMap, attrs_to_map, build_span_map,
@@ -56,6 +57,7 @@ pub mod tool_params;
 
 #[tokio::test]
 async fn test_inference_dryrun() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -98,6 +100,7 @@ async fn test_inference_dryrun() {
 
 #[tokio::test]
 async fn test_inference_chat_strip_unknown_block_non_stream() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -305,6 +308,7 @@ async fn test_inference_chat_strip_unknown_block_non_stream() {
 
 #[tokio::test]
 async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -461,6 +465,7 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
 /// being broken.
 #[tokio::test]
 async fn test_inference_model_fallback() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -603,6 +608,7 @@ async fn test_inference_model_fallback() {
 
 #[tokio::test]
 async fn test_tool_call() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -802,6 +808,7 @@ async fn test_tool_call() {
 
 #[tokio::test]
 async fn test_tool_call_malformed() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1000,6 +1007,7 @@ async fn test_tool_call_malformed() {
 /// We expect to see a null `parsed_content` field in the response and a null `parsed_content` field in the table.
 #[tokio::test]
 async fn test_inference_json_fail() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1133,6 +1141,7 @@ async fn test_inference_json_fail() {
 /// We expect to see a filled-out `content` field in the response and a filled-out `output` field in the table.
 #[tokio::test]
 async fn test_inference_json_success() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1285,6 +1294,7 @@ async fn test_inference_json_success() {
 /// the response is correct for the last one.
 #[tokio::test]
 async fn test_variant_failover() {
+    skip_for_postgres!();
     let mut last_response = None;
     let mut last_episode_id = None;
     for _ in 0..50 {
@@ -1450,6 +1460,7 @@ async fn test_variant_failover() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_variant_zero_weight_skip_zero() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let error = client
         .inference(ClientInferenceParams {
@@ -1496,6 +1507,7 @@ async fn test_variant_zero_weight_skip_zero() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_variant_zero_weight_pin_zero() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let error = client
         .inference(ClientInferenceParams {
@@ -1539,6 +1551,7 @@ async fn test_variant_zero_weight_pin_zero() {
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn test_streaming() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1724,6 +1737,7 @@ async fn test_streaming() {
 /// This test checks that streaming inference works as expected when dryrun is true.
 #[tokio::test]
 async fn test_streaming_dryrun() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -1800,6 +1814,7 @@ async fn test_streaming_dryrun() {
 
 #[tokio::test]
 async fn test_inference_original_response_non_stream() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -1834,6 +1849,7 @@ async fn test_inference_original_response_non_stream() {
 
 #[tokio::test]
 async fn test_gateway_template_base_path() {
+    skip_for_postgres!();
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(&format!(
         r#"
 [functions.my_test]
@@ -1881,6 +1897,7 @@ base_path = "{root}"
 
 #[tokio::test]
 async fn test_gateway_template_no_fs_access() {
+    skip_for_postgres!();
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(&format!(
@@ -1931,6 +1948,7 @@ model = "dummy::good"
 
 #[tokio::test]
 async fn test_original_response_best_of_n_flaky_judge() {
+    skip_for_postgres!();
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(
@@ -2013,6 +2031,7 @@ model_name = "json"
 
 #[tokio::test]
 async fn test_original_response_mixture_of_n_flaky_fuser() {
+    skip_for_postgres!();
     let exporter = install_capturing_otel_exporter().await;
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
@@ -2231,6 +2250,7 @@ fn check_dummy_model_span(
 
 #[tokio::test]
 async fn test_tool_call_streaming() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2458,6 +2478,7 @@ async fn test_tool_call_streaming() {
 
 #[tokio::test]
 async fn test_tool_call_streaming_split_tool_name() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2677,11 +2698,13 @@ async fn test_tool_call_streaming_split_tool_name() {
 
 #[tokio::test]
 async fn test_raw_text_http_gateway() {
+    skip_for_postgres!();
     test_raw_text(tensorzero::test_helpers::make_http_gateway().await).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_raw_text_embedded_gateway() {
+    skip_for_postgres!();
     test_raw_text(tensorzero::test_helpers::make_embedded_gateway().await).await;
 }
 
@@ -2940,6 +2963,7 @@ pub async fn test_dynamic_api_key() {
 
 #[tokio::test]
 async fn test_inference_invalid_params() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // Test with invalid params structure (including fake_variant_type)
@@ -3007,6 +3031,7 @@ async fn test_inference_invalid_params() {
 
 #[tokio::test]
 async fn test_dummy_only_embedded_gateway_no_config() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let response = client
         .inference(ClientInferenceParams {
@@ -3048,6 +3073,7 @@ async fn test_dummy_only_embedded_gateway_no_config() {
 
 #[tokio::test]
 async fn test_dummy_only_replicated_clickhouse() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let response = client
         .inference(ClientInferenceParams {
@@ -3114,6 +3140,7 @@ async fn test_dummy_only_replicated_clickhouse() {
 
 #[tokio::test]
 async fn test_dummy_only_inference_invalid_default_function_arg() {
+    skip_for_postgres!();
     // We cannot provide both `function_name` and `model_name`
     let func_and_model = json!({
         "function_name": "basic_test",
@@ -3324,6 +3351,7 @@ async fn test_dummy_only_inference_invalid_default_function_arg() {
 #[tokio::test]
 
 async fn test_image_inference_without_object_store() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let err_msg = client
         .inference(ClientInferenceParams {
@@ -3365,6 +3393,7 @@ async fn test_inference_zero_tokens_helper(
     expected_input_tokens: Option<u64>,
     expected_output_tokens: Option<u64>,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3483,21 +3512,25 @@ async fn test_inference_zero_tokens_helper(
 
 #[tokio::test]
 async fn test_inference_input_tokens_zero() {
+    skip_for_postgres!();
     test_inference_zero_tokens_helper("dummy::input_tokens_zero", None, Some(1)).await;
 }
 
 #[tokio::test]
 async fn test_inference_output_tokens_zero() {
+    skip_for_postgres!();
     test_inference_zero_tokens_helper("dummy::output_tokens_zero", Some(10), None).await;
 }
 
 #[tokio::test]
 async fn test_inference_input_tokens_output_tokens_zero() {
+    skip_for_postgres!();
     test_inference_zero_tokens_helper("dummy::input_tokens_output_tokens_zero", None, None).await;
 }
 
 #[tokio::test]
 async fn test_tool_call_input_no_warning() {
+    skip_for_postgres!();
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     client
@@ -3536,6 +3569,7 @@ async fn test_tool_call_input_no_warning() {
 /// Test that a json inference with null response (i.e. no generated content blocks) works as expected.
 #[tokio::test]
 async fn test_chat_function_null_response() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "null_chat",
         "input": {
@@ -3566,6 +3600,7 @@ async fn test_chat_function_null_response() {
 /// Test that a json inference with null response (i.e. no generated content blocks) works as expected.
 #[tokio::test]
 async fn test_json_function_null_response() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "null_json",
         "input": {
@@ -3612,6 +3647,7 @@ async fn test_json_function_null_response() {
 /// Test that a json inference with 2 text blocks in the message works as expected.
 #[tokio::test]
 async fn test_multiple_text_blocks_in_message() {
+    skip_for_postgres!();
     let payload = json!({
         "model_name": "dummy::multiple-text-blocks",
         "input": {
@@ -3673,6 +3709,7 @@ async fn test_multiple_text_blocks_in_message() {
 // group those tests as 'batch inference' tests
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_bulk_insert_off_default() {
+    skip_for_postgres!();
     let client = Arc::new(
         tensorzero::test_helpers::make_embedded_gateway_with_config(
             "
@@ -3715,6 +3752,7 @@ async fn test_clickhouse_bulk_insert_off_default() {
 // group those tests as 'batch inference' tests
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clickhouse_bulk_insert() {
+    skip_for_postgres!();
     let client = Arc::new(
         tensorzero::test_helpers::make_embedded_gateway_with_config(
             "
@@ -3821,6 +3859,7 @@ async fn test_clickhouse_bulk_insert() {
 
 #[tokio::test]
 async fn test_internal_tag_auto_injection() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Make an inference request with internal=true and a custom tag

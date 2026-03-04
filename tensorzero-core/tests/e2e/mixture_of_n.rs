@@ -8,6 +8,7 @@ use tensorzero_core::inference::types::{
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
     select_model_inferences_clickhouse,
@@ -15,6 +16,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 
 #[tokio::test]
 async fn test_mixture_of_n_dummy_candidates_dummy_judge_non_stream() {
+    skip_for_postgres!();
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
     test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
@@ -23,6 +25,7 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_non_stream() {
 
 #[tokio::test]
 async fn test_mixture_of_n_dummy_candidates_dummy_judge_streaming() {
+    skip_for_postgres!();
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
     test_mixture_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
@@ -34,6 +37,7 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
     should_be_cached: bool,
     stream: bool,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -256,11 +260,13 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
 
 #[tokio::test]
 async fn test_mixture_of_n_dummy_candidates_real_judge_non_stream() {
+    skip_for_postgres!();
     test_mixture_of_n_dummy_candidates_real_judge_inner(false).await;
 }
 
 #[tokio::test]
 async fn test_mixture_of_n_dummy_candidates_real_judge_streaming() {
+    skip_for_postgres!();
     test_mixture_of_n_dummy_candidates_real_judge_inner(true).await;
 }
 
@@ -269,6 +275,7 @@ async fn test_mixture_of_n_dummy_candidates_real_judge_streaming() {
 /// Besides checking that the response is well-formed and everything is stored correctly,
 /// we also check that the input to GPT4o-mini is correct (as this is the most critical part).
 async fn test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -569,6 +576,7 @@ async fn test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
 /// but they get stored to the ModelInference table.
 #[tokio::test]
 async fn test_mixture_of_n_json_real_judge() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -789,6 +797,7 @@ async fn test_mixture_of_n_json_real_judge() {
 
 #[tokio::test]
 async fn test_mixture_of_n_extra_body() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -924,6 +933,7 @@ async fn test_mixture_of_n_extra_body() {
 
 #[tokio::test]
 async fn test_mixture_of_n_bad_fuser_streaming() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let payload = json!({
         "function_name": "mixture_of_n",
@@ -1098,6 +1108,7 @@ async fn test_mixture_of_n_bad_fuser_streaming() {
 
 #[tokio::test]
 async fn test_mixture_of_n_single_candidate_streaming() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     test_mixture_of_n_single_candidate_inner(true, episode_id, json!({
         "function_name": "mixture_of_n_single_candidate",
@@ -1118,6 +1129,7 @@ async fn test_mixture_of_n_single_candidate_streaming() {
 }
 
 async fn test_mixture_of_n_single_candidate_inner(stream: bool, episode_id: Uuid, payload: Value) {
+    skip_for_postgres!();
     let builder = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload);
