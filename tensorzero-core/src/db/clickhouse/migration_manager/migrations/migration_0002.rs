@@ -48,7 +48,6 @@ impl Migration for Migration0002<'_> {
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
                 namespace String, -- deprecated: unused in application layer
-
                 input String,
                 output String,
                 embedding Array(Float32),
