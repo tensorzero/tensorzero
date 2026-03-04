@@ -491,16 +491,20 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
                         }
                         OptimizationDataSource::Dataset(DatasetDataSource { dataset_name })
                     }
-                    (output_source, None) => {
+                    (Some(output_source), None) => {
                         OptimizationDataSource::Inferences(InferencesDataSource {
-                            output_source: output_source
-                                .unwrap_or(InferenceOutputSource::Inference),
+                            output_source,
                             query_variant_name: params.query_variant_name,
                             filters: params.filters,
                             order_by: params.order_by,
                             limit: params.limit,
                             offset: params.offset,
                         })
+                    }
+                    (None, None) => {
+                        return Err(anyhow::anyhow!(
+                            "you must provide either `output_source` or `dataset_name`"
+                        ));
                     }
                 };
                 let launch_params = LaunchOptimizationWorkflowParams {

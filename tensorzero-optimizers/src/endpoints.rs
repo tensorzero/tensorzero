@@ -90,7 +90,6 @@ impl<'de> Deserialize<'de> for OptimizationDataSource {
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
         struct Helper {
             output_source: Option<InferenceOutputSource>,
             dataset_name: Option<String>,
