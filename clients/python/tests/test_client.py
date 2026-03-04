@@ -3720,4 +3720,4 @@ def test_capfd_captured_warnings(capfd: CaptureFixture[str]):
     assert client is not None
     captured = capfd.readouterr()
     assert captured.err == ""
-    assert "Disabling observability:" in captured.out
+    assert "No config file provided" in captured.out
