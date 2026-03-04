@@ -2954,7 +2954,7 @@ impl AsyncTensorZeroGateway {
 
 /// Build an `OptimizationDataSource` from flat Python kwargs.
 ///
-/// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
+/// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
 #[expect(clippy::too_many_arguments)]
 fn build_optimization_data_source(
     py: Python<'_>,
@@ -2992,14 +2992,26 @@ fn build_optimization_data_source(
                 offset,
             }))
         }
-        (None, Some(dataset_name)) => Ok(OptimizationDataSource::Dataset(DatasetDataSource {
-            dataset_name,
-        })),
+        (None, Some(dataset_name)) => {
+            if query_variant_name.is_some()
+                || filters.is_some()
+                || order_by.is_some()
+                || limit.is_some()
+                || offset.is_some()
+            {
+                return Err(PyValueError::new_err(
+                    "Inference-specific fields (`query_variant_name`, `filters`, `order_by`, `limit`, `offset`) cannot be used with `dataset_name`.",
+                ));
+            }
+            Ok(OptimizationDataSource::Dataset(DatasetDataSource {
+                dataset_name,
+            }))
+        }
         (Some(_), Some(_)) => Err(PyValueError::new_err(
             "Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
         )),
         (None, None) => Err(PyValueError::new_err(
-            "You must provide either `output_source` or `dataset_name`.",
+            "You must provide either `output_source` (for inferences) or `dataset_name` (for datasets).",
         )),
     }
 }

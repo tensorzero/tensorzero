@@ -37,11 +37,11 @@ pub struct LaunchOptimizationWorkflowToolParams {
     #[serde(default)]
     pub filters: Option<InferenceFilter>,
     /// Source of the output data (inference output, demonstration, etc.).
-    /// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
+    /// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
     #[serde(default)]
     pub output_source: Option<InferenceOutputSource>,
     /// Name of the dataset to use as training data.
-    /// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
+    /// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
     #[serde(default)]
     pub dataset_name: Option<String>,
     /// Optional ordering for the inferences.
@@ -472,6 +472,23 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
                         ));
                     }
                     (None, Some(dataset_name)) => {
+                        let inference_fields = [
+                            params
+                                .query_variant_name
+                                .as_ref()
+                                .map(|_| "query_variant_name"),
+                            params.filters.as_ref().map(|_| "filters"),
+                            params.order_by.as_ref().map(|_| "order_by"),
+                            params.limit.map(|_| "limit"),
+                            params.offset.map(|_| "offset"),
+                        ];
+                        let present: Vec<&str> = inference_fields.into_iter().flatten().collect();
+                        if !present.is_empty() {
+                            return Err(anyhow::anyhow!(
+                                "inference-specific fields [{}] cannot be used with `dataset_name`",
+                                present.join(", ")
+                            ));
+                        }
                         OptimizationDataSource::Dataset(DatasetDataSource { dataset_name })
                     }
                     (output_source, None) => {
@@ -525,10 +542,7 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
                 .await?;
 
             match &status {
-                OptimizationJobInfo::Completed { .. } => {
-                    return Ok(LaunchOptimizationWorkflowToolOutput { result: status });
-                }
-                OptimizationJobInfo::Failed { .. } => {
+                OptimizationJobInfo::Completed { .. } | OptimizationJobInfo::Failed { .. } => {
                     return Ok(LaunchOptimizationWorkflowToolOutput { result: status });
                 }
                 OptimizationJobInfo::Pending { .. } => {

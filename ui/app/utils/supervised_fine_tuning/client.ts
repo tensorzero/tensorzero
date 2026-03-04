@@ -120,15 +120,15 @@ export async function createFilters(
     return {
       type: "float_metric",
       metric_name: metric,
-      comparison_operator: comparison_operator,
+      comparison_operator,
       value: threshold,
     };
   } else if (metricConfig.type === "boolean") {
-    const value = metricConfig.optimize === "max" ? true : false;
+    const value = metricConfig.optimize === "max";
     return {
       type: "boolean_metric",
       metric_name: metric,
-      value: value,
+      value,
     };
   } else {
     throw new Error(`Unsupported metric type: ${metricConfig.type}`);

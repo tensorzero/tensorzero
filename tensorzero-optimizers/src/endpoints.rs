@@ -114,9 +114,28 @@ impl<'de> Deserialize<'de> for OptimizationDataSource {
                     offset: helper.offset,
                 }))
             }
-            (None, Some(dataset_name)) => Ok(OptimizationDataSource::Dataset(DatasetDataSource {
-                dataset_name,
-            })),
+            (None, Some(dataset_name)) => {
+                let inference_fields = [
+                    helper
+                        .query_variant_name
+                        .as_ref()
+                        .map(|_| "query_variant_name"),
+                    helper.filters.as_ref().map(|_| "filters"),
+                    helper.order_by.as_ref().map(|_| "order_by"),
+                    helper.limit.map(|_| "limit"),
+                    helper.offset.map(|_| "offset"),
+                ];
+                let present: Vec<&str> = inference_fields.into_iter().flatten().collect();
+                if !present.is_empty() {
+                    return Err(serde::de::Error::custom(format!(
+                        "inference-specific fields [{}] cannot be used with `dataset_name`",
+                        present.join(", ")
+                    )));
+                }
+                Ok(OptimizationDataSource::Dataset(DatasetDataSource {
+                    dataset_name,
+                }))
+            }
             (Some(_), Some(_)) => Err(serde::de::Error::custom(
                 "provide either `output_source` or `dataset_name`, not both",
             )),

@@ -1202,7 +1202,7 @@ impl ClientExt for Client {
     }
 
     /// Start an optimization job.
-    /// NOTE: This is the composition of `list_inferences`, `render_inferences`, and `launch_optimization`.
+    /// NOTE: This queries data (inferences or datapoints), renders samples, and launches the optimization.
     async fn experimental_launch_optimization_workflow(
         &self,
         params: LaunchOptimizationWorkflowParams,
@@ -1230,7 +1230,7 @@ impl ClientExt for Client {
                     .map_err(|e| TensorZeroError::Other {
                         source: Error::new(ErrorDetails::InvalidBaseUrl {
                             message: format!(
-                                "Failed to join base URL with /optimization_workflow endpoint: {e}"
+                                "Failed to join base URL with /experimental_optimization_workflow endpoint: {e}"
                             ),
                         })
                         .into(),
