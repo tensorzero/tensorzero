@@ -8,8 +8,8 @@ use tracing_subscriber::{self, EnvFilter};
 use uuid::Uuid;
 
 use tensorzero::{
-    ClientExt, InferenceOutputSource, LaunchOptimizationWorkflowParams, OptimizationDataSource,
-    RenderedSample, Role,
+    ClientExt, InferenceOutputSource, InferencesDataSource, LaunchOptimizationWorkflowParams,
+    OptimizationDataSource, RenderedSample, Role,
 };
 use tensorzero_core::{
     cache::{CacheManager, CacheOptions},
@@ -241,14 +241,14 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
     let params = LaunchOptimizationWorkflowParams {
         function_name: "write_haiku".to_string(),
         template_variant_name: "gpt_4o_mini".to_string(),
-        data_source: OptimizationDataSource::Inferences {
+        data_source: OptimizationDataSource::Inferences(InferencesDataSource {
             output_source: InferenceOutputSource::Inference,
             query_variant_name: None,
             filters: None,
             order_by: None,
             limit: Some(10),
             offset: None,
-        },
+        }),
         val_fraction: None,
         // Mock mode is configured via provider_types in the test config file
         optimizer_config: test_case.get_optimizer_info(),

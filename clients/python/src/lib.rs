@@ -64,11 +64,11 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
-    ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, Input, LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
-    ListInferencesParams, OptimizationDataSource, OptimizationJobHandle, PostgresConfig,
-    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
-    err_to_http, observability::LogFormat,
+    ClientSecretString, DatasetDataSource, DynamicToolParams, FeedbackParams, InferenceOutput,
+    InferenceParams, InferenceStream, InferencesDataSource, Input, LaunchOptimizationParams,
+    LaunchOptimizationWorkflowParams, ListInferencesParams, OptimizationDataSource,
+    OptimizationJobHandle, PostgresConfig, RenderedSample, StoredInference, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1636,16 +1636,13 @@ impl TensorZeroGateway {
 
     /// Launch an optimization workflow.
     ///
-    /// This is a convenience method that handles fetching inferences or dataset datapoints,
-    /// rendering samples, and launching the optimization job server-side.
-    ///
     /// :param function_name: The name of the function to optimize.
     /// :param template_variant_name: The name of the template variant to use.
     /// :param optimizer_config: The optimizer configuration dictionary.
     /// :param output_source: The source of inference output ("none", "inference", or "demonstration").
-    ///     Provide either `output_source` or `dataset_name`, not both.
+    ///     Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
     /// :param dataset_name: Name of the dataset to use as training data.
-    ///     Provide either `output_source` or `dataset_name`, not both.
+    ///     Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
     /// :param query_variant_name: Optional variant name to filter inferences by.
     /// :param filters: Optional filters to apply when querying inferences.
     /// :param order_by: Optional ordering for the inferences.
@@ -2874,16 +2871,13 @@ impl AsyncTensorZeroGateway {
 
     /// Launch an optimization workflow.
     ///
-    /// This is a convenience method that handles fetching inferences or dataset datapoints,
-    /// rendering samples, and launching the optimization job server-side.
-    ///
     /// :param function_name: The name of the function to optimize.
     /// :param template_variant_name: The name of the template variant to use.
     /// :param optimizer_config: The optimizer configuration dictionary.
     /// :param output_source: The source of inference output ("none", "inference", or "demonstration").
-    ///     Provide either `output_source` or `dataset_name`, not both.
+    ///     Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
     /// :param dataset_name: Name of the dataset to use as training data.
-    ///     Provide either `output_source` or `dataset_name`, not both.
+    ///     Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
     /// :param query_variant_name: Optional variant name to filter inferences by.
     /// :param filters: Optional filters to apply when querying inferences.
     /// :param order_by: Optional ordering for the inferences.
@@ -2960,7 +2954,7 @@ impl AsyncTensorZeroGateway {
 
 /// Build an `OptimizationDataSource` from flat Python kwargs.
 ///
-/// Exactly one of `output_source` or `dataset_name` must be provided.
+/// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
 #[expect(clippy::too_many_arguments)]
 fn build_optimization_data_source(
     py: Python<'_>,
@@ -2989,18 +2983,20 @@ fn build_optimization_data_source(
                 .as_ref()
                 .map(|x| deserialize_from_pyobj(py, x))
                 .transpose()?;
-            Ok(OptimizationDataSource::Inferences {
+            Ok(OptimizationDataSource::Inferences(InferencesDataSource {
                 output_source,
                 query_variant_name,
                 filters,
                 order_by,
                 limit,
                 offset,
-            })
+            }))
         }
-        (None, Some(dataset_name)) => Ok(OptimizationDataSource::Dataset { dataset_name }),
+        (None, Some(dataset_name)) => Ok(OptimizationDataSource::Dataset(DatasetDataSource {
+            dataset_name,
+        })),
         (Some(_), Some(_)) => Err(PyValueError::new_err(
-            "Provide either `output_source` or `dataset_name`, not both.",
+            "Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
         )),
         (None, None) => Err(PyValueError::new_err(
             "You must provide either `output_source` or `dataset_name`.",

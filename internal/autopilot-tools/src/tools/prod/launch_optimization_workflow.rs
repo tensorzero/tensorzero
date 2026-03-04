@@ -16,7 +16,10 @@ use tensorzero_core::endpoints::stored_inferences::v1::types::{InferenceFilter, 
 use tensorzero_core::optimization::{
     OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo,
 };
-use tensorzero_optimizers::endpoints::{LaunchOptimizationWorkflowParams, OptimizationDataSource};
+use tensorzero_optimizers::endpoints::{
+    DatasetDataSource, InferencesDataSource, LaunchOptimizationWorkflowParams,
+    OptimizationDataSource,
+};
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -34,11 +37,11 @@ pub struct LaunchOptimizationWorkflowToolParams {
     #[serde(default)]
     pub filters: Option<InferenceFilter>,
     /// Source of the output data (inference output, demonstration, etc.).
-    /// Exactly one of `output_source` or `dataset_name` must be provided.
+    /// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
     #[serde(default)]
     pub output_source: Option<InferenceOutputSource>,
     /// Name of the dataset to use as training data.
-    /// Exactly one of `output_source` or `dataset_name` must be provided.
+    /// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
     #[serde(default)]
     pub dataset_name: Option<String>,
     /// Optional ordering for the inferences.
@@ -134,11 +137,11 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                 "output_source": {
                     "type": "string",
                     "enum": ["none", "inference", "demonstration"],
-                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available, 'none' returns no output. Provide either `output_source` or `dataset_name`, not both."
+                    "description": "Source of the inference output. `inference` returns the original output, `demonstration` returns manually-curated output if available, `none` returns no output. Provide either `output_source` or `dataset_name`, not both."
                 },
                 "dataset_name": {
                     "type": "string",
-                    "description": "Name of the dataset to use as training data. Provide either `output_source` or `dataset_name`, not both."
+                    "description": "Name of the dataset to use as training data. Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both."
                 },
                 "limit": {
                     "type": "integer",
@@ -462,18 +465,25 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
         // Step 1: Launch the optimization workflow
         let job_handle: OptimizationJobHandle = ctx
             .step("launch", llm_params.clone(), |params, state| async move {
-                let data_source = if let Some(dataset_name) = params.dataset_name {
-                    OptimizationDataSource::Dataset { dataset_name }
-                } else {
-                    OptimizationDataSource::Inferences {
-                        output_source: params
-                            .output_source
-                            .unwrap_or(InferenceOutputSource::Inference),
-                        query_variant_name: params.query_variant_name,
-                        filters: params.filters,
-                        order_by: params.order_by,
-                        limit: params.limit,
-                        offset: params.offset,
+                let data_source = match (params.output_source, params.dataset_name) {
+                    (Some(_), Some(_)) => {
+                        return Err(anyhow::anyhow!(
+                            "provide either `output_source` or `dataset_name`, not both"
+                        ));
+                    }
+                    (None, Some(dataset_name)) => {
+                        OptimizationDataSource::Dataset(DatasetDataSource { dataset_name })
+                    }
+                    (output_source, None) => {
+                        OptimizationDataSource::Inferences(InferencesDataSource {
+                            output_source: output_source
+                                .unwrap_or(InferenceOutputSource::Inference),
+                            query_variant_name: params.query_variant_name,
+                            filters: params.filters,
+                            order_by: params.order_by,
+                            limit: params.limit,
+                            offset: params.offset,
+                        })
                     }
                 };
                 let launch_params = LaunchOptimizationWorkflowParams {

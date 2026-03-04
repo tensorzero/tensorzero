@@ -49,26 +49,82 @@ pub struct LaunchOptimizationWorkflowParams {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(untagged)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub enum OptimizationDataSource {
-    Inferences {
-        output_source: InferenceOutputSource,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        query_variant_name: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        filters: Option<InferenceFilter>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        order_by: Option<Vec<OrderBy>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        limit: Option<u32>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        offset: Option<u32>,
-    },
-    Dataset {
-        dataset_name: String,
-    },
+    Inferences(InferencesDataSource),
+    Dataset(DatasetDataSource),
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct InferencesDataSource {
+    pub output_source: InferenceOutputSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query_variant_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filters: Option<InferenceFilter>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_by: Option<Vec<OrderBy>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u32>,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct DatasetDataSource {
+    pub dataset_name: String,
+}
+
+/// Custom `Deserialize` that rejects payloads containing both `output_source` and `dataset_name`.
+impl<'de> Deserialize<'de> for OptimizationDataSource {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Helper {
+            output_source: Option<InferenceOutputSource>,
+            dataset_name: Option<String>,
+            query_variant_name: Option<String>,
+            filters: Option<InferenceFilter>,
+            order_by: Option<Vec<OrderBy>>,
+            limit: Option<u32>,
+            offset: Option<u32>,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+
+        match (helper.output_source, helper.dataset_name) {
+            (Some(output_source), None) => {
+                Ok(OptimizationDataSource::Inferences(InferencesDataSource {
+                    output_source,
+                    query_variant_name: helper.query_variant_name,
+                    filters: helper.filters,
+                    order_by: helper.order_by,
+                    limit: helper.limit,
+                    offset: helper.offset,
+                }))
+            }
+            (None, Some(dataset_name)) => Ok(OptimizationDataSource::Dataset(DatasetDataSource {
+                dataset_name,
+            })),
+            (Some(_), Some(_)) => Err(serde::de::Error::custom(
+                "provide either `output_source` or `dataset_name`, not both",
+            )),
+            (None, None) => Err(serde::de::Error::custom(
+                "you must provide either `output_source` or `dataset_name`",
+            )),
+        }
+    }
 }
 
 pub async fn launch_optimization_workflow_handler(
@@ -105,39 +161,33 @@ pub async fn launch_optimization_workflow(
     let variants = HashMap::from([(function_name.clone(), template_variant_name.clone())]);
 
     let rendered_samples = match data_source {
-        OptimizationDataSource::Inferences {
-            output_source,
-            query_variant_name,
-            filters,
-            order_by,
-            limit,
-            offset,
-        } => {
+        OptimizationDataSource::Inferences(inferences) => {
             let stored_inferences = db
                 .list_inferences(
                     &config,
                     &ListInferencesParams {
                         function_name: Some(&function_name),
                         ids: None,
-                        variant_name: query_variant_name.as_deref(),
+                        variant_name: inferences.query_variant_name.as_deref(),
                         episode_id: None,
-                        filters: filters.as_ref(),
-                        output_source,
-                        limit: limit
+                        filters: inferences.filters.as_ref(),
+                        output_source: inferences.output_source,
+                        limit: inferences
+                            .limit
                             .unwrap_or(DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS),
-                        offset: offset.unwrap_or(0),
+                        offset: inferences.offset.unwrap_or(0),
                         pagination: None,
-                        order_by: order_by.as_deref(),
+                        order_by: inferences.order_by.as_deref(),
                         search_query_experimental: None,
                     },
                 )
                 .await?;
             render_samples(config.clone(), stored_inferences, variants, None).await?
         }
-        OptimizationDataSource::Dataset { dataset_name } => {
+        OptimizationDataSource::Dataset(dataset) => {
             let stored_datapoints = db
                 .get_datapoints(&GetDatapointsParams {
-                    dataset_name: Some(dataset_name),
+                    dataset_name: Some(dataset.dataset_name),
                     function_name: Some(function_name.clone()),
                     ids: None,
                     limit: u32::MAX,
@@ -256,38 +306,25 @@ pub async fn poll_optimization(
 /// Returns a tuple of (train_examples, val_examples).
 /// val_examples is None if val_fraction is None.
 fn split_examples<T>(
-    stored_inferences: Vec<T>,
+    mut examples: Vec<T>,
     val_fraction: Option<f64>,
 ) -> Result<(Vec<T>, Option<Vec<T>>), Error> {
-    if let Some(val_fraction) = val_fraction {
-        if val_fraction <= 0.0 || val_fraction >= 1.0 {
-            // If val_fraction is not in (0, 1), treat as no split
-            return Err(Error::new(ErrorDetails::InvalidValFraction {
-                val_fraction,
-            }));
-        }
-        let mut rng = rand::rng();
-        let mut examples = stored_inferences;
-        let n = examples.len();
-        let n_val = ((n as f64) * val_fraction).round() as usize;
-        // Shuffle the examples
-        examples.as_mut_slice().shuffle(&mut rng);
+    let Some(val_fraction) = val_fraction else {
+        return Ok((examples, None));
+    };
 
-        // Split examples into val and train sets
-        let mut val = Vec::with_capacity(n_val);
-        let mut train = Vec::with_capacity(n - n_val);
-
-        // Move elements from examples into val and train
-        for (i, example) in examples.into_iter().enumerate() {
-            if i < n_val {
-                val.push(example);
-            } else {
-                train.push(example);
-            }
-        }
-
-        Ok((train, Some(val)))
-    } else {
-        Ok((stored_inferences, None))
+    if val_fraction <= 0.0 || val_fraction >= 1.0 {
+        return Err(Error::new(ErrorDetails::InvalidValFraction {
+            val_fraction,
+        }));
     }
+
+    let n_val = ((examples.len() as f64) * val_fraction).round() as usize;
+    examples.as_mut_slice().shuffle(&mut rand::rng());
+
+    // split_off takes everything from n_val onwards, leaving 0..n_val in `examples`
+    let train = examples.split_off(n_val);
+    let val = examples;
+
+    Ok((train, Some(val)))
 }

@@ -894,10 +894,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         Launch an optimization workflow.
 
-        This is a convenience method that handles fetching inferences or dataset datapoints,
-        rendering samples, and launching the optimization job server-side.
-
-        Provide either ``output_source`` (for inferences) or ``dataset_name`` (for datasets), not both.
+        Provide either `output_source` (for inferences) or `dataset_name` (for datasets), not both.
 
         :param function_name: The name of the function to optimize.
         :param template_variant_name: The name of the template variant to use.
@@ -1417,10 +1414,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         """
         Launch an optimization workflow.
 
-        This is a convenience method that handles fetching inferences or dataset datapoints,
-        rendering samples, and launching the optimization job server-side.
-
-        Provide either ``output_source`` (for inferences) or ``dataset_name`` (for datasets), not both.
+        Provide either `output_source` (for inferences) or `dataset_name` (for datasets), not both.
 
         :param function_name: The name of the function to optimize.
         :param template_variant_name: The name of the template variant to use.

@@ -110,7 +110,8 @@ pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migratio
 
 // Re-export optimization types from tensorzero-optimizers
 pub use tensorzero_optimizers::endpoints::{
-    LaunchOptimizationParams, LaunchOptimizationWorkflowParams, OptimizationDataSource,
+    DatasetDataSource, InferencesDataSource, LaunchOptimizationParams,
+    LaunchOptimizationWorkflowParams, OptimizationDataSource,
 };
 
 // Keep git module for Git-related extension traits
