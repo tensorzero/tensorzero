@@ -150,7 +150,7 @@ ollama pull nomic-embed-text
 ollama serve
 ```
 
-We assume that Ollama is available on `http://localhost:11434`.
+We assume that Ollama is running on your host machine at `http://localhost:11434`.
 
 </Step>
 
@@ -164,7 +164,7 @@ routing = ["ollama"]
 
 [embedding_models.nomic-embed-text.providers.ollama]
 type = "openai"
-api_base = "http://localhost:11434/v1"
+api_base = "http://host.docker.internal:11434/v1"
 model_name = "nomic-embed-text"
 api_key_location = "none"
 ```
@@ -179,14 +179,13 @@ See the [Configuration Reference](/gateway/configuration-reference#embedding_mod
 
 <Step title="Deploy the TensorZero Gateway with your configuration">
 
-Deploy the TensorZero Gateway with your configuration file:
+Deploy the TensorZero Gateway with your configuration file.
 
-```bash
-docker run \
-  -p 3000:3000 \
-  -v $(pwd)/config:/app/config:ro \
-  tensorzero/gateway
-```
+<Tip>
+
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
+
+</Tip>
 
 </Step>
 
