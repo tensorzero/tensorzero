@@ -16,6 +16,7 @@ use uuid::Uuid;
 use crate::{
     common::get_gateway_endpoint,
     providers::common::{DEEPSEEK_PAPER_PDF, E2ETestProvider, E2ETestProviders, FERRIS_PNG},
+    utils::skip_for_postgres,
 };
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
@@ -245,6 +246,7 @@ async fn test_thinking_rejected_128k() {
 
 #[tokio::test]
 async fn test_empty_chunks_success() {
+    skip_for_postgres!();
     let payload = json!({
         "model_name": "anthropic::claude-sonnet-4-5",
         "input":{
@@ -328,6 +330,7 @@ pub async fn test_thinking_signature_helper(
     model_name: &str,
     model_provider_name: &str,
 ) {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -515,6 +518,7 @@ pub async fn test_redacted_thinking_helper(
     model_provider_name: &str,
     provider_type: &str,
 ) {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -719,6 +723,7 @@ async fn test_beta_structured_outputs_json_non_streaming() {
 }
 
 async fn test_beta_structured_outputs_json_helper(stream: bool) {
+    skip_for_postgres!();
     let client = Client::new();
     let payload = json!({
         "function_name": "anthropic_beta_structured_outputs_json",
@@ -821,6 +826,7 @@ async fn test_beta_structured_outputs_strict_tool_non_streaming() {
 }
 
 async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
+    skip_for_postgres!();
     let client = Client::new();
     let payload = json!({
         "function_name": "anthropic_beta_structured_outputs_chat",
@@ -919,6 +925,7 @@ async fn test_streaming_thinking() {
 }
 
 pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &str) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1202,6 +1209,7 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
 
 #[tokio::test]
 async fn test_forward_image_url() {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     let config = format!(
         r#"
@@ -1284,6 +1292,7 @@ async fn test_forward_image_url() {
 
 #[tokio::test]
 async fn test_forward_file_url() {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     let config = format!(
         r#"

@@ -32,6 +32,7 @@ use crate::providers::common::{
     DEEPSEEK_PAPER_PDF, E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, FERRIS_PNG,
     ModelTestProvider,
 };
+use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
     select_model_inference_clickhouse,
@@ -309,6 +310,7 @@ async fn get_providers() -> E2ETestProviders {
 
 #[tokio::test]
 pub async fn test_provider_config_extra_body() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -406,6 +408,7 @@ pub async fn test_provider_config_extra_body() {
 
 #[tokio::test]
 async fn test_default_function_default_tool_choice() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -484,6 +487,7 @@ async fn test_default_function_default_tool_choice() {
 
 #[tokio::test]
 async fn test_default_function_model_name_shorthand() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -598,6 +602,7 @@ async fn test_default_function_model_name_shorthand() {
 
 #[tokio::test]
 async fn test_default_function_model_name_non_shorthand() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -842,6 +847,7 @@ async fn test_chat_function_json_override_with_mode_strict() {
 }
 
 async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceRequestJsonMode) {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
     let mode = serde_json::to_value(json_mode).unwrap();
@@ -999,6 +1005,7 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
 
 #[tokio::test]
 async fn test_o4_mini_inference() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -1112,6 +1119,7 @@ async fn test_o4_mini_inference() {
 
 #[tokio::test]
 async fn test_o3_mini_inference_with_reasoning_effort() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -1236,6 +1244,7 @@ async fn test_o3_mini_inference_with_reasoning_effort() {
 
 #[tokio::test]
 async fn test_embedding_request() {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let provider_config_serialized = r#"
     type = "openai"
@@ -1386,6 +1395,7 @@ async fn test_embedding_request() {
 
 #[tokio::test]
 async fn test_embedding_sanity_check() {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let provider_config_serialized = r#"
     type = "openai"
@@ -1589,6 +1599,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
 // Tests using `{"type": "text", "text": "Some string"}` as input
 #[tokio::test]
 async fn test_content_block_text_field() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -2015,6 +2026,7 @@ pub async fn test_embedding_extra_headers() {
 // (and we never read things back from the object in batch inference handling)
 #[tokio::test]
 pub async fn test_start_batch_inference_write_file() {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     let config = format!(
         r#"
@@ -2132,6 +2144,7 @@ pub async fn test_start_batch_inference_write_file() {
 
 #[tokio::test]
 async fn test_forward_image_url() {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     let config = format!(
         r#"
@@ -2214,6 +2227,7 @@ async fn test_forward_image_url() {
 
 #[tokio::test]
 async fn test_forward_file_url() {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     let config = format!(
         r#"
@@ -2478,6 +2492,7 @@ async fn test_responses_api_invalid_thought() {
 /// both the provider (openai) and the API type (responses).
 #[tokio::test]
 async fn test_responses_api_shorthand() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -2602,6 +2617,7 @@ async fn test_responses_api_shorthand() {
 
 #[tokio::test]
 async fn test_file_custom_filename_sent_to_openai() {
+    skip_for_postgres!();
     // Test that custom filename is sent to OpenAI API
     let temp_dir = tempfile::tempdir().unwrap();
     let config = format!(
@@ -2670,6 +2686,7 @@ async fn test_file_custom_filename_sent_to_openai() {
 
 #[tokio::test]
 async fn test_file_fallback_filename_sent_to_openai() {
+    skip_for_postgres!();
     // Test that fallback filename "input.pdf" is used when no custom filename provided
     let temp_dir = tempfile::tempdir().unwrap();
     let config = format!(

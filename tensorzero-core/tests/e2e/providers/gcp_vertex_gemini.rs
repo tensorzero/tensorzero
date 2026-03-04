@@ -12,6 +12,8 @@ use crate::{
 
 use super::common::ModelTestProvider;
 
+use crate::utils::skip_for_postgres;
+
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 crate::generate_unified_mock_batch_tests!(get_providers);
@@ -386,6 +388,7 @@ async fn test_gcp_vertex_multi_turn_thought_non_streaming() {
 /// the model is forced to use tools (because internally we set mode to Any).
 #[tokio::test]
 async fn test_gcp_vertex_gemini_tool_choice_auto_with_allowed_tools() {
+    skip_for_postgres!();
     use tensorzero_core::db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse,
     };
