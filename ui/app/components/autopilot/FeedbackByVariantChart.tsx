@@ -12,12 +12,6 @@ type ParsedFeedbackByVariant = Omit<FeedbackByVariant, "count"> & {
   count: number;
 };
 
-interface FeedbackByVariantChartProps {
-  data: ParsedFeedbackByVariant[];
-  metricName: string;
-  functionName: string;
-}
-
 /**
  * Validates that a parsed JSON value looks like a FeedbackByVariant entry.
  * Guards against malformed tool result data rendering NaN bars.
@@ -110,7 +104,7 @@ export default function FeedbackByVariantChart({
   data,
   metricName,
   functionName,
-}: FeedbackByVariantChartProps) {
+}: FeedbackChartData) {
   const rows = toPerformanceRows(data);
   const { data: chartData, variantNames } = transformVariantPerformances(rows);
 

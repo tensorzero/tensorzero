@@ -40,7 +40,6 @@ import type {
   EventPayloadUserQuestion,
   GatewayEvent,
   GatewayEventPayload,
-  JsonValue,
   TopKEvaluationVisualization,
   UserQuestionAnswer,
   VisualizationType,
@@ -50,9 +49,10 @@ import { hasAnsweredResponse } from "~/components/autopilot/question-cards/respo
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
-import FeedbackByVariantChart, {
-  parseFeedbackChartData,
-} from "./FeedbackByVariantChart";
+import {
+  detectToolResultVisualization,
+  ToolResultVisualization,
+} from "./ToolResultVisualization";
 
 /**
  * Max height for expandable tool content (tool call arguments, tool results, errors).
@@ -599,12 +599,10 @@ function UserQuestionsAnswersContent({
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
-type ToolCallInfo = { name: string; arguments: JsonValue };
-
 type EventItemProps = {
   event: GatewayEvent;
+  events: GatewayEvent[];
   questionsMap?: Map<string, EventPayloadUserQuestion[]>;
-  toolCallMap?: Map<string, ToolCallInfo>;
   isPendingToolCall?: boolean;
   isPendingQuestion?: boolean;
   configApplyEnabled?: boolean;
@@ -613,8 +611,8 @@ type EventItemProps = {
 
 function EventItem({
   event,
+  events,
   questionsMap,
-  toolCallMap,
   isPendingToolCall = false,
   isPendingQuestion = false,
   configApplyEnabled = false,
@@ -622,22 +620,11 @@ function EventItem({
 }: EventItemProps) {
   const { yoloMode } = useAutopilotSession();
 
-  // Resolve the tool name for tool_result events via the toolCallMap
-  const toolCallInfo =
-    event.payload.type === "tool_result"
-      ? toolCallMap?.get(event.payload.tool_call_event_id)
-      : undefined;
-
-  // Parse FeedbackByVariant chart data from get_feedback_by_variant tool results
-  const feedbackChartData = useMemo(() => {
-    if (toolCallInfo?.name !== "get_feedback_by_variant") return null;
-    if (event.payload.type !== "tool_result") return null;
-    if (event.payload.outcome.type !== "success") return null;
-    return parseFeedbackChartData(
-      event.payload.outcome.result,
-      toolCallInfo.arguments,
-    );
-  }, [event, toolCallInfo]);
+  // Detect if this tool_result can be rendered as a visualization (e.g. chart)
+  const toolResultVizData = useMemo(
+    () => detectToolResultVisualization(event, events),
+    [event, events],
+  );
 
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
@@ -655,17 +642,17 @@ function EventItem({
       (event.payload.outcome.type === "success" ||
         event.payload.outcome.type === "failure"));
   const [isExpanded, setIsExpanded] = useState(
-    event.payload.type === "visualization" || feedbackChartData != null,
+    event.payload.type === "visualization" || toolResultVizData != null,
   );
-  // Auto-expand once when feedbackChartData becomes available after mount
+  // Auto-expand once when visualization data becomes available after mount
   // (tool_call may load after tool_result due to newest-first pagination)
   const hasAutoExpanded = useRef(false);
   useEffect(() => {
-    if (feedbackChartData != null && !hasAutoExpanded.current) {
+    if (toolResultVizData != null && !hasAutoExpanded.current) {
       hasAutoExpanded.current = true;
       setIsExpanded(true);
     }
-  }, [feedbackChartData]);
+  }, [toolResultVizData]);
   const shouldShowDetails = !isExpandable || isExpanded;
   const label = <span className="text-sm font-medium">{title}</span>;
 
@@ -713,14 +700,10 @@ function EventItem({
           <TableItemTime timestamp={event.created_at} />
         </div>
       </div>
-      {shouldShowDetails && feedbackChartData && (
-        <FeedbackByVariantChart
-          data={feedbackChartData.data}
-          metricName={feedbackChartData.metricName}
-          functionName={feedbackChartData.functionName}
-        />
+      {shouldShowDetails && toolResultVizData && (
+        <ToolResultVisualization data={toolResultVizData} />
       )}
-      {shouldShowDetails && summary.description && !feedbackChartData && (
+      {shouldShowDetails && summary.description && !toolResultVizData && (
         <>
           {event.payload.type === "message" ? (
             <Markdown
@@ -899,21 +882,6 @@ export default function EventStream({
     return map;
   }, [events]);
 
-  // Map from tool_call_event_id → tool call info, used to resolve
-  // tool names and arguments when rendering tool_result events.
-  const toolCallMap = useMemo(() => {
-    const map = new Map<string, ToolCallInfo>();
-    for (const event of events) {
-      if (event.payload.type === "tool_call") {
-        map.set(event.payload.side_info.tool_call_event_id, {
-          name: event.payload.name,
-          arguments: event.payload.arguments,
-        });
-      }
-    }
-    return map;
-  }, [events]);
-
   // Determine what to show at the top: sentinel, error, or session start
   // Only show session start when there's content to display (events or optimistic messages)
   const showSessionStart =
@@ -946,8 +914,8 @@ export default function EventStream({
         <EventErrorBoundary key={event.id} eventId={event.id}>
           <EventItem
             event={event}
+            events={events}
             questionsMap={questionsMap}
-            toolCallMap={toolCallMap}
             isPendingToolCall={pendingToolCallIds?.has(event.id)}
             isPendingQuestion={pendingUserQuestionIds?.has(event.id)}
             configApplyEnabled={configApplyEnabled}
