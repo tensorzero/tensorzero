@@ -30,7 +30,7 @@ The TensorZero Python SDK doesn't have an independent embedding endpoint at the 
 
 <Tab title="Python (OpenAI SDK)">
 
-The TensorZero Python SDK integrates with the OpenAI Python SDK to provide a unified API for calling any LLM.
+You can point the OpenAI Python SDK to a TensorZero Gateway to generate embeddings with a unified API.
 
 <Steps>
 
@@ -50,37 +50,46 @@ See the [Integrations](/integrations/model-providers) page to learn how to set u
 
 </Step>
 
-<Step title="Install the OpenAI and TensorZero Python SDKs">
+<Step title="Install the OpenAI Python SDK">
 
-You can install the OpenAI and TensorZero SDKs with a Python package manager like `pip`.
+You can install the OpenAI SDK with a Python package manager like `pip`.
 
 ```bash
-pip install openai tensorzero
+pip install openai
 ```
+
+</Step>
+
+<Step title="Deploy the TensorZero Gateway">
+
+Let's deploy a standalone TensorZero Gateway using Docker.
+For simplicity, we'll use the gateway without observability or custom configuration.
+
+```bash
+docker run \
+  -e OPENAI_API_KEY \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --default-config
+```
+
+<Tip>
+
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
+
+</Tip>
 
 </Step>
 
 <Step title="Initialize the OpenAI client">
 
-Let's initialize the TensorZero Gateway and patch the OpenAI client to use it.
-For simplicity, we'll use an embedded gateway without observability or custom configuration.
+Let's initialize the OpenAI SDK and point it to the gateway we just launched.
 
 ```python
 from openai import OpenAI
-from tensorzero import patch_openai_client
 
-client = OpenAI()
-patch_openai_client(client, async_setup=False)
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 ```
-
-<Tip>
-
-The TensorZero Python SDK supports both the synchronous `OpenAI` client and the asynchronous `AsyncOpenAI` client.
-Both options support running the gateway embedded in your application with `patch_openai_client` or connecting to a standalone gateway with `base_url`.
-The embedded gateway supports synchronous initialization with `async_setup=False` or asynchronous initialization with `async_setup=True`.
-See [Clients](/gateway/clients/) for more details.
-
-</Tip>
 
 </Step>
 
@@ -168,6 +177,19 @@ See the [Configuration Reference](/gateway/configuration-reference#embedding_mod
 
 </Step>
 
+<Step title="Deploy the TensorZero Gateway with your configuration">
+
+Deploy the TensorZero Gateway with your configuration file:
+
+```bash
+docker run \
+  -p 3000:3000 \
+  -v $(pwd)/config:/app/config:ro \
+  tensorzero/gateway
+```
+
+</Step>
+
 <Step title="Call your custom embedding model">
 
 Use your custom model by referencing it with `tensorzero::embedding_model_name::nomic-embed-text`.
@@ -176,15 +198,8 @@ For example, using the OpenAI Python SDK:
 
 ```python
 from openai import OpenAI
-from tensorzero import patch_openai_client
 
-client = OpenAI()
-
-patch_openai_client(
-    client,
-    config_file="config/tensorzero.toml",
-    async_setup=False,
-)
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 result = client.embeddings.create(
     input="Hello, world!",

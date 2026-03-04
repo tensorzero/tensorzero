@@ -320,34 +320,23 @@ ChatInferenceResponse(
 
 <Tab title="Python (OpenAI)">
 
-<Tip>
-
-You can run an embedded (in-memory) TensorZero Gateway directly in your OpenAI Python client.
-
-</Tip>
+You can use TensorZero in Python with the OpenAI Python client.
+This approach requires running the TensorZero Gateway as a separate service.
+The `docker-compose.yml` above launched the gateway on port 3000.
 
 ```python title="after_openai.py" "base_url="http://localhost:3000/openai/v1"" "tensorzero::function_name::generate_haiku"
 from openai import OpenAI
-from tensorzero import patch_openai_client
 
-client = OpenAI()
-
-patch_openai_client(
-    client,
-    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
-    config_file="config/tensorzero.toml",
-    async_setup=False,
-)
-
-response = client.chat.completions.create(
-    model="tensorzero::function_name::generate_haiku",
-    messages=[
-        {
-            "role": "user",
-            "content": "Write a haiku about TensorZero.",
-        }
-    ],
-)
+with OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used") as client:
+    response = client.chat.completions.create(
+        model="tensorzero::function_name::generate_haiku",
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about TensorZero.",
+            }
+        ],
+    )
 
 print(response)
 ```

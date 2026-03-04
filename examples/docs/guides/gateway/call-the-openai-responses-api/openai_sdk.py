@@ -1,10 +1,10 @@
 from openai import OpenAI
 
-oai = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 # NB: OpenAI web search can take up to a minute to complete
 
-response = oai.chat.completions.create(
+response = client.chat.completions.create(
     # The model is defined in config/tensorzero.toml
     model="tensorzero::model_name::gpt-5-mini-responses-web-search",
     messages=[
