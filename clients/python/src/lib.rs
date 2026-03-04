@@ -685,6 +685,24 @@ fn build_http_evaluation_params(
         ))
     })?;
 
+    // Client-side validation matching the server-side checks in evaluations::run_evaluation_core_streaming
+    let has_datapoint_ids = datapoint_ids.as_ref().is_some_and(|ids| !ids.is_empty());
+    if dataset_name.is_some() && has_datapoint_ids {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other.",
+        ));
+    }
+    if dataset_name.is_none() && !has_datapoint_ids {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Must provide either dataset_name or datapoint_ids.",
+        ));
+    }
+    if has_datapoint_ids && max_datapoints.is_some() {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name.",
+        ));
+    }
+
     let (variant_name, internal_dynamic_variant_config) = match variant {
         EvaluationVariant::Name(name) => (Some(name), None),
         EvaluationVariant::Info(info) => (None, Some(*info)),

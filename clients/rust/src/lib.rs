@@ -1664,7 +1664,22 @@ async fn wait_for_start_event(
             ));
         };
         let message = match event_result {
-            Err(e) => return Err(evaluation_run_error(format!("SSE stream error: {e}"))),
+            Err(e) => {
+                return match *e {
+                    reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) => {
+                        let text = resp.text().await.ok();
+                        Err(TensorZeroError::Http {
+                            status_code: code.as_u16(),
+                            text,
+                            source: Error::new(ErrorDetails::EvaluationRun {
+                                message: "Failed to start evaluation SSE stream".to_string(),
+                            })
+                            .into(),
+                        })
+                    }
+                    other => Err(evaluation_run_error(format!("SSE stream error: {other}"))),
+                };
+            }
             Ok(reqwest_sse_stream::Event::Open) => continue,
             Ok(reqwest_sse_stream::Event::Message(m)) => m,
         };
