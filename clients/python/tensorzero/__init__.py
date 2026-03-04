@@ -55,10 +55,6 @@ from .generated_types import (
     ModelProviderExtraBodyDelete,
     ModelProviderExtraHeader,
     ModelProviderExtraHeaderDelete,
-    ProviderExtraBody,  # DEPRECATED
-    ProviderExtraBodyDelete,  # DEPRECATED
-    ProviderExtraHeader,  # DEPRECATED
-    ProviderExtraHeaderDelete,  # DEPRECATED
     StorageKind,
     StorageKindDisabled,
     StorageKindFilesystem,
@@ -256,10 +252,6 @@ __all__ = [
     "OptimizationJobStatus",
     "OrderBy",
     "patch_openai_client",
-    "ProviderExtraBody",  # DEPRECATED
-    "ProviderExtraBodyDelete",  # DEPRECATED
-    "ProviderExtraHeader",  # DEPRECATED
-    "ProviderExtraHeaderDelete",  # DEPRECATED
     "RawResponseEntry",
     "RawText",
     "RawUsageEntry",
