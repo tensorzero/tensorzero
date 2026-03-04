@@ -2,7 +2,7 @@ import typing as t
 from importlib.metadata import version
 
 import httpx
-from typing_extensions import Any
+from typing_extensions import Any, deprecated
 
 from .client import (
     AsyncTensorZeroGateway,
