@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::clickhouse::get_clean_clickhouse;
+use crate::utils::skip_for_postgres;
 use serde_json::json;
 use tensorzero::ClientBuilder;
 use tensorzero::FeedbackParams;
@@ -27,6 +28,7 @@ use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_deployment_id() {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let deployment_id = get_deployment_id(
         &clickhouse,
@@ -76,6 +78,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_howdy_report() {
+    skip_for_postgres!();
     let (clickhouse, _guard) = get_clean_clickhouse(true).await;
     let client = get_embedded_client(clickhouse.clone()).await;
     tokio::time::sleep(Duration::from_secs(1)).await;

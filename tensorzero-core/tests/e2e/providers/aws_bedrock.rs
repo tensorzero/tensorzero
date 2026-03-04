@@ -14,6 +14,8 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
+use crate::utils::skip_for_postgres;
+
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
@@ -152,6 +154,7 @@ async fn get_providers() -> E2ETestProviders {
 
 #[tokio::test]
 async fn test_inference_with_explicit_region() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -341,6 +344,7 @@ async fn test_inference_with_empty_system() {
 
 #[tokio::test]
 async fn test_inference_with_thinking_budget_tokens() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
