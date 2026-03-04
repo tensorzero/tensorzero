@@ -4,8 +4,6 @@ import FeedbackByVariantChart, {
   parseFeedbackChartData,
 } from "./FeedbackByVariantChart";
 
-export type ToolResultVizData = ParsedFeedbackByVariant[];
-
 /**
  * Detects whether a tool_result event contains data that can be rendered
  * as a visualization. Uses shape detection (parsing the result payload)
@@ -16,13 +14,17 @@ export type ToolResultVizData = ParsedFeedbackByVariant[];
  */
 export function detectToolResultVisualization(
   event: GatewayEvent,
-): ToolResultVizData | null {
+): ParsedFeedbackByVariant[] | null {
   if (event.payload.type !== "tool_result") return null;
   if (event.payload.outcome.type !== "success") return null;
 
   return parseFeedbackChartData(event.payload.outcome.result);
 }
 
-export function ToolResultVisualization({ data }: { data: ToolResultVizData }) {
+export function ToolResultVisualization({
+  data,
+}: {
+  data: ParsedFeedbackByVariant[];
+}) {
   return <FeedbackByVariantChart data={data} />;
 }

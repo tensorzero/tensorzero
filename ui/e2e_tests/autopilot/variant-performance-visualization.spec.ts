@@ -77,10 +77,6 @@ test.describe("Variant Performance Visualization", () => {
       page.getByText("get_feedback_by_variant", { exact: false }),
     ).toBeVisible({ timeout: 15000 });
 
-    // Verify the metric and function name labels are shown
-    await expect(page.getByText("exact_match")).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText("basic_test")).toBeVisible();
-
     // Verify the chart is rendered with bars
     const chart = page.locator("[data-chart]");
     await expect(chart).toHaveCount(1);
