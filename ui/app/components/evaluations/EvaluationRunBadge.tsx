@@ -8,7 +8,7 @@ import { cn } from "~/utils/common";
 interface EvaluationRunBadgeProps {
   runInfo: SearchEvaluationRunResult;
   getColor: (runId: string) => string;
-  lastUpdateDate?: Date;
+  createdAt?: Date;
   onRemove?: (e: React.MouseEvent) => void;
 }
 
@@ -20,7 +20,7 @@ export function getLastUuidSegment(uuid: string): string {
 export default function EvaluationRunBadge({
   runInfo,
   getColor,
-  lastUpdateDate,
+  createdAt,
   onRemove,
 }: EvaluationRunBadgeProps) {
   const runId = runInfo.evaluation_run_id;
@@ -71,9 +71,7 @@ export default function EvaluationRunBadge({
         <p className="text-xs">
           Run ID: <span className="font-mono text-xs">{runId}</span>
           <br />
-          {lastUpdateDate
-            ? `Last Updated: ${formatDate(lastUpdateDate)}`
-            : null}
+          {createdAt ? `Created: ${formatDate(createdAt)}` : null}
         </p>
       </TooltipContent>
     </Tooltip>

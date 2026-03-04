@@ -76,6 +76,7 @@ pub enum EvaluatorConfig {
     #[serde(rename = "llm_judge")]
     LLMJudge(LLMJudgeConfig),
     ToolUse(ToolUseConfig),
+    Regex(RegexConfig),
 }
 
 /// Minimal function configuration for evaluation purposes.
@@ -108,19 +109,20 @@ pub type EvaluationFunctionConfigTable = HashMap<String, EvaluationFunctionConfi
 
 impl EvaluatorConfig {
     // TODO(shuyangli): Remove this config option and make it a CLI flag instead.
+    #[expect(deprecated)]
     pub fn cutoff(&self) -> Option<f32> {
         match self {
             EvaluatorConfig::ExactMatch(config) => config.cutoff,
             EvaluatorConfig::LLMJudge(config) => config.cutoff,
-            EvaluatorConfig::ToolUse(_) => Option::None,
+            EvaluatorConfig::ToolUse(_) | EvaluatorConfig::Regex(_) => Option::None,
         }
     }
 
     pub fn optimize(&self) -> MetricConfigOptimize {
         match self {
-            EvaluatorConfig::ExactMatch(_) | EvaluatorConfig::ToolUse(_) => {
-                MetricConfigOptimize::Max
-            }
+            EvaluatorConfig::ExactMatch(_)
+            | EvaluatorConfig::ToolUse(_)
+            | EvaluatorConfig::Regex(_) => MetricConfigOptimize::Max,
             EvaluatorConfig::LLMJudge(config) => config.optimize.into(),
         }
     }
@@ -128,7 +130,9 @@ impl EvaluatorConfig {
     /// Returns true if this evaluator produces Bernoulli (boolean) outputs
     pub fn is_bernoulli(&self) -> bool {
         match self {
-            EvaluatorConfig::ExactMatch(_) | EvaluatorConfig::ToolUse(_) => true,
+            EvaluatorConfig::ExactMatch(_)
+            | EvaluatorConfig::ToolUse(_)
+            | EvaluatorConfig::Regex(_) => true,
             EvaluatorConfig::LLMJudge(config) => {
                 matches!(config.output_type, LLMJudgeOutputType::Boolean)
             }
@@ -141,6 +145,9 @@ impl EvaluatorConfig {
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
+    #[deprecated(
+        note = "Evaluator config `cutoff` is deprecated. Use evaluations CLI `--cutoffs` instead."
+    )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cutoff: Option<f32>,
 }
@@ -176,6 +183,23 @@ impl std::fmt::Display for ToolUseConfig {
     }
 }
 
+/// Evaluator that checks whether an inference's text output matches regex patterns.
+///
+/// At least one of `must_match` or `must_not_match` must be specified.
+/// If both are specified, the result is the logical AND: `must_match` matches AND `must_not_match` does not match.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(deny_unknown_fields)]
+pub struct RegexConfig {
+    /// Regex pattern that the inference output must match for the evaluation to pass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub must_match: Option<String>,
+    /// Regex pattern that the inference output must *not* match for the evaluation to pass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub must_not_match: Option<String>,
+}
+
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -185,6 +209,9 @@ pub struct LLMJudgeConfig {
     pub output_type: LLMJudgeOutputType,
     pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
+    #[deprecated(
+        note = "Evaluator config `cutoff` is deprecated. Use evaluations CLI `--cutoffs` instead."
+    )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cutoff: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -445,6 +472,7 @@ pub enum UninitializedEvaluatorConfig {
     #[serde(rename = "llm_judge")]
     LLMJudge(UninitializedLLMJudgeConfig),
     ToolUse(ToolUseConfig),
+    Regex(RegexConfig),
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
@@ -459,6 +487,9 @@ pub struct UninitializedLLMJudgeConfig {
     pub optimize: LLMJudgeOptimize,
     #[serde(default)]
     pub include: LLMJudgeIncludeConfig,
+    #[deprecated(
+        note = "Evaluator config `cutoff` is deprecated. Use evaluations CLI `--cutoffs` instead."
+    )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub cutoff: Option<f32>,
@@ -603,6 +634,7 @@ impl UninitializedEvaluatorConfig {
                     all_explicit_template_names: all_template_names,
                     experimentation,
                 });
+                #[expect(deprecated)]
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
                         input_format: params.input_format,
@@ -640,6 +672,47 @@ impl UninitializedEvaluatorConfig {
                 }
                 Ok((
                     EvaluatorConfig::ToolUse(config),
+                    None,
+                    MetricConfig {
+                        r#type: MetricConfigType::Boolean,
+                        optimize: MetricConfigOptimize::Max,
+                        level: MetricConfigLevel::Inference,
+                        description: None,
+                    },
+                ))
+            }
+            UninitializedEvaluatorConfig::Regex(config) => {
+                if config.must_match.is_none() && config.must_not_match.is_none() {
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                             at least one of `must_match` or `must_not_match` must be specified"
+                        ),
+                    }
+                    .into());
+                }
+                if let Some(pattern) = &config.must_match {
+                    regex::Regex::new(pattern).map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                                 invalid regex in `must_match`: {e}"
+                            ),
+                        })
+                    })?;
+                }
+                if let Some(pattern) = &config.must_not_match {
+                    regex::Regex::new(pattern).map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                                 invalid regex in `must_not_match`: {e}"
+                            ),
+                        })
+                    })?;
+                }
+                Ok((
+                    EvaluatorConfig::Regex(config),
                     None,
                     MetricConfig {
                         r#type: MetricConfigType::Boolean,
@@ -1358,10 +1431,10 @@ mod tests {
         // Test case 1: Successful loading with exact match evaluator
         {
             let mut evaluators = HashMap::new();
-            evaluators.insert(
-                "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) }),
-            );
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) });
+            evaluators.insert("em_evaluator".to_string(), exact_match);
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
@@ -1387,7 +1460,9 @@ mod tests {
             else {
                 panic!("Expected ExactMatch evaluator")
             };
-            assert_eq!(params.cutoff, Some(0.4));
+            #[expect(deprecated)]
+            let cutoff = params.cutoff;
+            assert_eq!(cutoff, Some(0.4));
             // No additional function configs for exact match
             assert_eq!(additional_functions.len(), 0);
 
@@ -1445,6 +1520,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -1588,6 +1664,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -1687,10 +1764,10 @@ mod tests {
         // Test case 3: Error when function doesn't exist
         {
             let mut evaluators = HashMap::new();
-            evaluators.insert(
-                "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-            );
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+            evaluators.insert("em_evaluator".to_string(), exact_match);
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
@@ -1709,10 +1786,10 @@ mod tests {
         // Test case 4: Error when evaluation name contains "::"
         {
             let mut evaluators = HashMap::new();
-            evaluators.insert(
-                "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-            );
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+            evaluators.insert("em_evaluator".to_string(), exact_match);
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
@@ -1803,6 +1880,7 @@ mod tests {
                 variants.insert(k, v);
             }
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -1861,10 +1939,10 @@ mod tests {
             );
 
             let mut evaluators = HashMap::new();
-            evaluators.insert(
-                "foo::invalid_name".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
-            );
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+            evaluators.insert("foo::invalid_name".to_string(), exact_match);
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
@@ -1918,6 +1996,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -1998,6 +2077,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -2079,6 +2159,7 @@ mod tests {
                 },
             );
 
+            #[expect(deprecated)]
             let llm_judge_config = UninitializedLLMJudgeConfig {
                 input_format: LLMJudgeInputFormat::Serialized,
                 variants,
@@ -2177,6 +2258,104 @@ mod tests {
 
         // Verify metric was created
         assert_eq!(metric_configs.len(), 1);
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_must_match_only() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: Some("(?i)please".to_string()),
+            must_not_match: None,
+        });
+        let result = config.load("test_eval", "test_evaluator");
+        assert!(result.is_ok(), "must_match only should load successfully");
+        let (eval_config, func_config, metric_config) = result.expect("should succeed");
+        assert!(
+            matches!(eval_config, EvaluatorConfig::Regex(_)),
+            "should produce Regex evaluator config"
+        );
+        assert!(func_config.is_none(), "regex evaluator needs no function");
+        assert_eq!(metric_config.r#type, MetricConfigType::Boolean);
+        assert_eq!(metric_config.optimize, MetricConfigOptimize::Max);
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_must_not_match_only() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: None,
+            must_not_match: Some("(?i)badword".to_string()),
+        });
+        let result = config.load("test_eval", "test_evaluator");
+        assert!(
+            result.is_ok(),
+            "must_not_match only should load successfully"
+        );
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_both_specified() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: Some("(?i)please".to_string()),
+            must_not_match: Some("(?i)badword".to_string()),
+        });
+        let result = config.load("test_eval", "test_evaluator");
+        assert!(
+            result.is_ok(),
+            "both must_match and must_not_match should load successfully"
+        );
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_neither_specified() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: None,
+            must_not_match: None,
+        });
+        let result = config.load("test_eval", "test_evaluator");
+        assert!(
+            result.is_err(),
+            "should fail when neither must_match nor must_not_match is specified"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at least one of `must_match` or `must_not_match` must be specified"),
+            "error message should mention the requirement, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_invalid_must_match() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: Some("[invalid".to_string()),
+            must_not_match: None,
+        });
+        let result = config.load("test_eval", "test_evaluator");
+        assert!(
+            result.is_err(),
+            "should fail with invalid regex in must_match"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("invalid regex in `must_match`"),
+            "error message should mention must_match, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_invalid_must_not_match() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: None,
+            must_not_match: Some("[invalid".to_string()),
+        });
+        let result = config.load("test_eval", "test_evaluator");
+        assert!(
+            result.is_err(),
+            "should fail with invalid regex in must_not_match"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("invalid regex in `must_not_match`"),
+            "error message should mention must_not_match, got: {err}"
+        );
     }
 
     // Helper functions for tests

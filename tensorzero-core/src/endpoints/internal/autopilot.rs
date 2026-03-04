@@ -26,7 +26,6 @@ use autopilot_client::{
 };
 use tensorzero_types::ResolveUuidResponse;
 
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::resolve_uuid::ResolveUuidQueries;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
@@ -154,10 +153,7 @@ async fn resolve_uuids_in_message(
         return Vec::new();
     }
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
 
     resolve_uuids(uuids, &database).await
 }
@@ -512,6 +508,7 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::delegating_connection::PrimaryDatastore;
     use crate::db::postgres::PostgresConnectionInfo;
     use crate::db::resolve_uuid::ResolvedObject;
     use crate::db::valkey::ValkeyConnectionInfo;
@@ -536,6 +533,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             TaskTracker::new(),
             CancellationToken::new(),
+            PrimaryDatastore::ClickHouse,
         )
         .unwrap()
     }

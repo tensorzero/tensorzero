@@ -109,6 +109,7 @@ impl EvaluationsInferenceExecutor for AppStateInferenceExecutor {
             self.app_state.cache_manager.clone(),
             self.app_state.deferred_tasks.clone(),
             self.app_state.rate_limiting_manager.clone(),
+            self.app_state.primary_datastore,
             endpoint_params,
             None, // No API key for internal calls
         ))

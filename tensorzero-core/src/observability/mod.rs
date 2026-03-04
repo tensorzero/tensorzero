@@ -1214,22 +1214,10 @@ pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<Prometheu
         .unwrap_or_default();
 
     if !buckets.is_empty() {
-        // Set buckets for both the new and deprecated metric names
+        // Set buckets for the metric
         builder = builder
             .set_buckets_for_metric(
                 Matcher::Full("tensorzero_inference_latency_overhead_seconds".to_string()),
-                &buckets,
-            )
-            .map_err(|e| {
-                Error::new(ErrorDetails::Observability {
-                    message: format!("Failed to set histogram buckets: {e}"),
-                })
-            })?;
-        builder = builder
-            .set_buckets_for_metric(
-                Matcher::Full(
-                    "tensorzero_inference_latency_overhead_seconds_histogram".to_string(),
-                ),
                 &buckets,
             )
             .map_err(|e| {
@@ -1274,12 +1262,6 @@ pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<Prometheu
             "tensorzero_inference_latency_overhead_seconds",
             Unit::Seconds,
             "Overhead of TensorZero on HTTP requests. You can customize buckets using `gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets` in the configuration."
-        );
-        // DEPRECATED (2026.2+): Also emit under the old name for backward compatibility
-        describe_histogram!(
-            "tensorzero_inference_latency_overhead_seconds_histogram",
-            Unit::Seconds,
-            "DEPRECATED (2026.2+): Use `tensorzero_inference_latency_overhead_seconds` instead. Overhead of TensorZero on HTTP requests."
         );
     }
 

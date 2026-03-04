@@ -78,6 +78,26 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
     /// The wrapped tool "returns" by writing to the autopilot API
     /// so for our purposes the output of the tool is ()
     type Output = ();
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        T::llm_params_ts_bundle()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        T::llm_params_ts_bundle_type_name()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
 }
 
 #[async_trait]
@@ -90,7 +110,7 @@ where
         &self,
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> DurableToolResult<Self::Output> {
         let session_id = side_info.session_id;
         let tool_call_event_id = side_info.tool_call_event_id;
@@ -208,6 +228,26 @@ where
     /// The wrapped tool "returns" by writing to the autopilot API
     /// so for our purposes the output of the tool is ()
     type Output = ();
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        T::llm_params_ts_bundle()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        T::llm_params_ts_bundle_type_name()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
 }
 
 /// Parameters for executing a simple tool within a checkpointed step.
@@ -226,7 +266,7 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
         &self,
         llm_params: Self::LlmParams,
         side_info: Self::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> DurableToolResult<Self::Output> {
         let tool_name = self.inner.name().to_string();
         let tool_call_event_id = side_info.tool_call_event_id;
@@ -374,7 +414,9 @@ mod tests {
     };
     use tensorzero_core::config::snapshot::SnapshotHash;
     use tensorzero_core::db::feedback::FeedbackByVariant;
-    use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+    use tensorzero_core::endpoints::feedback::internal::{
+        GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+    };
     use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
     use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 
@@ -389,6 +431,11 @@ mod tests {
                 &self,
                 params: ClientInferenceParams,
             ) -> Result<InferenceResponse, TensorZeroClientError>;
+
+            async fn embeddings(
+                &self,
+                params: durable_tools::EmbeddingsParams,
+            ) -> Result<durable_tools::EmbeddingResponse, TensorZeroClientError>;
 
             async fn feedback(
                 &self,
@@ -513,6 +560,14 @@ mod tests {
                 target_id: Uuid,
             ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
 
+            async fn get_feedback_by_target_id(
+                &self,
+                target_id: Uuid,
+                before: Option<Uuid>,
+                after: Option<Uuid>,
+                limit: Option<u32>,
+            ) -> Result<GetFeedbackByTargetIdResponse, TensorZeroClientError>;
+
             async fn get_feedback_by_variant(
                 &self,
                 metric_name: String,
@@ -554,6 +609,26 @@ mod tests {
         type LlmParams = TestTaskToolParams;
         type SideInfo = AutopilotSideInfo;
         type Output = TestTaskToolOutput;
+
+        #[cfg(feature = "ts-bindings")]
+        fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+            tensorzero_ts_types::UNIT
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn llm_params_ts_bundle_type_name() -> String {
+            "void".to_string()
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+            tensorzero_ts_types::UNIT
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn output_ts_bundle_type_name() -> String {
+            "void".to_string()
+        }
     }
 
     #[async_trait]
@@ -563,7 +638,7 @@ mod tests {
             &self,
             llm_params: Self::LlmParams,
             _side_info: Self::SideInfo,
-            _ctx: &mut ToolContext<'_>,
+            _ctx: &mut ToolContext,
         ) -> DurableToolResult<Self::Output> {
             Ok(TestTaskToolOutput {
                 result: format!("Processed: {}", llm_params.message),
@@ -598,6 +673,26 @@ mod tests {
         type LlmParams = TestSimpleToolParams;
         type SideInfo = AutopilotSideInfo;
         type Output = TestSimpleToolOutput;
+
+        #[cfg(feature = "ts-bindings")]
+        fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+            tensorzero_ts_types::UNIT
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn llm_params_ts_bundle_type_name() -> String {
+            "void".to_string()
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+            tensorzero_ts_types::UNIT
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn output_ts_bundle_type_name() -> String {
+            "void".to_string()
+        }
     }
 
     #[async_trait]

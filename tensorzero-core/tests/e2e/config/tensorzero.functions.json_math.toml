@@ -79,7 +79,7 @@ type = "chat_completion"
 model = "together-deepseek-r1"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 json_mode = "off"
-max_tokens = 800
+max_tokens = 1000
 
 [functions.json_math.variants.together-kimi]
 type = "chat_completion"

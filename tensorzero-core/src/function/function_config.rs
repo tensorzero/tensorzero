@@ -93,6 +93,13 @@ pub enum FunctionConfigType {
 }
 
 impl FunctionConfigType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FunctionConfigType::Chat => "chat",
+            FunctionConfigType::Json => "json",
+        }
+    }
+
     /// Returns the ClickHouse table name for the given function type.
     pub fn table_name(&self) -> &'static str {
         match self {

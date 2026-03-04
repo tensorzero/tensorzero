@@ -136,6 +136,7 @@ pub async fn start_batch_inference(
         cache_manager,
         deferred_tasks,
         rate_limiting_manager,
+        primary_datastore,
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
@@ -158,6 +159,7 @@ pub async fn start_batch_inference(
     let database = DelegatingDatabaseConnection::new(
         clickhouse_connection_info.clone(),
         postgres_connection_info.clone(),
+        primary_datastore,
     );
 
     // Get the function config or return an error if it doesn't exist
@@ -512,6 +514,7 @@ pub async fn poll_batch_inference_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        primary_datastore,
         ..
     }): AppState,
     Path(path_params): Path<PollPathParams>,
@@ -530,8 +533,11 @@ pub async fn poll_batch_inference_handler(
         }));
     }
 
-    let database =
-        DelegatingDatabaseConnection::new(clickhouse_connection_info, postgres_connection_info);
+    let database = DelegatingDatabaseConnection::new(
+        clickhouse_connection_info,
+        postgres_connection_info,
+        primary_datastore,
+    );
 
     let batch_request = get_batch_request(&database, &path_params).await?;
     match batch_request.status {
@@ -1327,7 +1333,7 @@ mod tests {
 
     use crate::config::gateway::GatewayConfig;
     use crate::config::{Config, ObservabilityConfig};
-    use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::db::clickhouse::clickhouse_client::{ClickHouseClientType, MockClickHouseClient};
     use crate::error::ErrorDetails;
     use crate::utils::gateway::{GatewayHandle, GatewayHandleTestOptions};
 
@@ -1345,6 +1351,9 @@ mod tests {
         };
         let mut mock_client = MockClickHouseClient::new();
         mock_client.expect_batcher_join_handle().returning(|| None);
+        mock_client
+            .expect_client_type()
+            .returning(|| ClickHouseClientType::Production);
         let gateway_handle = GatewayHandle::new_unit_test_data(
             Arc::new(config),
             GatewayHandleTestOptions {

@@ -12,11 +12,6 @@ use tensorzero_core::utils::gateway::AppStateData;
 
 pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
     Router::new()
-        // Deprecated (#4652): Remove the endpoint without the `/internal` prefix.
-        .route(
-            "/variant_sampling_probabilities",
-            get(endpoints::variant_probabilities::get_variant_sampling_probabilities_handler),
-        )
         .route(
             "/internal/functions/{function_name}/variant_sampling_probabilities",
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),

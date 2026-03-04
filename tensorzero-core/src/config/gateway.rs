@@ -61,43 +61,17 @@ pub struct MetricsConfig {
     /// Defaults to `[0.001, 0.01, 0.1]`. Set to empty to disable the metric.
     #[serde(default)]
     pub tensorzero_inference_latency_overhead_seconds_buckets: Option<Vec<f64>>,
-
-    /// DEPRECATED (2026.2+): use `tensorzero_inference_latency_overhead_seconds_buckets` instead.
-    #[serde(default, skip_serializing)]
-    pub tensorzero_inference_latency_overhead_seconds_histogram_buckets: Option<Vec<f64>>,
 }
 
 impl MetricsConfig {
-    /// Returns the histogram buckets, handling the deprecated field (2026.2+).
+    /// Returns the histogram buckets.
     pub fn get_buckets(&self) -> Vec<f64> {
         self.tensorzero_inference_latency_overhead_seconds_buckets
             .clone()
-            .or_else(|| {
-                self.tensorzero_inference_latency_overhead_seconds_histogram_buckets
-                    .clone()
-            })
             .unwrap_or_else(default_tensorzero_inference_latency_overhead_seconds_buckets)
     }
 
     pub fn validate(&self) -> Result<(), Error> {
-        // Handle deprecated field (2026.2+)
-        if self
-            .tensorzero_inference_latency_overhead_seconds_histogram_buckets
-            .is_some()
-        {
-            if self
-                .tensorzero_inference_latency_overhead_seconds_buckets
-                .is_some()
-            {
-                return Err(Error::new(crate::error::ErrorDetails::Config {
-                    message: "Cannot set both `gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets` and deprecated `gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`. Use only the former.".to_string(),
-                }));
-            }
-            crate::utils::deprecation_warning(
-                "`gateway.metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets` is deprecated and will be removed in a future release (2026.2+). Use `gateway.metrics.tensorzero_inference_latency_overhead_seconds_buckets` instead.",
-            );
-        }
-
         let buckets = self.get_buckets();
 
         if !buckets.is_empty() {
@@ -136,10 +110,31 @@ impl MetricsConfig {
     }
 }
 
-// TODO(shuyangli): Move per-request cache config (cache enabled option) here.
+/// Which backend to use for model inference caching.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InferenceCacheBackend {
+    /// Automatically select based on primary datastore:
+    /// - ClickHouse primary → ClickHouse cache
+    /// - Postgres primary → Valkey if available, else ClickHouse
+    #[default]
+    Auto,
+    ClickHouse,
+    Valkey,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelInferenceCacheConfig {
+    /// Whether caching is enabled.
+    /// - `true`: require a cache backend (fail startup if unavailable)
+    /// - `null` (default): use cache if available, warn and continue if not
+    /// - `false`: disable caching entirely
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    /// Which cache backend to use.
+    #[serde(default)]
+    pub backend: InferenceCacheBackend,
     #[serde(default)]
     pub valkey: ValkeyModelInferenceCacheConfig,
 }

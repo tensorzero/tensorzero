@@ -24,8 +24,13 @@ use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsRequest, DeleteDatapointsRequest,
     GetDatapointsRequest, UpdateDatapointsRequest,
 };
+use tensorzero_core::endpoints::embeddings::{
+    EmbeddingResponse, EmbeddingsParams, embeddings as core_embeddings,
+};
 use tensorzero_core::endpoints::feedback::feedback;
-use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+use tensorzero_core::endpoints::feedback::internal::{
+    GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+};
 use tensorzero_core::endpoints::inference::inference;
 use tensorzero_core::endpoints::internal::autopilot::{
     create_event, list_events, list_sessions, s3_initiate_upload,
@@ -77,6 +82,7 @@ impl TensorZeroClient for EmbeddedClient {
             self.app_state.cache_manager.clone(),
             self.app_state.deferred_tasks.clone(),
             self.app_state.rate_limiting_manager.clone(),
+            self.app_state.primary_datastore,
             internal_params,
             None, // No API key in embedded mode
         ))
@@ -89,6 +95,25 @@ impl TensorZeroClient for EmbeddedClient {
             InferenceOutput::NonStreaming(response) => Ok(response),
             InferenceOutput::Streaming(_) => Err(TensorZeroClientError::StreamingNotSupported),
         }
+    }
+
+    async fn embeddings(
+        &self,
+        params: EmbeddingsParams,
+    ) -> Result<EmbeddingResponse, TensorZeroClientError> {
+        core_embeddings(
+            self.app_state.config.clone(),
+            &self.app_state.http_client,
+            self.app_state.clickhouse_connection_info.clone(),
+            self.app_state.postgres_connection_info.clone(),
+            self.app_state.cache_manager.clone(),
+            self.app_state.deferred_tasks.clone(),
+            self.app_state.rate_limiting_manager.clone(),
+            params,
+            None, // No API key in embedded mode
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
     async fn feedback(
@@ -487,6 +512,24 @@ impl TensorZeroClient for EmbeddedClient {
         tensorzero_core::endpoints::feedback::internal::get_latest_feedback_id_by_metric(
             &self.app_state.get_delegating_database(),
             target_id,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn get_feedback_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        limit: Option<u32>,
+    ) -> Result<GetFeedbackByTargetIdResponse, TensorZeroClientError> {
+        tensorzero_core::endpoints::feedback::internal::get_feedback_by_target_id(
+            &self.app_state.get_delegating_database(),
+            target_id,
+            before,
+            after,
+            limit,
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))

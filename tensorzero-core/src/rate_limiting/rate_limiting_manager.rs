@@ -107,15 +107,15 @@ impl RateLimitingManager {
             ));
         }
 
-        // No backend available - this is only an error if rate limiting is enabled and rules are configured
-        let rate_limiting_enabled = config.enabled() && !config.rules().is_empty();
-        if !rate_limiting_enabled {
-            return Ok(Self::new(config, Arc::new(DisabledRateLimitQueries)));
+        // No backend available
+        if config.enabled() && !config.rules().is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Rate limiting is enabled with rules configured, but no backend is available. \
+                          Please set either `TENSORZERO_VALKEY_URL` or `TENSORZERO_POSTGRES_URL` environment variable, \
+                          or set `rate_limiting.enabled = false`.".to_string(),
+            }));
         }
-
-        Err(Error::new(ErrorDetails::Config {
-            message: "No rate limiting backend is available and rate limiting rules are configured. Please set either `TENSORZERO_VALKEY_URL` or `TENSORZERO_POSTGRES_URL` environment variable, or disable rate limiting.".to_string(),
-        }))
+        Ok(Self::new(config, Arc::new(DisabledRateLimitQueries)))
     }
 
     /// Create a new, dummy RateLimitingManager for unit tests.

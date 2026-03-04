@@ -517,6 +517,41 @@ where
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
+/// Recursively sorts all object keys in a `serde_json::Value` alphabetically.
+/// This is useful for producing deterministic JSON output from sources like Postgres JSONB
+/// that do not preserve key order.
+pub fn sort_json_keys(value: Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let sorted: serde_json::Map<String, Value> = map
+                .into_iter()
+                .map(|(k, v)| (k, sort_json_keys(v)))
+                .collect::<std::collections::BTreeMap<_, _>>()
+                .into_iter()
+                .collect();
+            Value::Object(sorted)
+        }
+        Value::Array(arr) => Value::Array(arr.into_iter().map(sort_json_keys).collect()),
+        other => other,
+    }
+}
+
+/// Serializes a JSON value with alphabetically sorted keys for deterministic string comparison.
+///
+/// Postgres JSONB does not preserve key order, so we sort keys before serializing
+/// to ensure identical logical outputs always produce byte-identical strings.
+/// Used by Postgres implementations in both the write path
+/// (`get_serialized_inference_output_for_feedback`) and the read path
+/// (`get_inference_evaluation_human_feedback`).
+pub fn serialize_with_sorted_keys(value: &Value) -> Result<String, crate::error::Error> {
+    let sorted = sort_json_keys(value.clone());
+    serde_json::to_string(&sorted).map_err(|e| {
+        crate::error::Error::new(crate::error::ErrorDetails::Serialization {
+            message: format!("Failed to serialize JSON with sorted keys: {e}"),
+        })
+    })
+}
+
 /// Helper for serde `skip_serializing_if` - returns true if the Option is None or contains an empty Vec.
 // Signature dictated by Serde
 #[expect(clippy::ref_option)]
@@ -1040,6 +1075,37 @@ mod tests {
         assert_eq!(
             result.field, "",
             "should return default empty string for absent field"
+        );
+    }
+
+    #[test]
+    fn test_sort_json_keys_nested() {
+        let input: Value = serde_json::json!({
+            "z": 1,
+            "a": {
+                "c": [{"b": 2, "a": 1}],
+                "a": "first"
+            },
+            "m": null
+        });
+        let sorted = sort_json_keys(input);
+        assert_eq!(
+            serde_json::to_string(&sorted).unwrap(),
+            r#"{"a":{"a":"first","c":[{"a":1,"b":2}]},"m":null,"z":1}"#,
+            "keys should be sorted alphabetically at every level"
+        );
+    }
+
+    #[test]
+    fn test_sort_json_keys_primitives_unchanged() {
+        assert_eq!(sort_json_keys(serde_json::json!(42)), serde_json::json!(42));
+        assert_eq!(
+            sort_json_keys(serde_json::json!("hello")),
+            serde_json::json!("hello")
+        );
+        assert_eq!(
+            sort_json_keys(serde_json::json!(null)),
+            serde_json::json!(null)
         );
     }
 }

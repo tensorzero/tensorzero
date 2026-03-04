@@ -9,6 +9,8 @@ use chrono::{DateTime, Utc};
 use mockall::automock;
 use uuid::Uuid;
 
+use crate::config::MetricConfigOptimize;
+use crate::endpoints::inference::InferenceResponse;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput, StoredInput};
@@ -22,7 +24,7 @@ pub struct EvaluationRunInfoRow {
     pub function_name: String,
     pub variant_name: String,
     pub dataset_name: String,
-    pub last_inference_timestamp: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
     #[serde(default)]
     pub snapshot_hash: Option<String>,
 }
@@ -34,13 +36,55 @@ pub struct EvaluationRunSearchResult {
     pub variant_name: String,
 }
 
+/// Metric metadata stored on an inference evaluation run.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InferenceEvaluationRunMetricMetadata {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_name: Option<String>,
+    /// `boolean` or `float`
+    pub value_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optimize: Option<MetricConfigOptimize>,
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceEvaluationRunSource {
+    DatasetName,
+    DatapointIds,
+}
+
+impl std::fmt::Display for InferenceEvaluationRunSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            InferenceEvaluationRunSource::DatasetName => "dataset_name",
+            InferenceEvaluationRunSource::DatapointIds => "datapoint_ids",
+        };
+        write!(f, "{s}")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InferenceEvaluationRunInsert {
+    pub run_id: Uuid,
+    pub evaluation_name: String,
+    pub function_name: String,
+    pub function_type: FunctionConfigType,
+    pub dataset_name: String,
+    pub variant_names: Vec<String>,
+    pub metrics: Vec<InferenceEvaluationRunMetricMetadata>,
+    pub source: InferenceEvaluationRunSource,
+    pub snapshot_hash: Option<Vec<u8>>,
+}
+
 /// Database struct for deserializing evaluation run info by IDs.
 /// This is a simpler struct than `EvaluationRunInfoRow` - used when querying by specific run IDs.
 #[derive(Debug, Deserialize, sqlx::FromRow)]
 pub struct EvaluationRunInfoByIdRow {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
-    pub most_recent_inference_date: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Database struct for deserializing evaluation statistics from ClickHouse.
@@ -293,6 +337,12 @@ impl RawEvaluationResultRow {
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait EvaluationQueries {
+    /// Inserts or updates run-level metadata for an inference evaluation run.
+    async fn insert_inference_evaluation_run(
+        &self,
+        run: &InferenceEvaluationRunInsert,
+    ) -> Result<(), Error>;
+
     /// Counts the total number of unique evaluation runs across all functions.
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error>;
 
@@ -372,19 +422,30 @@ pub trait EvaluationQueries {
         offset: u32,
     ) -> Result<Vec<EvaluationResultRow>, Error>;
 
-    /// Gets existing human feedback for a given inference evaluation if it exists.
+    /// Serializes an inference response's output into a string that is consistent
+    /// with how `get_serialized_inference_output_for_feedback` stored it.
     ///
-    /// This function queries the StaticEvaluationHumanFeedback table to find existing
-    /// human feedback for a specific combination of metric name, datapoint ID, and output.
+    /// ClickHouse preserves the original struct field order, so this is plain
+    /// `serde_json::to_string`. Postgres JSONB does not preserve key order, so
+    /// this sorts keys before serializing.
+    ///
+    /// Call this before `get_inference_evaluation_human_feedback` to produce
+    /// a correctly normalized output string.
+    ///
+    /// TODO(#6664): Make the lookup order-independent instead of requiring a particular
+    /// backend-dependent serialization implementation.
+    fn serialize_output_for_feedback(
+        &self,
+        inference_response: &InferenceResponse,
+    ) -> Result<String, Error>;
+
+    /// Gets existing human feedback for a given inference evaluation if it exists.
     ///
     /// # Arguments
     /// * `metric_name` - The name of the metric being evaluated
     /// * `datapoint_id` - The UUID of the datapoint being evaluated
-    /// * `output` - The serialized inference output to match against
-    ///
-    /// # Returns
-    /// * `Some(InferenceEvaluationHumanFeedbackRow)` - If human feedback exists
-    /// * `None` - If no human feedback exists for this combination
+    /// * `output` - The serialized inference output, produced by
+    ///   [`serialize_output_for_feedback`](Self::serialize_output_for_feedback)
     async fn get_inference_evaluation_human_feedback(
         &self,
         metric_name: &str,

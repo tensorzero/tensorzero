@@ -8,7 +8,6 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::stored_datapoint::{
     StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
@@ -86,10 +85,7 @@ pub async fn update_datapoints(
         object_store_info: &app_state.config.object_store_info,
     };
 
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
 
     // Fetch all datapoints in a single batch query
     let datapoint_ids: Vec<Uuid> = request
@@ -402,10 +398,7 @@ pub async fn update_datapoints_metadata_handler(
     Path(path_params): Path<UpdateDatapointsMetadataPathParams>,
     StructuredJson(request): StructuredJson<UpdateDatapointsMetadataRequest>,
 ) -> Result<Json<UpdateDatapointsResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
 
     let response =
         update_datapoints_metadata(&database, &path_params.dataset_name, request).await?;
@@ -514,7 +507,7 @@ pub async fn update_datapoints_metadata(
 mod tests {
     use super::*;
     use crate::config::{Config, ObjectStoreInfo, SchemaData};
-    use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::db::clickhouse::clickhouse_client::{ClickHouseClientType, MockClickHouseClient};
     use crate::db::stored_datapoint::StoredChatInferenceDatapoint;
     use crate::endpoints::datasets::v1::types::{
         DatapointMetadataUpdate, JsonDatapointOutputUpdate,
@@ -799,6 +792,9 @@ mod tests {
         fn create_test_app_state() -> AppStateData {
             let mut mock_client = MockClickHouseClient::new();
             mock_client.expect_batcher_join_handle().returning(|| None);
+            mock_client
+                .expect_client_type()
+                .returning(|| ClickHouseClientType::Production);
 
             let mut config = Config::default();
 

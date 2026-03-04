@@ -37,6 +37,26 @@ impl ToolMetadata for FailingTool {
             "Always returns an error with the specified message. Used for testing error propagation.",
         )
     }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
 }
 
 #[async_trait]
@@ -46,7 +66,7 @@ impl TaskTool for FailingTool {
         &self,
         llm_params: Self::LlmParams,
         _side_info: Self::SideInfo,
-        _ctx: &mut ToolContext<'_>,
+        _ctx: &mut ToolContext,
     ) -> ToolResult<Self::Output> {
         Err(AutopilotToolError::test_error(llm_params.error_message).into())
     }

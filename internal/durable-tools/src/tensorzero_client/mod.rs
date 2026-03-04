@@ -26,7 +26,11 @@ use tensorzero::{
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
-use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
+pub use tensorzero_core::embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput};
+pub use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
+use tensorzero_core::endpoints::feedback::internal::{
+    GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
+};
 pub use tensorzero_core::optimization::OptimizationJobHandle;
 pub use tensorzero_core::optimization::OptimizationJobInfo;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
@@ -100,6 +104,17 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         params: ClientInferenceParams,
     ) -> Result<InferenceResponse, TensorZeroClientError>;
 
+    // ========== Embedding Operations ==========
+
+    /// Compute embeddings for the given input.
+    ///
+    /// Calls the configured embedding model and returns the embedding vectors.
+    /// The `model_name` in params must match a configured `[embedding_models.*]` entry.
+    async fn embeddings(
+        &self,
+        params: EmbeddingsParams,
+    ) -> Result<EmbeddingResponse, TensorZeroClientError>;
+
     // ========== Feedback Operations ==========
 
     /// Submit feedback for an inference or episode.
@@ -116,6 +131,15 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         &self,
         target_id: Uuid,
     ) -> Result<LatestFeedbackIdByMetricResponse, TensorZeroClientError>;
+
+    /// Get all feedback for a target (inference or episode).
+    async fn get_feedback_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        limit: Option<u32>,
+    ) -> Result<GetFeedbackByTargetIdResponse, TensorZeroClientError>;
 
     /// Get feedback statistics by variant for a function and metric.
     ///

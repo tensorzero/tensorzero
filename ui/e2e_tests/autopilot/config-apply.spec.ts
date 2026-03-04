@@ -103,17 +103,15 @@ test.describe("Config applying", () => {
 
     const variantName = deterministicTestAndAttempt(testInfo, "variant");
 
-    // Build the variant JSON with the correct ResolvedTomlPathData format
-    // for system_template so the set_variant tool accepts it.
-    // The path is arbitrary since the config writing crate canonicalizes paths.
+    // Build the variant JSON with the simplified format expected by set_variant.
+    // Templates are plain strings (name → content), not ResolvedTomlPathData objects.
     const templateContent =
       "Extract all named entities (people, organizations, locations) from the given text and return them as JSON.";
     const variantJson = JSON.stringify({
       type: "chat_completion",
       model: "gpt-4o-mini-2024-07-18",
-      system_template: {
-        __tensorzero_remapped_path: "dummy",
-        __data: templateContent,
+      templates: {
+        system: templateContent,
       },
       temperature: 0,
       json_mode: "strict",
@@ -193,15 +191,20 @@ test.describe("Config applying", () => {
 
     // 9. Verify template file was created
     // The config writer canonicalizes paths, so read it from the TOML.
-    const writtenSystemTemplate = variant.system_template as string | undefined;
+    // With simplified types, templates are written under `templates.system.path`.
+    const templates = variant.templates as
+      | Record<string, Record<string, string>>
+      | undefined;
+    expect(templates, "Variant should have a templates section").toBeDefined();
+    const systemTemplatePath = templates?.system?.path;
     expect(
-      writtenSystemTemplate,
-      "Variant should have a system_template path",
+      systemTemplatePath,
+      "Variant should have a templates.system.path",
     ).toBeDefined();
 
     const fullTemplatePath = path.join(
       AUTOPILOT_CONFIG_DIR,
-      writtenSystemTemplate!,
+      systemTemplatePath!,
     );
     expect(
       fs.existsSync(fullTemplatePath),
@@ -304,10 +307,7 @@ test.describe("Config applying", () => {
           type: "chat_completion",
           model: "gpt-4o-mini-2024-07-18",
           json_mode: "off",
-          system_instructions: {
-            __tensorzero_remapped_path: "dummy",
-            __data: instructionsContent,
-          },
+          system_instructions: instructionsContent,
         },
       },
     });
@@ -431,9 +431,8 @@ test.describe("Config applying", () => {
     const variantJson = JSON.stringify({
       type: "chat_completion",
       model: "gpt-4o-mini-2024-07-18",
-      system_template: {
-        __tensorzero_remapped_path: "dummy",
-        __data: templateContent,
+      templates: {
+        system: templateContent,
       },
       temperature: 0,
       json_mode: "strict",
@@ -512,15 +511,20 @@ test.describe("Config applying", () => {
     ).toBe("gpt-4o-mini-2024-07-18");
 
     // 9. Verify template file was created
-    const writtenSystemTemplate = variant.system_template as string | undefined;
+    // With simplified types, templates are written under `templates.system.path`.
+    const templates = variant.templates as
+      | Record<string, Record<string, string>>
+      | undefined;
+    expect(templates, "Variant should have a templates section").toBeDefined();
+    const systemTemplatePath = templates?.system?.path;
     expect(
-      writtenSystemTemplate,
-      "Variant should have a system_template path",
+      systemTemplatePath,
+      "Variant should have a templates.system.path",
     ).toBeDefined();
 
     const fullTemplatePath = path.join(
       AUTOPILOT_CONFIG_DIR,
-      writtenSystemTemplate!,
+      systemTemplatePath!,
     );
     expect(
       fs.existsSync(fullTemplatePath),

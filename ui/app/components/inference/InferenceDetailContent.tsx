@@ -38,6 +38,7 @@ import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { logger } from "~/utils/logger";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
+import { CopyMessagesButton } from "~/components/inference/CopyMessagesButton";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { InputElement } from "../input_output/InputElement";
 import type { Input } from "~/types/tensorzero";
@@ -276,9 +277,19 @@ export function InferenceDetailContent({
   const options = isDefault ? models : variants;
   const onSelect = isDefault ? onModelSelect : onVariantSelect;
 
+  const variantType =
+    functionConfig?.variants[inference.variant_name]?.inner.type ??
+    (inference.function_name === "tensorzero::default"
+      ? "chat_completion"
+      : "unknown");
+
   // Build the header components
   const basicInfoElement = (
-    <BasicInfo inference={inference} modelInferences={model_inferences} />
+    <BasicInfo
+      inference={inference}
+      variantType={variantType}
+      modelInferences={model_inferences}
+    />
   );
 
   const actionBarElement = (
@@ -325,6 +336,8 @@ export function InferenceDetailContent({
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}
       />
+      {/* Keep at end of row — conditionally hidden, so trailing position avoids jitter */}
+      <CopyMessagesButton input={input} output={inference.output} />
     </ActionBar>
   );
 

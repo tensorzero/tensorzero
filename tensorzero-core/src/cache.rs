@@ -4,14 +4,15 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::config::OtlpConfig;
-use crate::config::gateway::ModelInferenceCacheConfig;
+use crate::config::gateway::{InferenceCacheBackend, ModelInferenceCacheConfig};
 use crate::db::cache::CacheQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
+use crate::db::delegating_connection::PrimaryDatastore;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::db::valkey::cache::ValkeyCacheClient;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
-use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -38,34 +39,93 @@ impl CacheManager {
         Self { client }
     }
 
-    /// Select the appropriate cache backend.
+    /// Select the appropriate cache backend based on config and available connections.
     ///
-    /// When Postgres is the primary datastore, uses Valkey if available,
-    /// otherwise falls back to ClickHouse. When ClickHouse is the primary
-    /// datastore, uses ClickHouse directly.
+    /// Respects `cache_config.enabled`:
+    /// - `Some(false)` → disabled (no-op)
+    /// - `Some(true)` → resolve backend, error if unavailable
+    /// - `None` → resolve backend (see below)
+    ///
+    /// Backend resolution (`cache_config.backend`):
+    /// - `Auto` + ClickHouse primary → ClickHouse
+    /// - `Auto` + Postgres primary → Valkey (disabled if unavailable)
+    /// - `ClickHouse` → ClickHouse (error if unavailable)
+    /// - `Valkey` → Valkey (error if unavailable)
     pub fn new_from_connections(
         valkey_connection_info: &ValkeyConnectionInfo,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         cache_config: &ModelInferenceCacheConfig,
-    ) -> Self {
-        if !ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-            return Self::new(Arc::new(clickhouse_connection_info.clone()));
+        primary_datastore: PrimaryDatastore,
+    ) -> Result<Self, Error> {
+        if cache_config.enabled == Some(false) {
+            return Ok(Self::disabled());
         }
-        match valkey_connection_info {
-            ValkeyConnectionInfo::Enabled { connection } => Self::new(Arc::new(
-                ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
-            )),
-            ValkeyConnectionInfo::Disabled => {
-                tracing::warn!(
-                    "Postgres is the primary datastore, but `TENSORZERO_VALKEY_URL` is not set; falling back to ClickHouse for cache writes if configured."
-                );
-                Self::new(Arc::new(clickhouse_connection_info.clone()))
+
+        let clickhouse_available =
+            clickhouse_connection_info.client_type() != ClickHouseClientType::Disabled;
+        let valkey_available =
+            matches!(valkey_connection_info, ValkeyConnectionInfo::Enabled { .. });
+
+        match cache_config.backend {
+            InferenceCacheBackend::Auto => {
+                let explicitly_enabled = cache_config.enabled == Some(true);
+                if primary_datastore == PrimaryDatastore::ClickHouse {
+                    if !clickhouse_available && explicitly_enabled {
+                        return Err(ErrorDetails::AppState {
+                            message: format!(
+                                "`cache.enabled` is `true` but the cache backend (`{:?}`) is not available. \
+                                 Ensure the required connection URL is set, or set `cache.enabled` to `false`.",
+                                cache_config.backend,
+                            ),
+                        }
+                        .into());
+                    }
+                    return Ok(Self::new(Arc::new(clickhouse_connection_info.clone())));
+                }
+                // Postgres primary: check if any backend is available
+                if explicitly_enabled && !valkey_available && !clickhouse_available {
+                    return Err(ErrorDetails::AppState {
+                        message: format!(
+                            "`cache.enabled` is `true` but the cache backend (`{:?}`) is not available. \
+                             Ensure the required connection URL is set, or set `cache.enabled` to `false`.",
+                            cache_config.backend,
+                        ),
+                    }
+                    .into());
+                }
+                match valkey_connection_info {
+                    ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
+                        ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+                    ))),
+                    ValkeyConnectionInfo::Disabled => Ok(Self::disabled()),
+                }
             }
+            InferenceCacheBackend::ClickHouse => {
+                if !clickhouse_available {
+                    return Err(ErrorDetails::AppState {
+                        message: "`cache.backend` is set to `clickhouse` but ClickHouse is not available. \
+                                  Ensure the required connection URL is set, or remove the `cache.backend` setting."
+                            .to_string(),
+                    }
+                    .into());
+                }
+                Ok(Self::new(Arc::new(clickhouse_connection_info.clone())))
+            }
+            InferenceCacheBackend::Valkey => match valkey_connection_info {
+                ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
+                    ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+                ))),
+                ValkeyConnectionInfo::Disabled => Err(ErrorDetails::AppState {
+                    message: "`cache.backend` is set to `valkey` but Valkey is not available. \
+                              Ensure the required connection URL is set, or remove the `cache.backend` setting."
+                        .to_string(),
+                }
+                .into()),
+            },
         }
     }
 
     /// Create a disabled cache manager (no-op: lookups return `None`, writes succeed immediately).
-    /// TODO(shuyangli): It's not test-only because tensorzero-optimizers/src/dicl.rs uses it; validate if this is appropriate.
     pub fn disabled() -> Self {
         Self::new(Arc::new(DisabledCacheQueries))
     }
@@ -587,126 +647,430 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
 #[cfg(test)]
 mod tests {
 
+    use std::borrow::Cow;
+
+    use std::panic::{RefUnwindSafe, UnwindSafe};
+
+    use googletest::prelude::*;
     use uuid::Uuid;
 
-    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+    use crate::inference::types::extra_body::{
+        ExtraBodyConfig, ExtraBodyReplacement, ExtraBodyReplacementKind, FullExtraBodyConfig,
+    };
+    use crate::inference::types::extra_headers::{
+        ExtraHeader, ExtraHeaderKind, ExtraHeadersConfig, FullExtraHeadersConfig,
+    };
+    use crate::inference::types::{
+        ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage,
+    };
+    use crate::tool::ToolCallConfig;
+    use tensorzero_types::Role;
 
     use super::*;
 
+    #[gtest]
     #[tokio::test]
     async fn test_disabled_returns_none() {
         let cache = CacheManager::disabled();
         let key = CacheKey::from(blake3::hash(b"test"));
         let result = cache.cache_lookup(&key, None).await.unwrap();
-        assert!(result.is_none(), "disabled backend should return None");
+        expect_that!(result, none());
     }
 
+    #[gtest]
     #[tokio::test]
     async fn test_disabled_write_succeeds() {
         let cache = CacheManager::disabled();
         let key = CacheKey::from(blake3::hash(b"test"));
-        cache
-            .cache_write(&key, r#"{"output":"test"}"#)
-            .await
-            .expect("disabled backend write should succeed");
+        let result = cache.cache_write(&key, r#"{"output":"test"}"#).await;
+        expect_that!(
+            result,
+            ok(anything()),
+            "disabled backend write should succeed"
+        );
     }
 
-    /// This test ensures that if we make a small change to the ModelInferenceRequest,
-    /// the cache key will change.
-    #[test]
-    fn test_get_cache_key() {
-        let model_inference_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![],
-            system: None,
-            tool_config: None,
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
-            fetch_and_encode_input_files_before_inference: false,
-            extra_cache_key: None,
-            stop_sequences: None,
-            ..Default::default()
-        };
-        let model_provider_request = ModelProviderRequest {
-            request: &model_inference_request,
-            model_name: "test_model",
-            provider_name: "test_provider",
-            otlp_config: &Default::default(),
+    /// Fixture providing a baseline `ModelInferenceRequest` with all cache-relevant
+    /// fields set to non-default values, plus its precomputed cache key.
+    ///
+    /// The exhaustive destructure in `set_up` ensures a compile error when a new field
+    /// is added to `ModelInferenceRequest`, forcing the author to decide whether it
+    /// affects the cache key and add a corresponding test.
+    struct CacheKeyFixture {
+        request: ModelInferenceRequest<'static>,
+        key: CacheKey,
+    }
+
+    // ModelInferenceRequest contains Vec/String which aren't UnwindSafe by default,
+    // but our fixture is read-only so this is safe.
+    impl UnwindSafe for CacheKeyFixture {}
+    impl RefUnwindSafe for CacheKeyFixture {}
+
+    impl Fixture for CacheKeyFixture {
+        fn set_up() -> googletest::Result<Self> {
+            static BASELINE_OUTPUT_SCHEMA: std::sync::LazyLock<serde_json::Value> =
+                std::sync::LazyLock::new(|| serde_json::json!({"type": "object"}));
+
+            let request = ModelInferenceRequest {
+                inference_id: Uuid::now_v7(),
+                messages: vec![RequestMessage {
+                    role: Role::User,
+                    content: vec![ContentBlock::from("hello".to_string())],
+                }],
+                system: Some("you are helpful".to_string()),
+                tool_config: None,
+                temperature: Some(0.5),
+                top_p: Some(0.9),
+                presence_penalty: Some(0.1),
+                frequency_penalty: Some(0.2),
+                max_tokens: Some(100),
+                seed: Some(42),
+                stream: false,
+                json_mode: ModelInferenceRequestJsonMode::Off,
+                function_type: FunctionType::Chat,
+                output_schema: Some(&*BASELINE_OUTPUT_SCHEMA),
+                extra_body: Default::default(),
+                extra_headers: Default::default(),
+                fetch_and_encode_input_files_before_inference: false,
+                extra_cache_key: Some("baseline".to_string()),
+                stop_sequences: Some(Cow::Owned(vec!["stop".to_string()])),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: Some("high".to_string()),
+                    service_tier: None,
+                    thinking_budget_tokens: Some(1000),
+                    verbosity: Some("verbose".to_string()),
+                },
+            };
+
+            let key = cache_key_for(&request, "model", "provider");
+            Ok(Self { request, key })
+        }
+
+        fn tear_down(self) -> googletest::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn cache_key_for(
+        request: &ModelInferenceRequest,
+        model_name: &str,
+        provider_name: &str,
+    ) -> CacheKey {
+        let otlp_config = OtlpConfig::default();
+        ModelProviderRequest {
+            request,
+            model_name,
+            provider_name,
+            otlp_config: &otlp_config,
             model_inference_id: Uuid::now_v7(),
+        }
+        .get_cache_key()
+        .expect("get_cache_key should not fail for a valid request")
+    }
+
+    #[gtest]
+    fn test_all_fields_are_considered_for_cache(fixture: &CacheKeyFixture) {
+        // Exhaustive destructure: a compile error here means a new field was added
+        // and must be classified as cache-relevant or explicitly excluded.
+        let ModelInferenceRequest {
+            // Excluded from cache key (unique per request)
+            inference_id: _,
+            // All remaining fields participate via JSON serialization
+            messages: _,
+            system: _,
+            tool_config: _,
+            temperature: _,
+            top_p: _,
+            presence_penalty: _,
+            frequency_penalty: _,
+            max_tokens: _,
+            seed: _,
+            stream: _,
+            json_mode: _,
+            function_type: _,
+            output_schema: _,
+            extra_body: _,
+            extra_headers: _,
+            fetch_and_encode_input_files_before_inference: _,
+            extra_cache_key: _,
+            stop_sequences: _,
+            inference_params_v2: _,
+        } = fixture.request;
+
+        // Expect a compile time error if this is incorrect.
+    }
+
+    #[gtest]
+    fn test_cache_key_ignores_inference_id(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.inference_id = Uuid::now_v7();
+        expect_that!(cache_key_for(&req, "model", "provider"), eq(fixture.key));
+    }
+
+    #[gtest]
+    fn test_cache_key_ignores_model_inference_id(fixture: &CacheKeyFixture) {
+        // cache_key_for uses a fresh model_inference_id each time
+        let key = cache_key_for(&fixture.request, "model", "provider");
+        expect_that!(key, eq(fixture.key));
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_model_name(fixture: &CacheKeyFixture) {
+        let key = cache_key_for(&fixture.request, "other_model", "provider");
+        expect_that!(key, not(eq(fixture.key)));
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_provider_name(fixture: &CacheKeyFixture) {
+        let key = cache_key_for(&fixture.request, "model", "other_provider");
+        expect_that!(key, not(eq(fixture.key)));
+    }
+
+    #[gtest]
+    fn test_cache_key_prefix_free_encoding(fixture: &CacheKeyFixture) {
+        let key = cache_key_for(&fixture.request, "modelp", "rovider");
+        expect_that!(key, not(eq(fixture.key)));
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_messages(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::from("goodbye".to_string())],
+        }];
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_system(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.system = Some("different system".to_string());
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_tool_config(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.tool_config = Some(Cow::Owned(ToolCallConfig::default()));
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_temperature(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.temperature = Some(0.9);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_top_p(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.top_p = Some(0.1);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_presence_penalty(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.presence_penalty = Some(0.9);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_frequency_penalty(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.frequency_penalty = Some(0.9);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_max_tokens(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.max_tokens = Some(200);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_seed(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.seed = Some(99);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_stream(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.stream = true;
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_json_mode(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.json_mode = ModelInferenceRequestJsonMode::On;
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_function_type(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.function_type = FunctionType::Json;
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_output_schema(fixture: &CacheKeyFixture) {
+        let different_schema = serde_json::json!({"type": "string"});
+        let mut req = fixture.request.clone();
+        req.output_schema = Some(&different_schema);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_extra_cache_key(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.extra_cache_key = Some("different".to_string());
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_stop_sequences(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.stop_sequences = Some(Cow::Owned(vec!["different".to_string()]));
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_fetch_and_encode_input_files(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.fetch_and_encode_input_files_before_inference = true;
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_extra_body(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.extra_body = FullExtraBodyConfig {
+            extra_body: Some(ExtraBodyConfig {
+                data: vec![ExtraBodyReplacement {
+                    pointer: "/custom_field".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(serde_json::json!("test")),
+                }],
+            }),
+            inference_extra_body: Default::default(),
         };
-        let cache_key = model_provider_request.get_cache_key().unwrap();
-        let model_inference_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![],
-            system: None,
-            tool_config: None,
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            fetch_and_encode_input_files_before_inference: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
-            extra_cache_key: None,
-            stop_sequences: None,
-            ..Default::default()
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_extra_headers(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: Some(ExtraHeadersConfig {
+                data: vec![ExtraHeader {
+                    name: "X-Custom-Header".to_string(),
+                    kind: ExtraHeaderKind::Value("test".to_string()),
+                }],
+            }),
+            inference_extra_headers: Default::default(),
         };
-        let model_provider_request = ModelProviderRequest {
-            request: &model_inference_request,
-            model_name: "test_model",
-            provider_name: "test_provider",
-            otlp_config: &Default::default(),
-            model_inference_id: Uuid::now_v7(),
-        };
-        let new_cache_key = model_provider_request.get_cache_key().unwrap();
-        // Make sure the first two get the same cache key (and that we ignore the inference_id)
-        assert_eq!(cache_key, new_cache_key);
-        let streaming_model_inference_request = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![],
-            system: None,
-            tool_config: None,
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stream: true,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-            fetch_and_encode_input_files_before_inference: false,
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
-            extra_cache_key: None,
-            stop_sequences: None,
-            ..Default::default()
-        };
-        let model_provider_request = ModelProviderRequest {
-            request: &streaming_model_inference_request,
-            model_name: "test_model",
-            provider_name: "test_provider",
-            otlp_config: &Default::default(),
-            model_inference_id: Uuid::now_v7(),
-        };
-        let streaming_cache_key = model_provider_request.get_cache_key().unwrap();
-        assert_ne!(cache_key, streaming_cache_key);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_reasoning_effort(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.inference_params_v2.reasoning_effort = Some("low".to_string());
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_service_tier(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.inference_params_v2.service_tier =
+            Some(crate::inference::types::chat_completion_inference_params::ServiceTier::Flex);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_thinking_budget_tokens(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.inference_params_v2.thinking_budget_tokens = Some(500);
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
+    }
+
+    #[gtest]
+    fn test_cache_key_changes_with_verbosity(fixture: &CacheKeyFixture) {
+        let mut req = fixture.request.clone();
+        req.inference_params_v2.verbosity = Some("concise".to_string());
+        expect_that!(
+            cache_key_for(&req, "model", "provider"),
+            not(eq(fixture.key))
+        );
     }
 }

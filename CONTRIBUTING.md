@@ -116,17 +116,15 @@ In `pre-commit` and CI, we check that the notebooks match the relevant scripts u
 
 ### Tests
 
-#### Rust
-
-##### Unit Tests
+#### Rust Unit Tests
 
 ```bash
 cargo test-unit
 ```
 
-##### E2E Tests
+#### Rust E2E Tests with ClickHouse
 
-1. Launch the test ClickHouse database
+1. Launch the test containers
 
    ```bash
    docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
@@ -150,6 +148,27 @@ cargo test-unit
 > The E2E tests involve every supported model provider, so you need every possible credential to run the entire test suite.
 >
 > If your changes don't affect every provider, you can run a subset of tests with `cargo test-e2e xyz`, which will only run tests with `xyz` in their name.
+
+#### Rust E2E Tests with Postgres
+
+1. Launch the test containers
+
+   ```bash
+   docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+   ```
+
+2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.
+
+3. Launch the gateway in testing mode
+
+   ```bash
+   cargo run-e2e-postgres
+   ```
+
+4. Run the E2E tests
+   ```bash
+   TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres cargo test-e2e
+   ```
 
 #### Python
 

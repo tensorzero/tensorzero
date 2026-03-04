@@ -9,6 +9,6 @@ export type EvaluationRunInfo = {
   dataset_name: string;
   function_name: string;
   variant_name: string;
-  last_inference_timestamp: string;
+  created_at: string;
   snapshot_hash?: string;
 };

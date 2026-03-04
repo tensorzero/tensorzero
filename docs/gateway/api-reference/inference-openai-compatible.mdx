@@ -58,7 +58,7 @@ See the [Inference Caching](/gateway/guides/inference-caching) guide for more de
 - **Required:** no (default: no credentials)
 
 Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
-See the [configuration reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See the [configuration reference](/gateway/configuration-reference/#models-model_name-providers-provider_name) for more details.
 The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
 The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
 
@@ -317,6 +317,35 @@ For streaming requests, this requires `stream_options.include_usage` to be `true
 
 See `tensorzero_raw_usage` in the [response](#response) section for more details.
 
+#### `tensorzero::namespace`
+
+- **Type:** string
+- **Required:** no
+
+Selects a namespace-specific experimentation config for this request.
+If the function has a matching namespace config, it will be used instead of the base experimentation config.
+If no matching config exists, the base config is used as a fallback.
+
+The namespace is also validated against namespaced models: if the selected variant uses a model scoped to a different namespace, the request will fail.
+
+The value must be a non-empty string.
+It is stored as the `tensorzero::namespace` tag on the inference record.
+Behaves the same as the [`namespace`](/gateway/api-reference/inference#namespace) parameter in the native API.
+
+Provide this as an extra body parameter:
+
+```python
+response = client.chat.completions.create(
+    model="tensorzero::function_name=draft_email",
+    messages=[...],
+    extra_body={
+        "tensorzero::namespace": "mobile",
+    },
+)
+```
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
+
 #### `tensorzero::params`
 
 - **Type:** object
@@ -392,7 +421,7 @@ Each object in the array has the following fields:
 When using OpenAI client libraries, pass this parameter via `extra_body`.
 
 This field allows for dynamic provider tool configuration at runtime.
-You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference/#provider_tools)).
+You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference)).
 Only use this field if dynamic provider tool configuration is necessary for your use case.
 
 <Accordion title="Example: OpenAI Web Search (Unscoped)">
@@ -1036,8 +1065,7 @@ See [Track usage and cost](/operations/track-usage-and-cost) for more informatio
 
 ##### Configuration
 
-```toml mark="draft_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft_email"
 # ...
 [functions.draft_email]
 type = "chat"
@@ -1188,8 +1216,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml "weather_bot"
-// tensorzero.toml
+```toml title="tensorzero.toml" "weather_bot"
 # ...
 
 [functions.weather_bot]
@@ -1393,8 +1420,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml mark="extract_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="extract_email"
 # ...
 [functions.extract_email]
 type = "json"
