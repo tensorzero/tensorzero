@@ -199,6 +199,35 @@ pub fn into_json_matcher<MatcherLike: IntoJsonMatcher>(
     matcher.into_json_matcher()
 }
 
+/// A matcher that checks whether a JSON value is an object.
+#[derive(Debug, MatcherBase)]
+pub struct IsJsonObjectMatcher;
+
+pub fn is_json_object() -> JsonMatchesMatcher<IsJsonObjectMatcher> {
+    matches_json(IsJsonObjectMatcher)
+}
+
+impl<'a> Matcher<JsonValueRef<'a>> for IsJsonObjectMatcher {
+    fn matches(&self, actual: JsonValueRef<'a>) -> MatcherResult {
+        actual.0.is_object().into()
+    }
+
+    fn describe(&self, matcher_result: MatcherResult) -> Description {
+        match matcher_result {
+            MatcherResult::Match => "is a JSON object".into(),
+            MatcherResult::NoMatch => "is not a JSON object".into(),
+        }
+    }
+
+    fn explain_match(&self, actual: JsonValueRef<'a>) -> Description {
+        if actual.0.is_object() {
+            "which is a JSON object".into()
+        } else {
+            format!("which is {actual:?}").into()
+        }
+    }
+}
+
 /// A matcher that checks whether a JSON value is `null`.
 #[derive(Debug, MatcherBase)]
 pub struct IsNullMatcher;
@@ -350,7 +379,7 @@ where
 macro_rules! matches_json {
     ({}) => {
         $crate::json_matchers::matches_json(
-            $crate::json_matchers::googletest::matchers::anything()
+            $crate::json_matchers::is_json_object()
         )
     };
     ({$($key:literal : $value:expr),+ $(,)?}) => {

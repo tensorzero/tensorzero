@@ -63,21 +63,29 @@ impl Matcher<&Value> for MatchesJsonLiteralMatcher {
     }
 
     fn describe(&self, matcher_result: MatcherResult) -> Description {
-        let mode_text = match self.mode {
-            LiteralMatchMode::Exact => "exactly matches",
-            LiteralMatchMode::PartialObject => "partially matches",
-        };
         match matcher_result {
-            MatcherResult::Match => format!(
-                "{mode_text} JSON literal {expected:#}",
-                expected = self.expected
-            )
-            .into(),
-            MatcherResult::NoMatch => format!(
-                "does not {mode_text} JSON literal {expected:#}",
-                expected = self.expected
-            )
-            .into(),
+            MatcherResult::Match => {
+                let mode_text = match self.mode {
+                    LiteralMatchMode::Exact => "exactly matches",
+                    LiteralMatchMode::PartialObject => "partially matches",
+                };
+                format!(
+                    "{mode_text} JSON literal {expected:#}",
+                    expected = self.expected
+                )
+                .into()
+            }
+            MatcherResult::NoMatch => {
+                let mode_text = match self.mode {
+                    LiteralMatchMode::Exact => "exactly match",
+                    LiteralMatchMode::PartialObject => "partially match",
+                };
+                format!(
+                    "does not {mode_text} JSON literal {expected:#}",
+                    expected = self.expected
+                )
+                .into()
+            }
         }
     }
 
