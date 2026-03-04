@@ -96,14 +96,12 @@ export async function launch_sft_job(
   const job = await client.experimentalLaunchOptimizationWorkflow({
     function_name: data.function,
     template_variant_name: data.variant,
-    query_variant_name: null,
-    filters: filters,
+    filters: filters ?? undefined,
     output_source: output_source,
     limit: data.maxSamples ? data.maxSamples : 0,
     offset: 0,
     val_fraction: data.validationSplitPercent / 100,
     optimizer_config: optimizerConfig,
-    order_by: null,
   });
   return job;
 }

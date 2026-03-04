@@ -16,12 +16,12 @@ use tensorzero_core::endpoints::stored_inferences::v1::types::{InferenceFilter, 
 use tensorzero_core::optimization::{
     OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo,
 };
-use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
+use tensorzero_optimizers::endpoints::{LaunchOptimizationWorkflowParams, OptimizationDataSource};
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct LaunchOptimizationWorkflowToolParams {
     /// The function name to optimize.
     pub function_name: String,
@@ -34,7 +34,13 @@ pub struct LaunchOptimizationWorkflowToolParams {
     #[serde(default)]
     pub filters: Option<InferenceFilter>,
     /// Source of the output data (inference output, demonstration, etc.).
-    pub output_source: InferenceOutputSource,
+    /// Exactly one of `output_source` or `dataset_name` must be provided.
+    #[serde(default)]
+    pub output_source: Option<InferenceOutputSource>,
+    /// Name of the dataset to use as training data.
+    /// Exactly one of `output_source` or `dataset_name` must be provided.
+    #[serde(default)]
+    pub dataset_name: Option<String>,
     /// Optional ordering for the inferences.
     #[serde(default)]
     pub order_by: Option<Vec<OrderBy>>,
@@ -100,7 +106,7 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
     fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
             "Launch an optimization workflow (fine-tuning, prompt optimization, etc.) \
-             using stored inferences and poll until completion.",
+             using stored inferences or a dataset and poll until completion.",
         )
     }
 
@@ -111,7 +117,7 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
-            "description": "Launch an optimization workflow using stored inferences.",
+            "description": "Launch an optimization workflow using stored inferences or a dataset.",
             "properties": {
                 "function_name": {
                     "type": "string",
@@ -123,20 +129,24 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                 },
                 "query_variant_name": {
                     "type": "string",
-                    "description": "Optional variant name to filter inferences by (defaults to all variants)."
+                    "description": "Optional variant name to filter inferences by (defaults to all variants). Only used with `output_source`."
                 },
                 "output_source": {
                     "type": "string",
                     "enum": ["none", "inference", "demonstration"],
-                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available, 'none' returns no output."
+                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available, 'none' returns no output. Provide either `output_source` or `dataset_name`, not both."
+                },
+                "dataset_name": {
+                    "type": "string",
+                    "description": "Name of the dataset to use as training data. Provide either `output_source` or `dataset_name`, not both."
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Maximum number of inferences to use."
+                    "description": "Maximum number of inferences to use. Only used with `output_source`."
                 },
                 "offset": {
                     "type": "integer",
-                    "description": "Offset for pagination."
+                    "description": "Offset for pagination. Only used with `output_source`."
                 },
                 "val_fraction": {
                     "type": "number",
@@ -423,7 +433,7 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                     ]
                 }
             },
-            "required": ["function_name", "template_variant_name", "output_source", "optimizer_config"],
+            "required": ["function_name", "template_variant_name", "optimizer_config"],
             "additionalProperties": false
         });
 
@@ -452,15 +462,24 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
         // Step 1: Launch the optimization workflow
         let job_handle: OptimizationJobHandle = ctx
             .step("launch", llm_params.clone(), |params, state| async move {
+                let data_source = if let Some(dataset_name) = params.dataset_name {
+                    OptimizationDataSource::Dataset { dataset_name }
+                } else {
+                    OptimizationDataSource::Inferences {
+                        output_source: params
+                            .output_source
+                            .unwrap_or(InferenceOutputSource::Inference),
+                        query_variant_name: params.query_variant_name,
+                        filters: params.filters,
+                        order_by: params.order_by,
+                        limit: params.limit,
+                        offset: params.offset,
+                    }
+                };
                 let launch_params = LaunchOptimizationWorkflowParams {
                     function_name: params.function_name,
                     template_variant_name: params.template_variant_name,
-                    query_variant_name: params.query_variant_name,
-                    filters: params.filters,
-                    output_source: params.output_source,
-                    order_by: params.order_by,
-                    limit: params.limit,
-                    offset: params.offset,
+                    data_source,
                     val_fraction: params.val_fraction,
                     optimizer_config: params.optimizer_config,
                 };

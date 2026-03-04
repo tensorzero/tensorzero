@@ -17,6 +17,7 @@ use tensorzero_core::{
     config::{Config, provider_types::ProviderTypesConfig},
     db::{
         clickhouse::query_builder::{InferenceFilter, OrderBy},
+        datasets::GetDatapointsParams,
         delegating_connection::DelegatingDatabaseQueries,
         inferences::{InferenceOutputSource, ListInferencesParams},
     },
@@ -36,18 +37,38 @@ const DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS: u32 = u32::MAX;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
     pub template_variant_name: String,
-    pub query_variant_name: Option<String>,
-    pub filters: Option<InferenceFilter>,
-    pub output_source: InferenceOutputSource,
-    pub order_by: Option<Vec<OrderBy>>,
-    pub limit: Option<u32>,
-    pub offset: Option<u32>,
+    #[serde(flatten)]
+    pub data_source: OptimizationDataSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub val_fraction: Option<f64>,
     pub optimizer_config: UninitializedOptimizerInfo,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub enum OptimizationDataSource {
+    Inferences {
+        output_source: InferenceOutputSource,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        query_variant_name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        filters: Option<InferenceFilter>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        order_by: Option<Vec<OrderBy>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        limit: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        offset: Option<u32>,
+    },
+    Dataset {
+        dataset_name: String,
+    },
 }
 
 pub async fn launch_optimization_workflow_handler(
@@ -63,7 +84,7 @@ pub async fn launch_optimization_workflow_handler(
 }
 
 /// Starts an optimization job.
-/// This function will query inferences from the database,
+/// This function will query inferences or datapoints from the database,
 /// render them by fetching any network resources needed and
 /// templating them with the template variant,
 /// and launch the optimization job specified.
@@ -76,47 +97,69 @@ pub async fn launch_optimization_workflow(
     let LaunchOptimizationWorkflowParams {
         function_name,
         template_variant_name,
-        query_variant_name,
-        filters,
-        output_source,
-        order_by,
-        limit,
-        offset,
+        data_source,
         val_fraction,
         optimizer_config,
     } = params;
-    // Query the database for the stored inferences
-    let stored_inferences = db
-        .list_inferences(
-            &config,
-            &ListInferencesParams {
-                function_name: Some(&function_name),
-                ids: None,
-                variant_name: query_variant_name.as_deref(),
-                episode_id: None,
-                filters: filters.as_ref(),
-                output_source,
-                limit: limit.unwrap_or(DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS),
-                offset: offset.unwrap_or(0),
-                pagination: None,
-                order_by: order_by.as_deref(),
-                search_query_experimental: None,
-            },
-        )
-        .await?;
+
     let variants = HashMap::from([(function_name.clone(), template_variant_name.clone())]);
-    // Template the inferences and fetch any network resources needed
-    let rendered_inferences =
-        render_samples(config.clone(), stored_inferences, variants, None).await?;
+
+    let rendered_samples = match data_source {
+        OptimizationDataSource::Inferences {
+            output_source,
+            query_variant_name,
+            filters,
+            order_by,
+            limit,
+            offset,
+        } => {
+            let stored_inferences = db
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        function_name: Some(&function_name),
+                        ids: None,
+                        variant_name: query_variant_name.as_deref(),
+                        episode_id: None,
+                        filters: filters.as_ref(),
+                        output_source,
+                        limit: limit
+                            .unwrap_or(DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS),
+                        offset: offset.unwrap_or(0),
+                        pagination: None,
+                        order_by: order_by.as_deref(),
+                        search_query_experimental: None,
+                    },
+                )
+                .await?;
+            render_samples(config.clone(), stored_inferences, variants, None).await?
+        }
+        OptimizationDataSource::Dataset { dataset_name } => {
+            let stored_datapoints = db
+                .get_datapoints(&GetDatapointsParams {
+                    dataset_name: Some(dataset_name),
+                    function_name: Some(function_name.clone()),
+                    ids: None,
+                    limit: u32::MAX,
+                    offset: 0,
+                    allow_stale: false,
+                    filter: None,
+                    order_by: None,
+                    search_query_experimental: None,
+                })
+                .await?;
+            render_samples(config.clone(), stored_datapoints, variants, None).await?
+        }
+    };
 
     // Drop any examples with output that is None
-    let rendered_inferences = rendered_inferences
+    let rendered_samples = rendered_samples
         .into_iter()
         .filter(|example| example.output.is_some())
         .collect::<Vec<_>>();
 
-    // Split the inferences into train and val sets
-    let (train_examples, val_examples) = split_examples(rendered_inferences, val_fraction)?;
+    // Split the samples into train and val sets
+    let (train_examples, val_examples) = split_examples(rendered_samples, val_fraction)?;
 
     // Launch the optimization job
     optimizer_config

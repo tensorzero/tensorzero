@@ -2,14 +2,8 @@
 import type { InferenceFilter } from "./InferenceFilter";
 import type { InferenceOutputSource } from "./InferenceOutputSource";
 import type { OrderBy } from "./OrderBy";
-import type { UninitializedOptimizerInfo } from "./UninitializedOptimizerInfo";
 
-export type LaunchOptimizationWorkflowParams = {
-  function_name: string;
-  template_variant_name: string;
-  val_fraction?: number;
-  optimizer_config: UninitializedOptimizerInfo;
-} & (
+export type OptimizationDataSource =
   | {
       output_source: InferenceOutputSource;
       query_variant_name?: string;
@@ -18,5 +12,4 @@ export type LaunchOptimizationWorkflowParams = {
       limit?: number;
       offset?: number;
     }
-  | { dataset_name: string }
-);
+  | { dataset_name: string };

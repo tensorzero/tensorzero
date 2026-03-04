@@ -9,8 +9,8 @@ use uuid::Uuid;
 use super::use_mock_provider_api;
 use tensorzero::{
     ClientExt, ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceOutputSource,
-    Input, InputMessage, InputMessageContent, LaunchOptimizationWorkflowParams, RenderedSample,
-    Role, System,
+    Input, InputMessage, InputMessageContent, LaunchOptimizationWorkflowParams,
+    OptimizationDataSource, RenderedSample, Role, System,
 };
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
@@ -1090,12 +1090,14 @@ pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
     let params = LaunchOptimizationWorkflowParams {
         function_name: "write_haiku".to_string(),
         template_variant_name: "gpt_4o_mini".to_string(),
-        query_variant_name: None,
-        filters: None,
-        output_source: InferenceOutputSource::Inference,
-        order_by: None,
-        limit: Some(10),
-        offset: None,
+        data_source: OptimizationDataSource::Inferences {
+            output_source: InferenceOutputSource::Inference,
+            query_variant_name: None,
+            filters: None,
+            order_by: None,
+            limit: Some(10),
+            offset: None,
+        },
         val_fraction: None,
         // We always mock the client tests since this is tested above
         optimizer_config: UninitializedOptimizerInfo {

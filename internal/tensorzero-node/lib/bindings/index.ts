@@ -300,6 +300,7 @@ export * from "./OpenAISFTJobHandle";
 export * from "./OpenAISimilarityMetric";
 export * from "./OpenAIStringCheckOp";
 export * from "./OpenRouterProvider";
+export * from "./OptimizationDataSource";
 export * from "./OptimizationJobHandle";
 export * from "./OptimizationJobInfo";
 export * from "./OptimizationWorkflowSideInfo";
