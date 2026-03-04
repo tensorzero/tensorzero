@@ -42,10 +42,10 @@ import { hasAnsweredResponse } from "~/components/autopilot/question-cards/respo
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import TopKEvaluationViz from "./TopKEvaluationViz";
-import {
-  detectToolResultVisualization,
-  ToolResultVisualization,
-} from "./ToolResultVisualization";
+import FeedbackByVariantChart, {
+  type ParsedFeedbackByVariant,
+  parseFeedbackChartData,
+} from "./FeedbackByVariantChart";
 
 /**
  * Max height for expandable tool content (tool call arguments, tool results, errors).
@@ -192,28 +192,44 @@ function getVisualizationTitle(visualization: VisualizationType): string {
   return "Visualization";
 }
 
-/**
- * Renders the appropriate visualization component based on the type.
- */
-function VisualizationRenderer({
-  visualization,
-}: {
-  visualization: VisualizationType;
-}) {
-  // Check for known visualization types
-  if (
-    typeof visualization === "object" &&
-    visualization !== null &&
-    "type" in visualization &&
-    visualization.type === "top_k_evaluation"
-  ) {
-    // Type assertion needed because TypeScript can't narrow through the untagged union
-    return (
-      <TopKEvaluationViz data={visualization as TopKEvaluationVisualization} />
-    );
+type EventVisualization =
+  | { type: "top_k_evaluation"; data: TopKEvaluationVisualization }
+  | { type: "feedback_by_variant"; data: ParsedFeedbackByVariant[] }
+  | { type: "unknown"; raw: unknown };
+
+function detectEventVisualization(
+  event: GatewayEvent,
+): EventVisualization | null {
+  if (event.payload.type === "visualization") {
+    const viz = event.payload.visualization;
+    if (
+      typeof viz === "object" &&
+      viz !== null &&
+      "type" in viz &&
+      viz.type === "top_k_evaluation"
+    ) {
+      return {
+        type: "top_k_evaluation",
+        data: viz as TopKEvaluationVisualization,
+      };
+    }
+    return { type: "unknown", raw: viz };
   }
 
-  // Unknown or malformed visualization - show raw JSON with a warning
+  if (
+    event.payload.type === "tool_result" &&
+    event.payload.outcome.type === "success"
+  ) {
+    const feedbackData = parseFeedbackChartData(event.payload.outcome.result);
+    if (feedbackData) {
+      return { type: "feedback_by_variant", data: feedbackData };
+    }
+  }
+
+  return null;
+}
+
+function UnknownVisualizationFallback({ raw }: { raw: unknown }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="text-fg-muted flex items-center gap-2 text-sm">
@@ -223,12 +239,28 @@ function VisualizationRenderer({
           outdated.
         </span>
       </div>
-      <ReadOnlyCodeBlock
-        code={JSON.stringify(visualization, null, 2)}
-        language="json"
-      />
+      <ReadOnlyCodeBlock code={JSON.stringify(raw, null, 2)} language="json" />
     </div>
   );
+}
+
+function EventVisualizationRenderer({
+  visualization,
+}: {
+  visualization: EventVisualization;
+}) {
+  switch (visualization.type) {
+    case "top_k_evaluation":
+      return <TopKEvaluationViz data={visualization.data} />;
+    case "feedback_by_variant":
+      return <FeedbackByVariantChart data={visualization.data} />;
+    case "unknown":
+      return <UnknownVisualizationFallback raw={visualization.raw} />;
+    default: {
+      const _exhaustiveCheck: never = visualization;
+      return _exhaustiveCheck;
+    }
+  }
 }
 
 /**
@@ -611,10 +643,7 @@ function EventItem({
 }: EventItemProps) {
   const { yoloMode } = useAutopilotSession();
 
-  const toolResultVisualizationData = useMemo(
-    () => detectToolResultVisualization(event),
-    [event],
-  );
+  const visualization = useMemo(() => detectEventVisualization(event), [event]);
 
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
@@ -631,10 +660,7 @@ function EventItem({
     (event.payload.type === "tool_result" &&
       (event.payload.outcome.type === "success" ||
         event.payload.outcome.type === "failure"));
-  const [isExpanded, setIsExpanded] = useState(
-    event.payload.type === "visualization" ||
-      toolResultVisualizationData != null,
-  );
+  const [isExpanded, setIsExpanded] = useState(visualization != null);
   const shouldShowDetails = !isExpandable || isExpanded;
   const label = <span className="text-sm font-medium">{title}</span>;
 
@@ -682,55 +708,54 @@ function EventItem({
           <TableItemTime timestamp={event.created_at} />
         </div>
       </div>
-      {shouldShowDetails && toolResultVisualizationData && (
-        <ToolResultVisualization data={toolResultVisualizationData} />
-      )}
-      {shouldShowDetails &&
-        summary.description &&
-        !toolResultVisualizationData && (
-          <>
-            {event.payload.type === "message" ? (
-              <Markdown
-                remarkPlugins={uuidRemarkPlugins}
-                components={uuidComponents}
-              >
-                {summary.description}
-              </Markdown>
-            ) : event.payload.type === "tool_call" ? (
-              <ReadOnlyCodeBlock code={summary.description} language="json" />
-            ) : (
-              <p
-                className={cn(
-                  "text-fg-secondary text-sm whitespace-pre-wrap",
-                  (event.payload.type === "tool_result" ||
-                    event.payload.type === "error") &&
-                    "overflow-y-auto font-mono",
-                )}
-                style={
-                  event.payload.type === "tool_result" ||
-                  event.payload.type === "error"
-                    ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
-                    : undefined
-                }
-              >
-                {summary.description}
-              </p>
-            )}
-          </>
-        )}
-      {shouldShowDetails && event.payload.type === "visualization" && (
-        <VisualizationRenderer visualization={event.payload.visualization} />
-      )}
-      {shouldShowDetails && event.payload.type === "user_questions" && (
-        <UserQuestionsContent questions={event.payload.questions} />
-      )}
-      {shouldShowDetails && event.payload.type === "user_questions_answers" && (
-        <UserQuestionsAnswersContent
-          responses={event.payload.responses}
-          questions={
-            questionsMap?.get(event.payload.user_questions_event_id) ?? []
-          }
-        />
+      {shouldShowDetails && (
+        <>
+          {summary.description && !visualization && (
+            <>
+              {event.payload.type === "message" ? (
+                <Markdown
+                  remarkPlugins={uuidRemarkPlugins}
+                  components={uuidComponents}
+                >
+                  {summary.description}
+                </Markdown>
+              ) : event.payload.type === "tool_call" ? (
+                <ReadOnlyCodeBlock code={summary.description} language="json" />
+              ) : (
+                <p
+                  className={cn(
+                    "text-fg-secondary text-sm whitespace-pre-wrap",
+                    (event.payload.type === "tool_result" ||
+                      event.payload.type === "error") &&
+                      "overflow-y-auto font-mono",
+                  )}
+                  style={
+                    event.payload.type === "tool_result" ||
+                    event.payload.type === "error"
+                      ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
+                      : undefined
+                  }
+                >
+                  {summary.description}
+                </p>
+              )}
+            </>
+          )}
+          {visualization && (
+            <EventVisualizationRenderer visualization={visualization} />
+          )}
+          {event.payload.type === "user_questions" && (
+            <UserQuestionsContent questions={event.payload.questions} />
+          )}
+          {event.payload.type === "user_questions_answers" && (
+            <UserQuestionsAnswersContent
+              responses={event.payload.responses}
+              questions={
+                questionsMap?.get(event.payload.user_questions_event_id) ?? []
+              }
+            />
+          )}
+        </>
       )}
     </div>
   );
