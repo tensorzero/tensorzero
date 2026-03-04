@@ -1521,7 +1521,7 @@ mod tests {
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
         assert!(logs_contain(
-            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+            "`gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
         ));
     }
 
@@ -1547,7 +1547,7 @@ mod tests {
             "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
         ));
         assert!(logs_contain(
-            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
+            "`gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
         ));
     }
 
