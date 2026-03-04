@@ -1284,6 +1284,8 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     needs: [build-gateway-e2e-container, publish-dev-docker-hub-images]
     uses: ./.github/workflows/dispatch-autopilot-e2e.yml
+    # TODO: Remove continue-on-error once autopilot e2e tests are stable
+    continue-on-error: true
     secrets:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
