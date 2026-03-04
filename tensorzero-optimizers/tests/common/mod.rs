@@ -8,8 +8,12 @@ use tracing_subscriber::{self, EnvFilter};
 use uuid::Uuid;
 
 use tensorzero::{
-    ClientExt, InferenceOutputSource, InferencesDataSource, LaunchOptimizationWorkflowParams,
+    ClientExt, CreateChatDatapointRequest, CreateDatapointRequest, DatasetDataSource,
+    InferenceOutputSource, InferencesDataSource, LaunchOptimizationWorkflowParams,
     OptimizationDataSource, RenderedSample, Role,
+};
+use tensorzero_core::inference::types::{
+    Arguments, Input, InputMessage, InputMessageContent, Template,
 };
 use tensorzero_core::{
     cache::{CacheManager, CacheOptions},
@@ -272,6 +276,96 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
         }
         sleep(Duration::from_secs(1)).await;
     }
+}
+
+/// Runs launch_optimization_workflow using a dataset (not inferences) as the data source
+#[allow(clippy::allow_attributes, dead_code)]
+pub async fn run_workflow_test_case_with_dataset(
+    test_case: &impl OptimizationTestCase,
+    client: &tensorzero::Client,
+) {
+    let dataset_name = format!("test_optimization_dataset_{}", Uuid::now_v7());
+
+    // Create 10 chat datapoints for the `write_haiku` function using Template input
+    let topics = [
+        "mountains",
+        "ocean",
+        "sunset",
+        "rain",
+        "forest",
+        "snow",
+        "wind",
+        "stars",
+        "river",
+        "clouds",
+    ];
+    let datapoints: Vec<CreateDatapointRequest> = topics
+        .iter()
+        .map(|topic| {
+            CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                function_name: "write_haiku".to_string(),
+                episode_id: None,
+                input: Input {
+                    system: None,
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Template(Template {
+                            name: "user".to_string(),
+                            arguments: Arguments(
+                                serde_json::json!({ "topic": topic })
+                                    .as_object()
+                                    .unwrap()
+                                    .clone(),
+                            ),
+                        })],
+                    }],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: format!("A haiku about {topic}"),
+                })]),
+                dynamic_tool_params: DynamicToolParams::default(),
+                tags: None,
+                name: None,
+            })
+        })
+        .collect();
+
+    client
+        .create_datapoints(dataset_name.clone(), datapoints)
+        .await
+        .unwrap();
+
+    let params = LaunchOptimizationWorkflowParams {
+        function_name: "write_haiku".to_string(),
+        template_variant_name: "gpt_4o_mini".to_string(),
+        data_source: OptimizationDataSource::Dataset(DatasetDataSource {
+            dataset_name: dataset_name.clone(),
+        }),
+        val_fraction: None,
+        optimizer_config: test_case.get_optimizer_info(),
+    };
+    let job_handle = client
+        .experimental_launch_optimization_workflow(params)
+        .await
+        .unwrap();
+    let mut status;
+    loop {
+        status = client
+            .experimental_poll_optimization(&job_handle)
+            .await
+            .unwrap();
+        println!("Status: `{status:?}` Handle: `{job_handle}`");
+        if matches!(status, OptimizationJobInfo::Completed { .. }) {
+            break;
+        }
+        if matches!(status, OptimizationJobInfo::Failed { .. }) {
+            panic!("Optimization failed: {status:?}");
+        }
+        sleep(Duration::from_secs(1)).await;
+    }
+
+    // Clean up the dataset
+    client.delete_dataset(dataset_name).await.unwrap();
 }
 
 fn get_examples(test_case: &impl OptimizationTestCase, num_examples: usize) -> Vec<RenderedSample> {
@@ -604,6 +698,20 @@ macro_rules! http_workflow_test_case {
             async fn [<test_http_mock_optimization_ $fn_name>]() {
                 let client = tensorzero::test_helpers::make_http_gateway().await;
                 $crate::common::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
+            }
+        }
+    };
+}
+
+/// Generates an embedded dataset-path workflow test
+#[macro_export]
+macro_rules! embedded_dataset_workflow_test_case {
+    ($fn_name:ident, $constructor:expr) => {
+        ::paste::paste! {
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<test_embedded_mock_optimization_dataset_ $fn_name>]() {
+                let client = tensorzero::test_helpers::make_embedded_gateway().await;
+                $crate::common::run_workflow_test_case_with_dataset(&$constructor, &client).await;
             }
         }
     };
