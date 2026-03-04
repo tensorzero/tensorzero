@@ -179,10 +179,64 @@ pub fn prepare_relay_extra_headers(
 /// The 'InferenceExtraBody' options provided directly in an inference request.
 /// These have not yet been filtered by variant name
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, JsonSchema, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraBody {
     extra_body: Vec<DynamicExtraBody>,
+}
+
+/// Custom `Deserialize` for `UnfilteredInferenceExtraBody` that handles the legacy
+/// `Provider`/`ProviderDelete` format stored in the database. These legacy rows contain
+/// a `model_provider_name` field which no longer exists in `DynamicExtraBody`.
+/// We map them to `Always`/`AlwaysDelete` (dropping the provider filter).
+impl<'de> Deserialize<'de> for UnfilteredInferenceExtraBody {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw_values: Vec<serde_json::Value> = Vec::deserialize(deserializer)?;
+        let mut extra_body = Vec::with_capacity(raw_values.len());
+
+        for value in raw_values {
+            match serde_json::from_value::<DynamicExtraBody>(value.clone()) {
+                Ok(parsed) => extra_body.push(parsed),
+                Err(original_err) => {
+                    // Check if this is a legacy format with `model_provider_name`
+                    let Some(obj) = value.as_object() else {
+                        return Err(serde::de::Error::custom(original_err));
+                    };
+                    if !obj.contains_key("model_provider_name") {
+                        return Err(serde::de::Error::custom(original_err));
+                    }
+
+                    let Some(pointer) = obj.get("pointer").and_then(|v| v.as_str()) else {
+                        return Err(serde::de::Error::custom(
+                            "legacy `extra_body` entry with `model_provider_name` is missing `pointer`",
+                        ));
+                    };
+                    let pointer = pointer.to_string();
+
+                    if let Some(val) = obj.get("value") {
+                        extra_body.push(DynamicExtraBody::Always {
+                            pointer,
+                            value: val.clone(),
+                        });
+                    } else if obj.get("delete").and_then(|v| v.as_bool()) == Some(true) {
+                        extra_body.push(DynamicExtraBody::AlwaysDelete {
+                            pointer,
+                            delete: (),
+                        });
+                    } else {
+                        return Err(serde::de::Error::custom(
+                            "legacy `extra_body` entry with `model_provider_name` has neither `value` nor `delete: true`",
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(UnfilteredInferenceExtraBody { extra_body })
+    }
 }
 
 impl UnfilteredInferenceExtraBody {
@@ -752,5 +806,122 @@ mod tests {
                 ],
             }
         );
+    }
+
+    #[test]
+    fn test_unfiltered_extra_body_legacy_provider_with_value() {
+        let json = r#"[{"model_provider_name": "tensorzero::model_name::X::provider_name::Y", "pointer": "/field", "value": "hello"}]"#;
+        let result: UnfilteredInferenceExtraBody = serde_json::from_str(json).unwrap();
+        assert_eq!(result.extra_body.len(), 1);
+        assert_eq!(
+            result.extra_body[0],
+            DynamicExtraBody::Always {
+                pointer: "/field".to_string(),
+                value: json!("hello"),
+            }
+        );
+    }
+
+    #[test]
+    fn test_unfiltered_extra_body_legacy_provider_with_delete() {
+        let json = r#"[{"model_provider_name": "tensorzero::model_name::X::provider_name::Y", "pointer": "/field", "delete": true}]"#;
+        let result: UnfilteredInferenceExtraBody = serde_json::from_str(json).unwrap();
+        assert_eq!(result.extra_body.len(), 1);
+        assert_eq!(
+            result.extra_body[0],
+            DynamicExtraBody::AlwaysDelete {
+                pointer: "/field".to_string(),
+                delete: (),
+            }
+        );
+    }
+
+    #[test]
+    fn test_unfiltered_extra_body_mixed_legacy_and_current() {
+        let json = r#"[
+            {"model_provider_name": "tensorzero::model_name::X::provider_name::Y", "pointer": "/legacy", "value": 42},
+            {"pointer": "/current", "value": "new_format"},
+            {"model_provider_name": "tensorzero::model_name::A::provider_name::B", "pointer": "/legacy_delete", "delete": true},
+            {"variant_name": "my_variant", "pointer": "/variant", "value": true}
+        ]"#;
+        let result: UnfilteredInferenceExtraBody = serde_json::from_str(json).unwrap();
+        assert_eq!(result.extra_body.len(), 4);
+        assert_eq!(
+            result.extra_body[0],
+            DynamicExtraBody::Always {
+                pointer: "/legacy".to_string(),
+                value: json!(42),
+            }
+        );
+        assert_eq!(
+            result.extra_body[1],
+            DynamicExtraBody::Always {
+                pointer: "/current".to_string(),
+                value: json!("new_format"),
+            }
+        );
+        assert_eq!(
+            result.extra_body[2],
+            DynamicExtraBody::AlwaysDelete {
+                pointer: "/legacy_delete".to_string(),
+                delete: (),
+            }
+        );
+        assert_eq!(
+            result.extra_body[3],
+            DynamicExtraBody::Variant {
+                variant_name: "my_variant".to_string(),
+                pointer: "/variant".to_string(),
+                value: json!(true),
+            }
+        );
+    }
+
+    #[test]
+    fn test_unfiltered_extra_body_current_format_regression() {
+        let json = r#"[
+            {"pointer": "/test", "value": {"key": "value"}},
+            {"pointer": "/delete_me", "delete": true},
+            {"model_name": "gpt-4o", "provider_name": "openai", "pointer": "/mp", "value": 1}
+        ]"#;
+        let result: UnfilteredInferenceExtraBody = serde_json::from_str(json).unwrap();
+        assert_eq!(result.extra_body.len(), 3);
+        assert_eq!(
+            result.extra_body[0],
+            DynamicExtraBody::Always {
+                pointer: "/test".to_string(),
+                value: json!({"key": "value"}),
+            }
+        );
+        assert_eq!(
+            result.extra_body[1],
+            DynamicExtraBody::AlwaysDelete {
+                pointer: "/delete_me".to_string(),
+                delete: (),
+            }
+        );
+        assert_eq!(
+            result.extra_body[2],
+            DynamicExtraBody::ModelProvider {
+                model_name: "gpt-4o".to_string(),
+                provider_name: Some("openai".to_string()),
+                pointer: "/mp".to_string(),
+                value: json!(1),
+            }
+        );
+    }
+
+    #[test]
+    fn test_unfiltered_extra_body_invalid_input_errors() {
+        let json = r#"[{"unknown_field": "value"}]"#;
+        let result: Result<UnfilteredInferenceExtraBody, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Expected error for invalid input");
+    }
+
+    #[test]
+    fn test_unfiltered_extra_body_empty_array() {
+        let json = r"[]";
+        let result: UnfilteredInferenceExtraBody = serde_json::from_str(json).unwrap();
+        assert!(result.extra_body.is_empty());
     }
 }
