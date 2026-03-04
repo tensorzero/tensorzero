@@ -3,8 +3,8 @@ import { AlertCircle, Loader2, StopCircle } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import type { Route } from "./+types/route";
 import type {
+  EvaluationConfig,
   EvaluationResultRow,
-  InferenceEvaluationConfig,
   MetricConfig,
 } from "~/types/tensorzero";
 import {
@@ -17,7 +17,10 @@ import {
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import { EvaluationTable, type SelectedRowData } from "./EvaluationTable";
+import {
+  EvaluationTable,
+  type SelectedRowData,
+} from "~/routes/evaluations/$evaluation_name/EvaluationTable";
 import {
   PageHeader,
   PageLayout,
@@ -37,13 +40,14 @@ import {
   useNavigate,
   useFetcher,
 } from "react-router";
-import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
-import BasicInfo from "./EvaluationBasicInfo";
+import AutoRefreshIndicator, {
+  useAutoRefresh,
+} from "~/routes/evaluations/$evaluation_name/AutoRefreshIndicator";
 import { getRunningEvaluation } from "~/utils/evaluations.server";
 import {
   EvaluationErrorInfo,
   type EvaluationErrorDisplayInfo,
-} from "./EvaluationErrorInfo";
+} from "~/routes/evaluations/$evaluation_name/EvaluationErrorInfo";
 import {
   addEvaluationHumanFeedback,
   getTensorZeroClient,
@@ -53,12 +57,17 @@ import { logger } from "~/utils/logger";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DatasetSelect } from "~/components/dataset/DatasetSelect";
-import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
-import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
-import { useCancelEvaluation } from "./useCancelEvaluation";
+import { handleBulkAddToDataset } from "~/routes/evaluations/$evaluation_name/bulkAddToDataset.server";
+import { useBulkAddToDatasetToast } from "~/routes/evaluations/$evaluation_name/useBulkAddToDatasetToast";
+import { useCancelEvaluation } from "~/routes/evaluations/$evaluation_name/useCancelEvaluation";
 import { useReadOnly } from "~/context/read-only";
+import BasicInfo from "~/routes/evaluations/$evaluation_name/EvaluationBasicInfo";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
+import type {
+  EvaluationRunMetadata,
+  RunMetricMetadata,
+} from "~/types/tensorzero";
 
 type EvaluationData = {
   selected_evaluation_run_infos: Awaited<
@@ -97,9 +106,6 @@ async function fetchEvaluationData(
     .getEvaluationRunInfos(selected_evaluation_run_ids_array, function_name)
     .then((response) => response.run_infos);
 
-  // If there is a freshly inserted feedback, ClickHouse may take some time to
-  // update the evaluation results as it is eventually consistent.
-  // In this case, we poll for the evaluation results until the feedback is found.
   const resultsPromise: Promise<EvaluationResultRow[]> = newFeedbackId
     ? pollForEvaluationResults(
         selected_evaluation_run_ids_array,
@@ -143,70 +149,123 @@ async function fetchEvaluationData(
   };
 }
 
-export async function loader({ request, params }: Route.LoaderArgs) {
-  const config = await getConfig();
-  let evaluationConfig = config.evaluations[params.evaluation_name];
-  let effectiveConfig = config;
+function buildMetricsConfigFromRunMetadata(
+  metrics: RunMetricMetadata[],
+): Record<string, MetricConfig> {
+  const metricsConfig: Record<string, MetricConfig> = {};
+  for (const metric of metrics) {
+    metricsConfig[metric.name] = {
+      type: metric.value_type === "boolean" ? "boolean" : "float",
+      level: "inference",
+      optimize: metric.optimize ?? "max",
+    };
+  }
+  return metricsConfig;
+}
 
-  if (!evaluationConfig) {
-    // Evaluation not in current config — try to find it from a historical snapshot
-    const client = getTensorZeroClient();
-    const runs = await client.listEvaluationRuns(100, 0);
-    const matchingRun = runs.runs.find(
-      (r) => r.evaluation_name === params.evaluation_name,
-    );
+export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const searchParams = new URLSearchParams(url.search);
 
-    if (matchingRun?.snapshot_hash) {
-      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
-      evaluationConfig = effectiveConfig.evaluations[params.evaluation_name];
-    }
-
-    if (!evaluationConfig) {
-      throw data(
-        `Evaluation config not found for evaluation ${params.evaluation_name}`,
-        { status: 404 },
-      );
-    }
+  const runIdsParam = searchParams.get("evaluation_run_ids");
+  if (!runIdsParam) {
+    throw data("Missing `evaluation_run_ids` query parameter", { status: 400 });
   }
 
-  const function_name = evaluationConfig.function_name;
-  const functionConfig = await getFunctionConfig(
-    function_name,
-    effectiveConfig,
+  const selected_evaluation_run_ids_array = runIdsParam
+    .split(",")
+    .filter((s) => s.trim().length > 0);
+  if (selected_evaluation_run_ids_array.length === 0) {
+    throw data("No run IDs provided", { status: 400 });
+  }
+
+  // Fetch run metadata from the database for all selected runs
+  const client = getTensorZeroClient();
+  const runMetadataResponse = await client.getEvaluationRunMetadata(
+    selected_evaluation_run_ids_array,
   );
-  const function_type = functionConfig?.type;
-  if (!function_type) {
-    throw data(`Function config not found for function ${function_name}`, {
+
+  // Use the first run's metadata as the primary source
+  const firstRunId = selected_evaluation_run_ids_array[0];
+  const firstRunMetadata: EvaluationRunMetadata | undefined =
+    runMetadataResponse.metadata[firstRunId];
+  if (!firstRunMetadata) {
+    throw data(`Evaluation run metadata not found for run ID: ${firstRunId}`, {
       status: 404,
     });
   }
 
-  const url = new URL(request.url);
-  const searchParams = new URLSearchParams(url.search);
-  const newFeedbackId = searchParams.get("newFeedbackId");
-  const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
+  const evaluation_name = firstRunMetadata.evaluation_name;
+  const function_name = firstRunMetadata.function_name;
+  const function_type = firstRunMetadata.function_type as "chat" | "json";
 
-  const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
-  const selected_evaluation_run_ids_array = selected_evaluation_run_ids
-    ? selected_evaluation_run_ids.split(",")
-    : [];
+  // Try to look up the full evaluation config for richer UI
+  const config = await getConfig();
+  let evaluationConfig = config.evaluations[evaluation_name];
+  let effectiveConfig = config;
 
-  const offset = parseInt(searchParams.get("offset") || "0");
-  const limit = parseInt(searchParams.get("limit") || "15");
-
-  const evaluator_names = Object.keys(evaluationConfig.evaluators);
-  const metric_names = evaluator_names.map((evaluatorName) =>
-    getEvaluatorMetricName(params.evaluation_name, evaluatorName),
-  );
-
-  // Build metrics config map for the relevant metrics
-  const metricsConfig: Record<string, MetricConfig> = {};
-  for (const metricName of metric_names) {
-    const metricConfig = effectiveConfig.metrics[metricName];
-    if (metricConfig) {
-      metricsConfig[metricName] = metricConfig;
+  if (!evaluationConfig) {
+    const runs = await client.listEvaluationRuns(100, 0);
+    const matchingRun = runs.runs.find(
+      (r) => r.evaluation_name === evaluation_name,
+    );
+    if (matchingRun?.snapshot_hash) {
+      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
+      evaluationConfig = effectiveConfig.evaluations[evaluation_name];
     }
   }
+
+  let evaluator_names: string[];
+  let metric_names: string[];
+  let metricsConfig: Record<string, MetricConfig>;
+
+  if (evaluationConfig) {
+    // Config found — derive from config (same as existing route)
+    evaluator_names = Object.keys(evaluationConfig.evaluators);
+    metric_names = evaluator_names.map((evaluatorName) =>
+      getEvaluatorMetricName(evaluation_name, evaluatorName),
+    );
+    metricsConfig = {};
+    for (const metricName of metric_names) {
+      const metricConfig = effectiveConfig.metrics[metricName];
+      if (metricConfig) {
+        metricsConfig[metricName] = metricConfig;
+      }
+    }
+  } else {
+    // Config not found — derive from DB metadata
+    metric_names = firstRunMetadata.metrics.map((m) => m.name);
+    evaluator_names = firstRunMetadata.metrics
+      .map((m) => m.evaluator_name)
+      .filter((name): name is string => name != null);
+    metricsConfig = buildMetricsConfigFromRunMetadata(firstRunMetadata.metrics);
+    // Build a minimal evaluationConfig for the components
+    const evaluators: Record<string, { type: "exact_match" }> = {};
+    for (const name of evaluator_names) {
+      evaluators[name] = { type: "exact_match" };
+    }
+    evaluationConfig = {
+      type: "inference" as const,
+      function_name,
+      evaluators,
+    };
+  }
+
+  // Verify function config exists
+  const functionConfig = await getFunctionConfig(
+    function_name,
+    effectiveConfig,
+  );
+  if (functionConfig?.type && functionConfig.type !== function_type) {
+    logger.warn(
+      `Function type mismatch: DB says ${function_type}, config says ${functionConfig.type}`,
+    );
+  }
+
+  const newFeedbackId = searchParams.get("newFeedbackId");
+  const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
+  const offset = parseInt(searchParams.get("offset") || "0");
+  const limit = parseInt(searchParams.get("limit") || "15");
 
   const running_evaluation_run_ids = selected_evaluation_run_ids_array.filter(
     (evaluationRunId) => {
@@ -218,7 +277,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         return false;
       }
       if (runningEvaluation.completed) {
-        // If the evaluation completed more than 5 seconds ago, consider it done
         if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
           return false;
         }
@@ -248,7 +306,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
 
   return {
-    evaluation_name: params.evaluation_name,
+    evaluation_name,
     evaluationConfig,
     function_type,
     metricsConfig,
@@ -376,7 +434,7 @@ function ResultsContent({
   isCancelling,
 }: {
   evaluation_name: string;
-  evaluationConfig: InferenceEvaluationConfig;
+  evaluationConfig: EvaluationConfig;
   metricsConfig: Record<string, MetricConfig>;
   data: EvaluationData;
   evaluator_names: string[];
@@ -467,7 +525,9 @@ function ResultsContent({
   );
 }
 
-export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
+export default function EvaluationRunsPage({
+  loaderData,
+}: Route.ComponentProps) {
   const {
     evaluation_name,
     evaluationConfig: evaluation_config,

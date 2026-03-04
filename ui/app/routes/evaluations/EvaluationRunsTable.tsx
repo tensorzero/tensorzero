@@ -16,7 +16,12 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { useFunctionConfig } from "~/context/config";
-import { toEvaluationUrl, toDatasetUrl, toFunctionUrl } from "~/utils/urls";
+import {
+  toEvaluationUrl,
+  toEvaluationRunsUrl,
+  toDatasetUrl,
+  toFunctionUrl,
+} from "~/utils/urls";
 
 function EvaluationRunRow({
   evaluationRun,
@@ -34,9 +39,7 @@ function EvaluationRunRow({
       <TableCell className="max-w-[200px]">
         <TableItemShortUuid
           id={evaluationRun.evaluation_run_id}
-          link={toEvaluationUrl(evaluationRun.evaluation_name, {
-            evaluation_run_ids: evaluationRun.evaluation_run_id,
-          })}
+          link={toEvaluationRunsUrl(evaluationRun.evaluation_run_id)}
         />
       </TableCell>
       <TableCell className="max-w-[200px]">
