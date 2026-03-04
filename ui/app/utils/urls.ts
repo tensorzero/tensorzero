@@ -70,6 +70,11 @@ export function toEvaluationUrl(
   return baseUrl;
 }
 
+export function toEvaluationRunsUrl(runIds: string | string[]): string {
+  const ids = Array.isArray(runIds) ? runIds.join(",") : runIds;
+  return `/evaluation-runs?evaluation_run_ids=${encodeURIComponent(ids)}`;
+}
+
 export function toEvaluationDatapointUrl(
   evaluationName: string,
   datapointId: string,
