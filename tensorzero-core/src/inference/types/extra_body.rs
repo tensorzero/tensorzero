@@ -215,13 +215,27 @@ impl<'de> Deserialize<'de> for UnfilteredInferenceExtraBody {
                         ));
                     };
                     let pointer = pointer.to_string();
+                    let model_provider_name = obj
+                        .get("model_provider_name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("<unknown>");
 
                     if let Some(val) = obj.get("value") {
+                        tracing::warn!(
+                            model_provider_name,
+                            pointer,
+                            "Dropping `model_provider_name` filter from legacy `extra_body` entry — applying unconditionally",
+                        );
                         extra_body.push(DynamicExtraBody::Always {
                             pointer,
                             value: val.clone(),
                         });
                     } else if obj.get("delete").and_then(|v| v.as_bool()) == Some(true) {
+                        tracing::warn!(
+                            model_provider_name,
+                            pointer,
+                            "Dropping `model_provider_name` filter from legacy `extra_body` delete entry — applying unconditionally",
+                        );
                         extra_body.push(DynamicExtraBody::AlwaysDelete {
                             pointer,
                             delete: (),
