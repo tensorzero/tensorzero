@@ -61,7 +61,7 @@ from google.cloud import storage
 from google.cloud.aiplatform_v1.types import JobState
 from IPython.display import clear_output
 from tensorzero import (
-    FloatMetricFilter,
+    InferenceFilterFloatMetric,
     ListInferencesRequest,
     RawText,
     TensorZeroGateway,
@@ -99,13 +99,13 @@ tensorzero_client = TensorZeroGateway.build_embedded(
 
 # %%
 comparison_operator = ">="
-metric_node = FloatMetricFilter(
+metric_node = InferenceFilterFloatMetric(
     metric_name=METRIC_NAME,
     value=FLOAT_METRIC_THRESHOLD,
     comparison_operator=comparison_operator,
 )
-# from tensorzero import BooleanMetricFilter
-# metric_node = BooleanMetricFilter(
+# from tensorzero import InferenceFilterBooleanMetric
+# metric_node = InferenceFilterBooleanMetric(
 #     metric_name=METRIC_NAME,
 #     value=True  # or False
 # )
