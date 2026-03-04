@@ -212,7 +212,10 @@ const mixedEvents: GatewayEvent[] = [
         tool_call_event_id: "rejected-tool-call-event-id",
         outcome: {
           type: "failure",
-          error: { kind: "Validation", message: "Authorization denied" },
+          error: {
+            kind: "tool",
+            error: { kind: "validation", message: "Authorization denied" },
+          },
         },
       },
     },

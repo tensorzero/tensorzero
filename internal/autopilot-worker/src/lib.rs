@@ -9,7 +9,7 @@ mod wrapper;
 pub use worker::{
     AutopilotWorker, AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker,
 };
-pub use wrapper::{ClientTaskToolWrapper, ToolFailure};
+pub use wrapper::ClientTaskToolWrapper;
 
 // Re-export useful types from durable-tools and autopilot-tools
 pub use durable_tools::{

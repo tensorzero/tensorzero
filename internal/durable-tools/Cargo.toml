@@ -33,6 +33,7 @@ tensorzero.workspace = true
 url = "2"
 secrecy.workspace = true
 
+tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-core.workspace = true
 tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
 ts-rs = { workspace = true, optional = true }

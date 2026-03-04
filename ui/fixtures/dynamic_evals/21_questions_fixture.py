@@ -56,7 +56,7 @@ async def play_21_questions(
 async def safe_play_21_questions(
     client: AsyncTensorZeroGateway, semaphore: asyncio.Semaphore, run_id: str
 ) -> Optional[bool]:
-    run_episode_response = await client.dynamic_evaluation_run_episode(run_id=run_id, tags={"baz": "bat"})
+    run_episode_response = await client.workflow_evaluation_run_episode(run_id=run_id, tags={"baz": "bat"})
     episode_id = run_episode_response.episode_id
     try:
         return await play_21_questions(client, semaphore, episode_id)
@@ -65,13 +65,13 @@ async def safe_play_21_questions(
         return None
 
 
-async def run_dynamic_evaluation(
+async def run_workflow_evaluation(
     t0: AsyncTensorZeroGateway,
     display_name: str,
     ask_question_variant: str,
 ):
     num_games = 50
-    run_info = await t0.dynamic_evaluation_run(
+    run_info = await t0.workflow_evaluation_run(
         variants={"ask_question": ask_question_variant, "answer_question": "baseline"},
         project_name="21_questions",
         display_name=display_name,
@@ -96,9 +96,9 @@ async def main():
         timeout=60,
     )
 
-    await run_dynamic_evaluation(t0, "gpt-4.1-nano", "gpt-4.1-nano")
-    await run_dynamic_evaluation(t0, "baseline", "baseline")
-    await run_dynamic_evaluation(t0, "gpt-4.1-mini", "gpt-4.1-mini")
+    await run_workflow_evaluation(t0, "gpt-4.1-nano", "gpt-4.1-nano")
+    await run_workflow_evaluation(t0, "baseline", "baseline")
+    await run_workflow_evaluation(t0, "gpt-4.1-mini", "gpt-4.1-mini")
 
 
 if __name__ == "__main__":
