@@ -132,7 +132,7 @@ impl HTTPGateway {
         Ok(resp)
     }
 
-    fn customize_builder<'a>(
+    pub fn customize_builder<'a>(
         &self,
         mut builder: TensorzeroRequestBuilder<'a>,
     ) -> TensorzeroRequestBuilder<'a> {

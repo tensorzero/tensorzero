@@ -8,11 +8,14 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::Stream;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Deserialize;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
+use evaluations::sse_events::{
+    EvaluationRunCompleteEvent, EvaluationRunErrorEvent, EvaluationRunEvent,
+    EvaluationRunFatalErrorEvent, EvaluationRunStartEvent, EvaluationRunSuccessEvent,
+};
 use evaluations::stats::{EvaluationError, EvaluationInfo, EvaluationUpdate};
 use evaluations::{
     EvaluationVariant, RunEvaluationWithAppStateParams, run_evaluation_with_app_state,
@@ -33,10 +36,14 @@ use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct RunEvaluationRequest {
-    /// The evaluation configuration (serialized)
-    pub evaluation_config: EvaluationConfig,
-    /// The function configuration for output schema validation
-    pub function_config: EvaluationFunctionConfig,
+    /// The evaluation configuration (serialized).
+    /// When `None`, the server resolves this from its loaded config using `evaluation_name`.
+    #[serde(default)]
+    pub evaluation_config: Option<EvaluationConfig>,
+    /// The function configuration for output schema validation.
+    /// When `None`, the server resolves this from its loaded config using the evaluation's function name.
+    #[serde(default)]
+    pub function_config: Option<EvaluationFunctionConfig>,
     /// Name of the evaluation
     pub evaluation_name: String,
     /// Name of the dataset to evaluate (optional, either this or datapoint_ids must be provided)
@@ -73,89 +80,28 @@ fn default_inference_cache() -> String {
     "on".to_string()
 }
 
-/// SSE event types for evaluation streaming.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum EvaluationRunEvent {
-    Start(EvaluationRunStartEvent),
-    Success(EvaluationRunSuccessEvent),
-    Error(EvaluationRunErrorEvent),
-    FatalError(EvaluationRunFatalErrorEvent),
-    Complete(EvaluationRunCompleteEvent),
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-pub struct EvaluationRunStartEvent {
-    pub evaluation_run_id: Uuid,
-    pub num_datapoints: usize,
-    pub evaluation_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dataset_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub variant_name: Option<String>,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EvaluationRunSuccessEvent {
-    pub evaluation_run_id: Uuid,
-    pub datapoint: Value,
-    pub response: Value,
-    pub evaluations: HashMap<String, Option<Value>>,
-    pub evaluator_errors: HashMap<String, String>,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EvaluationRunErrorEvent {
-    pub evaluation_run_id: Uuid,
-    pub datapoint_id: Uuid,
-    pub message: String,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-pub struct EvaluationRunFatalErrorEvent {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub evaluation_run_id: Option<Uuid>,
-    pub message: String,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EvaluationRunCompleteEvent {
-    pub evaluation_run_id: Uuid,
-}
-
-impl EvaluationRunSuccessEvent {
-    fn try_from_info(evaluation_run_id: Uuid, info: EvaluationInfo) -> Result<Self, Error> {
-        let datapoint = serde_json::to_value(info.datapoint).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize datapoint: {e}"),
-            })
-        })?;
-        let response = serde_json::to_value(info.response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize inference response: {e}"),
-            })
-        })?;
-
-        Ok(Self {
-            evaluation_run_id,
-            datapoint,
-            response,
-            evaluations: info.evaluations,
-            evaluator_errors: info.evaluator_errors,
+fn success_event_from_info(
+    evaluation_run_id: Uuid,
+    info: EvaluationInfo,
+) -> Result<EvaluationRunSuccessEvent, Error> {
+    let datapoint = serde_json::to_value(info.datapoint).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize datapoint: {e}"),
         })
-    }
+    })?;
+    let response = serde_json::to_value(info.response).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize inference response: {e}"),
+        })
+    })?;
+
+    Ok(EvaluationRunSuccessEvent {
+        evaluation_run_id,
+        datapoint,
+        response,
+        evaluations: info.evaluations,
+        evaluator_errors: info.evaluator_errors,
+    })
 }
 
 // =============================================================================
@@ -168,6 +114,7 @@ struct EvaluationStreamParams {
     evaluation_name: String,
     dataset_name: Option<String>,
     variant_name: Option<String>,
+    evaluation_config: Option<EvaluationConfig>,
     receiver: mpsc::Receiver<EvaluationUpdate>,
     batcher_join_handles: Vec<BatchWriterHandle>,
 }
@@ -181,6 +128,7 @@ fn create_evaluation_stream(
         evaluation_name,
         dataset_name,
         variant_name,
+        evaluation_config,
         mut receiver,
         batcher_join_handles,
     } = params;
@@ -193,6 +141,7 @@ fn create_evaluation_stream(
             evaluation_name,
             dataset_name,
             variant_name,
+            evaluation_config,
         });
 
         match serde_json::to_string(&start_event) {
@@ -214,7 +163,7 @@ fn create_evaluation_stream(
             let event = match update {
                 EvaluationUpdate::RunInfo(_) => continue, // Already sent start event
                 EvaluationUpdate::Success(info) => {
-                    match EvaluationRunSuccessEvent::try_from_info(evaluation_run_id, info) {
+                    match success_event_from_info(evaluation_run_id, info) {
                         Ok(success_event) => EvaluationRunEvent::Success(success_event),
                         Err(e) => EvaluationRunEvent::Error(EvaluationRunErrorEvent {
                             evaluation_run_id,
@@ -347,10 +296,58 @@ pub async fn run_evaluation_handler(
     let dataset_name_for_event = request.dataset_name.clone();
     let evaluation_name_for_event = request.evaluation_name.clone();
 
+    // Track whether configs were server-resolved (for including in start event)
+    let config_was_server_resolved = request.evaluation_config.is_none();
+
+    // Resolve evaluation_config: use provided or look up from app_state
+    let resolved_evaluation_config = match request.evaluation_config {
+        Some(config) => config,
+        None => app_state
+            .config
+            .evaluations
+            .get(&request.evaluation_name)
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "Evaluation `{}` not found in config",
+                        request.evaluation_name
+                    ),
+                })
+            })?
+            .as_ref()
+            .clone(),
+    };
+
+    // Resolve function_config: use provided or look up from app_state
+    let resolved_function_config = match request.function_config {
+        Some(config) => config,
+        None => {
+            let EvaluationConfig::Inference(ref inference_eval_config) = resolved_evaluation_config;
+            let function_name = &inference_eval_config.function_name;
+            let function = app_state.config.functions.get(function_name).ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "Function `{function_name}` (referenced by evaluation `{}`) not found in config",
+                        request.evaluation_name
+                    ),
+                })
+            })?;
+            EvaluationFunctionConfig::from(function.as_ref())
+        }
+    };
+
+    // Include evaluation_config in start event when it was server-resolved
+    // (so HTTP clients can use it for summary_stats)
+    let evaluation_config_for_event = if config_was_server_resolved {
+        Some(resolved_evaluation_config.clone())
+    } else {
+        None
+    };
+
     // Build the params for run_evaluation_with_app_state
     let params = RunEvaluationWithAppStateParams {
-        evaluation_config: request.evaluation_config,
-        function_config: request.function_config,
+        evaluation_config: resolved_evaluation_config,
+        function_config: resolved_function_config,
         evaluation_name: request.evaluation_name,
         dataset_name: request.dataset_name,
         datapoint_ids: request.datapoint_ids,
@@ -381,6 +378,7 @@ pub async fn run_evaluation_handler(
         evaluation_name: evaluation_name_for_event,
         dataset_name: dataset_name_for_event,
         variant_name: variant_name_for_event,
+        evaluation_config: evaluation_config_for_event,
         receiver: result.receiver,
         batcher_join_handles: result.batcher_join_handles,
     });

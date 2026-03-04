@@ -1,6 +1,11 @@
 #![recursion_limit = "256"]
 
 use std::{collections::HashMap, sync::Arc};
+
+use evaluations::RunInfo;
+use evaluations::sse_events::{EvaluationRunEvent, EvaluationRunSuccessEvent};
+use evaluations::stats::{EvaluationError, EvaluationInfo, EvaluationUpdate};
+use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::config::snapshot::ConfigSnapshot;
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::HealthCheckable;
@@ -12,10 +17,13 @@ use tensorzero_core::endpoints::workflow_evaluation_run::{
     WorkflowEvaluationRunEpisodeParams, WorkflowEvaluationRunEpisodeResponse,
 };
 use tensorzero_core::error::{Error, ErrorDetails};
+use tensorzero_core::evaluations::EvaluationConfig;
 use tensorzero_core::stored_inference::StoredSample;
 use tensorzero_optimizers::endpoints::{
     launch_optimization, launch_optimization_workflow, poll_optimization,
 };
+use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 // Re-export the core client from tensorzero-core
@@ -124,6 +132,35 @@ pub mod test_helpers;
 pub use tensorzero_core::observability;
 
 use crate::git::GitInfo;
+
+/// Parameters for running an evaluation over HTTP via the SSE endpoint.
+#[derive(Debug, serde::Serialize)]
+pub struct RunEvaluationHttpParams {
+    pub evaluation_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dataset_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datapoint_ids: Option<Vec<Uuid>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant_name: Option<String>,
+    pub concurrency: u32,
+    pub inference_cache: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_datapoints: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precision_targets: Option<HashMap<String, f64>>,
+}
+
+/// Result from running an evaluation over HTTP via SSE.
+/// Similar to `EvaluationStreamResult` but without `batcher_join_handles`
+/// since the server manages batch writers.
+pub struct ClientEvaluationStreamResult {
+    pub receiver: mpsc::Receiver<EvaluationUpdate>,
+    pub run_info: RunInfo,
+    pub evaluation_config: Arc<EvaluationConfig>,
+}
 
 // NOTE(shuyangli): For methods that delegate to APIs in the gateway, the arguments generally are flattened from the request type for
 // ease of use, except when the type contains more than 2-3 fields or multiple fields with the same type (e.g. `ListDatapointsRequest`).
@@ -514,6 +551,16 @@ pub trait ClientExt {
         &self,
         request: WriteConfigRequest,
     ) -> Result<WriteConfigResponse, TensorZeroError>;
+
+    /// Runs an evaluation over HTTP via the SSE endpoint.
+    ///
+    /// This method is only available in HTTPGateway mode. It POSTs to
+    /// `internal/evaluations/run` and streams SSE events back, converting them
+    /// into `EvaluationUpdate` messages on an mpsc channel.
+    async fn run_evaluation_sse(
+        &self,
+        params: RunEvaluationHttpParams,
+    ) -> Result<ClientEvaluationStreamResult, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData>;
@@ -1439,6 +1486,210 @@ impl ClientExt for Client {
         }
     }
 
+    async fn run_evaluation_sse(
+        &self,
+        params: RunEvaluationHttpParams,
+    ) -> Result<ClientEvaluationStreamResult, TensorZeroError> {
+        let ClientMode::HTTPGateway(client) = self.mode() else {
+            return Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InternalError {
+                    message:
+                        "`run_evaluation_sse` is only supported in HTTPGateway mode. Use `run_evaluation_core_streaming` for embedded mode."
+                            .to_string(),
+                })
+                .into(),
+            });
+        };
+
+        let url = client
+            .base_url
+            .join("internal/evaluations/run")
+            .map_err(|e| TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidBaseUrl {
+                    message: format!(
+                        "Failed to join base URL with /internal/evaluations/run endpoint: {e}"
+                    ),
+                })
+                .into(),
+            })?;
+
+        let builder = client.http_client.post(url).json(&params);
+        let event_source = client.customize_builder(builder).eventsource().await;
+
+        let mut event_source = match event_source {
+            Ok(es) => es,
+            Err(e) => {
+                if let reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp) = e
+                {
+                    return Err(TensorZeroError::Http {
+                        status_code: code.as_u16(),
+                        text: resp.text().await.ok(),
+                        source: Error::new(ErrorDetails::EvaluationRun {
+                            message: "Failed to start evaluation SSE stream".to_string(),
+                        })
+                        .into(),
+                    });
+                }
+                return Err(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::EvaluationRun {
+                        message: format!("Failed to open evaluation SSE stream: {e:?}"),
+                    })
+                    .into(),
+                });
+            }
+        };
+
+        // Read events until we get the Start event
+        let start_event = loop {
+            let Some(event_result) = event_source.next().await else {
+                return Err(TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::EvaluationRun {
+                        message: "SSE stream ended before receiving Start event".to_string(),
+                    })
+                    .into(),
+                });
+            };
+            match event_result {
+                Err(e) => {
+                    return Err(TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::EvaluationRun {
+                            message: format!("Evaluation SSE stream error: {e}"),
+                        })
+                        .into(),
+                    });
+                }
+                Ok(reqwest_sse_stream::Event::Open) => continue,
+                Ok(reqwest_sse_stream::Event::Message(message)) => {
+                    let event: EvaluationRunEvent =
+                        serde_json::from_str(&message.data).map_err(|e| {
+                            TensorZeroError::Other {
+                                source: Error::new(ErrorDetails::Serialization {
+                                    message: format!(
+                                        "Failed to deserialize evaluation SSE event: {e}"
+                                    ),
+                                })
+                                .into(),
+                            }
+                        })?;
+                    match event {
+                        EvaluationRunEvent::Start(start) => break start,
+                        EvaluationRunEvent::FatalError(fatal) => {
+                            return Err(TensorZeroError::Other {
+                                source: Error::new(ErrorDetails::EvaluationRun {
+                                    message: format!("Evaluation fatal error: {}", fatal.message),
+                                })
+                                .into(),
+                            });
+                        }
+                        _ => {
+                            return Err(TensorZeroError::Other {
+                                source: Error::new(ErrorDetails::EvaluationRun {
+                                    message: "Expected Start event as first evaluation SSE event"
+                                        .to_string(),
+                                })
+                                .into(),
+                            });
+                        }
+                    }
+                }
+            }
+        };
+
+        let run_info = RunInfo {
+            evaluation_run_id: start_event.evaluation_run_id,
+            num_datapoints: start_event.num_datapoints,
+        };
+
+        let evaluation_config =
+            start_event
+                .evaluation_config
+                .ok_or_else(|| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::EvaluationRun {
+                        message: "Server did not include `evaluation_config` in the Start event. \
+                              Ensure the server is up to date."
+                            .to_string(),
+                    })
+                    .into(),
+                })?;
+        let evaluation_config = Arc::new(evaluation_config);
+
+        let (sender, receiver) = mpsc::channel(128);
+        let verbose_errors = self.verbose_errors;
+
+        // Spawn a background task to consume remaining SSE events.
+        // This task only reads from the SSE stream and forwards to the mpsc channel;
+        // it is safe for the gateway to shut down without waiting for it.
+        #[expect(clippy::disallowed_methods)]
+        tokio::spawn(async move {
+            while let Some(event_result) = event_source.next().await {
+                match event_result {
+                    Err(e) => {
+                        tracing::error!("Evaluation SSE stream error: {e:?}");
+                        break;
+                    }
+                    Ok(reqwest_sse_stream::Event::Open) => continue,
+                    Ok(reqwest_sse_stream::Event::Message(message)) => {
+                        let event: EvaluationRunEvent = match serde_json::from_str(&message.data) {
+                            Ok(e) => e,
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to deserialize evaluation SSE event: {e}, raw: {}",
+                                    if verbose_errors {
+                                        message.data.clone()
+                                    } else {
+                                        "<hidden>".to_string()
+                                    }
+                                );
+                                continue;
+                            }
+                        };
+
+                        match event {
+                            EvaluationRunEvent::Success(success) => {
+                                let update = match convert_success_event(success) {
+                                    Ok(update) => update,
+                                    Err(e) => {
+                                        tracing::error!("Failed to convert success event: {e}");
+                                        continue;
+                                    }
+                                };
+                                if sender.send(update).await.is_err() {
+                                    break; // receiver dropped
+                                }
+                            }
+                            EvaluationRunEvent::Error(error) => {
+                                let update = EvaluationUpdate::Error(EvaluationError {
+                                    datapoint_id: error.datapoint_id,
+                                    message: error.message,
+                                });
+                                if sender.send(update).await.is_err() {
+                                    break; // receiver dropped
+                                }
+                            }
+                            EvaluationRunEvent::FatalError(fatal) => {
+                                tracing::error!("Evaluation fatal error: {}", fatal.message);
+                                break;
+                            }
+                            EvaluationRunEvent::Complete(_) => {
+                                break;
+                            }
+                            EvaluationRunEvent::Start(_) => {
+                                // Unexpected second Start event, ignore
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(ClientEvaluationStreamResult {
+            receiver,
+            run_info,
+            evaluation_config,
+        })
+    }
+
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData> {
         match self.mode() {
@@ -1446,4 +1697,20 @@ impl ClientExt for Client {
             ClientMode::HTTPGateway(_) => None,
         }
     }
+}
+
+/// Converts an `EvaluationRunSuccessEvent` (with JSON `Value` fields) back into
+/// an `EvaluationUpdate::Success` with deserialized `Datapoint` and `InferenceResponse`.
+fn convert_success_event(
+    success: EvaluationRunSuccessEvent,
+) -> Result<EvaluationUpdate, serde_json::Error> {
+    let datapoint: Datapoint = serde_json::from_value(success.datapoint)?;
+    let response: InferenceResponse = serde_json::from_value(success.response)?;
+
+    Ok(EvaluationUpdate::Success(EvaluationInfo {
+        datapoint,
+        response,
+        evaluations: success.evaluations,
+        evaluator_errors: success.evaluator_errors,
+    }))
 }

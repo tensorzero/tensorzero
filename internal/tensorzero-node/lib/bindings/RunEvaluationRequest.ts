@@ -8,13 +8,15 @@ import type { UninitializedVariantInfo } from "./UninitializedVariantInfo";
  */
 export type RunEvaluationRequest = {
   /**
-   * The evaluation configuration (serialized)
+   * The evaluation configuration (serialized).
+   * When `None`, the server resolves this from its loaded config using `evaluation_name`.
    */
-  evaluation_config: EvaluationConfig;
+  evaluation_config?: EvaluationConfig;
   /**
-   * The function configuration for output schema validation
+   * The function configuration for output schema validation.
+   * When `None`, the server resolves this from its loaded config using the evaluation's function name.
    */
-  function_config: EvaluationFunctionConfig;
+  function_config?: EvaluationFunctionConfig;
   /**
    * Name of the evaluation
    */
