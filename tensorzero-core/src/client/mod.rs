@@ -142,6 +142,16 @@ impl HTTPGateway {
         builder.headers(self.headers.clone())
     }
 
+    /// Like `customize_builder` but without applying the per-request timeout.
+    /// Use this for long-running SSE streams (e.g. evaluation runs) where the
+    /// stream lifetime is unbounded and should not be subject to the HTTP timeout.
+    pub fn customize_builder_no_timeout<'a>(
+        &self,
+        builder: TensorzeroRequestBuilder<'a>,
+    ) -> TensorzeroRequestBuilder<'a> {
+        builder.headers(self.headers.clone())
+    }
+
     pub async fn send_request(
         &self,
         builder: TensorzeroRequestBuilder<'_>,

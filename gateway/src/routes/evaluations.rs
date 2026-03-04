@@ -179,6 +179,12 @@ fn create_evaluation_stream(
                         message,
                     })
                 }
+                EvaluationUpdate::FatalError(message) => {
+                    EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
+                        evaluation_run_id: Some(evaluation_run_id),
+                        message,
+                    })
+                }
             };
 
             match serde_json::to_string(&event) {

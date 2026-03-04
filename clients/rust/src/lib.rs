@@ -1517,7 +1517,13 @@ impl ClientExt for Client {
             })?;
 
         let builder = client.http_client.post(url).json(&params);
-        let mut event_source = match client.customize_builder(builder).eventsource().await {
+        // Use no-timeout builder: evaluation streams are long-running and should not
+        // be subject to the per-request HTTP timeout.
+        let mut event_source = match client
+            .customize_builder_no_timeout(builder)
+            .eventsource()
+            .await
+        {
             Ok(es) => es,
             Err(reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(code, resp)) => {
                 return Err(TensorZeroError::Http {
@@ -1562,6 +1568,13 @@ impl ClientExt for Client {
                 let message = match event_result {
                     Err(e) => {
                         tracing::error!("Evaluation SSE stream error: {e:?}");
+                        // Propagate the transport error to the consumer so it doesn't
+                        // silently treat a broken stream as normal completion.
+                        let _ = sender
+                            .send(EvaluationUpdate::FatalError(format!(
+                                "SSE stream error: {e}"
+                            )))
+                            .await;
                         break;
                     }
                     Ok(reqwest_sse_stream::Event::Open) => continue,
@@ -1597,6 +1610,11 @@ impl ClientExt for Client {
                     }),
                     EvaluationRunEvent::FatalError(fatal) => {
                         tracing::error!("Evaluation fatal error: {}", fatal.message);
+                        // Propagate the fatal error to the consumer so it doesn't
+                        // silently treat early termination as normal completion.
+                        let _ = sender
+                            .send(EvaluationUpdate::FatalError(fatal.message))
+                            .await;
                         break;
                     }
                     EvaluationRunEvent::Complete(_) => break,
