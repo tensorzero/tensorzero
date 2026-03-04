@@ -34,7 +34,7 @@ from tensorzero import (
     StoredInputMessageContentText,
     StoredInputMessageContentThought,
     TensorZeroGateway,
-    patch_openai_client,
+    patch_openai_client,  # pyright: ignore[reportDeprecated]
 )
 from tensorzero.util import uuid7
 
