@@ -1,26 +1,10 @@
 import type { GatewayEvent } from "~/types/tensorzero";
-import type { FeedbackChartData } from "./FeedbackByVariantChart";
 import FeedbackByVariantChart, {
+  type ParsedFeedbackByVariant,
   parseFeedbackChartData,
 } from "./FeedbackByVariantChart";
 
-/**
- * Resolves tool_call arguments for a given tool_call_event_id
- * by scanning the events array for the matching tool_call event.
- */
-function resolveToolCallArguments(
-  toolCallEventId: string,
-  events: GatewayEvent[],
-): unknown {
-  const toolCall = events.find(
-    (e) =>
-      e.payload.type === "tool_call" &&
-      e.payload.side_info.tool_call_event_id === toolCallEventId,
-  );
-  return toolCall?.payload.type === "tool_call"
-    ? toolCall.payload.arguments
-    : undefined;
-}
+export type ToolResultVizData = ParsedFeedbackByVariant[];
 
 /**
  * Detects whether a tool_result event contains data that can be rendered
@@ -32,17 +16,13 @@ function resolveToolCallArguments(
  */
 export function detectToolResultVisualization(
   event: GatewayEvent,
-  events: GatewayEvent[],
-): FeedbackChartData | null {
+): ToolResultVizData | null {
   if (event.payload.type !== "tool_result") return null;
   if (event.payload.outcome.type !== "success") return null;
 
-  return parseFeedbackChartData(
-    event.payload.outcome.result,
-    resolveToolCallArguments(event.payload.tool_call_event_id, events),
-  );
+  return parseFeedbackChartData(event.payload.outcome.result);
 }
 
-export function ToolResultVisualization({ data }: { data: FeedbackChartData }) {
-  return <FeedbackByVariantChart {...data} />;
+export function ToolResultVisualization({ data }: { data: ToolResultVizData }) {
+  return <FeedbackByVariantChart data={data} />;
 }

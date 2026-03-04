@@ -601,7 +601,6 @@ const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
 type EventItemProps = {
   event: GatewayEvent;
-  events: GatewayEvent[];
   questionsMap?: Map<string, EventPayloadUserQuestion[]>;
   isPendingToolCall?: boolean;
   isPendingQuestion?: boolean;
@@ -611,7 +610,6 @@ type EventItemProps = {
 
 function EventItem({
   event,
-  events,
   questionsMap,
   isPendingToolCall = false,
   isPendingQuestion = false,
@@ -622,8 +620,8 @@ function EventItem({
 
   // Detect if this tool_result can be rendered as a visualization (e.g. chart)
   const toolResultVizData = useMemo(
-    () => detectToolResultVisualization(event, events),
-    [event, events],
+    () => detectToolResultVisualization(event),
+    [event],
   );
 
   const summary = summarizeEvent(event);
@@ -914,7 +912,6 @@ export default function EventStream({
         <EventErrorBoundary key={event.id} eventId={event.id}>
           <EventItem
             event={event}
-            events={events}
             questionsMap={questionsMap}
             isPendingToolCall={pendingToolCallIds?.has(event.id)}
             isPendingQuestion={pendingUserQuestionIds?.has(event.id)}

@@ -8,7 +8,7 @@ import {
 } from "~/components/function/variant/VariantPerformanceChart";
 
 // JSON.parse returns number (not bigint) for count, so override it.
-type ParsedFeedbackByVariant = Omit<FeedbackByVariant, "count"> & {
+export type ParsedFeedbackByVariant = Omit<FeedbackByVariant, "count"> & {
   count: number;
 };
 
@@ -38,35 +38,16 @@ export function parseFeedbackByVariant(
   return data;
 }
 
-export interface FeedbackChartData {
-  data: ParsedFeedbackByVariant[];
-  metricName: string;
-  functionName: string;
-}
-
 /**
- * Extracts chart data from a successful get_feedback_by_variant tool result.
- * Returns null if the tool result is not a valid feedback chart payload.
+ * Tries to parse a tool result string as FeedbackByVariant chart data.
+ * Returns null if the payload doesn't match the expected shape.
  */
 export function parseFeedbackChartData(
   toolResult: string,
-  toolArguments: unknown,
-): FeedbackChartData | null {
+): ParsedFeedbackByVariant[] | null {
   try {
     const raw: unknown = JSON.parse(toolResult);
-    const data = parseFeedbackByVariant(raw);
-    if (!data) return null;
-    const params =
-      typeof toolArguments === "object" && toolArguments !== null
-        ? (toolArguments as Record<string, unknown>)
-        : null;
-    const metricName =
-      typeof params?.metric_name === "string" ? params.metric_name : "metric";
-    const functionName =
-      typeof params?.function_name === "string"
-        ? params.function_name
-        : "function";
-    return { data, metricName, functionName };
+    return parseFeedbackByVariant(raw);
   } catch {
     return null;
   }
@@ -100,11 +81,13 @@ function toPerformanceRows(
   });
 }
 
+interface FeedbackByVariantChartProps {
+  data: ParsedFeedbackByVariant[];
+}
+
 export default function FeedbackByVariantChart({
   data,
-  metricName,
-  functionName,
-}: FeedbackChartData) {
+}: FeedbackByVariantChartProps) {
   const rows = toPerformanceRows(data);
   const { data: chartData, variantNames } = transformVariantPerformances(rows);
 
@@ -119,16 +102,11 @@ export default function FeedbackByVariantChart({
   const singleVariantMode = variantNames.length === 1;
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="text-fg-secondary text-xs font-medium">
-        <code>{metricName}</code> for <code>{functionName}</code>
-      </div>
-      <VariantPerformanceChart
-        data={chartData}
-        variantNames={variantNames}
-        timeGranularity="cumulative"
-        singleVariantMode={singleVariantMode}
-      />
-    </div>
+    <VariantPerformanceChart
+      data={chartData}
+      variantNames={variantNames}
+      timeGranularity="cumulative"
+      singleVariantMode={singleVariantMode}
+    />
   );
 }
