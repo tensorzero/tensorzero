@@ -133,11 +133,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
         )
         .slice(hasMoreEvents ? 1 : 0);
-      // Sort pending tool calls by creation time (oldest first for queue)
-      const pendingToolCalls = response.pending_tool_calls.sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      );
+      // Filter to only tool calls that require approval, then sort by creation time (oldest first)
+      const pendingToolCalls = response.pending_tool_calls
+        .filter(
+          (tc) =>
+            tc.payload.type === "tool_call" && tc.payload.requires_approval,
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
       // Sort pending user questions by creation time (oldest first for queue)
       const pendingUserQuestions = (response.pending_user_questions ?? []).sort(
         (a, b) =>

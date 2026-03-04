@@ -60,6 +60,7 @@ const toolingEvents: GatewayEvent[] = [
         type: "tool_call",
         name: "search_wikipedia",
         arguments: { query: "TensorZero" },
+        requires_approval: true,
         side_info: {
           tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
           session_id: sessionId,
@@ -142,6 +143,7 @@ const mixedEvents: GatewayEvent[] = [
         type: "tool_call",
         name: "search_wikipedia",
         arguments: { query: "TensorZero Autopilot" },
+        requires_approval: true,
         side_info: {
           tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
           session_id: sessionId,
@@ -420,6 +422,7 @@ const longFormEvents: GatewayEvent[] = [
         type: "tool_call",
         name: "search_wikipedia",
         arguments: JSON.parse(longToolArguments),
+        requires_approval: true,
         side_info: {
           tool_call_event_id: "8c9d0e1f-2a3b-4c4d-9e5f-1234567890e1",
           session_id: sessionId,
@@ -551,6 +554,7 @@ const visualizationEvents: GatewayEvent[] = [
       payload: {
         type: "tool_call",
         name: "topk_evaluation",
+        requires_approval: true,
         arguments: {
           evaluation_name: "test_topk_evaluation",
           dataset_name: "topk_test_dataset",

@@ -153,6 +153,10 @@ export function useAutopilotEventStream({
                   // Update pending tool calls based on event type
                   setPendingToolCalls((prev) => {
                     if (event.payload.type === "tool_call") {
+                      // Skip whitelisted tools that don't require approval
+                      if (!event.payload.requires_approval) {
+                        return prev;
+                      }
                       // Add new tool call if not already present
                       if (prev.some((e) => e.id === event.id)) {
                         return prev;
