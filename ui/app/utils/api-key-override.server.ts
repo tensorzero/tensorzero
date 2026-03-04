@@ -20,8 +20,15 @@ export const apiKeyCookie = createCookie("tz_gateway_key", {
   sameSite: "strict",
   path: "/",
   maxAge: 2592000, // 30 days
-  secure: true,
 });
+
+/** Secure flag should only be set when served over HTTPS, not plain HTTP. */
+export function isSecureRequest(request: Request): boolean {
+  // X-Forwarded-Proto is set by reverse proxies (nginx, cloud load balancers)
+  const forwarded = request.headers.get("x-forwarded-proto");
+  if (forwarded) return forwarded === "https";
+  return new URL(request.url).protocol === "https:";
+}
 
 const apiKeyStore = new AsyncLocalStorage<string | undefined>();
 

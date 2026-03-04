@@ -47,6 +47,7 @@ import {
 import {
   apiKeyCookie,
   getApiKeyFromRequest,
+  isSecureRequest,
   runWithRequest,
 } from "./utils/api-key-override.server";
 
@@ -131,7 +132,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       if (await getApiKeyFromRequest(request)) {
         return data(loaderData, {
           headers: {
-            "Set-Cookie": await apiKeyCookie.serialize("", { maxAge: 0 }),
+            "Set-Cookie": await apiKeyCookie.serialize("", {
+              maxAge: 0,
+              secure: isSecureRequest(request),
+            }),
           },
         });
       }

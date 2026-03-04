@@ -3,6 +3,7 @@ import {
   runWithRequest,
   getApiKeyFromRequest,
   getEffectiveApiKey,
+  isSecureRequest,
   apiKeyCookie,
 } from "./api-key-override.server";
 
@@ -27,6 +28,23 @@ beforeEach(() => {
   mockGetEnv.mockReturnValue({
     TENSORZERO_GATEWAY_URL: "http://localhost:3000",
     TENSORZERO_API_KEY: "",
+  });
+});
+
+describe("isSecureRequest", () => {
+  it("returns false for http URLs", () => {
+    expect(isSecureRequest(new Request("http://10.0.0.5:4000"))).toBe(false);
+  });
+
+  it("returns true for https URLs", () => {
+    expect(isSecureRequest(new Request("https://example.com"))).toBe(true);
+  });
+
+  it("respects x-forwarded-proto header", () => {
+    const request = new Request("http://localhost:3000", {
+      headers: { "x-forwarded-proto": "https" },
+    });
+    expect(isSecureRequest(request)).toBe(true);
   });
 });
 
