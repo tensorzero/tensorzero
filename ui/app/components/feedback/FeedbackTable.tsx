@@ -8,12 +8,13 @@ import type {
   FeedbackRow,
   FeedbackBounds,
   MetricConfig,
+  CommentFeedbackRow,
+  DemonstrationFeedbackRow,
 } from "~/types/tensorzero";
 import { useConfig } from "~/context/config";
 import { getFeedbackConfig } from "~/utils/config/feedback";
 import type { FeedbackConfig } from "~/utils/config/feedback";
 import { TableItemTime, TableItemShortUuid } from "~/components/ui/TableItems";
-import { ChevronRight } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -33,6 +34,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
+import { Sheet, SheetContent } from "~/components/ui/sheet";
+import { CommentModal, DemonstrationModal } from "./FeedbackTableModal";
 import { Skeleton } from "~/components/ui/skeleton";
 
 function formatTagKey(key: string): string {
@@ -42,7 +45,7 @@ function formatTagKey(key: string): string {
   return key;
 }
 
-export function FeedbackTableHeaders() {
+function MetricsTableHeaders() {
   return (
     <TableHeader>
       <TableRow>
@@ -56,10 +59,14 @@ export function FeedbackTableHeaders() {
   );
 }
 
+export function FeedbackTableHeaders() {
+  return <MetricsTableHeaders />;
+}
+
 export function FeedbackTableSkeleton() {
   return (
     <Table className="table-fixed">
-      <FeedbackTableHeaders />
+      <MetricsTableHeaders />
       <TableBody>
         {Array.from({ length: 3 }).map((_, i) => (
           <TableRow key={i}>
@@ -118,30 +125,36 @@ export default function FeedbackTable({
   latestByMetric,
 }: FeedbackTableProps) {
   const config = useConfig();
-  const [showOverwritten, setShowOverwritten] = useState(false);
 
-  const { latest, overwritten } = useMemo(() => {
-    if (!feedbackBounds || !latestByMetric) {
-      return { latest: feedback, overwritten: [] };
+  const { metrics, comments, demonstrations } = useMemo(() => {
+    // Filter to latest-only when bounds are available
+    let items = feedback;
+    if (feedbackBounds && latestByMetric) {
+      items = feedback.filter((item) => {
+        if (item.type === "comment")
+          return item.id === feedbackBounds.by_type.comment.last_id;
+        if (item.type === "demonstration")
+          return item.id === feedbackBounds.by_type.demonstration.last_id;
+        return latestByMetric[item.metric_name] === item.id;
+      });
     }
-    const latestList = feedback.filter((item) => {
-      if (item.type === "comment")
-        return item.id === feedbackBounds.by_type.comment.last_id;
-      if (item.type === "demonstration")
-        return item.id === feedbackBounds.by_type.demonstration.last_id;
-      return latestByMetric[item.metric_name] === item.id;
-    });
-    const latestIds = new Set(latestList.map((f) => f.id));
+
     return {
-      latest: latestList,
-      overwritten: feedback.filter((f) => !latestIds.has(f.id)),
+      metrics: items.filter((f) => f.type === "boolean" || f.type === "float"),
+      comments: items.filter(
+        (f): f is FeedbackRow & { type: "comment" } => f.type === "comment",
+      ) as (CommentFeedbackRow & { type: "comment" })[],
+      demonstrations: items.filter(
+        (f): f is FeedbackRow & { type: "demonstration" } =>
+          f.type === "demonstration",
+      ) as (DemonstrationFeedbackRow & { type: "demonstration" })[],
     };
   }, [feedback, feedbackBounds, latestByMetric]);
 
   if (feedback.length === 0) {
     return (
       <Table className="table-fixed">
-        <FeedbackTableHeaders />
+        <MetricsTableHeaders />
         <TableBody>
           <TableEmptyState message="No feedback found" />
         </TableBody>
@@ -150,66 +163,47 @@ export default function FeedbackTable({
   }
 
   return (
-    <Table className="table-fixed">
-      <FeedbackTableHeaders />
-      <TableBody>
-        {latest.map((item) => (
-          <FeedbackRowItem
-            key={item.id}
-            item={item}
-            metricConfig={config.metrics[getMetricName(item)]}
-            feedbackConfig={getFeedbackConfig(getMetricName(item), config)}
-          />
-        ))}
-        {overwritten.length > 0 && (
-          <>
-            <TableRow>
-              <TableCell colSpan={5} className="py-1">
-                <button
-                  type="button"
-                  className="text-fg-muted hover:text-fg-secondary flex items-center gap-1 text-xs transition-colors"
-                  onClick={() => setShowOverwritten(!showOverwritten)}
-                >
-                  <ChevronRight
-                    className={`h-3 w-3 transition-transform ${showOverwritten ? "rotate-90" : ""}`}
-                  />
-                  {overwritten.length} overwritten
-                </button>
-              </TableCell>
-            </TableRow>
-            {showOverwritten &&
-              overwritten.map((item) => (
-                <FeedbackRowItem
-                  key={item.id}
-                  item={item}
-                  metricConfig={config.metrics[getMetricName(item)]}
-                  feedbackConfig={getFeedbackConfig(
-                    getMetricName(item),
-                    config,
-                  )}
-                  isOverwritten
-                />
-              ))}
-          </>
-        )}
-      </TableBody>
-    </Table>
+    <div className="space-y-6">
+      {metrics.length > 0 && (
+        <Table className="table-fixed">
+          <MetricsTableHeaders />
+          <TableBody>
+            {metrics.map((item) => (
+              <MetricRowItem
+                key={item.id}
+                item={item}
+                metricConfig={config.metrics[getMetricName(item)]}
+                feedbackConfig={getFeedbackConfig(getMetricName(item), config)}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      )}
+
+      {comments.length > 0 && <CommentsList comments={comments} />}
+
+      {demonstrations.length > 0 && (
+        <DemonstrationsList demonstrations={demonstrations} />
+      )}
+    </div>
   );
 }
 
-interface FeedbackRowItemProps {
+// ---------------------------------------------------------------------------
+// Metrics table row
+// ---------------------------------------------------------------------------
+
+interface MetricRowItemProps {
   item: FeedbackRow;
   metricConfig: MetricConfig | undefined;
   feedbackConfig: FeedbackConfig | undefined;
-  isOverwritten?: boolean;
 }
 
-function FeedbackRowItem({
+function MetricRowItem({
   item,
   metricConfig,
   feedbackConfig,
-  isOverwritten,
-}: FeedbackRowItemProps) {
+}: MetricRowItemProps) {
   const displayMetric = getDisplayMetricName(item);
 
   const allTags = Object.entries(item.tags).filter(
@@ -217,10 +211,7 @@ function FeedbackRowItem({
   );
 
   return (
-    <TableRow
-      data-testid={`feedback-row-${item.id}`}
-      className={isOverwritten ? "opacity-50" : undefined}
-    >
+    <TableRow data-testid={`feedback-row-${item.id}`}>
       <TableCell>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -246,16 +237,16 @@ function FeedbackRowItem({
         {allTags.length > 0 ? (
           <TagsPopover tags={allTags} />
         ) : (
-          <span className="text-fg-muted text-xs">—</span>
+          <span className="text-fg-muted text-xs">&mdash;</span>
         )}
       </TableCell>
       <TableCell>
-        <MetricConfigInfo feedbackConfig={feedbackConfig} item={item} />
+        <MetricConfigInfo feedbackConfig={feedbackConfig} />
       </TableCell>
       <TableCell>
         <span className="text-fg-tertiary flex items-center gap-1.5 text-xs">
           <TableItemTime timestamp={item.timestamp} />
-          <span className="text-fg-muted">·</span>
+          <span className="text-fg-muted">&middot;</span>
           <TableItemShortUuid id={item.id} />
         </span>
       </TableCell>
@@ -263,31 +254,28 @@ function FeedbackRowItem({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Metric config info (only for boolean/float metrics now)
+// ---------------------------------------------------------------------------
+
 interface MetricConfigInfoProps {
   feedbackConfig: FeedbackConfig | undefined;
-  item: FeedbackRow;
 }
 
-function MetricConfigInfo({ feedbackConfig, item }: MetricConfigInfoProps) {
-  if (!feedbackConfig) {
-    return <span className="text-fg-muted text-xs">—</span>;
+function MetricConfigInfo({ feedbackConfig }: MetricConfigInfoProps) {
+  if (
+    !feedbackConfig ||
+    feedbackConfig.type === "comment" ||
+    feedbackConfig.type === "demonstration"
+  ) {
+    return <span className="text-fg-muted text-xs">&mdash;</span>;
   }
 
-  const parts: string[] = [];
-
-  if (feedbackConfig.type === "comment") {
-    parts.push("comment");
-    if (item.type === "comment" && item.target_type) {
-      parts.push(item.target_type);
-    }
-  } else if (feedbackConfig.type === "demonstration") {
-    parts.push("demonstration");
-    parts.push("inference");
-  } else {
-    parts.push(feedbackConfig.type);
-    parts.push(feedbackConfig.optimize);
-    parts.push(feedbackConfig.level);
-  }
+  const parts = [
+    feedbackConfig.type,
+    feedbackConfig.optimize,
+    feedbackConfig.level,
+  ];
 
   return (
     <span className="text-fg-tertiary text-xs">
@@ -295,7 +283,7 @@ function MetricConfigInfo({ feedbackConfig, item }: MetricConfigInfoProps) {
         <span key={i}>
           {i > 0 && (
             <span className="text-fg-muted mx-1" aria-hidden>
-              ·
+              &middot;
             </span>
           )}
           {part}
@@ -304,6 +292,134 @@ function MetricConfigInfo({ feedbackConfig, item }: MetricConfigInfoProps) {
     </span>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Comments list
+// ---------------------------------------------------------------------------
+
+interface CommentsListProps {
+  comments: (CommentFeedbackRow & { type: "comment" })[];
+}
+
+function CommentsList({ comments }: CommentsListProps) {
+  return (
+    <div className="space-y-2">
+      <h4 className="text-fg-tertiary text-xs font-medium">
+        Comments ({comments.length})
+      </h4>
+      <div className="divide-border divide-y">
+        {comments.map((comment) => (
+          <CommentRow key={comment.id} comment={comment} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface CommentRowProps {
+  comment: CommentFeedbackRow & { type: "comment" };
+}
+
+function CommentRow({ comment }: CommentRowProps) {
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  const allTags = Object.entries(comment.tags).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+
+  return (
+    <div
+      data-testid={`feedback-row-${comment.id}`}
+      className="hover:bg-bg-secondary flex cursor-pointer items-start justify-between gap-4 py-2.5"
+      onClick={() => setIsSheetOpen(true)}
+    >
+      <p className="text-fg-primary line-clamp-2 min-w-0 flex-1 text-sm">
+        {comment.value}
+      </p>
+      <div className="text-fg-tertiary flex shrink-0 items-center gap-2 text-xs">
+        {allTags.length > 0 && (
+          <span onClick={(e) => e.stopPropagation()}>
+            <TagsPopover tags={allTags} />
+          </span>
+        )}
+        <TableItemTime timestamp={comment.timestamp} />
+        <span className="text-fg-muted">&middot;</span>
+        <TableItemShortUuid id={comment.id} />
+      </div>
+      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+          <CommentModal feedback={comment} />
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Demonstrations list
+// ---------------------------------------------------------------------------
+
+interface DemonstrationsListProps {
+  demonstrations: (DemonstrationFeedbackRow & { type: "demonstration" })[];
+}
+
+function DemonstrationsList({ demonstrations }: DemonstrationsListProps) {
+  return (
+    <div className="space-y-2">
+      <h4 className="text-fg-tertiary text-xs font-medium">
+        Demonstrations ({demonstrations.length})
+      </h4>
+      <div className="divide-border divide-y">
+        {demonstrations.map((demo) => (
+          <DemonstrationRow key={demo.id} demonstration={demo} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface DemonstrationRowProps {
+  demonstration: DemonstrationFeedbackRow & { type: "demonstration" };
+}
+
+function DemonstrationRow({ demonstration }: DemonstrationRowProps) {
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  const allTags = Object.entries(demonstration.tags).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+
+  return (
+    <div
+      data-testid={`feedback-row-${demonstration.id}`}
+      className="hover:bg-bg-secondary flex cursor-pointer items-start justify-between gap-4 py-2.5"
+      onClick={() => setIsSheetOpen(true)}
+    >
+      <p className="text-fg-primary line-clamp-2 min-w-0 flex-1 font-mono text-sm">
+        {demonstration.value}
+      </p>
+      <div className="text-fg-tertiary flex shrink-0 items-center gap-2 text-xs">
+        {allTags.length > 0 && (
+          <span onClick={(e) => e.stopPropagation()}>
+            <TagsPopover tags={allTags} />
+          </span>
+        )}
+        <TableItemTime timestamp={demonstration.timestamp} />
+        <span className="text-fg-muted">&middot;</span>
+        <TableItemShortUuid id={demonstration.id} />
+      </div>
+      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+          <DemonstrationModal feedback={demonstration} />
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tags popover (shared)
+// ---------------------------------------------------------------------------
 
 interface TagsPopoverProps {
   tags: [string, string][];
