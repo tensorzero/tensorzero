@@ -1592,7 +1592,12 @@ impl ClientExt for Client {
                         tracing::error!(
                             "Failed to deserialize evaluation SSE event: {e}, raw: {raw}"
                         );
-                        continue;
+                        let _ = sender
+                            .send(EvaluationUpdate::FatalError(format!(
+                                "Failed to deserialize SSE event: {e}"
+                            )))
+                            .await;
+                        break;
                     }
                 };
 
@@ -1601,7 +1606,12 @@ impl ClientExt for Client {
                         Ok(update) => update,
                         Err(e) => {
                             tracing::error!("Failed to convert success event: {e}");
-                            continue;
+                            let _ = sender
+                                .send(EvaluationUpdate::FatalError(format!(
+                                    "Failed to convert success event: {e}"
+                                )))
+                                .await;
+                            break;
                         }
                     },
                     EvaluationRunEvent::Error(error) => EvaluationUpdate::Error(EvaluationError {

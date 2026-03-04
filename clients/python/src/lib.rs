@@ -589,7 +589,7 @@ fn parse_adaptive_stopping(
     };
     let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
         PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-            "adaptive_stopping['precision'] must be a dictionary",
+            "`adaptive_stopping[\"precision\"]` must be a dictionary",
         )
     })?;
     let mut map = HashMap::new();
@@ -677,7 +677,14 @@ fn build_http_evaluation_params(
     inference_cache: String,
     max_datapoints: Option<u32>,
     precision_targets_map: HashMap<String, f32>,
-) -> RunEvaluationHttpParams {
+) -> PyResult<RunEvaluationHttpParams> {
+    let concurrency: u32 = concurrency.try_into().map_err(|_| {
+        PyValueError::new_err(format!(
+            "`concurrency` must fit in a u32 (max {}), got {concurrency}",
+            u32::MAX
+        ))
+    })?;
+
     let (variant_name, internal_dynamic_variant_config) = match variant {
         EvaluationVariant::Name(name) => (Some(name), None),
         EvaluationVariant::Info(info) => (None, Some(*info)),
@@ -694,17 +701,17 @@ fn build_http_evaluation_params(
         )
     };
 
-    RunEvaluationHttpParams {
+    Ok(RunEvaluationHttpParams {
         evaluation_name,
         dataset_name,
         datapoint_ids,
         variant_name,
-        concurrency: concurrency as u32,
+        concurrency,
         inference_cache,
         internal_dynamic_variant_config,
         max_datapoints,
         precision_targets,
-    }
+    })
 }
 
 /// Helper function to construct an EvaluationVariant from the optional variant_name and internal_dynamic_variant_config parameters.
@@ -1475,7 +1482,7 @@ impl TensorZeroGateway {
                 inference_cache,
                 max_datapoints,
                 precision_targets_map,
-            );
+            )?;
 
             tokio_block_on_without_gil(this.py(), client.run_evaluation_sse(params))
                 .map_err(|e| convert_error(this.py(), e))?
@@ -2629,7 +2636,7 @@ impl AsyncTensorZeroGateway {
                     inference_cache,
                     max_datapoints,
                     precision_targets_map,
-                );
+                )?;
 
                 client
                     .run_evaluation_sse(params)
