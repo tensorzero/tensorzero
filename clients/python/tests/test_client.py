@@ -42,7 +42,6 @@ from tensorzero import (
     AlwaysExtraBodyDelete,
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
-    DynamicEvaluationRunResponse,
     FeedbackResponse,
     FileBase64,
     FileUrl,
@@ -64,6 +63,7 @@ from tensorzero import (
     ToolResult,
     VariantExtraBody,
     VariantExtraBodyDelete,
+    WorkflowEvaluationRunResponse,
 )
 from tensorzero.types import (
     ChatChunk,
@@ -3277,18 +3277,18 @@ def test_content_block_text_init_validation():
     assert text.arguments == arguments
 
 
-def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
-    response = sync_client.dynamic_evaluation_run(
+def test_sync_workflow_evaluation_run(sync_client: TensorZeroGateway):
+    response = sync_client.workflow_evaluation_run(
         variants={"basic_test": "test2"},
         tags={"foo": "bar"},
     )
-    assert isinstance(response, DynamicEvaluationRunResponse)
+    assert isinstance(response, WorkflowEvaluationRunResponse)
     run_id = response.run_id
     assert isinstance(run_id, UUID)
     assert run_id is not None
 
     # Get the episode id
-    episode_id = sync_client.dynamic_evaluation_run_episode(
+    episode_id = sync_client.workflow_evaluation_run_episode(
         run_id=run_id,
         task_name="basic_test",
     ).episode_id
@@ -3310,20 +3310,20 @@ def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_async_dynamic_evaluation_run(
+async def test_async_workflow_evaluation_run(
     async_client: AsyncTensorZeroGateway,
 ):
-    response = await async_client.dynamic_evaluation_run(
+    response = await async_client.workflow_evaluation_run(
         variants={"basic_test": "test2"},
         tags={"foo": "bar"},
     )
-    assert isinstance(response, DynamicEvaluationRunResponse)
+    assert isinstance(response, WorkflowEvaluationRunResponse)
     run_id = response.run_id
     assert isinstance(run_id, UUID)
     assert run_id is not None
 
     # Get the episode id
-    episode_response = await async_client.dynamic_evaluation_run_episode(
+    episode_response = await async_client.workflow_evaluation_run_episode(
         run_id=run_id,
         task_name="basic_test",
     )
