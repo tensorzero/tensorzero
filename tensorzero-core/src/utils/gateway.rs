@@ -31,7 +31,7 @@ use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
 use crate::endpoints::openai_compatible::RouterExt;
 use crate::error::{Error, ErrorDetails};
-use crate::howdy::setup_howdy;
+use crate::howdy::{get_deployment_id, setup_howdy};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, RateLimitingManager};
 use autopilot_client::AutopilotClient;
@@ -370,14 +370,18 @@ impl GatewayHandle {
             cancel_token.clone(),
         );
 
-        // Fetch the deployment ID
-        let deployment_id = crate::howdy::get_deployment_id(
-            &clickhouse_connection_info,
-            &postgres_connection_info,
-            primary_datastore,
-        )
-        .await
-        .ok();
+        // Fetch the deployment ID (skip when observability is disabled since there's no datastore to query)
+        let deployment_id = if primary_datastore == PrimaryDatastore::Disabled {
+            None
+        } else {
+            get_deployment_id(
+                &clickhouse_connection_info,
+                &postgres_connection_info,
+                primary_datastore,
+            )
+            .await
+            .ok()
+        };
 
         let db = Arc::new(DelegatingDatabaseConnection::new(
             clickhouse_connection_info.clone(),
@@ -590,7 +594,7 @@ pub async fn setup_clickhouse(
         (Some(false), _) => {
             // Observability disabled by config
             tracing::info!(
-                "Disabling observability: `gateway.observability.enabled` is set to false in config."
+                "Disabling ClickHouse: `gateway.observability.enabled` is set to false in config."
             );
             ClickHouseConnectionInfo::new_disabled()
         }
@@ -616,7 +620,7 @@ pub async fn setup_clickhouse(
                 "`TENSORZERO_CLICKHOUSE_URL` is not set."
             };
             tracing::warn!(
-                "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and {msg_suffix}"
+                "Disabling ClickHouse: `gateway.observability.enabled` is not explicitly specified in config and {msg_suffix}"
             );
             ClickHouseConnectionInfo::new_disabled()
         }
@@ -1078,7 +1082,7 @@ mod tests {
             "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"
         ));
         assert!(logs_contain(
-            "Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."
+            "`gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."
         ));
 
         // We do not test the case where a ClickHouse URL is provided but observability is default,
