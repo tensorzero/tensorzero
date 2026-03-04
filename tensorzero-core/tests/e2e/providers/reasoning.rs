@@ -294,6 +294,11 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
 
     use crate::common::get_gateway_endpoint;
 
+    // TODO (#6680): re-enable once streaming reasoning is fixed for GCP Vertex Gemini
+    if provider.model_provider_name == "gcp_vertex_gemini" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     let extra_headers = if provider.is_modal_provider() {
