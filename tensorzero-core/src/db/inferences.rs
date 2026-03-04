@@ -503,13 +503,16 @@ pub trait InferenceQueries {
         inference_id: Uuid,
     ) -> Result<Option<Value>, Error>;
 
-    /// Get the output string from an inference for human feedback context.
+    /// Returns the serialized inference output for storing in the
+    /// `StaticEvaluationHumanFeedback` table and for later exact-match lookup.
     ///
-    /// Returns the serialized output of the inference, which is needed when
-    /// writing static evaluation human feedback records.
+    /// Implementations must ensure that logically identical outputs always produce
+    /// byte-identical strings. ClickHouse stores strings verbatim, so no
+    /// normalization is needed. Postgres JSONB does not preserve key order, so
+    /// the Postgres implementation sorts keys before serializing.
     ///
     /// Returns `None` if the inference doesn't exist.
-    async fn get_inference_output(
+    async fn get_serialized_inference_output_for_feedback(
         &self,
         function_info: &FunctionInfo,
         inference_id: Uuid,

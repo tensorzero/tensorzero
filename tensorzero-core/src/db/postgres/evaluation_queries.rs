@@ -10,8 +10,10 @@ use crate::db::evaluation_queries::{
     EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
     InferenceEvaluationRunInsert, RawEvaluationResultRow,
 };
+use crate::endpoints::inference::InferenceResponse;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
+use crate::serde_util::serialize_with_sorted_keys;
 use crate::statistics_util::{wald_confint, wilson_confint};
 
 use super::PostgresConnectionInfo;
@@ -262,6 +264,25 @@ impl EvaluationQueries for PostgresConnectionInfo {
             .collect()
     }
 
+    fn serialize_output_for_feedback(
+        &self,
+        inference_response: &InferenceResponse,
+    ) -> Result<String, Error> {
+        // Serialize through Value so we can sort keys before producing the final string.
+        // Postgres JSONB does not preserve key order, so the stored output may have
+        // different ordering than direct struct serialization.
+        let output_value = match inference_response {
+            InferenceResponse::Chat(c) => serde_json::to_value(&c.content),
+            InferenceResponse::Json(j) => serde_json::to_value(&j.output),
+        }
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize inference output for feedback lookup: {e}"),
+            })
+        })?;
+        serialize_with_sorted_keys(&output_value)
+    }
+
     async fn get_inference_evaluation_human_feedback(
         &self,
         metric_name: &str,
@@ -277,7 +298,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
             Some(row) => {
                 let value_str: String = row.get("value");
                 let value: serde_json::Value = serde_json::from_str(&value_str).map_err(|e| {
-                    Error::new(crate::error::ErrorDetails::Serialization {
+                    Error::new(ErrorDetails::Serialization {
                         message: format!("Failed to deserialize human feedback value: {e}"),
                     })
                 })?;
