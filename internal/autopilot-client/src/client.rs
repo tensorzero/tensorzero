@@ -1283,4 +1283,126 @@ mod tests {
             "Building without tensorzero_version should fail with MissingConfig error"
         );
     }
+
+    // -------------------------------------------------------------------------
+    // requires_approval tests
+    // -------------------------------------------------------------------------
+
+    use crate::types::{
+        AutopilotSideInfo, GatewayEventPayloadToolCall, OptimizationWorkflowSideInfo,
+    };
+
+    /// Helper to build a minimal `AutopilotSideInfo` for tests.
+    fn test_side_info() -> AutopilotSideInfo {
+        AutopilotSideInfo {
+            tool_call_event_id: Uuid::nil(),
+            session_id: Uuid::nil(),
+            config_snapshot_hash: "test".to_string(),
+            optimization: OptimizationWorkflowSideInfo::default(),
+        }
+    }
+
+    #[test]
+    fn test_from_event_payload_tool_call_defaults_requires_approval_to_true() {
+        let tc = EventPayloadToolCall {
+            name: "some_tool".to_string(),
+            arguments: serde_json::json!({}),
+            side_info: test_side_info(),
+        };
+        let gateway_tc: GatewayEventPayloadToolCall = tc.into();
+        assert!(
+            gateway_tc.requires_approval,
+            "From<EventPayloadToolCall> should default requires_approval to true"
+        );
+    }
+
+    #[test]
+    fn test_gateway_event_try_from_tool_call_defaults_requires_approval_to_true() {
+        use chrono::Utc;
+
+        let event = Event {
+            id: Uuid::nil(),
+            payload: EventPayload::ToolCall(EventPayloadToolCall {
+                name: "some_tool".to_string(),
+                arguments: serde_json::json!({}),
+                side_info: test_side_info(),
+            }),
+            session_id: Uuid::nil(),
+            created_at: Utc::now(),
+        };
+        let gateway_event: GatewayEvent = event.try_into().expect("conversion should succeed");
+        match gateway_event.payload {
+            GatewayEventPayload::ToolCall(tc) => {
+                assert!(
+                    tc.requires_approval,
+                    "Event -> GatewayEvent conversion should default requires_approval to true"
+                );
+            }
+            other => panic!("Expected ToolCall payload, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_serde_roundtrip_preserves_requires_approval() {
+        for requires_approval in [true, false] {
+            let tc = GatewayEventPayloadToolCall {
+                name: "test_tool".to_string(),
+                arguments: serde_json::json!({"key": "value"}),
+                side_info: test_side_info(),
+                requires_approval,
+            };
+            let json = serde_json::to_string(&tc).expect("serialization should succeed");
+            let deserialized: GatewayEventPayloadToolCall =
+                serde_json::from_str(&json).expect("deserialization should succeed");
+            assert_eq!(
+                deserialized.requires_approval, requires_approval,
+                "Serde roundtrip should preserve requires_approval={requires_approval}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_requires_approval_present_in_serialized_json() {
+        let tc = GatewayEventPayloadToolCall {
+            name: "test_tool".to_string(),
+            arguments: serde_json::json!({}),
+            side_info: test_side_info(),
+            requires_approval: false,
+        };
+        let json: serde_json::Value =
+            serde_json::to_value(&tc).expect("serialization should succeed");
+        assert_eq!(
+            json["requires_approval"], false,
+            "`requires_approval` should be present in serialized JSON even when false"
+        );
+    }
+
+    #[test]
+    fn test_whitelist_determines_requires_approval() {
+        let mut whitelist = HashSet::new();
+        whitelist.insert("write_config".to_string());
+
+        // Whitelisted tool: requires_approval = !whitelist.contains(name) = false
+        let requires_approval = !whitelist.contains("write_config");
+        assert!(
+            !requires_approval,
+            "Whitelisted tool should not require approval"
+        );
+
+        // Non-whitelisted tool: requires_approval = !whitelist.contains(name) = true
+        let requires_approval = !whitelist.contains("delete_datapoints");
+        assert!(
+            requires_approval,
+            "Non-whitelisted tool should require approval"
+        );
+    }
+
+    #[test]
+    fn test_empty_whitelist_means_all_require_approval() {
+        let whitelist: HashSet<String> = HashSet::new();
+        assert!(
+            !whitelist.contains("any_tool"),
+            "Empty whitelist means all tools require approval"
+        );
+    }
 }

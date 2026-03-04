@@ -781,6 +781,91 @@ export const WithUnknownVisualization: Story = {
   },
 };
 
+// Events demonstrating a whitelisted tool call that skips the authorization step
+const whitelistedToolingEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "wt-user-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "text", text: "Look up the current deployment config." },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "wt-tool-call",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "read_config",
+        arguments: { section: "deployment" },
+        requires_approval: false,
+        side_info: {
+          tool_call_event_id: "wt-tool-call",
+          session_id: sessionId,
+          config_snapshot_hash: "abc",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    1,
+  ),
+  // No authorization event — whitelisted tools go straight to result
+  buildEvent(
+    {
+      id: "wt-tool-result",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_result",
+        tool_call_event_id: "wt-tool-call",
+        outcome: {
+          type: "success",
+          result: "Current deployment: region=us-east-1, replicas=3",
+        },
+      },
+    },
+    2,
+  ),
+  buildEvent(
+    {
+      id: "wt-assistant-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "The current deployment is running in us-east-1 with 3 replicas.",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    3,
+  ),
+];
+
+export const WhitelistedTooling: Story = {
+  args: {
+    events: whitelistedToolingEvents,
+  },
+};
+
 export const MarkdownContent: Story = {
   args: {
     events: markdownEvents,
