@@ -43,7 +43,6 @@ First, let's initialize the TensorZero client (just like you would for typical i
 ```python
 from tensorzero import TensorZeroGateway
 
-# Initialize the client with `build_http` or `build_embedded`
 with TensorZeroGateway.build_http(
     gateway_url="http://localhost:3000",
 ) as t0:
@@ -93,7 +92,6 @@ First, let's initialize the TensorZero client (just like you would for typical i
 ```python
 from tensorzero import AsyncTensorZeroGateway
 
-# Initialize the client with `build_http` or `build_embedded`
 async with await AsyncTensorZeroGateway.build_http(
     gateway_url="http://localhost:3000",
 ) as t0:

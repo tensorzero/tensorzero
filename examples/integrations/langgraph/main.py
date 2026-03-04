@@ -11,9 +11,9 @@ from tensorzero import (
 )
 from typing_extensions import TypedDict
 
-# Initialize TensorZero Gateway
-t0 = TensorZeroGateway.build_embedded(
-    config_file="config/tensorzero.toml",
+# Initialize TensorZero Client
+t0 = TensorZeroGateway.build_http(
+    gateway_url="http://localhost:3000",
 )
 
 

@@ -50,21 +50,41 @@ pip install tensorzero
 
 </Step>
 
-<Step title="Initialize the TensorZero Gateway">
+<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
 
-Let's initialize the TensorZero Gateway.
-For simplicity, we'll use an embedded gateway without observability or custom configuration.
+Let's deploy a standalone TensorZero Gateway using Docker.
+For simplicity, we'll use the gateway without observability or custom configuration.
+
+```bash
+docker run \
+  -e OPENAI_API_KEY \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --default-config
+```
+
+<Tip>
+
+See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Initialize the TensorZero Client">
+
+Let's initialize the TensorZero client and point it to the gateway we just launched.
 
 ```python
 from tensorzero import TensorZeroGateway
 
-t0 = TensorZeroGateway.build_embedded()
+t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
 ```
 
 <Tip>
 
 The TensorZero Python SDK includes a synchronous `TensorZeroGateway` client and an asynchronous `AsyncTensorZeroGateway` client.
-Both options support running the gateway embedded in your application with `build_embedded` or connecting to a standalone gateway with `build_http`.
+Both options support connecting to a standalone gateway with `build_http` or running the gateway embedded in your application with `build_embedded`.
 See [Clients](/gateway/clients/) for more details.
 
 </Tip>
