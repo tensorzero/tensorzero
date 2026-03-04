@@ -642,7 +642,10 @@ async fn test_get_evaluation_results_pagination() {
 async fn test_get_evaluation_results_evaluation_not_found() {
     let http_client = Client::new();
 
-    let evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
+    // Use a run ID that does NOT exist in InferenceEvaluationRuns so that
+    // resolve_evaluation_metadata falls back to the config path (where the
+    // nonexistent evaluation name triggers an error).
+    let evaluation_run_id = "00000000-0000-0000-0000-000000000000";
 
     let url = get_gateway_endpoint("/internal/evaluations/results").to_string()
         + &format!(
