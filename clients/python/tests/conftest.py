@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Awaitable, cast
+from typing import Any, Awaitable, Dict, Iterator, List, Optional, cast
 
 import pytest
 import pytest_asyncio
@@ -299,7 +299,7 @@ async def async_openai_client(request: FixtureRequest):
                     config_file=TEST_CONFIG_FILE,
                     clickhouse_url=CLICKHOUSE_URL,
                     async_setup=True,
-                )
+                ),
             )
             yield client
 

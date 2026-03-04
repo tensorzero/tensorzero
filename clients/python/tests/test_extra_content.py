@@ -6,8 +6,9 @@ These tests verify that extra content blocks (Thought, Unknown) can be:
 2. Sent back to the API in follow-up requests (round-trip)
 """
 
-import pytest
 from typing import Any, cast
+
+import pytest
 from openai import AsyncOpenAI
 from uuid_utils.compat import uuid7
 
@@ -44,18 +45,21 @@ async def test_extra_content_roundtrip_non_streaming(async_openai_client: AsyncO
     # Step 3: Round-trip - send the extra content back as an assistant message
     roundtrip_result = await async_openai_client.chat.completions.create(
         extra_body={"tensorzero::episode_id": episode_id},
-        messages=cast(Any, [
-            {
-                "role": "user",
-                "content": "Hello",
-            },
-            {
-                "role": "assistant",
-                "content": message.content,
-                "tensorzero_extra_content": extra_content,
-            },
-            {"role": "user", "content": "Continue"},
-        ]),
+        messages=cast(
+            Any,
+            [
+                {
+                    "role": "user",
+                    "content": "Hello",
+                },
+                {
+                    "role": "assistant",
+                    "content": message.content,
+                    "tensorzero_extra_content": extra_content,
+                },
+                {"role": "user", "content": "Continue"},
+            ],
+        ),
         model="tensorzero::model_name::dummy::echo",
         stream=False,
     )
@@ -105,18 +109,21 @@ async def test_extra_content_roundtrip_streaming(async_openai_client: AsyncOpenA
     if reconstructed_extra_content and content_text:
         roundtrip_result = await async_openai_client.chat.completions.create(
             extra_body={"tensorzero::episode_id": episode_id},
-            messages=cast(Any, [
-                {
-                    "role": "user",
-                    "content": "Hello",
-                },
-                {
-                    "role": "assistant",
-                    "content": content_text,
-                    "tensorzero_extra_content": reconstructed_extra_content,
-                },
-                {"role": "user", "content": "Continue"},
-            ]),
+            messages=cast(
+                Any,
+                [
+                    {
+                        "role": "user",
+                        "content": "Hello",
+                    },
+                    {
+                        "role": "assistant",
+                        "content": content_text,
+                        "tensorzero_extra_content": reconstructed_extra_content,
+                    },
+                    {"role": "user", "content": "Continue"},
+                ],
+            ),
             model="tensorzero::model_name::dummy::echo",
             stream=False,
         )

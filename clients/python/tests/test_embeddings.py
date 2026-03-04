@@ -17,8 +17,7 @@ import asyncio
 import random
 
 import pytest
-
-from openai import AsyncOpenAI, APIStatusError
+from openai import APIStatusError, AsyncOpenAI
 
 
 @pytest.mark.asyncio
