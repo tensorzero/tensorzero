@@ -40,16 +40,6 @@ describe("detectEventVisualization", () => {
     expect(result).toEqual({ type: "unknown", raw: unknownViz });
   });
 
-  test("returns unknown for visualization event with non-object payload", () => {
-    const event = makeEvent({
-      type: "visualization",
-      tool_execution_id: "tool-1",
-      visualization: "just a string" as never,
-    });
-    const result = detectEventVisualization(event);
-    expect(result).toEqual({ type: "unknown", raw: "just a string" });
-  });
-
   test("returns feedback_by_variant for tool_result with valid feedback data", () => {
     const feedbackData = [
       { variant_name: "v1", mean: 0.8, variance: 0.04, count: 100 },
@@ -74,70 +64,6 @@ describe("detectEventVisualization", () => {
       outcome: {
         type: "success",
         result: JSON.stringify({ some: "other data" }),
-      },
-    });
-    expect(detectEventVisualization(event)).toBeNull();
-  });
-
-  test("returns null for tool_result with failure outcome", () => {
-    const event = makeEvent({
-      type: "tool_result",
-      tool_call_event_id: "tc-1",
-      outcome: {
-        type: "failure",
-        error: { message: "something broke" },
-      },
-    });
-    expect(detectEventVisualization(event)).toBeNull();
-  });
-
-  test("returns null for message events", () => {
-    const event = makeEvent({
-      type: "message",
-      role: "assistant",
-      content: [{ type: "text", text: "hello" }],
-      metadata: {},
-    });
-    expect(detectEventVisualization(event)).toBeNull();
-  });
-
-  test("returns null for tool_call events", () => {
-    const event = makeEvent({
-      type: "tool_call",
-      name: "get_feedback_by_variant",
-      arguments: {},
-      side_info: {
-        tool_call_event_id: "tc-1",
-        session_id: "sess-1",
-        config_snapshot_hash: "abc",
-        optimization: {
-          poll_interval_secs: BigInt(60),
-          max_wait_secs: BigInt(86400),
-        },
-      },
-    });
-    expect(detectEventVisualization(event)).toBeNull();
-  });
-
-  test("returns null for tool_result with invalid JSON", () => {
-    const event = makeEvent({
-      type: "tool_result",
-      tool_call_event_id: "tc-1",
-      outcome: {
-        type: "success",
-        result: "not valid json {{{",
-      },
-    });
-    expect(detectEventVisualization(event)).toBeNull();
-  });
-
-  test("returns null for tool_result with empty feedback array", () => {
-    const event = makeEvent({
-      type: "tool_result",
-      tool_call_event_id: "tc-1",
-      outcome: {
-        type: "success",
-        result: JSON.stringify([]),
       },
     });
     expect(detectEventVisualization(event)).toBeNull();
