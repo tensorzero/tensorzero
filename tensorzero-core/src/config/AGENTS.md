@@ -1,0 +1,3 @@
+# Config
+
+- Config snapshots are stored in the database and must remain deserializable forever. When deprecating a config field, you must handle both paths: (1) fresh configs loaded from TOML, and (2) stored snapshots loaded from the DB. Add a deprecation warning in `UninitializedConfig::warn_on_deprecations()` (in `mod.rs`), which only runs for fresh configs so snapshot users won't see spurious warnings. Then add a historical snapshot test in `stored/mod.rs` that parses a TOML string containing the deprecated field as `StoredConfig`, converts it to `UninitializedConfig`, and asserts the values are correct (see `stored/AGENTS.md` for more details).

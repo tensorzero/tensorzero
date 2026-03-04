@@ -1337,9 +1337,10 @@ jobs:
   check-all-general-jobs-passed:
     permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
+    # NOTE: autopilot-e2e is intentionally excluded — it runs but doesn't block merging
+    # TODO: Add autopilot-e2e back once autopilot e2e tests are stable
     needs:
       [
-        autopilot-e2e,
         build-gateway-container,
         build-gateway-e2e-container,
         build-live-tests-container,

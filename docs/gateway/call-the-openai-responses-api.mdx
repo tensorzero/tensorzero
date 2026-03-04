@@ -90,7 +90,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
 
 </Tip>
 
@@ -347,7 +347,7 @@ ChatInferenceResponse(
 
 <Tab title="Python (OpenAI SDK)">
 
-The TensorZero Python SDK integrates with the OpenAI Python SDK to provide access to the Responses API.
+You can point the OpenAI Python SDK to a TensorZero Gateway to access the Responses API.
 
 <Steps>
 
@@ -361,12 +361,12 @@ export OPENAI_API_KEY="sk-..."
 
 </Step>
 
-<Step title="Install the OpenAI and TensorZero Python SDKs">
+<Step title="Install the OpenAI Python SDK">
 
-You can install the OpenAI and TensorZero SDKs with a Python package manager like `pip`.
+You can install the OpenAI SDK with a Python package manager like `pip`.
 
 ```bash
-pip install openai tensorzero
+pip install openai
 ```
 
 </Step>
@@ -409,7 +409,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
 
 </Tip>
 
@@ -422,16 +422,8 @@ Let's initialize the OpenAI SDK and point it to the gateway we just launched.
 ```python
 from openai import OpenAI
 
-oai = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 ```
-
-<Tip>
-
-The TensorZero Python SDK supports both the synchronous `OpenAI` client and the asynchronous `AsyncOpenAI` client.
-Both options support running the gateway embedded in your application with `patch_openai_client` or connecting to a standalone gateway with `base_url`.
-See [Clients](/gateway/clients/) for more details.
-
-</Tip>
 
 </Step>
 
@@ -440,7 +432,7 @@ See [Clients](/gateway/clients/) for more details.
 <Note>OpenAI web search can take up to a minute to complete.</Note>
 
 ```python
-response = oai.chat.completions.create(
+response = client.chat.completions.create(
     model="tensorzero::model_name::gpt-5-mini-responses-web-search",
     messages=[
         {
@@ -567,7 +559,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
 
 </Tip>
 
@@ -580,9 +572,9 @@ Let's initialize the OpenAI SDK and point it to the gateway we just launched.
 ```ts
 import OpenAI from "openai";
 
-const oai = new OpenAI({
-  apiKey: "not-used",
+const client = new OpenAI({
   baseURL: "http://localhost:3000/openai/v1",
+  apiKey: "not-used",
 });
 ```
 
@@ -593,7 +585,7 @@ const oai = new OpenAI({
 <Note>OpenAI web search can take up to a minute to complete.</Note>
 
 ```ts
-const response = await oai.chat.completions.create({
+const response = await client.chat.completions.create({
   model: "tensorzero::model_name::gpt-5-mini-responses-web-search",
   messages: [
     {
@@ -705,7 +697,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
 
 </Tip>
 

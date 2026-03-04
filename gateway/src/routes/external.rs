@@ -140,15 +140,6 @@ fn build_evaluations_routes() -> Router<AppStateData> {
             "/workflow_evaluation_run/{run_id}/episode",
             post(endpoints::workflow_evaluation_run::workflow_evaluation_run_episode_handler),
         )
-        // DEPRECATED: Use /workflow_evaluation_run endpoints instead
-        .route(
-            "/dynamic_evaluation_run",
-            post(endpoints::workflow_evaluation_run::dynamic_evaluation_run_handler),
-        )
-        .route(
-            "/dynamic_evaluation_run/{run_id}/episode",
-            post(endpoints::workflow_evaluation_run::dynamic_evaluation_run_episode_handler),
-        )
 }
 
 /// This function builds the public routes for meta-observability (e.g. gateway health).

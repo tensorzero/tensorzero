@@ -310,10 +310,12 @@ ChatInferenceResponse(
 
 <Tab title="Python (OpenAI)">
 
+You can use TensorZero in Python with the OpenAI Python client.
+
 ```python title="after_openai.py" "base_url="http://localhost:3000/openai/v1"" "tensorzero::function_name::generate_haiku"
 from openai import OpenAI
 
-with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
+with OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used") as client:
     response = client.chat.completions.create(
         model="tensorzero::function_name::generate_haiku",
         messages=[

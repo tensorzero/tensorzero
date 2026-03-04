@@ -116,44 +116,10 @@ See above for more details.
 
 </Tip>
 
-### OpenAI Python Client
+### OpenAI Python SDK
 
 You can use the OpenAI Python client to run inference requests with TensorZero.
 You need to use the TensorZero Client for feedback requests.
-
-#### Embedded Gateway
-
-You can run an embedded (in-memory) TensorZero Gateway with the OpenAI Python client, which doesn't require a separate service.
-
-```python
-from openai import OpenAI
-from tensorzero import patch_openai_client
-
-client = OpenAI()  # or AsyncOpenAI
-
-await patch_openai_client(
-    client,
-    config_file="path/to/tensorzero.toml",
-    clickhouse_url="https://user:password@host:port/database",
-)
-
-response = client.chat.completions.create(
-    model="tensorzero::model_name::openai::gpt-4o-mini",
-    messages=[
-        {
-            "role": "user",
-            "content": "Write a haiku about TensorZero.",
-        }
-    ],
-)
-```
-
-<Tip>
-
-You can avoid the `await` in `patch_openai_client` by setting `async_setup=False`.
-See above for more details.
-
-</Tip>
 
 #### Standalone HTTP Gateway
 
@@ -165,7 +131,7 @@ from openai import OpenAI
 
 # Assuming the TensorZero Gateway is running on localhost:3000...
 
-with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
+with OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used") as client:
     response = client.chat.completions.create(
         model="tensorzero::model_name::openai::gpt-4o-mini",
         messages=[
@@ -207,7 +173,7 @@ response = client.chat.completions.create(
 
 ## JavaScript / TypeScript / Node
 
-### OpenAI Node Client
+### OpenAI Node SDK
 
 You can use the OpenAI client to run inference requests with TensorZero.
 You can deploy the TensorZero Gateway as a separate service and configure the OpenAI client to talk to the TensorZero Gateway.

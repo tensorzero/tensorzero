@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 // Re-export types from tensorzero-types that InputMessage depends on
 use schemars::JsonSchema;
 pub use tensorzero_types::{
@@ -248,7 +249,7 @@ pub enum GatewayEventPayload {
     Message(EventPayloadMessage),
     Error(EventPayloadError),
     StatusUpdate(EventPayloadStatusUpdate),
-    ToolCall(EventPayloadToolCall),
+    ToolCall(GatewayEventPayloadToolCall),
     ToolCallAuthorization(GatewayEventPayloadToolCallAuthorization),
     ToolResult(EventPayloadToolResult),
     Visualization(EventPayloadVisualization),
@@ -267,7 +268,7 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             EventPayload::Message(m) => Ok(GatewayEventPayload::Message(m)),
             EventPayload::Error(e) => Ok(GatewayEventPayload::Error(e)),
             EventPayload::StatusUpdate(s) => Ok(GatewayEventPayload::StatusUpdate(s)),
-            EventPayload::ToolCall(t) => Ok(GatewayEventPayload::ToolCall(t)),
+            EventPayload::ToolCall(t) => Ok(GatewayEventPayload::ToolCall(t.into())),
             EventPayload::ToolCallAuthorization(auth) => {
                 Ok(GatewayEventPayload::ToolCallAuthorization(auth.try_into()?))
             }
@@ -311,6 +312,30 @@ pub struct EventPayloadToolCall {
     pub arguments: serde_json::Value,
     /// Side info to pass to the tool (hidden from LLM, used for execution context).
     pub side_info: AutopilotSideInfo,
+}
+
+/// Tool call payload as seen by gateway consumers.
+/// Includes `requires_approval` which is set by the gateway based on tool whitelist config.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayEventPayloadToolCall {
+    pub name: String,
+    pub arguments: serde_json::Value,
+    pub side_info: AutopilotSideInfo,
+    /// Whether this tool call requires manual user approval.
+    /// `false` for whitelisted tools (auto-approved by gateway).
+    pub requires_approval: bool,
+}
+
+impl From<EventPayloadToolCall> for GatewayEventPayloadToolCall {
+    fn from(tc: EventPayloadToolCall) -> Self {
+        GatewayEventPayloadToolCall {
+            name: tc.name,
+            arguments: tc.arguments,
+            side_info: tc.side_info,
+            requires_approval: true, // safe default: require approval
+        }
+    }
 }
 
 /// Side information required for autopilot client tools.
@@ -385,10 +410,39 @@ impl AutopilotSideInfo {
     }
 }
 
+/// Tool result that can carry either a structured JSON value or a legacy serialized string.
+///
+/// New producers should use `AutopilotToolResult::typed`. Consumers should use
+/// `AutopilotToolResult::value()` which returns the structured value directly
+/// or parses the legacy string as a fallback.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutopilotToolResult {
-    pub result: String,
+#[serde(untagged)]
+pub enum AutopilotToolResult {
+    Typed {
+        result_value: JsonValue,
+    },
+    #[deprecated = "Use `AutopilotToolResult::typed` instead. This variant exists only for backwards compatibility with old serialized data."]
+    Legacy {
+        result: String,
+    },
+}
+
+impl AutopilotToolResult {
+    pub fn typed(value: JsonValue) -> Self {
+        Self::Typed {
+            result_value: value,
+        }
+    }
+
+    /// Get the structured value, parsing the legacy string as a fallback.
+    #[expect(deprecated)]
+    pub fn value(&self) -> Result<JsonValue, serde_json::Error> {
+        match self {
+            Self::Typed { result_value, .. } => Ok(result_value.clone()),
+            Self::Legacy { result } => serde_json::from_str(result),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -485,9 +539,7 @@ pub enum ToolOutcome {
     },
     Failure {
         /// Structured error data from the tool.
-        /// For autopilot tools, this is typically a serialized `AutopilotToolError`
-        /// with a `kind` field discriminator (e.g., "ClientError", "Validation").
-        error: serde_json::Value,
+        error: tensorzero_types::ToolFailure,
     },
     Missing,
     #[serde(other)]
