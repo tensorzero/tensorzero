@@ -862,7 +862,7 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is 34 * 57 + 21 / 3? Answer with just the number."
+                    "content": "What is 34 * 57 + 21 / 3? Think carefully before answering. Answer with just the number."
                 }
             ]},
         "stream": true,
