@@ -37,7 +37,13 @@ import {
 import { Sheet, SheetContent } from "~/components/ui/sheet";
 import { CommentModal, DemonstrationModal } from "./FeedbackTableModal";
 import { Skeleton } from "~/components/ui/skeleton";
-import { Card } from "~/components/ui/card";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
+import {
+  parseInferenceOutput,
+  isJsonOutput,
+} from "~/utils/clickhouse/inference";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 
 function formatTagKey(key: string): string {
   if (key.startsWith("tensorzero::")) {
@@ -64,32 +70,39 @@ export function FeedbackTableHeaders() {
   return <MetricsTableHeaders />;
 }
 
-export function FeedbackTableSkeleton() {
+export function FeedbackTableSkeleton({
+  pagination,
+}: {
+  pagination?: React.ReactNode;
+}) {
   return (
-    <Table className="table-fixed">
-      <MetricsTableHeaders />
-      <TableBody>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <TableRow key={i}>
-            <TableCell>
-              <Skeleton className="h-4 w-32" />
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-4 w-20" />
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-4 w-16" />
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-4 w-24" />
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-4 w-28" />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="space-y-6">
+      <Table className="table-fixed">
+        <MetricsTableHeaders />
+        <TableBody>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <Skeleton className="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-20" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-16" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-24" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-28" />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {pagination}
+    </div>
   );
 }
 
@@ -118,12 +131,14 @@ interface FeedbackTableProps {
   feedback: FeedbackRow[];
   feedbackBounds?: FeedbackBounds;
   latestByMetric?: Record<string, string>;
+  pagination?: React.ReactNode;
 }
 
 export default function FeedbackTable({
   feedback,
   feedbackBounds,
   latestByMetric,
+  pagination,
 }: FeedbackTableProps) {
   const config = useConfig();
 
@@ -181,28 +196,49 @@ export default function FeedbackTable({
         </Table>
       )}
 
-      {comments.length > 0 && (
-        <FeedbackCard
-          label="Comment"
-          value={comments[0].value}
-          tags={comments[0].tags}
-          timestamp={comments[0].timestamp}
-          testId={`feedback-row-${comments[0].id}`}
-          modal={<CommentModal feedback={comments[0]} />}
-        />
-      )}
+      {pagination}
 
-      {demonstrations.length > 0 && (
-        <FeedbackCard
-          label="Demonstration"
-          value={demonstrations[0].value}
-          tags={demonstrations[0].tags}
-          timestamp={demonstrations[0].timestamp}
-          testId={`feedback-row-${demonstrations[0].id}`}
-          mono
-          modal={<DemonstrationModal feedback={demonstrations[0]} />}
-        />
-      )}
+      <FeedbackCard
+        label="Comment"
+        tags={comments[0]?.tags}
+        timestamp={comments[0]?.timestamp}
+        testId={
+          comments[0] ? `feedback-row-${comments[0].id}` : "feedback-comment"
+        }
+        modal={
+          comments[0] ? <CommentModal feedback={comments[0]} /> : undefined
+        }
+      >
+        {comments[0]?.value ? (
+          <p className="text-fg-primary line-clamp-2 text-sm">
+            {comments[0].value}
+          </p>
+        ) : (
+          <p className="text-fg-muted text-sm italic">No data</p>
+        )}
+      </FeedbackCard>
+
+      <FeedbackCard
+        label="Demonstration"
+        tags={demonstrations[0]?.tags}
+        timestamp={demonstrations[0]?.timestamp}
+        testId={
+          demonstrations[0]
+            ? `feedback-row-${demonstrations[0].id}`
+            : "feedback-demonstration"
+        }
+        modal={
+          demonstrations[0] ? (
+            <DemonstrationModal feedback={demonstrations[0]} />
+          ) : undefined
+        }
+      >
+        {demonstrations[0] ? (
+          <DemonstrationPreview value={demonstrations[0].value} />
+        ) : (
+          <p className="text-fg-muted text-sm italic">No data</p>
+        )}
+      </FeedbackCard>
     </div>
   );
 }
@@ -312,68 +348,99 @@ function MetricConfigInfo({ feedbackConfig }: MetricConfigInfoProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Demonstration preview (renders parsed output in code block)
+// ---------------------------------------------------------------------------
+
+function DemonstrationPreview({ value }: { value: string }) {
+  if (!value) {
+    return <p className="text-fg-muted text-sm italic">No data</p>;
+  }
+
+  try {
+    const parsedOutput = parseInferenceOutput(value);
+    return (
+      <div className="max-h-32 overflow-hidden">
+        {isJsonOutput(parsedOutput) ? (
+          <JsonOutputElement output={parsedOutput} />
+        ) : (
+          <ChatOutputElement output={parsedOutput} />
+        )}
+      </div>
+    );
+  } catch {
+    return (
+      <pre className="text-fg-primary line-clamp-3 whitespace-pre-wrap font-mono text-sm">
+        {value}
+      </pre>
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Feedback card (shared by comments and demonstrations)
 // ---------------------------------------------------------------------------
 
 interface FeedbackCardProps {
   label: string;
-  value: string;
-  tags: Record<string, unknown>;
-  timestamp: string;
+  children: React.ReactNode;
+  tags?: Record<string, unknown>;
+  timestamp?: string;
   testId: string;
-  modal: React.ReactNode;
-  mono?: boolean;
+  modal?: React.ReactNode;
 }
 
 function FeedbackCard({
   label,
-  value,
+  children,
   tags,
   timestamp,
   testId,
   modal,
-  mono,
 }: FeedbackCardProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-  const allTags = Object.entries(tags).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string",
-  );
+  const allTags = tags
+    ? Object.entries(tags).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      )
+    : [];
 
   return (
-    <div className="space-y-2">
-      <h4 className="text-fg-tertiary text-xs font-medium">{label}</h4>
+    <>
       <Card
         data-testid={testId}
-        className="hover:bg-bg-secondary cursor-pointer p-4"
-        onClick={() => setIsSheetOpen(true)}
+        className={`overflow-hidden${modal ? " hover:bg-bg-secondary cursor-pointer" : ""}`}
+        onClick={modal ? () => setIsSheetOpen(true) : undefined}
       >
-        {value ? (
-          <p
-            className={`text-fg-primary line-clamp-2 text-sm ${mono ? "font-mono" : ""}`}
-          >
-            {value}
-          </p>
-        ) : (
-          <p className="text-fg-muted text-sm italic">No data</p>
-        )}
-        <div className="text-fg-tertiary mt-2 flex items-center gap-2 text-xs">
-          {allTags.length > 0 && (
-            <span onClick={(e) => e.stopPropagation()}>
-              <TagsPopover tags={allTags} />
-            </span>
+        <CardHeader className="bg-bg-secondary text-fg-tertiary flex h-10 justify-center border-b px-3 py-0 text-sm font-medium">
+          {label}
+        </CardHeader>
+        <CardContent className="p-4">
+          {children}
+          {(allTags.length > 0 || timestamp) && (
+            <div className="text-fg-tertiary mt-2 flex items-center gap-2 text-xs">
+              {allTags.length > 0 && (
+                <span onClick={(e) => e.stopPropagation()}>
+                  <TagsPopover tags={allTags} />
+                </span>
+              )}
+              {timestamp && (
+                <span>
+                  Last updated <TableItemTime timestamp={timestamp} />
+                </span>
+              )}
+            </div>
           )}
-          <span>
-            Last updated <TableItemTime timestamp={timestamp} />
-          </span>
-        </div>
+        </CardContent>
       </Card>
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
-          {modal}
-        </SheetContent>
-      </Sheet>
-    </div>
+      {modal && (
+        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+          <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+            {modal}
+          </SheetContent>
+        </Sheet>
+      )}
+    </>
   );
 }
 

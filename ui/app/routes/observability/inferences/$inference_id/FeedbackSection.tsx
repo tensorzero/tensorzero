@@ -116,24 +116,21 @@ function FeedbackContent({
         feedback={feedback}
         feedbackBounds={feedback_bounds}
         latestByMetric={latestByMetric}
-      />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={disablePrevious}
-        disableNext={disableNext}
+        pagination={
+          <PageButtons
+            onPreviousPage={handlePreviousPage}
+            onNextPage={handleNextPage}
+            disablePrevious={disablePrevious}
+            disableNext={disableNext}
+          />
+        }
       />
     </>
   );
 }
 
 function FeedbackSkeleton() {
-  return (
-    <>
-      <FeedbackTableSkeleton />
-      <PageButtons disabled />
-    </>
-  );
+  return <FeedbackTableSkeleton pagination={<PageButtons disabled />} />;
 }
 
 function FeedbackError() {
@@ -144,16 +141,13 @@ function FeedbackError() {
   });
 
   return (
-    <>
-      <div className="rounded-lg border py-8">
-        <TableErrorNotice
-          icon={AlertCircle}
-          title="Error loading data"
-          description={message}
-        />
-      </div>
-      <PageButtons disabled />
-    </>
+    <div className="rounded-lg border py-8">
+      <TableErrorNotice
+        icon={AlertCircle}
+        title="Error loading data"
+        description={message}
+      />
+    </div>
   );
 }
 

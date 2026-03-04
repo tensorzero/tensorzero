@@ -212,16 +212,13 @@ function FeedbackSectionError() {
   });
 
   return (
-    <>
-      <div className="rounded-lg border py-8">
-        <TableErrorNotice
-          icon={AlertCircle}
-          title="Error loading data"
-          description={message}
-        />
-      </div>
-      <PageButtons disabled />
-    </>
+    <div className="rounded-lg border py-8">
+      <TableErrorNotice
+        icon={AlertCircle}
+        title="Error loading data"
+        description={message}
+      />
+    </div>
   );
 }
 
@@ -265,12 +262,14 @@ function FeedbackSectionContent({ data }: { data: FeedbackData }) {
         feedback={feedbacks}
         feedbackBounds={bounds}
         latestByMetric={latestByMetric}
-      />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={disablePrevious}
-        disableNext={disableNext}
+        pagination={
+          <PageButtons
+            onPreviousPage={handlePreviousPage}
+            onNextPage={handleNextPage}
+            disablePrevious={disablePrevious}
+            disableNext={disableNext}
+          />
+        }
       />
     </>
   );
@@ -397,10 +396,7 @@ export default function EpisodeDetailPage({
           />
           <Suspense
             fallback={
-              <>
-                <FeedbackTableSkeleton />
-                <PageButtons disabled />
-              </>
+              <FeedbackTableSkeleton pagination={<PageButtons disabled />} />
             }
           >
             <Await
