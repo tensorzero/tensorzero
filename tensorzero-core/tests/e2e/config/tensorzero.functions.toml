@@ -228,6 +228,7 @@ user_schema = "../../../fixtures/config/functions/variant_failover/user_schema.j
 [functions.variant_failover_zero_weight.experimentation]
 type = "static"
 candidate_variants = { "first_error" = 0.5, "second_error" = 0.5 }
+fallback_variants = ["no_weight"]
 
 [functions.variant_failover_zero_weight.variants.first_error]
 type = "chat_completion"
