@@ -1,24 +1,23 @@
-# pyright: reportDeprecated=false
 from datetime import datetime, timezone
 
 import pytest
 from tensorzero import (
-    AndFilter,
     AsyncTensorZeroGateway,
-    BooleanMetricFilter,
     ContentBlockChatOutputText,
     ContentBlockChatOutputToolCall,
-    FloatMetricFilter,
-    NotFilter,
+    InferenceFilterAnd,
+    InferenceFilterBooleanMetric,
+    InferenceFilterFloatMetric,
+    InferenceFilterNot,
+    InferenceFilterOr,
+    InferenceFilterTag,
+    InferenceFilterTime,
     OrderBy,
-    OrFilter,
     StoredInferenceJson,
     StoredInputMessageContentText,
     StoredInputMessageContentToolCall,
     StoredInputMessageContentToolResult,
-    TagFilter,
     TensorZeroGateway,
-    TimeFilter,
 )
 
 
@@ -73,7 +72,7 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
 
 
 def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway):
-    filters = FloatMetricFilter(
+    filters = InferenceFilterFloatMetric(
         metric_name="jaccard_similarity",
         value=0.5,
         comparison_operator=">",
@@ -239,7 +238,7 @@ def test_demonstration_output_source(embedded_sync_client: TensorZeroGateway):
 
 
 def test_boolean_metric_filter(embedded_sync_client: TensorZeroGateway):
-    filters = BooleanMetricFilter(
+    filters = InferenceFilterBooleanMetric(
         metric_name="exact_match",
         value=True,
     )
@@ -257,14 +256,14 @@ def test_boolean_metric_filter(embedded_sync_client: TensorZeroGateway):
 
 
 def test_and_filter_multiple_float_metrics(embedded_sync_client: TensorZeroGateway):
-    filters = AndFilter(
+    filters = InferenceFilterAnd(
         children=[
-            FloatMetricFilter(
+            InferenceFilterFloatMetric(
                 metric_name="jaccard_similarity",
                 value=0.5,
                 comparison_operator=">",
             ),
-            FloatMetricFilter(
+            InferenceFilterFloatMetric(
                 metric_name="jaccard_similarity",
                 value=0.8,
                 comparison_operator="<",
@@ -285,18 +284,18 @@ def test_and_filter_multiple_float_metrics(embedded_sync_client: TensorZeroGatew
 
 
 def test_or_filter_mixed_metrics(embedded_sync_client: TensorZeroGateway):
-    filters = OrFilter(
+    filters = InferenceFilterOr(
         children=[
-            FloatMetricFilter(
+            InferenceFilterFloatMetric(
                 metric_name="jaccard_similarity",
                 value=0.8,
                 comparison_operator=">=",
             ),
-            BooleanMetricFilter(
+            InferenceFilterBooleanMetric(
                 metric_name="exact_match",
                 value=True,
             ),
-            BooleanMetricFilter(
+            InferenceFilterBooleanMetric(
                 metric_name="goal_achieved",
                 value=True,
             ),
@@ -317,8 +316,8 @@ def test_or_filter_mixed_metrics(embedded_sync_client: TensorZeroGateway):
 
 def test_not_filter(embedded_sync_client: TensorZeroGateway):
     # NOT (tag = entity_extraction) should return rows that do NOT have that tag value.
-    not_filter = NotFilter(
-        child=TagFilter(
+    not_filter = InferenceFilterNot(
+        child=InferenceFilterTag(
             key="tensorzero::evaluation_name",
             value="entity_extraction",
             comparison_operator="=",
@@ -342,7 +341,7 @@ def test_not_filter(embedded_sync_client: TensorZeroGateway):
 
 
 def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
-    filters = TimeFilter(
+    filters = InferenceFilterTime(
         # 2023-01-01 00:00:00 UTC
         time=datetime.fromtimestamp(1672531200, tz=timezone.utc).isoformat(),
         comparison_operator=">",
@@ -380,7 +379,7 @@ def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
 
 
 def test_simple_tag_filter(embedded_sync_client: TensorZeroGateway):
-    filters = TagFilter(
+    filters = InferenceFilterTag(
         key="tensorzero::evaluation_name",
         value="entity_extraction",
         comparison_operator="=",
@@ -401,14 +400,14 @@ def test_simple_tag_filter(embedded_sync_client: TensorZeroGateway):
 
 
 def test_combined_time_and_tag_filter(embedded_sync_client: TensorZeroGateway):
-    filters = AndFilter(
+    filters = InferenceFilterAnd(
         children=[
-            TimeFilter(
+            InferenceFilterTime(
                 # 2025-04-14 23:30:00 UTC
                 time=datetime.fromtimestamp(1744673400, tz=timezone.utc).isoformat(),
                 comparison_operator=">=",
             ),
-            TagFilter(
+            InferenceFilterTag(
                 key="tensorzero::evaluation_name",
                 value="haiku",
                 comparison_operator="=",
@@ -519,7 +518,7 @@ async def test_simple_list_json_inferences_async(
 async def test_simple_query_with_float_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = FloatMetricFilter(
+    filters = InferenceFilterFloatMetric(
         metric_name="jaccard_similarity",
         value=0.5,
         comparison_operator=">",
@@ -622,7 +621,7 @@ async def test_demonstration_output_source_async(
 async def test_boolean_metric_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = BooleanMetricFilter(
+    filters = InferenceFilterBooleanMetric(
         metric_name="exact_match",
         value=True,
     )
@@ -643,14 +642,14 @@ async def test_boolean_metric_filter_async(
 async def test_and_filter_multiple_float_metrics_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = AndFilter(
+    filters = InferenceFilterAnd(
         children=[
-            FloatMetricFilter(
+            InferenceFilterFloatMetric(
                 metric_name="jaccard_similarity",
                 value=0.5,
                 comparison_operator=">",
             ),
-            FloatMetricFilter(
+            InferenceFilterFloatMetric(
                 metric_name="jaccard_similarity",
                 value=0.8,
                 comparison_operator="<",
@@ -674,18 +673,18 @@ async def test_and_filter_multiple_float_metrics_async(
 async def test_or_filter_mixed_metrics_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = OrFilter(
+    filters = InferenceFilterOr(
         children=[
-            FloatMetricFilter(
+            InferenceFilterFloatMetric(
                 metric_name="jaccard_similarity",
                 value=0.8,
                 comparison_operator=">=",
             ),
-            BooleanMetricFilter(
+            InferenceFilterBooleanMetric(
                 metric_name="exact_match",
                 value=True,
             ),
-            BooleanMetricFilter(
+            InferenceFilterBooleanMetric(
                 metric_name="goal_achieved",
                 value=True,
             ),
@@ -707,8 +706,8 @@ async def test_or_filter_mixed_metrics_async(
 @pytest.mark.asyncio
 async def test_not_filter_async(embedded_async_client: AsyncTensorZeroGateway):
     # NOT (tag = entity_extraction) should return rows that do NOT have that tag value.
-    not_filter = NotFilter(
-        child=TagFilter(
+    not_filter = InferenceFilterNot(
+        child=InferenceFilterTag(
             key="tensorzero::evaluation_name",
             value="entity_extraction",
             comparison_operator="=",
@@ -735,7 +734,7 @@ async def test_not_filter_async(embedded_async_client: AsyncTensorZeroGateway):
 async def test_simple_time_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = TimeFilter(
+    filters = InferenceFilterTime(
         # 2023-01-01 00:00:00 UTC
         time=datetime.fromtimestamp(1672531200, tz=timezone.utc).isoformat(),
         comparison_operator=">",
@@ -776,7 +775,7 @@ async def test_simple_time_filter_async(
 async def test_simple_tag_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = TagFilter(
+    filters = InferenceFilterTag(
         key="tensorzero::evaluation_name",
         value="entity_extraction",
         comparison_operator="=",
@@ -800,14 +799,14 @@ async def test_simple_tag_filter_async(
 async def test_combined_time_and_tag_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    filters = AndFilter(
+    filters = InferenceFilterAnd(
         children=[
-            TimeFilter(
+            InferenceFilterTime(
                 # 2025-04-14 23:30:00 UTC
                 time=datetime.fromtimestamp(1744673400, tz=timezone.utc).isoformat(),
                 comparison_operator=">=",
             ),
-            TagFilter(
+            InferenceFilterTag(
                 key="tensorzero::evaluation_name",
                 value="haiku",
                 comparison_operator="=",
