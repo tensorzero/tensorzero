@@ -426,14 +426,6 @@ from openai import OpenAI
 oai = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
 ```
 
-<Tip>
-
-The TensorZero Python SDK supports both the synchronous `OpenAI` client and the asynchronous `AsyncOpenAI` client.
-Both options support running the gateway embedded in your application with `patch_openai_client` or connecting to a standalone gateway with `base_url`.
-See [Clients](/gateway/clients/) for more details.
-
-</Tip>
-
 </Step>
 
 <Step title="Call the LLM">

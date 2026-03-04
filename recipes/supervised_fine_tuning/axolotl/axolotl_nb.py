@@ -149,6 +149,7 @@ import toml
 import yaml
 from tensorzero import (
     InferenceFilterFloatMetric,
+    ListInferencesRequest,
     TensorZeroGateway,
 )
 from tensorzero.util import uuid7
@@ -190,13 +191,15 @@ metric_node
 #
 
 # %%
-stored_samples = tensorzero_client.experimental_list_inferences(
-    function_name=FUNCTION_NAME,
-    variant_name=None,
-    output_source="inference",  # could also be "demonstration"
-    filters=metric_node,
-    limit=MAX_SAMPLES,
+response = tensorzero_client.list_inferences(
+    request=ListInferencesRequest(
+        function_name=FUNCTION_NAME,
+        output_source="inference",  # could also be "demonstration"
+        filters=metric_node,
+        limit=MAX_SAMPLES,
+    )
 )
+stored_samples = response.inferences
 
 # %% [markdown]
 # Render the inputs using the templates in the template variant.
