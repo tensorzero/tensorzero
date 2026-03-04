@@ -4,16 +4,20 @@
 - If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` (from root), then rebuild the NAPI bindings with `pnpm --filter=tensorzero-node build`. Run `cargo check` first to catch compilation errors.
 - If you change a signature of a struct, function, and so on, use `grep` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
 - Place crate imports at the top of the file or module using `use crate::...`. Avoid imports inside functions or tests. Avoid long inline crate paths.
-- Run tests with `cargo nextest`.
 - Once you're done with your work, make sure to:
   - Run `cargo fmt`.
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
   - Run unit tests with `cargo test-unit-fast` which uses `nextest` under the hood.
-- When writing tests, key assertions should include a custom message stating the expected behavior.
-- In tests, prefer `.expect("descriptive message")` over `.unwrap()` for better failure diagnostics.
 - Use `#[expect(clippy::...)]` instead of `#[allow(clippy::...)]`.
 - Prefer early returns over nested `match`/`if` blocks. For example, use `let ... else { return Err(...) };` or `if !condition { return Err(...) }` to reduce nesting.
 - For internally-tagged enums (`#[serde(tag = "...")]`) without lifetimes, use `TensorZeroDeserialize` instead of `Deserialize` for better error messages via `serde_path_to_error`.
+
+## Rust Testing
+
+- Run tests with `cargo nextest`.
+- Annotate new tests with `#[gtest]` (googletest crate).
+- Include descriptive messages: use `.expect("why")` over `.unwrap()`, and add custom messages to key assertions.
+- Prefer `expect_that!` to collect all failure messages; use `assert_that!` when subsequent code depends on the assertion.
 
 ## For APIs
 
