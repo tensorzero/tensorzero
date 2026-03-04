@@ -16,6 +16,11 @@ pub struct GetHumanFeedbackRequest {
     /// The name of the metric being evaluated.
     pub metric_name: String,
     /// The serialized inference output to match against.
+    ///
+    /// Must be produced by `EvaluationQueries::serialize_output_for_feedback` to ensure
+    /// backend-consistent serialization (e.g. sorted keys for Postgres).
+    ///
+    /// TODO(#6664): Make the lookup order-independent instead of sorting keys.
     pub output: String,
 }
 
@@ -54,12 +59,12 @@ pub async fn get_human_feedback_handler(
 
 /// Core business logic for checking human feedback.
 pub async fn get_human_feedback(
-    clickhouse: &impl EvaluationQueries,
+    db: &impl EvaluationQueries,
     metric_name: &str,
     datapoint_id: &Uuid,
     output: &str,
 ) -> Result<GetHumanFeedbackResponse, Error> {
-    let feedback = clickhouse
+    let feedback = db
         .get_inference_evaluation_human_feedback(metric_name, datapoint_id, output)
         .await?;
 
