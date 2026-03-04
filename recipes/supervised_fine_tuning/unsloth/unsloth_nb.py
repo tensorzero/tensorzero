@@ -116,7 +116,7 @@ from typing import Any, Dict
 import toml
 from datasets import Dataset
 from tensorzero import (
-    FloatMetricFilter,
+    InferenceFilterFloatMetric,
     TensorZeroGateway,
 )
 from tensorzero.util import uuid7
@@ -142,13 +142,13 @@ tensorzero_client = TensorZeroGateway.build_embedded(
 
 # %%
 comparison_operator = ">="
-metric_node = FloatMetricFilter(
+metric_node = InferenceFilterFloatMetric(
     metric_name=METRIC_NAME,
     value=FLOAT_METRIC_THRESHOLD,
     comparison_operator=comparison_operator,
 )
-# from tensorzero import BooleanMetricFilter
-# metric_node = BooleanMetricFilter(
+# from tensorzero import InferenceFilterBooleanMetric
+# metric_node = InferenceFilterBooleanMetric(
 #     metric_name=METRIC_NAME,
 #     value=True  # or False
 # )

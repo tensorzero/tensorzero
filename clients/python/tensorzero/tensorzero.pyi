@@ -20,8 +20,6 @@ import uuid_utils
 from tensorzero import (
     ChatInferenceOutput,
     ContentBlock,
-    DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
-    DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
     ExtraHeader,
     FeedbackResponse,
@@ -596,43 +594,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: {"feedback_id": str}
         """
 
-    def dynamic_evaluation_run(
-        self,
-        *,
-        variants: Dict[str, str],
-        tags: Optional[Dict[str, str]] = None,
-        project_name: Optional[str] = None,
-        display_name: Optional[str] = None,
-    ) -> DynamicEvaluationRunResponse:
-        """
-        DEPRECATED: Use `workflow_evaluation_run` instead.
-        Make a POST request to the /dynamic_evaluation_run endpoint.
-
-        :param variants: A dictionary of variant names to variant values.
-        :param tags: A dictionary of tags to add to the dynamic evaluation run.
-        :param project_name: The name of the project to use for the dynamic evaluation run.
-        :param display_name: The display name of the dynamic evaluation run.
-        :return: A `DynamicEvaluationRunResponse` instance ({"run_id": str}).
-        """
-
-    def dynamic_evaluation_run_episode(
-        self,
-        *,
-        run_id: str | UUID | uuid_utils.UUID,
-        task_name: Optional[str] = None,
-        tags: Optional[Dict[str, str]] = None,
-    ) -> DynamicEvaluationRunEpisodeResponse:
-        """
-        DEPRECATED: Use `workflow_evaluation_run_episode` instead.
-
-        Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
-
-        :param run_id: The run ID to use for the dynamic evaluation run.
-        :param task_name: The name of the task to use for the dynamic evaluation run.
-        :param tags: A dictionary of tags to add to the dynamic evaluation run.
-        :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
-        """
-
     def workflow_evaluation_run(
         self,
         *,
@@ -1113,44 +1074,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
         :param tags: If set, adds tags to the feedback request.
         :return: {"feedback_id": str}
-        """
-
-    async def dynamic_evaluation_run(  # type: ignore[override]
-        self,
-        *,
-        variants: Dict[str, str],
-        tags: Optional[Dict[str, str]] = None,
-        project_name: Optional[str] = None,
-        display_name: Optional[str] = None,
-    ) -> DynamicEvaluationRunResponse:
-        """
-        DEPRECATED: Use `workflow_evaluation_run` instead.
-
-        Make a POST request to the /dynamic_evaluation_run endpoint.
-
-        :param variants: A dictionary of variant names to variant values.
-        :param tags: A dictionary of tags to add to the dynamic evaluation run.
-        :param project_name: The name of the project to use for the dynamic evaluation run.
-        :param display_name: The display name of the dynamic evaluation run.
-        :return: A `DynamicEvaluationRunResponse` instance ({"run_id": str}).
-        """
-
-    async def dynamic_evaluation_run_episode(  # type: ignore[override]
-        self,
-        *,
-        run_id: str | UUID | uuid_utils.UUID,
-        task_name: Optional[str] = None,
-        tags: Optional[Dict[str, str]] = None,
-    ) -> DynamicEvaluationRunEpisodeResponse:
-        """
-        DEPRECATED: Use `workflow_evaluation_run_episode` instead.
-
-        Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
-
-        :param run_id: The run ID to use for the dynamic evaluation run.
-        :param task_name: The name of the task to use for the dynamic evaluation run.
-        :param tags: A dictionary of tags to add to the dynamic evaluation run.
-        :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
     async def workflow_evaluation_run(  # type: ignore[override]

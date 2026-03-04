@@ -25,7 +25,7 @@ You can think of them like integration tests for your LLM applications.
 
 <Tip>
 
-For a more complex, runnable example, see the [Workflow Evaluations for Agentic RAG Example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/dynamic_evaluations/simple-agentic-rag).
+For a more complex, runnable example, see the [Workflow Evaluations for Agentic RAG Example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/workflow_evaluations/simple-agentic-rag).
 
 </Tip>
 
@@ -66,7 +66,7 @@ If you specify a `project_name`, you'll be able to compare this run against othe
 The `display_name` is a human-readable identifier for the run that you can use to identify the run in the TensorZero UI.
 
 ```python
-run_info = t0.dynamic_evaluation_run(
+run_info = t0.workflow_evaluation_run(
     # Assume we have these variants defined in our `tensorzero.toml` configuration file
     variants={
         "generate_database_query": "o4_mini_prompt_baseline",
@@ -116,7 +116,7 @@ If you specify a `project_name`, you'll be able to compare this run against othe
 The `display_name` is a human-readable identifier for the run that you can use to identify the run in the TensorZero UI.
 
 ```python
-run_info = await t0.dynamic_evaluation_run(
+run_info = await t0.workflow_evaluation_run(
     # Assume we have these variants defined in our `tensorzero.toml` configuration file
     variants={
         "generate_database_query": "o4_mini_prompt_baseline",
@@ -152,7 +152,7 @@ If you specify a `project_name`, you'll be able to compare this run against othe
 The `display_name` is a human-readable identifier for the run that you can use to identify the run in the TensorZero UI.
 
 ```bash
-curl -X POST http://localhost:3000/dynamic_evaluation_run \
+curl -X POST http://localhost:3000/workflow_evaluation_run \
   -H "Content-Type: application/json" \
   -d '{
     "variants": {
@@ -183,7 +183,7 @@ If you specify a `task_name`, you'll be able to compare this episode against epi
 We encourage you to use the `task_name` to provide a meaningful identifier for the task that the episode is tackling.
 
 ```python
-episode_info = t0.dynamic_evaluation_run_episode(
+episode_info = t0.workflow_evaluation_run_episode(
     run_id=run_info.run_id,
     task_name="user_query_123",
 )
@@ -200,7 +200,7 @@ You can optionally also specify a `task_name` for the episode.
 If you specify a `task_name`, you'll be able to compare this episode against episodes for that task from other runs using the TensorZero UI.
 
 ```python
-episode_info = await t0.dynamic_evaluation_run_episode(
+episode_info = await t0.workflow_evaluation_run_episode(
     run_id=run_info.run_id,
     task_name="user_query_123",
 )
@@ -217,7 +217,7 @@ You can optionally also specify a `task_name` for the episode.
 If you specify a `task_name`, you'll be able to compare this episode against episodes for that task from other runs using the TensorZero UI.
 
 ```bash
-curl -X POST http://localhost:3000/dynamic_evaluation_run/{run_id}/episode \
+curl -X POST http://localhost:3000/workflow_evaluation_run/{run_id}/episode \
   -H "Content-Type: application/json" \
   -d '{
     "task_name": "user_query_123"
