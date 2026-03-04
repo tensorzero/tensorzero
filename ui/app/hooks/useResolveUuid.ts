@@ -43,7 +43,7 @@ export function useResolveUuid(uuid: string): {
     ) {
       fetcher.load(toResolveUuidApi(normalizedUuid));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [normalizedUuid]);
 
   const data = fetcher.data ?? resolvedUuids.get(normalizedUuid) ?? null;

@@ -79,8 +79,18 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
     }
 
     #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "LaunchOptimizationWorkflowToolParams".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LAUNCH_OPTIMIZATION_WORKFLOW_TOOL_OUTPUT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "LaunchOptimizationWorkflowToolOutput".to_string()
     }
 
     fn name(&self) -> Cow<'static, str> {
@@ -437,7 +447,7 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
         &self,
         llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Step 1: Launch the optimization workflow
         let job_handle: OptimizationJobHandle = ctx

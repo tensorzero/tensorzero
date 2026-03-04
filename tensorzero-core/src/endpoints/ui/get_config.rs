@@ -13,7 +13,6 @@ use crate::{
     config::snapshot::{ConfigSnapshot, SnapshotHash},
     config::{Config, MetricConfig, UninitializedConfig},
     db::ConfigQueries,
-    db::delegating_connection::DelegatingDatabaseConnection,
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
     function::FunctionConfig,
@@ -152,10 +151,7 @@ pub async fn ui_config_by_hash_handler(
         })
     })?;
 
-    let db = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let db = app_state.get_delegating_database();
     let snapshot = db.get_config_snapshot(snapshot_hash).await?;
 
     Ok(Json(UiConfig::from_snapshot(snapshot)?))

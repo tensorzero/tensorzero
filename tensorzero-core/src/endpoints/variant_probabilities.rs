@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -26,22 +26,6 @@ pub struct GetVariantSamplingProbabilitiesResponse {
     /// Map of variant names to their sampling probabilities (0.0 to 1.0)
     /// Probabilities sum to 1.0
     pub probabilities: HashMap<String, f64>,
-}
-
-/// HTTP handler for the variant sampling probabilities endpoint (query-based)
-#[debug_handler(state = AppStateData)]
-pub async fn get_variant_sampling_probabilities_handler(
-    State(app_state): AppState,
-    Query(params): Query<GetVariantSamplingProbabilitiesParams>,
-) -> Result<Json<GetVariantSamplingProbabilitiesResponse>, Error> {
-    Ok(Json(
-        get_variant_sampling_probabilities(
-            &app_state.config,
-            &app_state.postgres_connection_info,
-            params,
-        )
-        .await?,
-    ))
 }
 
 /// HTTP handler for the variant sampling probabilities endpoint (path-based)

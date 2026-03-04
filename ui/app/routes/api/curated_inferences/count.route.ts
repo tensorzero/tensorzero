@@ -85,7 +85,7 @@ export function useCountFetcher(params: {
       countFetcher.load(`/api/curated_inferences/count?${searchParams}`);
     }
     // TODO: Fix and stop ignoring lint rule
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [params.functionName, params.metricName, params.threshold]);
 
   return {

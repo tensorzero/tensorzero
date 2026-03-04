@@ -1,10 +1,99 @@
 //! E2E tests for evaluation queries (ClickHouse and Postgres).
 
+use tensorzero_core::config::MetricConfigOptimize;
 use tensorzero_core::db::evaluation_queries::{
-    ChatEvaluationResultRow, EvaluationQueries, EvaluationResultRow, JsonEvaluationResultRow,
+    ChatEvaluationResultRow, EvaluationQueries, EvaluationResultRow, InferenceEvaluationRunInsert,
+    InferenceEvaluationRunMetricMetadata, InferenceEvaluationRunSource, JsonEvaluationResultRow,
 };
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::function::FunctionConfigType;
 use uuid::Uuid;
+
+fn make_test_inference_evaluation_run(run_id: Uuid) -> InferenceEvaluationRunInsert {
+    InferenceEvaluationRunInsert {
+        run_id,
+        evaluation_name: format!("e2e_insert_eval_{run_id}"),
+        function_name: "write_haiku".to_string(),
+        function_type: FunctionConfigType::Chat,
+        dataset_name: format!("e2e_insert_dataset_{run_id}"),
+        variant_names: vec!["variant_a".to_string(), "variant_b".to_string()],
+        metrics: vec![
+            InferenceEvaluationRunMetricMetadata {
+                name: format!("tensorzero::evaluation_name::e2e::{run_id}::bool"),
+                evaluator_name: Some("exact_match".to_string()),
+                value_type: "boolean".to_string(),
+                optimize: Some(MetricConfigOptimize::Max),
+            },
+            InferenceEvaluationRunMetricMetadata {
+                name: format!("tensorzero::evaluation_name::e2e::{run_id}::float"),
+                evaluator_name: Some("llm_judge".to_string()),
+                value_type: "float".to_string(),
+                optimize: Some(MetricConfigOptimize::Min),
+            },
+        ],
+        source: InferenceEvaluationRunSource::DatasetName,
+        snapshot_hash: Some(vec![0xDE, 0xAD, 0xBE, 0xEF]),
+    }
+}
+
+/// Test that `insert_inference_evaluation_run` writes expected fields, verified via trait query methods.
+async fn test_insert_inference_evaluation_run(conn: impl EvaluationQueries + TestDatabaseHelpers) {
+    let run = make_test_inference_evaluation_run(Uuid::now_v7());
+
+    conn.insert_inference_evaluation_run(&run)
+        .await
+        .expect("insert_inference_evaluation_run should succeed");
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Verify via search_evaluation_runs (queries the runs table by evaluation_name)
+    let search_results = conn
+        .search_evaluation_runs(&run.evaluation_name, Some(&run.function_name), "", 10, 0)
+        .await
+        .expect("search_evaluation_runs should succeed");
+    assert_eq!(
+        search_results.len(),
+        1,
+        "search should find exactly one run for the unique evaluation_name"
+    );
+    assert_eq!(
+        search_results[0].evaluation_run_id, run.run_id,
+        "search result run_id should match inserted value"
+    );
+    assert_eq!(
+        search_results[0].variant_name, "variant_a",
+        "search result variant_name should be the first variant"
+    );
+
+    // Verify via list_evaluation_runs (returns more fields)
+    // Since run_id is a v7 UUID (timestamp-based), the newly inserted run will be first.
+    let listed = conn
+        .list_evaluation_runs(1, 0)
+        .await
+        .expect("list_evaluation_runs should succeed");
+    assert_eq!(listed.len(), 1, "list should return at least one run");
+    let row = &listed[0];
+    assert_eq!(
+        row.evaluation_run_id, run.run_id,
+        "listed run_id should match inserted value"
+    );
+    assert_eq!(
+        row.evaluation_name, run.evaluation_name,
+        "listed evaluation_name should match inserted value"
+    );
+    assert_eq!(
+        row.function_name, run.function_name,
+        "listed function_name should match inserted value"
+    );
+    assert_eq!(
+        row.variant_name, "variant_a",
+        "listed variant_name should be the first variant"
+    );
+    assert_eq!(
+        row.dataset_name, run.dataset_name,
+        "listed dataset_name should match inserted value"
+    );
+}
+make_db_test!(test_insert_inference_evaluation_run);
 
 // ============================================================================
 // get_evaluation_run_infos tests

@@ -6,6 +6,10 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{ClientInferenceParams, InferenceResponse};
+use tensorzero_core::cache::CacheParamsOptions;
+use tensorzero_core::embeddings::{EmbeddingEncodingFormat, EmbeddingInput};
+use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
+use tensorzero_core::endpoints::inference::InferenceCredentials;
 use uuid::Uuid;
 
 use crate::error::{NonControlToolError, ToolResult};
@@ -82,19 +86,19 @@ impl<S> ToolAppState<S> {
 ///
 /// Wraps durable's `TaskContext` and provides access to the application context
 /// along with helper methods for calling other tools and checkpointing operations.
-pub struct ToolContext<'a, S: Clone + Send + Sync + 'static = ()> {
-    task_ctx: &'a mut TaskContext<ToolAppState<S>>,
-    app_state: &'a ToolAppState<S>,
+pub struct ToolContext<S: Clone + Send + Sync + 'static = ()> {
+    task_ctx: TaskContext<ToolAppState<S>>,
+    app_state: ToolAppState<S>,
     episode_id: Uuid,
     /// Counter for generating unique tool call identifiers.
     tool_call_counter: u32,
 }
 
-impl<'a, S: Clone + Send + Sync + 'static> ToolContext<'a, S> {
+impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
     /// Create a new tool context.
     pub fn new(
-        task_ctx: &'a mut TaskContext<ToolAppState<S>>,
-        app_ctx: &'a ToolAppState<S>,
+        task_ctx: TaskContext<ToolAppState<S>>,
+        app_ctx: ToolAppState<S>,
         episode_id: Uuid,
     ) -> Self {
         Self {
@@ -172,7 +176,7 @@ impl<'a, S: Clone + Send + Sync + 'static> ToolContext<'a, S> {
     ///
     /// Use this for advanced operations not exposed by `ToolContext`.
     pub fn task_ctx(&mut self) -> &mut TaskContext<ToolAppState<S>> {
-        self.task_ctx
+        &mut self.task_ctx
     }
 
     /// Execute a checkpointed step.
@@ -511,6 +515,30 @@ impl<'a, S: Clone + Send + Sync + 'static> ToolContext<'a, S> {
         )
         .await
     }
+
+    /// Compute embeddings with the configured embedding model.
+    ///
+    /// This is a checkpointed operation - results are cached on restart.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the embeddings call fails.
+    pub async fn embeddings(&mut self, params: EmbeddingsParams) -> ToolResult<EmbeddingResponse> {
+        let step_name = format!("embeddings:{}", params.model_name);
+
+        let serializable = SerializableEmbeddingsParams {
+            input: params.input,
+            model_name: params.model_name,
+            dimensions: params.dimensions,
+            encoding_format: params.encoding_format,
+            dryrun: params.dryrun,
+            credentials: params.credentials,
+            cache_options: params.cache_options,
+            include_raw_response: params.include_raw_response,
+        };
+
+        self.step(&step_name, serializable, embeddings_step).await
+    }
 }
 
 /// Simplified context for `SimpleTool` execution.
@@ -557,4 +585,59 @@ impl<'a> SimpleToolContext<'a> {
     ) -> Result<InferenceResponse, TensorZeroClientError> {
         self.t0_client.inference(params).await
     }
+
+    /// Compute embeddings with the configured embedding model.
+    ///
+    /// Note: `SimpleTools` run inside a `TaskTool`'s `step()`, so this call
+    /// is already checkpointed by the outer step.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the embeddings call fails.
+    pub async fn embeddings(
+        &self,
+        params: EmbeddingsParams,
+    ) -> Result<EmbeddingResponse, TensorZeroClientError> {
+        self.t0_client.embeddings(params).await
+    }
+}
+
+/// Serializable version of `EmbeddingsParams` for durable checkpointing.
+///
+/// Credentials are excluded from serialization (`#[serde(skip)]`) so they
+/// are never persisted to the checkpoint database. On replay, the step result
+/// is returned from the checkpoint and the function is not re-executed, so
+/// credentials are not needed.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct SerializableEmbeddingsParams {
+    input: EmbeddingInput,
+    model_name: String,
+    dimensions: Option<u32>,
+    encoding_format: EmbeddingEncodingFormat,
+    dryrun: Option<bool>,
+    #[serde(skip)]
+    credentials: InferenceCredentials,
+    cache_options: CacheParamsOptions,
+    include_raw_response: bool,
+}
+
+async fn embeddings_step<S: Send + Sync + 'static>(
+    serializable: SerializableEmbeddingsParams,
+    state: ToolAppState<S>,
+) -> anyhow::Result<EmbeddingResponse> {
+    let params = EmbeddingsParams {
+        input: serializable.input,
+        model_name: serializable.model_name,
+        dimensions: serializable.dimensions,
+        encoding_format: serializable.encoding_format,
+        dryrun: serializable.dryrun,
+        credentials: serializable.credentials,
+        cache_options: serializable.cache_options,
+        include_raw_response: serializable.include_raw_response,
+    };
+    state
+        .t0_client
+        .embeddings(params)
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))
 }

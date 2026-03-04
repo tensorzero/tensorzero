@@ -173,6 +173,7 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ObservabilityBackend;
     use crate::embeddings::UninitializedEmbeddingModelConfig;
 
     /// Old snapshot with deprecated `gateway.observability.disable_automatic_migrations`
@@ -323,7 +324,7 @@ mod tests {
     }
 
     /// Forward-compatibility: `StoredObservabilityConfig` should accept unknown fields
-    /// (e.g. a future `backend` field added by a newer gateway version).
+    /// (e.g. fields added by a newer gateway version).
     #[test]
     fn test_stored_observability_config_ignores_unknown_fields() {
         let toml_str = r#"
@@ -337,6 +338,7 @@ mod tests {
             toml::from_str(toml_str).expect("should ignore unknown fields");
         assert_eq!(stored.enabled, Some(true));
         assert!(stored.async_writes);
+        assert_eq!(stored.backend, ObservabilityBackend::Postgres);
     }
 
     /// Forward-compatibility: `StoredCacheConfig` should accept unknown fields
@@ -411,5 +413,44 @@ mod tests {
         assert_eq!(uninit.gateway.observability.enabled, Some(true));
         assert!(uninit.gateway.observability.async_writes);
         assert!(uninit.gateway.debug);
+    }
+
+    /// Old snapshots with deprecated `postgres.enabled` should still parse correctly.
+    #[test]
+    #[expect(deprecated)]
+    fn test_stored_config_with_deprecated_postgres_enabled() {
+        let toml_str = r"
+            [postgres]
+            enabled = true
+            connection_pool_size = 10
+        ";
+
+        let stored: StoredConfig =
+            toml::from_str(toml_str).expect("should parse deprecated postgres.enabled");
+        assert_eq!(stored.postgres.enabled, Some(true));
+        assert_eq!(stored.postgres.connection_pool_size, 10);
+
+        let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
+        assert_eq!(
+            uninit.postgres.enabled,
+            Some(true),
+            "deprecated field should be preserved during conversion"
+        );
+    }
+
+    /// Serialized config should NOT include deprecated `postgres.enabled`.
+    #[test]
+    #[expect(deprecated)]
+    fn test_serialized_config_omits_deprecated_postgres_enabled() {
+        let config = PostgresConfig {
+            enabled: Some(true),
+            connection_pool_size: 10,
+            ..Default::default()
+        };
+        let serialized = toml::to_string(&config).expect("should serialize");
+        assert!(
+            !serialized.contains("enabled"),
+            "serialized PostgresConfig should not include deprecated enabled field: {serialized}"
+        );
     }
 }

@@ -1,21 +1,26 @@
 //! Delegating database connection that wraps both ClickHouse and Postgres.
 //!
 //! This module provides a database implementation that delegates operations
-//! to both ClickHouse (primary) and Postgres (secondary) databases based on
-//! feature flags.
+//! to either ClickHouse or Postgres based on the configured primary datastore.
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use async_trait::async_trait;
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::config::ObservabilityBackend;
+use crate::config::ObservabilityConfig;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::{Config, MetricConfigLevel};
 use crate::db::BatchWriterHandle;
 use crate::db::TimeWindow;
 use crate::db::batch_inference::{BatchInferenceQueries, CompletedBatchInferenceRow};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::datasets::{
     DatasetMetadata, DatasetQueries, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams,
@@ -23,6 +28,7 @@ use crate::db::datasets::{
 use crate::db::evaluation_queries::{
     EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
     EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
+    InferenceEvaluationRunInsert,
 };
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CumulativeFeedbackTimeSeriesPoint,
@@ -52,9 +58,9 @@ use crate::db::{
     EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries, HowdyTokenUsage,
     ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
 };
+use crate::endpoints::inference::InferenceResponse;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
-use crate::error::Error;
-use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
+use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 use crate::inference::types::{
@@ -63,16 +69,109 @@ use crate::inference::types::{
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::tool::ToolCallConfigDatabaseInsert;
 
+/// Which database backend is the primary datastore for observability data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PrimaryDatastore {
+    ClickHouse,
+    Postgres,
+    /// We should not write any observability data.
+    Disabled,
+}
+
+impl PrimaryDatastore {
+    /// Resolves the primary datastore from the observability config and available connections.
+    ///
+    /// Takes `observability.enabled` into account:
+    /// - `Some(true)`: a backend **must** be available or this returns an error.
+    /// - `None`: opportunistic — uses whatever is available, falls back to `Disabled`.
+    /// - `Some(false)`: uses whatever is available for non-observability queries, falls back to `Disabled`.
+    pub fn resolve(
+        observability_config: &ObservabilityConfig,
+        clickhouse: &ClickHouseConnectionInfo,
+        postgres: &PostgresConnectionInfo,
+    ) -> Result<Self, Error> {
+        let resolved = match observability_config.backend {
+            ObservabilityBackend::Auto => {
+                if clickhouse.client_type() != ClickHouseClientType::Disabled {
+                    Self::ClickHouse
+                } else if !matches!(postgres, PostgresConnectionInfo::Disabled) {
+                    Self::Postgres
+                } else {
+                    Self::Disabled
+                }
+            }
+            ObservabilityBackend::ClickHouse => Self::ClickHouse,
+            ObservabilityBackend::Postgres => Self::Postgres,
+        };
+
+        match observability_config.enabled {
+            Some(true) => match resolved {
+                Self::Postgres => {
+                    if matches!(postgres, PostgresConnectionInfo::Disabled) {
+                        return Err(ErrorDetails::AppState {
+                            message:
+                                "A Postgres connection is required when the primary datastore \
+                                 is Postgres and observability is enabled."
+                                    .to_string(),
+                        }
+                        .into());
+                    }
+                    Ok(Self::Postgres)
+                }
+                Self::ClickHouse => {
+                    if clickhouse.client_type() == ClickHouseClientType::Disabled {
+                        return Err(ErrorDetails::AppState {
+                            message: "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
+                                .to_string(),
+                        }
+                        .into());
+                    }
+                    Ok(Self::ClickHouse)
+                }
+                Self::Disabled => Err(ErrorDetails::AppState {
+                    message: "Observability is enabled but no backend is available. \
+                              Set `TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL`, \
+                              or configure `gateway.observability.backend` explicitly."
+                        .to_string(),
+                }
+                .into()),
+            },
+            None => {
+                if resolved == Self::Disabled {
+                    tracing::warn!(
+                        "No observability backend available. \
+                         Observability writes will be disabled."
+                    );
+                }
+                Ok(resolved)
+            }
+            // TODO(#6469): audit uses of database operations when observability is disabled.
+            Some(false) => Ok(Self::Disabled),
+        }
+    }
+
+    /// Reads the primary datastore from `TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND` env var.
+    /// Returns `Postgres` if set to "postgres", otherwise `ClickHouse`. Never disabled.
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn from_test_env() -> Self {
+        match std::env::var("TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND").as_deref() {
+            Ok("postgres") => PrimaryDatastore::Postgres,
+            _ => PrimaryDatastore::ClickHouse,
+        }
+    }
+}
+
 /// A delegating database implementation that wraps both ClickHouse and Postgres.
 ///
 /// Both ClickHouse and Postgres connections wrap an Arc<> under the hood, so this is safe and cheap to clone.
 ///
-/// When `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE` is set, all reads and writes are
-/// delegated to Postgres. Otherwise, all operations go to ClickHouse.
+/// Routes all reads and writes to the configured `primary` datastore.
 #[derive(Clone)]
 pub struct DelegatingDatabaseConnection {
     pub clickhouse: ClickHouseConnectionInfo,
     pub postgres: PostgresConnectionInfo,
+    primary: PrimaryDatastore,
 }
 /// A trait that allows us to express "The returned database supports all these queries"
 /// via &(dyn DelegatingDatabaseQueries).
@@ -107,30 +206,44 @@ impl DelegatingDatabaseQueries for PostgresConnectionInfo {
 impl DelegatingDatabaseQueries for DelegatingDatabaseConnection {
     fn batcher_join_handles(&self) -> Vec<BatchWriterHandle> {
         let mut handles = Vec::new();
-        if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-            if let Some(h) = self.postgres.batcher_join_handle() {
-                handles.push(h);
+        match self.primary {
+            PrimaryDatastore::Postgres => {
+                if let Some(h) = self.postgres.batcher_join_handle() {
+                    handles.push(h);
+                }
             }
-        } else if let Some(h) = self.clickhouse.batcher_join_handle() {
-            handles.push(h);
+            PrimaryDatastore::ClickHouse => {
+                if let Some(h) = self.clickhouse.batcher_join_handle() {
+                    handles.push(h);
+                }
+            }
+            PrimaryDatastore::Disabled => {}
         }
         handles
     }
 }
 
 impl DelegatingDatabaseConnection {
-    pub fn new(clickhouse: ClickHouseConnectionInfo, postgres: PostgresConnectionInfo) -> Self {
+    pub fn new(
+        clickhouse: ClickHouseConnectionInfo,
+        postgres: PostgresConnectionInfo,
+        primary: PrimaryDatastore,
+    ) -> Self {
         Self {
             clickhouse,
             postgres,
+            primary,
         }
     }
 
     fn get_database(&self) -> &(dyn DelegatingDatabaseQueries + Sync) {
-        if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-            &self.postgres
-        } else {
-            &self.clickhouse
+        static DISABLED: LazyLock<ClickHouseConnectionInfo> =
+            LazyLock::new(ClickHouseConnectionInfo::new_disabled);
+
+        match self.primary {
+            PrimaryDatastore::Postgres => &self.postgres,
+            PrimaryDatastore::ClickHouse => &self.clickhouse,
+            PrimaryDatastore::Disabled => &*DISABLED,
         }
     }
 }
@@ -362,13 +475,13 @@ impl InferenceQueries for DelegatingDatabaseConnection {
             .await
     }
 
-    async fn get_inference_output(
+    async fn get_serialized_inference_output_for_feedback(
         &self,
         function_info: &FunctionInfo,
         inference_id: Uuid,
     ) -> Result<Option<String>, Error> {
         self.get_database()
-            .get_inference_output(function_info, inference_id)
+            .get_serialized_inference_output_for_feedback(function_info, inference_id)
             .await
     }
 
@@ -757,6 +870,15 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
 
 #[async_trait]
 impl EvaluationQueries for DelegatingDatabaseConnection {
+    async fn insert_inference_evaluation_run(
+        &self,
+        run: &InferenceEvaluationRunInsert,
+    ) -> Result<(), Error> {
+        self.get_database()
+            .insert_inference_evaluation_run(run)
+            .await
+    }
+
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
         self.get_database().count_total_evaluation_runs().await
     }
@@ -855,6 +977,14 @@ impl EvaluationQueries for DelegatingDatabaseConnection {
             .await
     }
 
+    fn serialize_output_for_feedback(
+        &self,
+        inference_response: &InferenceResponse,
+    ) -> Result<String, Error> {
+        self.get_database()
+            .serialize_output_for_feedback(inference_response)
+    }
+
     async fn get_inference_evaluation_human_feedback(
         &self,
         metric_name: &str,
@@ -941,36 +1071,40 @@ impl DICLQueries for DelegatingDatabaseConnection {
 
 #[cfg(any(test, feature = "e2e_tests"))]
 mod test_helpers_impl {
-    use super::DelegatingDatabaseConnection;
+    use super::{DelegatingDatabaseConnection, PrimaryDatastore};
     use crate::db::clickhouse::test_helpers::get_clickhouse;
     use crate::db::postgres::test_helpers::get_postgres;
     use crate::db::test_helpers::TestDatabaseHelpers;
-    use crate::feature_flags::ENABLE_POSTGRES_AS_PRIMARY_DATASTORE;
     use async_trait::async_trait;
 
     impl DelegatingDatabaseConnection {
         pub async fn new_for_e2e_test() -> Self {
             let clickhouse = get_clickhouse().await;
             let postgres = get_postgres().await;
-            Self::new(clickhouse, postgres)
+            let primary = PrimaryDatastore::from_test_env();
+            Self::new(clickhouse, postgres, primary)
         }
     }
 
     #[async_trait]
     impl TestDatabaseHelpers for DelegatingDatabaseConnection {
         async fn flush_pending_writes(&self) {
-            if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-                self.postgres.flush_pending_writes().await;
-            } else {
-                self.clickhouse.flush_pending_writes().await;
+            match self.primary {
+                PrimaryDatastore::Postgres => self.postgres.flush_pending_writes().await,
+                PrimaryDatastore::ClickHouse => self.clickhouse.flush_pending_writes().await,
+                PrimaryDatastore::Disabled => {}
             }
         }
 
         async fn sleep_for_writes_to_be_visible(&self) {
-            if ENABLE_POSTGRES_AS_PRIMARY_DATASTORE.get() {
-                self.postgres.sleep_for_writes_to_be_visible().await;
-            } else {
-                self.clickhouse.sleep_for_writes_to_be_visible().await;
+            match self.primary {
+                PrimaryDatastore::Postgres => {
+                    self.postgres.sleep_for_writes_to_be_visible().await;
+                }
+                PrimaryDatastore::ClickHouse => {
+                    self.clickhouse.sleep_for_writes_to_be_visible().await;
+                }
+                PrimaryDatastore::Disabled => {}
             }
         }
     }

@@ -56,8 +56,18 @@ impl ToolMetadata for AutoRejectToolCallTool {
     }
 
     #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "AutoRejectToolCallParams".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
     }
 
     fn parameters_schema(&self) -> ToolResult<Schema> {
@@ -85,7 +95,7 @@ impl TaskTool for AutoRejectToolCallTool {
         &self,
         _llm_params: <Self as ToolMetadata>::LlmParams,
         side_info: <Self as ToolMetadata>::SideInfo,
-        ctx: &mut ToolContext<'_>,
+        ctx: &mut ToolContext,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Send ToolCallAuthorization::NotAvailable to autopilot API
         ctx.client()

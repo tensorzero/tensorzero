@@ -64,17 +64,11 @@ macro_rules! make_cache_tests {
 /// Creates a gateway configured to use the specified cache backend.
 ///
 /// - `CacheBackend::Clickhouse`: default mode (ClickHouse as primary datastore)
-/// - `CacheBackend::Valkey`: sets `ENABLE_POSTGRES_AS_PRIMARY_DATASTORE=true`,
-///   uses Postgres + Valkey connections
+/// - `CacheBackend::Valkey`: uses Postgres as primary datastore + Valkey connections
 async fn make_cache_test_gateway(backend: CacheBackend, db_prefix: &str) -> tensorzero::Client {
     match backend {
         CacheBackend::Clickhouse => make_embedded_gateway_e2e_with_unique_db(db_prefix).await,
         CacheBackend::Valkey => {
-            // Must be set before the first flag access (OnceLock caches on first read)
-            tensorzero_unsafe_helpers::set_env_var_tests_only(
-                "TENSORZERO_INTERNAL_FLAG_ENABLE_POSTGRES_AS_PRIMARY_DATASTORE",
-                "true",
-            );
             make_embedded_gateway_e2e_with_unique_db_all_backends(db_prefix).await
         }
     }

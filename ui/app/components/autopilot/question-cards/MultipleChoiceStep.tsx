@@ -1,5 +1,13 @@
+import { Markdown } from "~/components/ui/markdown";
 import { cn } from "~/utils/common";
 import type { EventPayloadUserQuestion } from "~/types/tensorzero";
+
+// Strip interactive elements inside buttons to avoid nested interactive HTML
+const nonInteractiveComponents: React.ComponentProps<
+  typeof Markdown
+>["components"] = {
+  a: ({ children }) => <span>{children}</span>,
+};
 
 type MultipleChoiceStepProps = {
   question: Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>;
@@ -15,9 +23,9 @@ export function MultipleChoiceStep({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
-        <span className="text-fg-primary text-sm font-medium">
+        <Markdown className="text-fg-primary text-sm font-medium">
           {question.question}
-        </span>
+        </Markdown>
         <span className="text-fg-muted text-xs">
           {question.multi_select ? "Select all that apply" : "Select one"}
         </span>
@@ -48,16 +56,17 @@ export function MultipleChoiceStep({
               >
                 {option.label}
               </span>
-              <span
+              <Markdown
                 className={cn(
                   "text-xs leading-snug",
                   isSelected
                     ? "text-purple-600 dark:text-purple-400"
                     : "text-fg-muted",
                 )}
+                components={nonInteractiveComponents}
               >
                 {option.description}
-              </span>
+              </Markdown>
             </button>
           );
         })}

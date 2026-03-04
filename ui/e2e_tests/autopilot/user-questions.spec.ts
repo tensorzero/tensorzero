@@ -315,12 +315,6 @@ test.describe("User questions", () => {
       page.getByText("Which framework do you prefer?"),
     ).toBeVisible();
 
-    // Verify React is still selected (button should have selected styling)
-    const reactButton = page.getByRole("button", {
-      name: "React React with TypeScript",
-    });
-    await expect(reactButton).toHaveClass(/border-purple-500/);
-
     // Complete the flow and verify the preserved selection in DB
     await page.getByRole("button", { name: /next/i }).click();
     const textarea = page.getByPlaceholder("Type your response...");
@@ -456,5 +450,75 @@ test.describe("User questions", () => {
       answerRequestCount,
       "Spam-clicking Submit should send only one request",
     ).toBe(1);
+  });
+});
+
+// ── Full E2E Tests ────────────────────────────────────────────────────
+// These tests go through the live autopilot backend: send a message that
+// triggers the LLM to call ask_user_questions, wait for the real worker
+// to write the UserQuestions event, interact with the UI, and verify the
+// session completes successfully (returns to idle).
+
+test.describe("User questions (full e2e)", () => {
+  test("should complete multiple choice flow through live backend", async ({
+    page,
+  }) => {
+    test.setTimeout(240000);
+
+    const sessionId = await createSession(
+      page,
+      `Use the ask_user_questions tool to ask me exactly one multiple choice question. Use header "Auth", question "Which auth method?", type "multiple_choice", multi_select false, and two options: label "JWT" description "JSON Web Tokens" and label "OAuth" description "OAuth 2.0 flow". Call the tool directly without using any other tools first. ${v7()}`,
+    );
+
+    const submitButton = page.getByRole("button", { name: /submit/i });
+    await expect(submitButton).toBeVisible({ timeout: 90000 });
+
+    // Select JWT option and submit (options render as buttons in the card)
+    await page.getByRole("button", { name: /JWT/ }).click();
+    await submitButton.click();
+
+    // Verify "Answered" event appears
+    await expect(page.getByText("Answered")).toBeVisible({ timeout: 15000 });
+
+    await expect(page.getByText("Ready")).toBeVisible({ timeout: 60000 });
+
+    // Verify the answer was persisted correctly in the database
+    const answer = queryFirstAnswerPayload(sessionId);
+    expect(answer.type).toBe("user_questions_answers");
+    const response = Object.values(answer.responses)[0];
+    expect(response.type, "answer should be a multiple choice response").toBe(
+      "multiple_choice",
+    );
+  });
+
+  test("should complete free response flow through live backend", async ({
+    page,
+  }) => {
+    test.setTimeout(240000);
+
+    const sessionId = await createSession(
+      page,
+      `Use the ask_user_questions tool to ask me exactly one free response question. Use header "Notes", question "Any requirements?", type "free_response". Call the tool directly without using any other tools first. ${v7()}`,
+    );
+
+    // Wait for the free response textarea to appear
+    const textarea = page.getByPlaceholder("Type your response...");
+    await expect(textarea).toBeVisible({ timeout: 90000 });
+
+    await textarea.fill("We need RBAC support");
+    await page.getByRole("button", { name: /submit/i }).click();
+
+    await expect(page.getByText("Answered")).toBeVisible({ timeout: 15000 });
+
+    await expect(page.getByText("Ready")).toBeVisible({ timeout: 60000 });
+
+    // Verify the answer was persisted correctly in the database
+    const answer = queryFirstAnswerPayload(sessionId);
+    expect(answer.type).toBe("user_questions_answers");
+    const response = Object.values(answer.responses)[0];
+    expect(response.type, "answer should be a free response").toBe(
+      "free_response",
+    );
+    expect(response.text).toBe("We need RBAC support");
   });
 });

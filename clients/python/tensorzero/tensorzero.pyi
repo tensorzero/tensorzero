@@ -876,6 +876,40 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    def experimental_launch_optimization_workflow(
+        self,
+        *,
+        function_name: str,
+        template_variant_name: str,
+        output_source: str,
+        optimizer_config: Dict[str, Any],
+        query_variant_name: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        order_by: Optional[List[Dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        val_fraction: Optional[float] = None,
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization workflow.
+
+        This is a convenience method that handles fetching inferences, rendering samples,
+        and launching the optimization job server-side.
+
+        :param function_name: The name of the function to optimize.
+        :param template_variant_name: The name of the template variant to use.
+        :param output_source: The source of the output (e.g. "inference" or "demonstration").
+        :param optimizer_config: The optimizer configuration dictionary.
+        :param query_variant_name: Optional name of the query variant.
+        :param filters: Optional inference filters.
+        :param order_by: Optional ordering specification.
+        :param limit: Optional limit on the number of inferences to use.
+        :param offset: Optional offset for pagination.
+        :param val_fraction: Optional fraction of data to use for validation.
+        :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
+        """
+        ...
+
     def experimental_poll_optimization(
         self,
         *,
@@ -1358,6 +1392,40 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param val_samples: A list of RenderedSample objects that will be used for validation.
         :param optimization_config: The optimization config.
         :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    async def experimental_launch_optimization_workflow(
+        self,
+        *,
+        function_name: str,
+        template_variant_name: str,
+        output_source: str,
+        optimizer_config: Dict[str, Any],
+        query_variant_name: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        order_by: Optional[List[Dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        val_fraction: Optional[float] = None,
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization workflow.
+
+        This is a convenience method that handles fetching inferences, rendering samples,
+        and launching the optimization job server-side.
+
+        :param function_name: The name of the function to optimize.
+        :param template_variant_name: The name of the template variant to use.
+        :param output_source: The source of the output (e.g. "inference" or "demonstration").
+        :param optimizer_config: The optimizer configuration dictionary.
+        :param query_variant_name: Optional name of the query variant.
+        :param filters: Optional inference filters.
+        :param order_by: Optional ordering specification.
+        :param limit: Optional limit on the number of inferences to use.
+        :param offset: Optional offset for pagination.
+        :param val_fraction: Optional fraction of data to use for validation.
+        :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
         """
         ...
 

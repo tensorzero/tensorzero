@@ -97,13 +97,14 @@ repos:
           - oxfmt
         pass_filenames: false
 
-      - id: "eslint: ui"
-        name: "eslint: ui"
+      - id: "lint: ui"
+        name: "lint: ui (oxlint + eslint)"
         entry: bash -c 'pnpm --filter=tensorzero-ui run lint'
         language: node
         language_version: "24.13.0"
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
+          - oxlint
           - eslint
           - "@typescript-eslint/parser"
           - "@typescript-eslint/eslint-plugin"

@@ -52,8 +52,18 @@ impl ToolMetadata for WriteConfigTool {
     }
 
     #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "WriteConfigToolParams".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::WRITE_CONFIG_RESPONSE
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "WriteConfigResponse".to_string()
     }
 
     fn name(&self) -> Cow<'static, str> {

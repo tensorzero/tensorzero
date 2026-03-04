@@ -10,7 +10,6 @@ use axum::Json;
 use axum::extract::{Query, State};
 use tracing::instrument;
 
-use crate::db::delegating_connection::DelegatingDatabaseConnection;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::endpoints::internal::models::types::{
     GetModelLatencyQueryParams, GetModelUsageQueryParams,
@@ -26,10 +25,7 @@ use crate::utils::gateway::{AppState, AppStateData};
 pub async fn count_models_handler(
     State(app_state): AppState,
 ) -> Result<Json<CountModelsResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
 
     let count = database.count_distinct_models_used().await?;
 
@@ -45,10 +41,7 @@ pub async fn get_model_usage_handler(
     State(app_state): AppState,
     Query(params): Query<GetModelUsageQueryParams>,
 ) -> Result<Json<GetModelUsageResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
 
     let data = database
         .get_model_usage_timeseries(params.time_window, params.max_periods)
@@ -66,10 +59,7 @@ pub async fn get_model_latency_handler(
     State(app_state): AppState,
     Query(params): Query<GetModelLatencyQueryParams>,
 ) -> Result<Json<GetModelLatencyResponse>, Error> {
-    let database = DelegatingDatabaseConnection::new(
-        app_state.clickhouse_connection_info.clone(),
-        app_state.postgres_connection_info.clone(),
-    );
+    let database = app_state.get_delegating_database();
 
     let quantiles = database
         .get_model_latency_quantile_function_inputs()

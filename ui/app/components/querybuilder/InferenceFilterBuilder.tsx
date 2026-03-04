@@ -61,7 +61,7 @@ export default function InferenceFilterBuilder({
         `/api/function/${encodeURIComponent(functionName)}/feedback_counts`,
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [functionName]);
 
   const validMetricNames = useMemo((): Set<string> | null => {

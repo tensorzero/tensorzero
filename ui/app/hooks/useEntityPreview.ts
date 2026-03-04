@@ -42,7 +42,7 @@ export function useEntityPreview<T>({
     // Intentionally omits fetcher from deps to avoid infinite loops.
     // Re-runs when url or enabled changes, which covers the hovercard
     // open/close lifecycle.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [url, enabled]);
 
   return {

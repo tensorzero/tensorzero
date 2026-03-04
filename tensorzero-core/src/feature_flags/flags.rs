@@ -28,7 +28,4 @@ macro_rules! define_flags {
 define_flags! {
     /// A dummy test flag for unit tests.
     pub TEST_FLAG: bool = ("test_flag", false);
-
-    /// Use Postgres as the primary datastore instead of ClickHouse.
-    pub ENABLE_POSTGRES_AS_PRIMARY_DATASTORE: bool = ("enable_postgres_as_primary_datastore", false);
 }

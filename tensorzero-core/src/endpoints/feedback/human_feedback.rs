@@ -40,7 +40,7 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
         }
     };
     let output = database
-        .get_inference_output(&function_info, target_id)
+        .get_serialized_inference_output_for_feedback(&function_info, target_id)
         .await?
         .ok_or_else(|| {
             Error::new(ErrorDetails::InferenceNotFound {

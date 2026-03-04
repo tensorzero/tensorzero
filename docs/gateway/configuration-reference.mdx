@@ -48,6 +48,7 @@ Enable authentication for the TensorZero Gateway.
 When enabled, all gateway endpoints except `/status` and `/health` will require a valid API key.
 
 You must set up Postgres to use authentication features.
+The gateway will fail to start if authentication is enabled but `TENSORZERO_POSTGRES_URL` is not set.
 API keys can be created and managed through the TensorZero UI or CLI.
 
 ```toml title="tensorzero.toml"
@@ -120,7 +121,7 @@ When this field is set to `true`, the gateway will log more verbose errors to as
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/deployment/tensorzero-gateway/#disabling-pseudonymous-usage-analytics).
+If set to `true`, TensorZero will not collect or share pseudonymous usage analytics.
 
 ### `export.otlp.traces.enabled`
 
@@ -377,8 +378,7 @@ A list of provider names to route requests to.
 The providers must be defined in the `providers` sub-section (see below).
 The TensorZero Gateway will attempt to route a request to the first provider in the list, and fallback to subsequent providers in order if the request is not successful.
 
-```toml mark="openai" mark="azure"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="openai" mark="azure"
 [models.gpt-4o]
 # ...
 routing = ["openai", "azure"]
@@ -438,6 +438,29 @@ The specified timeouts apply to the scope of an entire model inference request, 
 You can also set timeouts at the variant level and provider level.
 Multiple timeouts can be active simultaneously.
 
+### `namespace`
+
+- **Type:** string
+- **Required:** no
+
+Scopes this model to a specific namespace.
+When set, the model can only be used by variants that are reachable from a matching namespace experimentation config.
+This is validated at both config time and inference time.
+
+This is useful for per-customer fine-tuned models that should only be served when the correct namespace is provided at inference time.
+
+```toml title="tensorzero.toml"
+[models.customer-a-ft]
+routing = ["fireworks"]
+namespace = "customer_a"
+
+[models.customer-a-ft.providers.fireworks]
+type = "fireworks"
+model_name = "accounts/customer-a/models/ft-v1"
+```
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
+
 ## `[models.model_name.providers.provider_name]`
 
 The `providers` sub-section defines the behavior of a specific provider for a model.
@@ -446,8 +469,7 @@ You can define multiple providers by including multiple `[models.model_name.prov
 If your `provider_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `vllm.internal` as `[models.model_name.providers."vllm.internal"]`.
 
-```toml mark="gpt-4o" mark="openai" mark="azure"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="gpt-4o" mark="openai" mark="azure"
 [models.gpt-4o]
 # ...
 routing = ["openai", "azure"]
@@ -466,7 +488,7 @@ routing = ["openai", "azure"]
 - **Required:** no
 
 Configures how to extract cost information from batch inference provider responses.
-This is used for cost tracking of [batch inferences](/gateway/batch-inference).
+This is used for cost tracking of [batch inferences](/gateway/guides/batch-inference).
 
 Many providers offer discounted pricing for batch inferences compared to real-time inferences.
 Use `batch_cost` to configure the batch-specific rates.
@@ -2171,8 +2193,7 @@ A list of provider names to route requests to.
 The providers must be defined in the `providers` sub-section (see below).
 The TensorZero Gateway will attempt to route a request to the first provider in the list, and fallback to subsequent providers in order if the request is not successful.
 
-```toml mark="openai" mark="azure"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="openai" mark="azure"
 [embedding_models.model-name]
 # ...
 routing = ["openai", "alternative-provider"]
@@ -2211,8 +2232,7 @@ You can define multiple providers by including multiple `[embedding_models.model
 If your `provider_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `vllm.internal` as `[embedding_models.model_name.providers."vllm.internal"]`.
 
-```toml mark="openai" mark="azure"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="openai" mark="azure"
 [embedding_models.model-name]
 # ...
 routing = ["openai", "alternative-provider"]
@@ -3006,8 +3026,7 @@ The supported tool choice strategies are:
 - `required`: The model should use a tool. If multiple tools are available, the model decides which tool to use.
 - `{ specific = "tool_name" }`: The model should use a specific tool. The tool must be defined in the `tools` field (see below).
 
-```toml mark="run-python"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="run-python"
 [functions.solve-math-problem]
 # ...
 type = "chat"
@@ -3024,8 +3043,7 @@ tools = [
 
 ```
 
-```toml mark="query-database"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="query-database"
 [functions.generate-query]
 # ...
 type = "chat"
@@ -3050,8 +3068,7 @@ Determines the tools that the function can use.
 
 The supported tools are defined in `[tools.tool_name]` sections (see below).
 
-```toml mark="query-database"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="query-database"
 [functions.draft-email]
 # ...
 type = "chat"
@@ -3128,8 +3145,7 @@ You can define multiple variants by including multiple `[functions.function_name
 If your `variant_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `llama-3.1-8b-instruct` as `[functions.function_name.variants."llama-3.1-8b-instruct"]`.
 
-```toml mark="draft-email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft-email"
 [functions.draft-email]
 # ...
 
@@ -4583,6 +4599,34 @@ update_period_s = 300
 
 </Accordion>
 
+### Namespace-Specific Experimentation
+
+You can override the base experimentation config for specific namespaces using the `namespaces` sub-section.
+Each namespace key maps to an experimentation config that follows the same schema as the base config (i.e. `type`, `candidate_variants`, etc.).
+
+When a request provides a namespace, the gateway uses the matching namespace config if one exists.
+If no matching namespace config is found, the base experimentation config is used as a fallback.
+
+```toml title="tensorzero.toml"
+# Base config: used when no namespace is provided or namespace has no specific config
+[functions.draft-email.experimentation]
+type = "static"
+candidate_variants = ["variant-a", "variant-b"]
+
+# Mobile namespace: always serve variant-a
+[functions.draft-email.experimentation.namespaces.mobile]
+type = "static"
+candidate_variants = {"variant-a" = 1.0}
+
+# Web namespace: run an adaptive experiment
+[functions.draft-email.experimentation.namespaces.web]
+type = "adaptive"
+candidate_variants = ["variant-a", "variant-b"]
+metric = "user-rating"
+```
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
+
 ## `[metrics]`
 
 The `[metrics]` section defines the behavior of a metric.
@@ -4693,8 +4737,7 @@ For example, periods are not allowed in basic strings, so you can define `run-py
 
 You can enable a tool for a function by adding it to the function's `tools` field.
 
-```toml mark="get-temperature"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="get-temperature"
 [functions.weather-chatbot]
 # ...
 type = "chat"
@@ -4882,18 +4925,6 @@ You can connect to Postgres by setting the `TENSORZERO_POSTGRES_URL` environment
 
 Defines the maximum number of connections in the Postgres connection pool.
 
-### `enabled`
-
-- **Type:** boolean
-- **Required:** no (default: `null`)
-
-Enable Postgres connectivity.
-If `true`, the gateway will throw an error on startup if it fails to connect to Postgres (requires `TENSORZERO_POSTGRES_URL` environment variable).
-If `false`, the gateway will not use Postgres even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
-If omitted, the gateway will connect to Postgres if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable Postgres with a warning.
-
-If you have features that require Postgres (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
-
 ## `[rate_limiting]`
 
 The `[rate_limiting]` section allows you to configure granular rate limits for your TensorZero Gateway.
@@ -4921,7 +4952,8 @@ default_cost = 0.50
 - **Required:** no (default: `true`)
 
 Enable or disable rate limiting enforcement.
-When set to `false`, rate limiting rules will not be enforced even if they are defined.
+When `true` and there are rate limiting rules, we validate that a valid rate limiting backend (Postgres or Valkey) is available, and fail gateway startup otherwise.
+When `false`, rate limiting rules will not be enforced even if they are defined.
 
 ```toml
 [rate_limiting]
