@@ -21,6 +21,9 @@ http_workflow_test_case!(openai_rft, common::openai_rft::OpenAIRFTTestCase());
 embedded_workflow_test_case!(openai_sft, common::openai_sft::OpenAISFTTestCase());
 http_workflow_test_case!(openai_sft, common::openai_sft::OpenAISFTTestCase());
 
+// Dataset-path workflow test
+embedded_dataset_workflow_test_case!(openai_sft, common::openai_sft::OpenAISFTTestCase());
+
 embedded_workflow_test_case!(together_sft, common::together_sft::TogetherSFTTestCase());
 http_workflow_test_case!(together_sft, common::together_sft::TogetherSFTTestCase());
 

@@ -654,6 +654,7 @@ mod tests {
     use googletest::prelude::*;
     use uuid::Uuid;
 
+    use crate::embeddings::{EmbeddingEncodingFormat, EmbeddingInput};
     use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
     use crate::inference::types::extra_body::{
         ExtraBodyConfig, ExtraBodyReplacement, ExtraBodyReplacementKind, FullExtraBodyConfig,
@@ -1072,5 +1073,125 @@ mod tests {
             cache_key_for(&req, "model", "provider"),
             not(eq(fixture.key))
         );
+    }
+
+    // --- Embedding cache key tests ---
+
+    fn baseline_embedding_request() -> EmbeddingRequest {
+        EmbeddingRequest {
+            input: EmbeddingInput::Single("hello world".to_string()),
+            dimensions: Some(256),
+            encoding_format: EmbeddingEncodingFormat::Float,
+        }
+    }
+
+    fn embedding_cache_key_for(
+        request: &EmbeddingRequest,
+        model_name: &str,
+        provider_name: &str,
+    ) -> CacheKey {
+        let otlp_config = OtlpConfig::default();
+        EmbeddingModelProviderRequest {
+            request,
+            model_name,
+            provider_name,
+            otlp_config: &otlp_config,
+            model_inference_id: Uuid::now_v7(),
+        }
+        .get_cache_key()
+        .expect("get_cache_key should not fail for a valid embedding request")
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_all_fields_considered() {
+        let request = baseline_embedding_request();
+
+        // Exhaustive destructure: a compile error here means a new field was added
+        // and must be classified as cache-relevant or explicitly excluded.
+        let EmbeddingRequest {
+            input: _,
+            dimensions: _,
+            encoding_format: _,
+        } = &request;
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_deterministic() {
+        let req = baseline_embedding_request();
+        let key_a = embedding_cache_key_for(&req, "model", "provider");
+        let key_b = embedding_cache_key_for(&req, "model", "provider");
+        expect_that!(key_a, eq(key_b));
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_ignores_model_inference_id() {
+        let req = baseline_embedding_request();
+        // embedding_cache_key_for uses a fresh model_inference_id each time
+        let key_a = embedding_cache_key_for(&req, "model", "provider");
+        let key_b = embedding_cache_key_for(&req, "model", "provider");
+        expect_that!(key_a, eq(key_b));
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_changes_with_model_name() {
+        let req = baseline_embedding_request();
+        let baseline_key = embedding_cache_key_for(&req, "model", "provider");
+        let key = embedding_cache_key_for(&req, "other_model", "provider");
+        expect_that!(key, not(eq(baseline_key)));
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_changes_with_provider_name() {
+        let req = baseline_embedding_request();
+        let baseline_key = embedding_cache_key_for(&req, "model", "provider");
+        let key = embedding_cache_key_for(&req, "model", "other_provider");
+        expect_that!(key, not(eq(baseline_key)));
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_prefix_free_encoding() {
+        let req = baseline_embedding_request();
+        let baseline_key = embedding_cache_key_for(&req, "model", "provider");
+        let key = embedding_cache_key_for(&req, "modelp", "rovider");
+        expect_that!(key, not(eq(baseline_key)));
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_changes_with_input() {
+        let req = baseline_embedding_request();
+        let baseline_key = embedding_cache_key_for(&req, "model", "provider");
+
+        let different = EmbeddingRequest {
+            input: EmbeddingInput::Single("goodbye world".to_string()),
+            ..baseline_embedding_request()
+        };
+        let key = embedding_cache_key_for(&different, "model", "provider");
+        expect_that!(key, not(eq(baseline_key)));
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_changes_with_dimensions() {
+        let req = baseline_embedding_request();
+        let baseline_key = embedding_cache_key_for(&req, "model", "provider");
+
+        let different = EmbeddingRequest {
+            dimensions: Some(512),
+            ..baseline_embedding_request()
+        };
+        let key = embedding_cache_key_for(&different, "model", "provider");
+        expect_that!(key, not(eq(baseline_key)));
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_changes_with_encoding_format() {
+        let req = baseline_embedding_request();
+        let baseline_key = embedding_cache_key_for(&req, "model", "provider");
+
+        let different = EmbeddingRequest {
+            encoding_format: EmbeddingEncodingFormat::Base64,
+            ..baseline_embedding_request()
+        };
+        let key = embedding_cache_key_for(&different, "model", "provider");
+        expect_that!(key, not(eq(baseline_key)));
     }
 }
