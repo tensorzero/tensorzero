@@ -152,7 +152,7 @@ pub struct RunEvaluationHttpParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_datapoints: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub precision_targets: Option<HashMap<String, f64>>,
+    pub precision_targets: Option<HashMap<String, f32>>,
 }
 
 /// Result from running an evaluation over HTTP via SSE.

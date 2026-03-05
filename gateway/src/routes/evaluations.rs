@@ -69,7 +69,7 @@ pub struct RunEvaluationRequest {
     pub max_datapoints: Option<u32>,
     /// Per-evaluator precision targets for adaptive stopping
     #[serde(default)]
-    pub precision_targets: Option<HashMap<String, f64>>,
+    pub precision_targets: Option<HashMap<String, f32>>,
 }
 
 fn default_concurrency() -> u32 {
@@ -285,13 +285,7 @@ pub async fn run_evaluation_handler(
         }
     };
 
-    // Parse precision_targets
-    let precision_targets: HashMap<String, f32> = request
-        .precision_targets
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(k, v)| (k, v as f32))
-        .collect();
+    let precision_targets: HashMap<String, f32> = request.precision_targets.unwrap_or_default();
 
     // Get variant name for the start event
     let variant_name_for_event = match &variant {

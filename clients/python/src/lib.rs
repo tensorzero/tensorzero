@@ -707,12 +707,7 @@ fn build_http_evaluation_params(
     let precision_targets = if precision_targets_map.is_empty() {
         None
     } else {
-        Some(
-            precision_targets_map
-                .into_iter()
-                .map(|(k, v)| (k, v as f64))
-                .collect(),
-        )
+        Some(precision_targets_map)
     };
 
     Ok(RunEvaluationHttpParams {
