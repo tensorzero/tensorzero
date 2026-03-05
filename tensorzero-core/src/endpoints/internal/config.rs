@@ -10,8 +10,8 @@ use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+use crate::config::UninitializedConfig;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use crate::config::{Config, RuntimeOverlay, UninitializedConfig};
 use crate::db::ConfigQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
@@ -124,15 +124,9 @@ pub async fn write_config_handler(
 
     let hash = snapshot.hash.to_string();
 
-    // Validate the config by running the full loading pipeline.
-    // We use the live config's runtime settings (gateway, postgres, rate limiting,
-    // object storage) since those are infrastructure concerns not part of the snapshot.
-    // Credential validation is skipped since we're only checking config correctness.
-    let runtime_overlay = RuntimeOverlay::from_config(&app_state.config);
-    Config::load_from_snapshot(snapshot.clone(), runtime_overlay, false).await?;
-
-    let db = app_state.get_delegating_database();
-    db.write_config_snapshot(&snapshot).await?;
+    app_state
+        .validate_and_write_config_snapshot(&snapshot)
+        .await?;
 
     Ok(Json(WriteConfigResponse { hash }))
 }
