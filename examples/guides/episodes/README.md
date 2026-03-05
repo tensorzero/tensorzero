@@ -19,5 +19,5 @@ docker compose up
 3. Run the example:
 
 ```bash
-uv run python run.py
+uv run main.py
 ```
