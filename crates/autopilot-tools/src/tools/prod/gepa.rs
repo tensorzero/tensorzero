@@ -17,7 +17,7 @@ use durable_tools::{
     RunEvaluationParams, RunEvaluationResponse, TaskTool, ToolAppState, ToolContext, ToolMetadata,
     ToolResult,
 };
-use rand::seq::IndexedRandom;
+use rand::seq::{IndexedRandom, SliceRandom};
 use rand::{SeedableRng, rngs::StdRng};
 use serde::Deserialize;
 use serde_json::from_value;
@@ -110,7 +110,7 @@ impl TaskTool for GepaTool {
         // ── Step "init_eval": evaluate all initial variants ─────────
         let init_eval_params = InitEvalStepParams {
             evaluation_name: setup.gepa_config.evaluation_name.clone(),
-            val_dataset_name: setup.val_dataset_name.clone(),
+            datapoint_ids: setup.val_datapoint_ids.clone(),
             variants: setup.original_variants.clone(),
             max_concurrency: setup.gepa_config.max_concurrency,
         };
@@ -276,8 +276,8 @@ impl TaskTool for GepaTool {
                     &format!("iter_{iteration}_eval_child_val"),
                     EvalStepParams {
                         evaluation_name: setup.gepa_config.evaluation_name.clone(),
-                        dataset_name: Some(setup.val_dataset_name.clone()),
-                        datapoint_ids: None,
+                        dataset_name: None,
+                        datapoint_ids: Some(setup.val_datapoint_ids.clone()),
                         variant_name: mutation.child_name.clone(),
                         variant_config: mutation.child_config.clone(),
                         max_concurrency: setup.gepa_config.max_concurrency,
@@ -384,23 +384,6 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
         )
         .map_err(|e| anyhow::anyhow!("Failed to get initial variants: {e}"))?;
 
-    // Resolve dataset names
-    let train_dataset_name = params
-        .train_dataset_name
-        .clone()
-        .or_else(|| params.dataset_name.clone())
-        .ok_or_else(|| {
-            anyhow::anyhow!("Either `dataset_name` or `train_dataset_name` must be provided")
-        })?;
-
-    let val_dataset_name = params
-        .val_dataset_name
-        .clone()
-        .or_else(|| params.dataset_name.clone())
-        .ok_or_else(|| {
-            anyhow::anyhow!("Either `dataset_name` or `val_dataset_name` must be provided")
-        })?;
-
     // Get evaluator configs for Pareto analysis
     let evaluator_configs = match &*function_context.evaluation_config {
         EvaluationConfig::Inference(cfg) => cfg.evaluators.clone(),
@@ -408,46 +391,115 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
 
     let run_id = Uuid::now_v7();
 
-    // Get training datapoint IDs for minibatch sampling
-    let train_datapoints = client
-        .list_datapoints(
-            train_dataset_name.clone(),
-            ListDatapointsRequest {
-                limit: None,
-                ..Default::default()
-            },
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to list training datapoints: {e}"))?;
+    // Resolve datasets and datapoint IDs.
+    // Two modes:
+    //   1. Separate datasets: `train_dataset_name` + `val_dataset_name`
+    //   2. Auto-split: single `dataset_name` shuffled and split 50/50
+    let has_separate_datasets =
+        params.train_dataset_name.is_some() || params.val_dataset_name.is_some();
 
-    let train_datapoint_ids: Vec<Uuid> =
-        train_datapoints.datapoints.iter().map(|d| d.id()).collect();
+    let (train_dataset_name, train_datapoint_ids, val_dataset_name, val_datapoint_ids) =
+        if has_separate_datasets {
+            let train_name = params
+                .train_dataset_name
+                .clone()
+                .or_else(|| params.dataset_name.clone())
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Either `dataset_name` or `train_dataset_name` must be provided"
+                    )
+                })?;
 
-    if train_datapoint_ids.is_empty() {
-        return Err(anyhow::anyhow!(
-            "Training dataset `{train_dataset_name}` contains no datapoints"
-        ));
-    }
+            let val_name = params
+                .val_dataset_name
+                .clone()
+                .or_else(|| params.dataset_name.clone())
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Either `dataset_name` or `val_dataset_name` must be provided")
+                })?;
 
-    // Get validation datapoint IDs
-    let val_datapoints = client
-        .list_datapoints(
-            val_dataset_name.clone(),
-            ListDatapointsRequest {
-                limit: None,
-                ..Default::default()
-            },
-        )
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to list val datapoints: {e}"))?;
+            let train_datapoints = client
+                .list_datapoints(
+                    train_name.clone(),
+                    ListDatapointsRequest {
+                        limit: None,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to list training datapoints: {e}"))?;
 
-    let val_datapoint_ids: Vec<Uuid> = val_datapoints.datapoints.iter().map(|d| d.id()).collect();
+            let train_ids: Vec<Uuid> = train_datapoints.datapoints.iter().map(|d| d.id()).collect();
+            if train_ids.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Training dataset `{train_name}` contains no datapoints"
+                ));
+            }
 
-    if val_datapoint_ids.is_empty() {
-        return Err(anyhow::anyhow!(
-            "Validation dataset `{val_dataset_name}` contains no datapoints"
-        ));
-    }
+            let val_datapoints = client
+                .list_datapoints(
+                    val_name.clone(),
+                    ListDatapointsRequest {
+                        limit: None,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to list val datapoints: {e}"))?;
+
+            let val_ids: Vec<Uuid> = val_datapoints.datapoints.iter().map(|d| d.id()).collect();
+            if val_ids.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Validation dataset `{val_name}` contains no datapoints"
+                ));
+            }
+
+            (train_name, train_ids, val_name, val_ids)
+        } else {
+            // Auto-split: single dataset shuffled 50/50
+            let dataset_name = params.dataset_name.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "One of `dataset_name`, `train_dataset_name`, or `val_dataset_name` must be provided"
+                )
+            })?;
+
+            let all_datapoints = client
+                .list_datapoints(
+                    dataset_name.clone(),
+                    ListDatapointsRequest {
+                        limit: None,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to list datapoints: {e}"))?;
+
+            let mut all_ids: Vec<Uuid> = all_datapoints.datapoints.iter().map(|d| d.id()).collect();
+            if all_ids.len() < 2 {
+                return Err(anyhow::anyhow!(
+                    "Dataset `{dataset_name}` needs at least 2 datapoints for auto-split"
+                ));
+            }
+
+            // Shuffle deterministically for reproducibility
+            let mut split_rng = match gepa_config.seed {
+                Some(seed) => StdRng::seed_from_u64(seed as u64),
+                None => StdRng::from_rng(&mut rand::rng()),
+            };
+            all_ids.shuffle(&mut split_rng);
+
+            let split_point = all_ids.len() / 2;
+            let train_ids = all_ids[..split_point].to_vec();
+            let val_ids = all_ids[split_point..].to_vec();
+
+            tracing::info!(
+                "Auto-split dataset `{dataset_name}`: {} train, {} val datapoints",
+                train_ids.len(),
+                val_ids.len(),
+            );
+
+            (dataset_name.clone(), train_ids, dataset_name, val_ids)
+        };
 
     let resolved_config = ResolvedGEPAConfig {
         function_name: gepa_config.function_name,
@@ -496,8 +548,8 @@ async fn init_eval_step(
 
         let eval_params = RunEvaluationParams {
             evaluation_name: params.evaluation_name.clone(),
-            dataset_name: Some(params.val_dataset_name.clone()),
-            datapoint_ids: None,
+            dataset_name: None,
+            datapoint_ids: Some(params.datapoint_ids.clone()),
             variant_name: variant_name.clone(),
             concurrency: per_variant_concurrency,
             inference_cache: CacheEnabledMode::Off,
@@ -750,7 +802,7 @@ fn parse_mutate_response(
     for parent_template_name in parent_config.templates.inner.keys() {
         if !templates.contains_key(parent_template_name) {
             return Err(anyhow::anyhow!(
-                "Mutate function did not return template '{parent_template_name}' present in parent"
+                "Mutate function did not return template `{parent_template_name}` present in parent"
             ));
         }
     }
@@ -759,7 +811,7 @@ fn parse_mutate_response(
     for template_name in templates.keys() {
         if !parent_config.templates.inner.contains_key(template_name) {
             return Err(anyhow::anyhow!(
-                "Mutate function returned unexpected template '{template_name}' not present in parent"
+                "Mutate function returned unexpected template `{template_name}` not present in parent"
             ));
         }
     }
