@@ -816,8 +816,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         function_name: str,
         template_variant_name: str,
-        output_source: str,
         optimizer_config: Dict[str, Any],
+        output_source: Optional[str] = None,
+        dataset_name: Optional[str] = None,
         query_variant_name: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         order_by: Optional[List[Dict[str, Any]]] = None,
@@ -828,18 +829,18 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         Launch an optimization workflow.
 
-        This is a convenience method that handles fetching inferences, rendering samples,
-        and launching the optimization job server-side.
+        Provide either `output_source` (for inferences) or `dataset_name` (for datasets), not both.
 
         :param function_name: The name of the function to optimize.
         :param template_variant_name: The name of the template variant to use.
-        :param output_source: The source of the output (e.g. "inference" or "demonstration").
         :param optimizer_config: The optimizer configuration dictionary.
-        :param query_variant_name: Optional name of the query variant.
-        :param filters: Optional inference filters.
-        :param order_by: Optional ordering specification.
-        :param limit: Optional limit on the number of inferences to use.
-        :param offset: Optional offset for pagination.
+        :param output_source: The source of inference output ("none", "inference", or "demonstration").
+        :param dataset_name: Name of the dataset to use as training data.
+        :param query_variant_name: Optional variant name to filter inferences by.
+        :param filters: Optional filters to apply when querying inferences.
+        :param order_by: Optional ordering for the inferences.
+        :param limit: Maximum number of inferences to use.
+        :param offset: Offset for pagination.
         :param val_fraction: Optional fraction of data to use for validation.
         :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
         """
@@ -1272,8 +1273,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         function_name: str,
         template_variant_name: str,
-        output_source: str,
         optimizer_config: Dict[str, Any],
+        output_source: Optional[str] = None,
+        dataset_name: Optional[str] = None,
         query_variant_name: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
         order_by: Optional[List[Dict[str, Any]]] = None,
@@ -1284,18 +1286,18 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         """
         Launch an optimization workflow.
 
-        This is a convenience method that handles fetching inferences, rendering samples,
-        and launching the optimization job server-side.
+        Provide either `output_source` (for inferences) or `dataset_name` (for datasets), not both.
 
         :param function_name: The name of the function to optimize.
         :param template_variant_name: The name of the template variant to use.
-        :param output_source: The source of the output (e.g. "inference" or "demonstration").
         :param optimizer_config: The optimizer configuration dictionary.
-        :param query_variant_name: Optional name of the query variant.
-        :param filters: Optional inference filters.
-        :param order_by: Optional ordering specification.
-        :param limit: Optional limit on the number of inferences to use.
-        :param offset: Optional offset for pagination.
+        :param output_source: The source of inference output ("none", "inference", or "demonstration").
+        :param dataset_name: Name of the dataset to use as training data.
+        :param query_variant_name: Optional variant name to filter inferences by.
+        :param filters: Optional filters to apply when querying inferences.
+        :param order_by: Optional ordering for the inferences.
+        :param limit: Maximum number of inferences to use.
+        :param offset: Offset for pagination.
         :param val_fraction: Optional fraction of data to use for validation.
         :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
         """

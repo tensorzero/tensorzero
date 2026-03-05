@@ -27,6 +27,7 @@ use uuid::Uuid;
 
 // ===== DUAL-BACKEND TESTS (ClickHouse + Postgres) =====
 
+#[expect(clippy::disallowed_methods)]
 async fn test_config_snapshot_write_and_read(conn: impl ConfigQueries + TestDatabaseHelpers) {
     let random_id = Uuid::now_v7();
 
@@ -80,6 +81,7 @@ async fn test_config_snapshot_not_found(conn: impl ConfigQueries + TestDatabaseH
 }
 make_db_test!(test_config_snapshot_not_found);
 
+#[expect(clippy::disallowed_methods)]
 async fn test_config_snapshot_with_extra_templates(conn: impl ConfigQueries + TestDatabaseHelpers) {
     let random_id = Uuid::now_v7();
 
@@ -185,6 +187,7 @@ async fn test_config_snapshot_includes_built_in_functions(
 }
 make_db_test!(test_config_snapshot_includes_built_in_functions);
 
+#[expect(clippy::disallowed_methods)]
 async fn test_config_snapshot_tag_merging(conn: impl ConfigQueries + TestDatabaseHelpers) {
     use tensorzero_core::config::stored::StoredConfig;
 
@@ -262,6 +265,7 @@ make_db_test!(test_config_snapshot_tag_merging);
 /// Verifies ClickHouse-specific upsert behavior: `created_at` is preserved and
 /// `last_used` is updated when writing the same config snapshot twice.
 #[tokio::test(flavor = "multi_thread")]
+#[expect(clippy::disallowed_methods)]
 async fn test_write_config_snapshot_upsert_clickhouse() {
     let clickhouse = get_clickhouse().await;
 
@@ -361,6 +365,7 @@ optimize = "max"
 /// Verifies Postgres-specific upsert behavior: `created_at` is preserved and
 /// `last_used` is updated when writing the same config snapshot twice.
 #[tokio::test]
+#[expect(clippy::disallowed_methods)]
 async fn test_write_config_snapshot_upsert_postgres() {
     let postgres = get_test_postgres().await;
 

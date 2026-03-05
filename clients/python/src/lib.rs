@@ -65,8 +65,9 @@ use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
     ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceStream, Input, LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
-    OptimizationJobHandle, PostgresConfig, RenderedSample, RunEvaluationHttpParams,
-    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    OptimizationDataSource, OptimizationJobHandle, OrderBy, PostgresConfig, RenderedSample,
+    RunEvaluationHttpParams, TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http,
+    observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1594,28 +1595,29 @@ impl TensorZeroGateway {
 
     /// Launch an optimization workflow.
     ///
-    /// This is a convenience method that handles fetching inferences, rendering samples,
-    /// and launching the optimization job server-side.
-    ///
     /// :param function_name: The name of the function to optimize.
     /// :param template_variant_name: The name of the template variant to use.
-    /// :param output_source: The source of the output (e.g. "inference" or "demonstration").
     /// :param optimizer_config: The optimizer configuration dictionary.
-    /// :param query_variant_name: Optional name of the query variant.
-    /// :param filters: Optional inference filters.
-    /// :param order_by: Optional ordering specification.
-    /// :param limit: Optional limit on the number of inferences to use.
-    /// :param offset: Optional offset for pagination.
+    /// :param output_source: The source of inference output ("none", "inference", or "demonstration").
+    ///     Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
+    /// :param dataset_name: Name of the dataset to use as training data.
+    ///     Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
+    /// :param query_variant_name: Optional variant name to filter inferences by.
+    /// :param filters: Optional filters to apply when querying inferences.
+    /// :param order_by: Optional ordering for the inferences.
+    /// :param limit: Maximum number of inferences to use.
+    /// :param offset: Offset for pagination.
     /// :param val_fraction: Optional fraction of data to use for validation.
     /// :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
     #[expect(clippy::too_many_arguments)]
-    #[pyo3(signature = (*, function_name, template_variant_name, output_source, optimizer_config, query_variant_name=None, filters=None, order_by=None, limit=None, offset=None, val_fraction=None))]
+    #[pyo3(signature = (*, function_name, template_variant_name, optimizer_config, output_source=None, dataset_name=None, query_variant_name=None, filters=None, order_by=None, limit=None, offset=None, val_fraction=None))]
     fn experimental_launch_optimization_workflow(
         this: PyRef<'_, Self>,
         function_name: String,
         template_variant_name: String,
-        output_source: Bound<'_, PyAny>,
         optimizer_config: Bound<'_, PyAny>,
+        output_source: Option<String>,
+        dataset_name: Option<String>,
         query_variant_name: Option<String>,
         filters: Option<Bound<'_, PyAny>>,
         order_by: Option<Bound<'_, PyAny>>,
@@ -1624,24 +1626,22 @@ impl TensorZeroGateway {
         val_fraction: Option<f64>,
     ) -> PyResult<OptimizationJobHandle> {
         let client = this.as_super().client.clone();
-        let output_source = deserialize_from_pyobj(this.py(), &output_source)?;
         let optimizer_config = deserialize_optimization_config(&optimizer_config)?;
-        let filters = filters
-            .map(|f| deserialize_from_pyobj(this.py(), &f))
-            .transpose()?;
-        let order_by = order_by
-            .map(|o| deserialize_from_pyobj(this.py(), &o))
-            .transpose()?;
+        let data_source = build_optimization_data_source(
+            this.py(),
+            output_source,
+            dataset_name,
+            query_variant_name,
+            filters,
+            order_by,
+            limit,
+            offset,
+        )?;
         let fut =
             client.experimental_launch_optimization_workflow(LaunchOptimizationWorkflowParams {
                 function_name,
                 template_variant_name,
-                query_variant_name,
-                filters,
-                output_source,
-                order_by,
-                limit,
-                offset,
+                data_source,
                 val_fraction,
                 optimizer_config: UninitializedOptimizerInfo {
                     inner: optimizer_config,
@@ -2665,28 +2665,29 @@ impl AsyncTensorZeroGateway {
 
     /// Launch an optimization workflow.
     ///
-    /// This is a convenience method that handles fetching inferences, rendering samples,
-    /// and launching the optimization job server-side.
-    ///
     /// :param function_name: The name of the function to optimize.
     /// :param template_variant_name: The name of the template variant to use.
-    /// :param output_source: The source of the output (e.g. "inference" or "demonstration").
     /// :param optimizer_config: The optimizer configuration dictionary.
-    /// :param query_variant_name: Optional name of the query variant.
-    /// :param filters: Optional inference filters.
-    /// :param order_by: Optional ordering specification.
-    /// :param limit: Optional limit on the number of inferences to use.
-    /// :param offset: Optional offset for pagination.
+    /// :param output_source: The source of inference output ("none", "inference", or "demonstration").
+    ///     Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
+    /// :param dataset_name: Name of the dataset to use as training data.
+    ///     Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
+    /// :param query_variant_name: Optional variant name to filter inferences by.
+    /// :param filters: Optional filters to apply when querying inferences.
+    /// :param order_by: Optional ordering for the inferences.
+    /// :param limit: Maximum number of inferences to use.
+    /// :param offset: Offset for pagination.
     /// :param val_fraction: Optional fraction of data to use for validation.
     /// :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
     #[expect(clippy::too_many_arguments)]
-    #[pyo3(signature = (*, function_name, template_variant_name, output_source, optimizer_config, query_variant_name=None, filters=None, order_by=None, limit=None, offset=None, val_fraction=None))]
+    #[pyo3(signature = (*, function_name, template_variant_name, optimizer_config, output_source=None, dataset_name=None, query_variant_name=None, filters=None, order_by=None, limit=None, offset=None, val_fraction=None))]
     fn experimental_launch_optimization_workflow<'a>(
         this: PyRef<'a, Self>,
         function_name: String,
         template_variant_name: String,
-        output_source: Bound<'a, PyAny>,
         optimizer_config: Bound<'a, PyAny>,
+        output_source: Option<String>,
+        dataset_name: Option<String>,
         query_variant_name: Option<String>,
         filters: Option<Bound<'a, PyAny>>,
         order_by: Option<Bound<'a, PyAny>>,
@@ -2695,25 +2696,23 @@ impl AsyncTensorZeroGateway {
         val_fraction: Option<f64>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
-        let output_source = deserialize_from_pyobj(this.py(), &output_source)?;
         let optimizer_config = deserialize_optimization_config(&optimizer_config)?;
-        let filters = filters
-            .map(|f| deserialize_from_pyobj(this.py(), &f))
-            .transpose()?;
-        let order_by = order_by
-            .map(|o| deserialize_from_pyobj(this.py(), &o))
-            .transpose()?;
+        let data_source = build_optimization_data_source(
+            this.py(),
+            output_source,
+            dataset_name,
+            query_variant_name,
+            filters,
+            order_by,
+            limit,
+            offset,
+        )?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
                 .experimental_launch_optimization_workflow(LaunchOptimizationWorkflowParams {
                     function_name,
                     template_variant_name,
-                    query_variant_name,
-                    filters,
-                    output_source,
-                    order_by,
-                    limit,
-                    offset,
+                    data_source,
                     val_fraction,
                     optimizer_config: UninitializedOptimizerInfo {
                         inner: optimizer_config,
@@ -2745,6 +2744,49 @@ impl AsyncTensorZeroGateway {
             }
         })
     }
+}
+
+/// Build an `OptimizationDataSource` from flat Python kwargs.
+///
+/// Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
+#[expect(clippy::too_many_arguments)]
+fn build_optimization_data_source(
+    py: Python<'_>,
+    output_source: Option<String>,
+    dataset_name: Option<String>,
+    query_variant_name: Option<String>,
+    filters: Option<Bound<'_, PyAny>>,
+    order_by: Option<Bound<'_, PyAny>>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> PyResult<OptimizationDataSource> {
+    let output_source = output_source
+        .map(|s| {
+            s.as_str()
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(py, TensorZeroError::Other { source: e.into() })
+                })
+        })
+        .transpose()?;
+    let filters = filters
+        .as_ref()
+        .map(|x| deserialize_from_pyobj(py, x))
+        .transpose()?;
+    let order_by: Option<Vec<OrderBy>> = order_by
+        .as_ref()
+        .map(|x| deserialize_from_pyobj(py, x))
+        .transpose()?;
+    OptimizationDataSource::from_flat_fields(
+        output_source,
+        dataset_name,
+        query_variant_name,
+        filters,
+        order_by,
+        limit,
+        offset,
+    )
+    .map_err(PyValueError::new_err)
 }
 
 #[expect(unknown_lints)]

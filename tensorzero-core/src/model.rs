@@ -258,13 +258,6 @@ impl StreamResponse {
     }
 }
 
-/// Creates a fully-qualified name from a model and provider name.
-/// This format was previously used in `ContentBlock::Unknown.model_provider_name`
-/// and is still used for the deprecated `DynamicExtraBody::Provider` variant.
-pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
-    format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")
-}
-
 impl ModelConfig {
     /// Checks if an Unknown content block should be filtered out based on model_name and provider_name.
     /// Returns true if the block should be filtered (removed), false if it should be kept.

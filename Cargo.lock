@@ -2948,6 +2948,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "googletest-matchers"
+version = "2026.3.0"
+dependencies = [
+ "googletest",
+ "serde_json",
+]
+
+[[package]]
 name = "googletest_macro"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6971,6 +6979,7 @@ dependencies = [
  "globset",
  "google-cloud-auth",
  "googletest",
+ "googletest-matchers",
  "hex",
  "http 1.4.0",
  "http-body 1.0.1",
