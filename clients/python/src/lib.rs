@@ -63,11 +63,10 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
-    ClientSecretString, DatasetDataSource, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, InferencesDataSource, Input, LaunchOptimizationParams,
-    LaunchOptimizationWorkflowParams, OptimizationDataSource, OptimizationJobHandle, OrderBy,
-    PostgresConfig, RenderedSample, TensorZeroError, Tool, WorkflowEvaluationRunParams,
-    err_to_http, observability::LogFormat,
+    ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
+    InferenceStream, Input, LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
+    OptimizationDataSource, OptimizationJobHandle, OrderBy, PostgresConfig, RenderedSample,
+    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -2681,54 +2680,33 @@ fn build_optimization_data_source(
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> PyResult<OptimizationDataSource> {
-    match (output_source, dataset_name) {
-        (Some(output_source), None) => {
-            let output_source =
-                output_source
-                    .as_str()
-                    .try_into()
-                    .map_err(|e: tensorzero_core::error::Error| {
-                        convert_error(py, TensorZeroError::Other { source: e.into() })
-                    })?;
-            let filters = filters
-                .as_ref()
-                .map(|x| deserialize_from_pyobj(py, x))
-                .transpose()?;
-            let order_by: Option<Vec<OrderBy>> = order_by
-                .as_ref()
-                .map(|x| deserialize_from_pyobj(py, x))
-                .transpose()?;
-            Ok(OptimizationDataSource::Inferences(InferencesDataSource {
-                output_source,
-                query_variant_name,
-                filters,
-                order_by,
-                limit,
-                offset,
-            }))
-        }
-        (None, Some(dataset_name)) => {
-            if query_variant_name.is_some()
-                || filters.is_some()
-                || order_by.is_some()
-                || limit.is_some()
-                || offset.is_some()
-            {
-                return Err(PyValueError::new_err(
-                    "Inference-specific fields (`query_variant_name`, `filters`, `order_by`, `limit`, `offset`) cannot be used with `dataset_name`.",
-                ));
-            }
-            Ok(OptimizationDataSource::Dataset(DatasetDataSource {
-                dataset_name,
-            }))
-        }
-        (Some(_), Some(_)) => Err(PyValueError::new_err(
-            "Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.",
-        )),
-        (None, None) => Err(PyValueError::new_err(
-            "You must provide either `output_source` (for inferences) or `dataset_name` (for datasets).",
-        )),
-    }
+    let output_source = output_source
+        .map(|s| {
+            s.as_str()
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(py, TensorZeroError::Other { source: e.into() })
+                })
+        })
+        .transpose()?;
+    let filters = filters
+        .as_ref()
+        .map(|x| deserialize_from_pyobj(py, x))
+        .transpose()?;
+    let order_by: Option<Vec<OrderBy>> = order_by
+        .as_ref()
+        .map(|x| deserialize_from_pyobj(py, x))
+        .transpose()?;
+    OptimizationDataSource::from_flat_fields(
+        output_source,
+        dataset_name,
+        query_variant_name,
+        filters,
+        order_by,
+        limit,
+        offset,
+    )
+    .map_err(PyValueError::new_err)
 }
 
 #[expect(unknown_lints)]
