@@ -11,6 +11,12 @@ import {
   DemonstrationCard,
 } from "~/components/feedback/FeedbackCard";
 
+export type FeedbackData = {
+  feedback: FeedbackRow[];
+  feedbackBounds: FeedbackBounds;
+  latestFeedbackByMetric: Record<string, string>;
+};
+
 export function filterToLatestFeedback(
   feedback: FeedbackRow[],
   feedbackBounds?: FeedbackBounds,

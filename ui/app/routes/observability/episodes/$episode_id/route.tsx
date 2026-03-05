@@ -1,20 +1,19 @@
-import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
-import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import type { Route } from "./+types/route";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import {
   Await,
   data,
-  useAsyncError,
+  useLocation,
   useNavigate,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
+import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import type { Route } from "./+types/route";
+import type { FeedbackData } from "~/components/feedback/FeedbackDisplay";
+import { FeedbackSection } from "~/components/feedback/FeedbackSection";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
-import FeedbackDisplay, {
-  FeedbackDisplaySkeleton,
-  filterToLatestFeedback,
-} from "~/components/feedback/FeedbackDisplay";
 import PageButtons from "~/components/utils/PageButtons";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import {
@@ -26,35 +25,19 @@ import {
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { Suspense, useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { HelpTooltip } from "~/components/ui/HelpTooltip";
-import type {
-  StoredInference,
-  FeedbackRow,
-  FeedbackBounds,
-} from "~/types/tensorzero";
-import {
-  TableErrorNotice,
-  getErrorMessage,
-} from "~/components/ui/error/ErrorContentPrimitives";
+import type { StoredInference } from "~/types/tensorzero";
 import type { FeedbackActionData } from "~/routes/api/feedback/route";
-import { AlertCircle } from "lucide-react";
 
 export type InferencesData = {
   inferences: StoredInference[];
   hasNextPage: boolean;
   hasPreviousPage: boolean;
-};
-
-export type FeedbackData = {
-  feedbacks: FeedbackRow[];
-  bounds: FeedbackBounds;
-  latestFeedbackByMetric: Record<string, string>;
 };
 
 export const handle: RouteHandle = {
@@ -133,14 +116,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const feedbackDataPromise: Promise<FeedbackData> = newFeedbackId
     ? // Sequential case: poll first, then query bounds/metrics
       pollForFeedbackItem(episode_id, newFeedbackId, limit).then(
-        async (feedbacks) => {
-          const [bounds, latestFeedbackByMetric] = await Promise.all([
+        async (feedback) => {
+          const [feedbackBounds, latestFeedbackByMetric] = await Promise.all([
             tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
             tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
           ]);
           return {
-            feedbacks,
-            bounds,
+            feedback,
+            feedbackBounds,
             latestFeedbackByMetric,
           };
         },
@@ -154,9 +137,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }),
         tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
         tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
-      ]).then(([feedbacks, bounds, latestFeedbackByMetric]) => ({
-        feedbacks,
-        bounds,
+      ]).then(([feedback, feedbackBounds, latestFeedbackByMetric]) => ({
+        feedback,
+        feedbackBounds,
         latestFeedbackByMetric,
       }));
 
@@ -203,98 +186,6 @@ function InferencePaginationContent({ data }: { data: InferencesData }) {
   );
 }
 
-function FeedbackSectionError() {
-  const error = useAsyncError();
-  const message = getErrorMessage({
-    error,
-    fallback: "Failed to load feedback",
-  });
-
-  return (
-    <div className="rounded-lg border py-8">
-      <TableErrorNotice
-        icon={AlertCircle}
-        title="Error loading data"
-        description={message}
-      />
-    </div>
-  );
-}
-
-function FeedbackSectionContent({
-  data,
-  onCountUpdate,
-}: {
-  data: FeedbackData;
-  onCountUpdate: (count: number) => void;
-}) {
-  const { feedbacks, bounds, latestFeedbackByMetric } = data;
-  const navigate = useNavigate();
-
-  const filteredCount = filterToLatestFeedback(
-    feedbacks,
-    bounds,
-    latestFeedbackByMetric,
-  ).length;
-
-  useEffect(() => {
-    onCountUpdate(filteredCount);
-  }, [filteredCount, onCountUpdate]);
-
-  const topFeedback = feedbacks[0] as { id: string } | undefined;
-  const bottomFeedback = feedbacks[feedbacks.length - 1] as
-    | { id: string }
-    | undefined;
-
-  const handleNextPage = () => {
-    if (!bottomFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("afterFeedback");
-    searchParams.delete("newFeedbackId");
-    searchParams.set("beforeFeedback", bottomFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousPage = () => {
-    if (!topFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("beforeFeedback");
-    searchParams.delete("newFeedbackId");
-    searchParams.set("afterFeedback", topFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  // These are swapped because feedback is sorted in descending order
-  const disablePrevious =
-    !topFeedback?.id || !bounds.last_id || bounds.last_id === topFeedback.id;
-
-  const disableNext =
-    !bottomFeedback?.id ||
-    !bounds.first_id ||
-    bounds.first_id === bottomFeedback.id;
-
-  const showPagination = !disablePrevious || !disableNext;
-
-  return (
-    <FeedbackDisplay
-      feedback={feedbacks}
-      feedbackBounds={bounds}
-      latestFeedbackByMetric={latestFeedbackByMetric}
-      showDemonstrations={false}
-      pagination={
-        showPagination ? (
-          <PageButtons
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-            disablePrevious={disablePrevious}
-            disableNext={disableNext}
-          />
-        ) : undefined
-      }
-    />
-  );
-}
-
 export default function EpisodeDetailPage({
   loaderData,
 }: Route.ComponentProps) {
@@ -305,6 +196,7 @@ export default function EpisodeDetailPage({
     num_inferences,
     newFeedbackId,
   } = loaderData;
+  const location = useLocation();
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [feedbackCount, setFeedbackCount] = useState<number | undefined>(
@@ -420,26 +312,12 @@ export default function EpisodeDetailPage({
               </humanFeedbackFetcher.Form>
             </HumanFeedbackModal>
           </div>
-          <Suspense
-            fallback={
-              <FeedbackDisplaySkeleton
-                pagination={<PageButtons disabled />}
-                showDemonstrations={false}
-              />
-            }
-          >
-            <Await
-              resolve={feedbackData}
-              errorElement={<FeedbackSectionError />}
-            >
-              {(resolvedData) => (
-                <FeedbackSectionContent
-                  data={resolvedData}
-                  onCountUpdate={setFeedbackCount}
-                />
-              )}
-            </Await>
-          </Suspense>
+          <FeedbackSection
+            promise={feedbackData}
+            locationKey={location.key}
+            onCountUpdate={setFeedbackCount}
+            showDemonstrations={false}
+          />
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>

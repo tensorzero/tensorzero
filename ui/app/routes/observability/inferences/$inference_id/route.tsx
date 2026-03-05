@@ -1,14 +1,17 @@
-import { useEffect, useState, useCallback } from "react";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { getConfigForSnapshot } from "~/utils/config/index.server";
-import type { Route } from "./+types/route";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import {
+  Await,
+  Link,
   data,
   useLocation,
   useNavigate,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
+import { AlertTriangle, MoveUpRight } from "lucide-react";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { getConfigForSnapshot } from "~/utils/config/index.server";
+import type { Route } from "./+types/route";
 import {
   PageHeader,
   PageLayout,
@@ -19,7 +22,6 @@ import {
 } from "~/components/layout/PageLayout";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import { getPageErrorInfo } from "~/utils/tensorzero/errors";
-import { AlertTriangle } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
@@ -34,10 +36,10 @@ import {
   fetchFeedbackData,
   fetchEpisodeFeedbackCount,
 } from "./inference-data.server";
+import { FeedbackSection } from "~/components/feedback/FeedbackSection";
 import { BasicInfoStreaming } from "./BasicInfo";
 import { InferenceActionBar } from "./InferenceActionBar";
 import { InputSection } from "./InputSection";
-import { FeedbackSection } from "./FeedbackSection";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
 import { ModelInferencesSection } from "./ModelInferencesSection";
 
@@ -211,21 +213,33 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           )}
         </SectionLayout>
 
-        <FeedbackSection
-          promise={feedbackData}
-          locationKey={location.key}
-          count={feedbackCount}
-          onCountUpdate={setFeedbackCount}
-          episodeId={inference.episode_id}
-          episodeFeedbackCount={episodeFeedbackCount}
-          addFeedbackButton={
-            <HumanFeedbackAction
-              key={`human-feedback-${location.key}`}
-              inference={inference}
-              onFeedbackAdded={handleFeedbackAdded}
-            />
-          }
-        />
+        <SectionLayout>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SectionHeader heading="Inference Feedback" count={feedbackCount} />
+            <div className="flex items-center gap-6">
+              <Suspense fallback={null}>
+                <Await resolve={episodeFeedbackCount} errorElement={null}>
+                  {(count) => (
+                    <EpisodeFeedbackNotice
+                      episodeId={inference.episode_id}
+                      feedbackCount={count}
+                    />
+                  )}
+                </Await>
+              </Suspense>
+              <HumanFeedbackAction
+                key={`human-feedback-${location.key}`}
+                inference={inference}
+                onFeedbackAdded={handleFeedbackAdded}
+              />
+            </div>
+          </div>
+          <FeedbackSection
+            promise={feedbackData}
+            locationKey={location.key}
+            onCountUpdate={setFeedbackCount}
+          />
+        </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
@@ -271,6 +285,26 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         />
       </SectionsGroup>
     </PageLayout>
+  );
+}
+
+interface EpisodeFeedbackNoticeProps {
+  episodeId: string;
+  feedbackCount: number;
+}
+
+function EpisodeFeedbackNotice({
+  episodeId,
+  feedbackCount,
+}: EpisodeFeedbackNoticeProps) {
+  return (
+    <Link
+      to={`/observability/episodes/${episodeId}`}
+      className="text-fg-muted hover:text-fg-secondary flex items-center gap-1.5 text-sm transition-colors"
+    >
+      Episode Feedback ({feedbackCount})
+      <MoveUpRight className="h-3.5 w-3.5" />
+    </Link>
   );
 }
 
