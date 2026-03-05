@@ -422,7 +422,10 @@ export default function EpisodeDetailPage({
           </div>
           <Suspense
             fallback={
-              <FeedbackTableSkeleton pagination={<PageButtons disabled />} />
+              <FeedbackTableSkeleton
+                pagination={<PageButtons disabled />}
+                showDemonstrations={false}
+              />
             }
           >
             <Await

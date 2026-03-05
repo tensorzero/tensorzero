@@ -30,10 +30,25 @@ export function filterToLatestFeedback(
   });
 }
 
+function CardSkeleton({ label }: { label: string }) {
+  return (
+    <div className="bg-bg-primary border-border overflow-hidden rounded-lg border">
+      <div className="bg-bg-secondary text-fg-tertiary flex h-10 items-center border-b px-3 text-sm font-medium">
+        {label}
+      </div>
+      <div className="p-4">
+        <Skeleton className="h-4 w-48" />
+      </div>
+    </div>
+  );
+}
+
 export function FeedbackTableSkeleton({
   pagination,
+  showDemonstrations = true,
 }: {
   pagination?: React.ReactNode;
+  showDemonstrations?: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -58,6 +73,8 @@ export function FeedbackTableSkeleton({
           ))}
         </TableBody>
       </Table>
+      {showDemonstrations && <CardSkeleton label="Demonstration" />}
+      <CardSkeleton label="Comment" />
       {pagination}
     </div>
   );
