@@ -36,23 +36,6 @@ uv run main.py
 </details>
 
 <details>
-<summary><b>Node</b></summary>
-
-a. Install the Node dependencies:
-
-```bash
-npm install
-```
-
-b. Run the example:
-
-```bash
-npx tsx main.ts
-```
-
-</details>
-
-<details>
 <summary><b>HTTP</b></summary>
 
 ```bash
