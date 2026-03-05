@@ -22,10 +22,6 @@ See the [API Reference](/gateway/api-reference/inference-openai-compatible/#tens
 
 ## Example
 
-<Tabs>
-
-<Tab title="Python">
-
 ```python
 from openai import OpenAI
 
@@ -49,40 +45,6 @@ response = client.chat.completions.create(
 
 print(response)
 ```
-
-</Tab>
-
-<Tab title="Node">
-
-```ts
-import OpenAI from "openai";
-
-const client = new OpenAI({
-  baseURL: "http://localhost:3000/openai/v1",
-});
-
-const response = await client.chat.completions.create({
-  model: "tensorzero::model_name::openai::gpt-4o-mini",
-  messages: [
-    {
-      role: "user",
-      content: "What is the capital of Japan?",
-    },
-  ],
-  extra_body: {
-    "tensorzero::cache_options": {
-      enabled: "on", // read and write to cache
-      max_age_s: 3600, // optional: cache entries >1h (>3600s) old are disregarded for reads
-    },
-  },
-});
-
-console.log(response);
-```
-
-</Tab>
-
-</Tabs>
 
 ## Cache Backend
 
