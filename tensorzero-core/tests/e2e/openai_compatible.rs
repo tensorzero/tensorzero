@@ -1229,7 +1229,10 @@ async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
         messages.push(json!({
             "role": "tool",
             "tool_call_id": tool_id,
-            "content": result_content
+            "content": [{
+                "type": "text",
+                "text": result_content
+            }]
         }));
     }
 

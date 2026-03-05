@@ -657,7 +657,7 @@ pub fn openai_messages_to_input(
                 tool_results.push(InputMessageContent::ToolResult(ToolResult {
                     id: msg.tool_call_id,
                     name,
-                    result: msg.content.unwrap_or_default().to_string(),
+                    result: convert_openai_tool_message_content(msg.content)?,
                 }));
 
                 while let Some(message) = iter.peek() {
@@ -673,7 +673,9 @@ pub fn openai_messages_to_input(
                         tool_results.push(InputMessageContent::ToolResult(ToolResult {
                             id: tool_result.tool_call_id.clone(),
                             name,
-                            result: tool_result.content.clone().unwrap_or_default().to_string(),
+                            result: convert_openai_tool_message_content(
+                                tool_result.content.clone(),
+                            )?,
                         }));
                         // Consume the tool result that we just peeked
                         iter.next();
@@ -693,6 +695,45 @@ pub fn openai_messages_to_input(
         system: system_message,
         messages,
     })
+}
+
+fn convert_openai_tool_message_content(content: Option<Value>) -> Result<String, Error> {
+    let Some(content) = content else {
+        return Ok(String::new());
+    };
+
+    match content {
+        Value::Null => Ok(String::new()),
+        Value::String(text) => Ok(text),
+        Value::Array(blocks) => {
+            let mut result = String::new();
+            for block in blocks {
+                match serde_json::from_value::<OpenAICompatibleContentBlock>(block) {
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => {
+                        result.push_str(&text);
+                    }
+                    Ok(OpenAICompatibleContentBlock::RawText(raw_text)) => {
+                        result.push_str(&raw_text.value);
+                    }
+                    Ok(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                            message: "Tool message content must contain only `text` or `tensorzero::raw_text` blocks".to_string(),
+                        }));
+                    }
+                    Err(e) => {
+                        return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                            message: format!("Invalid tool message content block: {e}"),
+                        }));
+                    }
+                }
+            }
+            Ok(result)
+        }
+        _ => Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: "Tool message content must either be a string or an array of `text`/`tensorzero::raw_text` blocks".to_string(),
+        }
+        .into()),
+    }
 }
 
 pub fn convert_openai_message_content(
@@ -987,14 +1028,23 @@ mod tests {
                 tool_call_id: "1".to_string(),
             }),
             OpenAICompatibleMessage::Tool(OpenAICompatibleToolMessage {
-                content: Some(Value::String("Tool result 2".to_string())),
+                content: Some(json!([
+                    {
+                        "type": "text",
+                        "text": "Tool result "
+                    },
+                    {
+                        "type": "tensorzero::raw_text",
+                        "value": "2"
+                    }
+                ])),
                 tool_call_id: "2".to_string(),
             }),
             OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
                 content: Value::String("First message".to_string()),
             }),
             OpenAICompatibleMessage::Tool(OpenAICompatibleToolMessage {
-                content: Some(Value::String("Tool result 3".to_string())),
+                content: None,
                 tool_call_id: "3".to_string(),
             }),
             OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
@@ -1052,12 +1102,12 @@ mod tests {
                     content: vec![
                         InputMessageContent::ToolResult(ToolResult {
                             name: "test_tool".to_string(),
-                            result: "\"Tool result 1\"".to_string(),
+                            result: "Tool result 1".to_string(),
                             id: "1".to_string()
                         }),
                         InputMessageContent::ToolResult(ToolResult {
                             name: "test_tool".to_string(),
-                            result: "\"Tool result 2\"".to_string(),
+                            result: "Tool result 2".to_string(),
                             id: "2".to_string()
                         })
                     ]
@@ -1072,7 +1122,7 @@ mod tests {
                     role: Role::User,
                     content: vec![InputMessageContent::ToolResult(ToolResult {
                         name: "test_tool".to_string(),
-                        result: "\"Tool result 3\"".to_string(),
+                        result: String::new(),
                         id: "3".to_string()
                     })]
                 },
