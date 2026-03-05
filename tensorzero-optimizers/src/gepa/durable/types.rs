@@ -1,11 +1,24 @@
 //! Serializable types for the durable GEPA task tool.
+//!
+//! Checkpoint types must not store full datapoints, inference results, or score maps.
+//! That data already lives in ClickHouse/Postgres and can be reloaded by ID.
+//! Configs, datapoint IDs, and other lightweight state are fine.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_core::config::MetricConfigOptimize;
+use tensorzero_core::evaluations::EvaluatorConfig;
 use tensorzero_core::optimization::gepa::GepaEvaluatorStats;
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
+use uuid::Uuid;
+
+use crate::gepa::evaluate::{EvaluatorName, VariantName, VariantScores};
+use crate::gepa::pareto::VariantScoresMap;
+use crate::gepa::validate::SerializableFunctionContext;
+
+// ── Tool params & output (visible to LLM / used as spawn params) ────────
 
 /// Parameters for the durable GEPA tool (visible to LLM / used as spawn params).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -68,4 +81,101 @@ pub struct GepaToolOutput {
     pub variants: HashMap<String, UninitializedChatCompletionConfig>,
     /// Map of variant_name to { evaluator_name to stats }.
     pub statistics: HashMap<String, HashMap<String, GepaEvaluatorStats>>,
+}
+
+// ── Setup step types ────────────────────────────────────────────────────
+
+/// Result of the "setup" step — stored once as step output.
+/// Subsequent steps use lightweight params instead of cloning this.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetupResult {
+    pub function_context: SerializableFunctionContext,
+    pub original_variants: HashMap<String, UninitializedChatCompletionConfig>,
+    pub val_dataset_name: String,
+    pub val_datapoint_ids: Vec<Uuid>,
+    pub evaluator_configs: HashMap<String, EvaluatorConfig>,
+    pub run_id: Uuid,
+    pub gepa_config: ResolvedGEPAConfig,
+}
+
+/// Resolved GEPA config fields (extracted from GepaToolParams with defaults applied).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedGEPAConfig {
+    pub function_name: String,
+    pub evaluation_name: String,
+    pub initial_variants: Option<Vec<String>>,
+    pub variant_prefix: Option<String>,
+    pub batch_size: usize,
+    pub max_iterations: u32,
+    pub max_concurrency: u32,
+    pub analysis_model: String,
+    pub mutation_model: String,
+    pub seed: Option<u32>,
+    pub include_inference_for_mutation: bool,
+    pub max_tokens: Option<u32>,
+}
+
+// ── Lightweight step params (avoid cloning full SetupResult) ────────────
+
+/// Params for evaluating a single variant on a dataset.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalStepParams {
+    pub evaluation_name: String,
+    pub dataset_name: String,
+    pub variant_name: VariantName,
+    pub variant_config: UninitializedChatCompletionConfig,
+    pub max_concurrency: u32,
+}
+
+/// Params for the initial evaluation step (multiple variants).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InitEvalStepParams {
+    pub evaluation_name: String,
+    pub val_dataset_name: String,
+    pub variants: HashMap<String, UninitializedChatCompletionConfig>,
+    pub max_concurrency: u32,
+}
+
+/// Params for the mutation step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MutateStepParams {
+    pub function_context: SerializableFunctionContext,
+    pub gepa_config: ResolvedGEPAConfig,
+    pub parent_name: VariantName,
+    pub parent_config: UninitializedChatCompletionConfig,
+    pub iteration: u32,
+}
+
+// ── Step result types ───────────────────────────────────────────────────
+
+/// Result of evaluating a variant.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalResult {
+    pub variant_name: VariantName,
+    pub scores: VariantScores,
+    pub stats: HashMap<EvaluatorName, evaluations::EvaluatorStats>,
+}
+
+/// Result of a mutation step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MutationResult {
+    pub child_name: VariantName,
+    pub child_config: UninitializedChatCompletionConfig,
+}
+
+// ── Pareto frontier checkpoint ──────────────────────────────────────────
+
+/// Serializable snapshot of ParetoFrontier state.
+///
+/// Contains variant configs, per-datapoint scores, frequencies, layout info, and RNG seed.
+/// The `objective_vector_cache` is recomputed on restore.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParetoCheckpoint {
+    pub variant_configs: HashMap<VariantName, UninitializedChatCompletionConfig>,
+    pub variant_scores_map: VariantScoresMap,
+    pub variant_frequencies: HashMap<VariantName, usize>,
+    pub datapoint_ids: Vec<Uuid>,
+    pub optimize_directions: BTreeMap<EvaluatorName, MetricConfigOptimize>,
+    /// RNG seed to reconstruct deterministic sampling state.
+    pub rng_seed: u64,
 }

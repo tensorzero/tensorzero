@@ -12,13 +12,15 @@ use std::{
 };
 
 use evaluations::EvaluatorStats;
-use rand::{SeedableRng, prelude::IndexedRandom, rngs::StdRng};
+use rand::{RngExt, SeedableRng, prelude::IndexedRandom, rngs::StdRng};
 use tensorzero_core::{
     config::MetricConfigOptimize,
     error::{Error, ErrorDetails},
     evaluations::EvaluatorConfig,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
+
+use crate::gepa::durable::types::ParetoCheckpoint;
 
 use crate::gepa::{
     GEPAVariant,
@@ -137,6 +139,39 @@ impl ParetoFrontier {
     /// Returns a reference to the frequency map (instance-wise Pareto set membership counts) for read-only access (e.g., diagnostics)
     pub fn variant_frequencies(&self) -> &HashMap<VariantName, usize> {
         &self.variant_frequencies
+    }
+
+    /// Serialize the frontier state into a checkpoint.
+    ///
+    /// Captures all state needed to reconstruct the frontier except the
+    /// `objective_vector_cache`, which is recomputed on restore.
+    /// A fresh RNG seed is derived from the current RNG state.
+    pub fn to_checkpoint(&self) -> ParetoCheckpoint {
+        let rng_seed = self.rng.borrow_mut().random::<u64>();
+        ParetoCheckpoint {
+            variant_configs: self.variant_configs.clone(),
+            variant_scores_map: self.variant_scores_map.clone(),
+            variant_frequencies: self.variant_frequencies.clone(),
+            datapoint_ids: self.datapoint_ids.clone(),
+            optimize_directions: self.optimize_directions.clone(),
+            rng_seed,
+        }
+    }
+
+    /// Restore a frontier from a serialized checkpoint.
+    ///
+    /// The `objective_vector_cache` starts empty and will be rebuilt
+    /// on the next call to `update()`.
+    pub fn from_checkpoint(checkpoint: ParetoCheckpoint) -> Self {
+        Self {
+            variant_configs: checkpoint.variant_configs,
+            variant_scores_map: checkpoint.variant_scores_map,
+            variant_frequencies: checkpoint.variant_frequencies,
+            objective_vector_cache: HashMap::new(),
+            datapoint_ids: checkpoint.datapoint_ids,
+            optimize_directions: checkpoint.optimize_directions,
+            rng: RefCell::new(StdRng::seed_from_u64(checkpoint.rng_seed)),
+        }
     }
 
     /// Update the Pareto frontier with new candidates (variant config + scores)
