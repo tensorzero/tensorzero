@@ -19,11 +19,10 @@
 #
 # 1. **Generate candidate instructions and demonstrations**
 #    - Candidate instructions are generated using OpenAI's o1 model based on a system template and an optional schema.
-#      - This is configurable in the `config/tensorzero.toml` file if you want to use a different model.
 #    - Candidate demonstrations are sets of few-shot examples sampled from the training dataset.
 # 2. **Evaluate Instruction-Demonstration Pairs**
 #    - Sample an instruction and demonstration pair and score it using a Large Language Model (LLM) judge.
-#    - The judge (a TensorZero function utilizing OpenAI's GPT-4o-mini model) scores the quality of the instruction-demonstration pair.
+#    - The judge (using OpenAI's GPT-4o-mini model) scores the quality of the instruction-demonstration pair.
 #    - Scores are aggregated over the evaluation set to produce a final evaluation score.
 # 3. **Optimization via Search Algorithms**
 #    - Utilize a random search or a Tree-structured Parzen Estimator (TPE) to determine the next instruction and demonstration pair for evaluation.
@@ -31,7 +30,6 @@
 #    - Repeat the optimization process for a fixed number of iterations.
 # 5. **Select the Best Performing Prompts**
 #    - The instruction and demonstration pairs corresponding to the highest-performing prompts are formatted to yield optimized system templates.
-#
 
 # %% [markdown]
 # ## Step 1: Define Function Configuration Parameters
@@ -129,23 +127,21 @@ if tensorzero_path not in sys.path:
 # %%
 import asyncio
 import json
+from pathlib import Path
 from random import shuffle
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import optuna
 from minijinja import Environment
+from openai import AsyncOpenAI
 from optuna.samplers import TPESampler
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatCompletionConfig,
     ChatInferenceOutput,
-    InferenceResponse,
-    JsonInferenceResponse,
     ListInferencesRequest,
-    RawText,
     RenderedSample,
-    Text,
 )
 from tqdm.asyncio import tqdm_asyncio
 from utils.client_calls import candidate_inference, get_instructions, judge_answer
@@ -153,19 +149,29 @@ from utils.client_calls import candidate_inference, get_instructions, judge_answ
 from recipes.util import train_val_split
 
 # %% [markdown]
-# ## Initialize the MIPRO TensorZero Client
+# ## Initialize Clients
 #
-# This client is used to generate candidate instructions and score the quality of responses given the candidate instructions and demonstrations.
-#
+# We use the OpenAI SDK for inference (instruction generation, candidate evaluation, and judging)
+# and the TensorZero SDK for non-inference operations (config inspection, data retrieval, sample rendering).
 
 # %%
 MAX_CONCURRENT_REQUESTS = 50
 
 # %%
-mipro_client = await AsyncTensorZeroGateway.build_embedded(
-    config_file="config/tensorzero.toml",
-)
+# OpenAI client for all inference calls (instruction generation, judging, and candidate evaluation)
+openai_client = AsyncOpenAI()
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
+# Load MIPRO templates for instruction generation and judging
+_MIPRO_CONFIG_DIR = Path("config/functions")
+mipro_templates = {
+    "generate_instruction_system": (
+        _MIPRO_CONFIG_DIR / "generate_instruction" / "baseline" / "system_template.minijinja"
+    ).read_text(),
+    "judge_answer_system": (_MIPRO_CONFIG_DIR / "judge_answer" / "baseline" / "system_template.minijinja").read_text(),
+    "judge_answer_user": (_MIPRO_CONFIG_DIR / "judge_answer" / "baseline" / "user_template.minijinja").read_text(),
+}
+mipro_env = Environment(templates=mipro_templates)
 
 # %% [markdown]
 # ## Load Data
@@ -176,8 +182,10 @@ semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 # %% [markdown]
 # Retrieve the configuration for the variant with the templates we'll use for prompt optimization.
 #
+# The TensorZero SDK is used here for non-inference operations (config inspection, data retrieval, sample rendering).
 
 # %%
+# TensorZero client for non-inference operations (config, data retrieval, sample rendering)
 original_client = await AsyncTensorZeroGateway.build_embedded(
     config_file=CONFIG_DIR,
     clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"],
@@ -189,7 +197,16 @@ base_function = config.functions[FUNCTION_NAME]
 base_variant = base_function.variants[TEMPLATE_VARIANT_NAME]
 if not isinstance(base_variant, ChatCompletionConfig):
     raise ValueError("Only chat completion variants are supported")
-model_name = base_variant.model
+
+# Extract the OpenAI model name from the TensorZero model reference (e.g. "openai::gpt-4o-mini" -> "gpt-4o-mini")
+tz_model_name = base_variant.model
+if "::" in tz_model_name:
+    openai_model_name = tz_model_name.split("::", 1)[1]
+else:
+    raise ValueError(
+        f"Cannot extract OpenAI model name from `{tz_model_name}`. "
+        "Expected format: `provider::model_name` (e.g. `openai::gpt-4o-mini`)."
+    )
 
 # %% [markdown]
 # Query the inferences and demonstration feedback from ClickHouse.
@@ -322,6 +339,13 @@ def sample_to_openai_messages(sample: RenderedSample) -> List[Dict[str, Any]]:
     return rendered_messages
 
 
+def sample_to_user_messages(sample: RenderedSample) -> List[Dict[str, Any]]:
+    """Extract non-system messages from a rendered sample (for use with candidate_inference)."""
+    all_messages = sample_to_openai_messages(sample)
+    # Filter out system messages — the candidate system prompt will be provided separately
+    return [msg for msg in all_messages if msg["role"] != "system"]
+
+
 # %% [markdown]
 # Split the data into training and evaluation sets.
 # The training set is used to generate candidate demonstrations.
@@ -352,12 +376,17 @@ if base_function.system_schema is not None:
 else:
     example_schema = None
 
+instruction_system_prompt = mipro_env.render_template(
+    "generate_instruction_system",
+    example_instructions=example_instructions,
+    **({"example_schema": example_schema} if example_schema else {}),
+)
+
 responses = await tqdm_asyncio.gather(
     *[
         get_instructions(
-            client=mipro_client,
-            example_instructions=example_instructions,
-            example_schema=example_schema,
+            client=openai_client,
+            system_prompt=instruction_system_prompt,
             semaphore=semaphore,
         )
         for _ in range(NUM_CANDIDATE_INSTRUCTIONS)
@@ -368,7 +397,7 @@ candidate_instructions = [example_instructions]
 for response in responses:
     if response is None:
         continue
-    candidate_instructions.append(response.output.parsed["instructions"])
+    candidate_instructions.append(response["instructions"])
 
 
 # %% [markdown]
@@ -426,20 +455,11 @@ num_demonstrations = len(candidate_demonstrations)
 
 
 # %%
-def format_response(response: Optional[InferenceResponse]) -> str:
+def format_response(response: Optional[Any]) -> str:
     if response is None:
         return ""
-    if isinstance(response, JsonInferenceResponse):
-        return str(response.output.parsed)
-    else:
-        content = response.content
-        assert len(content) == 1  # TODO: Handle multiple content blocks
-        if isinstance(content[0], Text):
-            return content[0].text
-        elif isinstance(content[0], RawText):
-            return content[0].value
-        else:
-            raise ValueError(f"Unsupported content type: {type(content[0])}")
+    content = response.choices[0].message.content
+    return content if content else ""
 
 
 async def objective(trial: optuna.Trial):
@@ -457,10 +477,10 @@ async def objective(trial: optuna.Trial):
     responses = await tqdm_asyncio.gather(
         *[
             candidate_inference(
-                client=original_client,
-                input=example[1].input,
+                client=openai_client,
+                messages=sample_to_user_messages(example[1]),
                 system_prompt=candidate_system_prompt,
-                model_name=model_name,
+                model_name=openai_model_name,
                 semaphore=semaphore,
             )
             for example in val_examples
@@ -468,14 +488,21 @@ async def objective(trial: optuna.Trial):
     )
 
     # Score the responses using the judge
+    judge_system_prompt = mipro_env.render_template(
+        "judge_answer_system",
+        task_description=TASK_DESCRIPTION,
+        metric_properties=METRIC_PROPERTIES,
+    )
     judge_responses = await tqdm_asyncio.gather(
         *[
             judge_answer(
-                client=mipro_client,
-                task_description=TASK_DESCRIPTION,
-                metric_properties=METRIC_PROPERTIES,
-                prediction=format_response(response) if response is not None else "",
-                ground_truth=str(example[1].output),
+                client=openai_client,
+                system_prompt=judge_system_prompt,
+                user_prompt=mipro_env.render_template(
+                    "judge_answer_user",
+                    prediction=format_response(response) if response is not None else "",
+                    ground_truth=str(example[1].output),
+                ),
                 semaphore=semaphore,
             )
             for response, example in zip(responses, val_examples)
@@ -486,8 +513,7 @@ async def objective(trial: optuna.Trial):
     scores = []
     for response in judge_responses:
         if response is not None:
-            if response.output.parsed is not None:
-                scores.append(response.output.parsed["score"])
+            scores.append(response["score"])
 
     # Return the mean score
     return np.mean(scores)

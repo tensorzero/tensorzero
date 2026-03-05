@@ -136,12 +136,6 @@ services:
       start_interval: 1s
       timeout: 1s
 
-  # The TensorZero Python client *doesn't* require a separate gateway service.
-  #
-  # The gateway is only needed if you want to use the OpenAI Python client
-  # or interact with TensorZero via its HTTP API (for other programming languages).
-  #
-  # The TensorZero UI also requires the gateway service.
   gateway:
     image: tensorzero/gateway
     volumes:
@@ -181,7 +175,7 @@ Our setup should look like:
 ```
 - config/
   - tensorzero.toml
-- after.py see below
+- after.py (or after.ts) see below
 - before.py
 - docker-compose.yml
 ```
@@ -196,135 +190,13 @@ docker compose up
 
 The gateway will replicate our original OpenAI call and store the data in our database &mdash; with less than 1ms latency overhead thanks to Rust 🦀.
 
-The TensorZero Gateway can be used with the **TensorZero Python client**, with **OpenAI client (Python, Node, etc.)**, or via its **HTTP API in any programming language**.
+The TensorZero Gateway is compatible with the **OpenAI SDK**, so you can use it with any language that has an OpenAI client library.
+The only code changes are pointing the client at the gateway and using a TensorZero function name as the model.
 
 <Tabs>
 <Tab title="Python">
 
-You can install the TensorZero Python client with:
-
-```bash
-pip install tensorzero
-```
-
-Then, you can make a TensorZero API call with:
-
-```python title="after.py"
-from tensorzero import TensorZeroGateway
-
-with TensorZeroGateway.build_embedded(
-    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
-    config_file="config/tensorzero.toml",
-) as client:
-    response = client.inference(
-        function_name="generate_haiku",
-        input={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Write a haiku about TensorZero.",
-                }
-            ]
-        },
-    )
-
-print(response)
-```
-
-<Accordion title="Sample Output">
-
-```python
-ChatInferenceResponse(
-  inference_id=UUID('0191ddb2-2c02-7641-8525-494f01bcc468'),
-  episode_id=UUID('0191ddb2-28f3-7cc2-b0cc-07f504d37e59'),
-  variant_name='gpt_4o_mini',
-  content=[
-    Text(
-      type='text',
-      text='Wires hum with intent,  \nThoughts born from code and structure,  \nGhost in silicon.'
-    )
-  ],
-  usage=Usage(
-    input_tokens=15,
-    output_tokens=20
-  )
-)
-```
-
-</Accordion>
-
-</Tab>
-
-<Tab title="Python (Async)">
-
-You can install the TensorZero Python client with:
-
-```bash
-pip install tensorzero
-```
-
-Then, you can make a TensorZero API call with:
-
-```python title="after_async.py"
-import asyncio
-
-from tensorzero import AsyncTensorZeroGateway
-
-
-async def main():
-    async with await AsyncTensorZeroGateway.build_embedded(
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
-        config_file="config/tensorzero.toml",
-    ) as gateway:
-        response = await gateway.inference(
-            function_name="generate_haiku",
-            input={
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Write a haiku about TensorZero.",
-                    }
-                ]
-            },
-        )
-
-    print(response)
-
-
-asyncio.run(main())
-```
-
-<Accordion title="Sample Output">
-
-```python
-ChatInferenceResponse(
-  inference_id=UUID('01940622-d215-7111-9ca7-4995ef2c43f8'),
-  episode_id=UUID('01940622-cba0-7db3-832b-273aff72f95f'),
-  variant_name='gpt_4o_mini',
-  content=[
-    Text(
-      type='text',
-      text='Wires whisper secrets,  \nLogic dances with the light—  \nDreams of thoughts unfurl.'
-    )
-  ],
-  usage=Usage(
-    input_tokens=15,
-    output_tokens=21
-  )
-)
-```
-
-</Accordion>
-
-</Tab>
-
-<Tab title="Python (OpenAI)">
-
-You can use TensorZero in Python with the OpenAI Python client.
-This approach requires running the TensorZero Gateway as a separate service.
-The `docker-compose.yml` above launched the gateway on port 3000.
-
-```python title="after_openai.py" "base_url="http://localhost:3000/openai/v1"" "tensorzero::function_name::generate_haiku"
+```python title="after.py" "base_url="http://localhost:3000/openai/v1"" "tensorzero::function_name::generate_haiku"
 from openai import OpenAI
 
 with OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used") as client:
@@ -381,13 +253,9 @@ ChatCompletion(
 
 </Tab>
 
-<Tab title="Node (OpenAI)">
+<Tab title="Node">
 
-You can use TensorZero in Node (JavaScript/TypeScript) with the OpenAI Node client.
-This approach requires running the TensorZero Gateway as a separate service.
-The `docker-compose.yml` above launched the gateway on port 3000.
-
-```ts title="after_openai.ts" "baseURL: "http://localhost:3000/openai/v1"" "tensorzero::function_name::generate_haiku"
+```ts title="after.ts" "baseURL: "http://localhost:3000/openai/v1"" "tensorzero::function_name::generate_haiku"
 import OpenAI from "openai";
 
 const client = new OpenAI({
@@ -439,49 +307,6 @@ console.log(JSON.stringify(response, null, 2));
 </Accordion>
 
 </Tab>
-
-<Tab title="HTTP">
-
-```bash
-curl -X POST "http://localhost:3000/inference" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "function_name": "generate_haiku",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    }
-  }'
-```
-
-<Accordion title="Sample Output">
-
-```python
-{
-  "inference_id": "01940627-935f-7fa1-a398-e1f57f18064a",
-  "episode_id": "01940627-8fe2-75d3-9b65-91be2c7ba622",
-  "variant_name": "gpt_4o_mini",
-  "content": [
-    {
-      "type": "text",
-      "text": "Wires hum with pure thought,  \nDreams of codes in twilight's glow,  \nBeyond human touch."
-    }
-  ],
-  "usage": {
-    "input_tokens": 15,
-    "output_tokens": 23
-  }
-}
-```
-
-</Accordion>
-
-</Tab>
-
 </Tabs>
 
 ## TensorZero UI

@@ -103,65 +103,7 @@ You can also find a complete runnable example on [GitHub](https://github.com/ten
 </Tip>
 
 <Tabs>
-<Tab title="Python">
-
-```python
-from tensorzero import TensorZeroGateway, ToolCall  # or AsyncTensorZeroGateway
-
-with TensorZeroGateway.build_http(
-    gateway_url="http://localhost:3000",
-) as t0:
-    messages = [{"role": "user", "content": "What is the weather in Tokyo (°F)?"}]
-
-    response = t0.inference(
-        function_name="weather_chatbot",
-        input={"messages": messages},
-    )
-
-    print(response)
-
-    # The model can return multiple content blocks, including tool calls
-    # In a real application, you'd be stricter about validating the response
-    tool_calls = [
-        content_block
-        for content_block in response.content
-        if isinstance(content_block, ToolCall)
-    ]
-    assert len(tool_calls) == 1, "Expected the model to return exactly one tool call"
-
-    # Add the tool call to the message history
-    messages.append(
-        {
-            "role": "assistant",
-            "content": response.content,
-        }
-    )
-
-    # Pretend we've called the tool and got a response
-    messages.append(
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "id": tool_calls[0].id,
-                    "name": tool_calls[0].name,
-                    "result": "70",  # imagine it's 70°F in Tokyo
-                }
-            ],
-        }
-    )
-
-    response = t0.inference(
-        function_name="weather_chatbot",
-        input={"messages": messages},
-    )
-
-    print(response)
-```
-
-</Tab>
-<Tab title="Python (OpenAI)">
+<Tab title="Python (OpenAI SDK)">
 
 ```python
 from openai import OpenAI  # or AsyncOpenAI
@@ -205,7 +147,7 @@ print(response)
 ```
 
 </Tab>
-<Tab title="Node (OpenAI)">
+<Tab title="Node (OpenAI SDK)">
 
 ```typescript
 import OpenAI from "openai";
@@ -251,61 +193,6 @@ console.log(JSON.stringify(response2, null, 2));
 ```
 
 </Tab>
-<Tab title="HTTP">
-
-```bash
-#!/bin/bash
-
-curl http://localhost:3000/inference \
-  -H "Content-Type: application/json" \
-  -d '{
-    "function_name": "weather_chatbot",
-    "input": {"messages": [{"role": "user", "content": "What is the weather in Tokyo (°F)?"}]}
-  }'
-
-echo "\n"
-
-curl http://localhost:3000/inference \
-  -H "Content-Type: application/json" \
-  -d '{
-    "function_name": "weather_chatbot",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the weather in Tokyo (°F)?"
-        },
-        {
-          "role": "assistant",
-          "content": [
-            {
-              "type": "tool_call",
-              "id": "123",
-              "name": "get_temperature",
-              "arguments": {
-                "location": "Tokyo"
-              }
-            }
-          ]
-        },
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "tool_result",
-              "id": "123",
-              "name": "get_temperature",
-              "result": "70"
-            }
-          ]
-        }
-      ]
-    }
-  }'
-
-```
-
-</Tab>
 </Tabs>
 
 </Accordion>
@@ -320,23 +207,22 @@ See "Advanced Usage" below for information on how to customize the tool calling 
 
 ### Restricting allowed tools at inference time
 
-You can restrict the set of tools that can be called at inference time by using the `allowed_tools` parameter.
+You can restrict the set of tools that can be called at inference time by using the `tool_choice` parameter with the `allowed_tools` type.
 
 The names should be the configuration keys (e.g. `foo` from `[tools.foo]`), not the display names shown to the LLM (e.g. `bar` from `tools.foo.name = "bar"`).
 
 For example, suppose your TensorZero function has access to several tools, but you only want to allow the `get_temperature` tool to be called during a particular inference.
-You can achieve this by setting `allowed_tools=["get_temperature"]` in your inference request.
+You can achieve this by setting `tool_choice={"type": "allowed_tools", "allowed_tools": {"tools": ["get_temperature"], "mode": "auto"}}` in your inference request.
 
 ### Defining tools dynamically at inference time
 
-You can define tools dynamically at inference time by using the `additional_tools` property.
-(In the OpenAI-compatible API, you can use the `tools` property instead.)
+You can define tools dynamically at inference time by using the `tools` parameter.
 
 You should only use dynamic tools if your use case requires it.
 Otherwise, it's recommended to define tools in the configuration file.
 
-You can define a tool dynamically with the `additional_tools` property.
-This field accepts a list of objects with the same structure as the tools defined in the configuration file, except that the `parameters` field should contain the JSON Schema itself (rather than a path to a file with the schema).
+The `tools` parameter accepts a list of tool objects following the OpenAI format.
+See the [API Reference](/gateway/api-reference/inference-openai-compatible/#tools) for full documentation on the tool object structure.
 
 ### Customizing the tool calling strategy
 
@@ -346,7 +232,7 @@ The supported tool choice strategies are:
 - `none`: The function should not use any tools.
 - `auto`: The model decides whether or not to use a tool. If it decides to use a tool, it also decides which tools to use.
 - `required`: The model should use a tool. If multiple tools are available, the model decides which tool to use.
-- `{ specific = "tool_name" }`: The model should use a specific tool. The tool must be defined in the `tools` section of the configuration file or provided in `additional_tools`.
+- `{ specific = "tool_name" }`: The model should use a specific tool. The tool must be defined in the `tools` section of the configuration file or provided dynamically via the `tools` parameter.
 
 The `tool_choice` parameter can be set either in your configuration file or directly in your inference request.
 
@@ -395,7 +281,7 @@ project_id = "your-project-id"
 provider_tools = [{type = "web_search_20250305", name = "web_search"}]
 ```
 
-You can also provide them dynamically at inference time via the `provider_tools` parameter.
+You can also provide them dynamically at inference time via the `tensorzero::provider_tools` parameter in `extra_body`.
 
 Provider tools are currently supported by the OpenAI (Responses API), Anthropic, and GCP Vertex AI Anthropic providers.
 
@@ -416,39 +302,41 @@ Using custom tools with other providers will result in an error.
 
 OpenAI offers custom tools that support alternative output formats beyond JSON Schema, such as freeform text or grammar-constrained output (using Lark or regex syntax).
 
-Custom tools are passed dynamically at inference time via `additional_tools` with `type: "openai_custom"`:
+Custom tools are passed dynamically at inference time via the `tools` parameter with `type: "custom"`:
 
-```json
-{
-  "model_name": "openai::gpt-5-mini",
-  "input": {
-    "messages": [
-      {
-        "role": "user",
-        "content": "Generate Python code to print 'Hello, World!'"
-      }
-    ]
-  },
-  "additional_tools": [
-    {
-      "type": "openai_custom",
-      "name": "code_generator",
-      "description": "Generates Python code snippets",
-      "format": { "type": "text" }
-    }
-  ]
-}
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
+
+response = client.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-5-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": "Generate Python code to print 'Hello, World!'",
+        }
+    ],
+    extra_body={
+        "tools": [
+            {
+                "type": "custom",
+                "custom": {
+                    "name": "code_generator",
+                    "description": "Generates Python code snippets",
+                    "format": {"type": "text"},
+                },
+            }
+        ],
+    },
+)
 ```
 
-See the [API Reference](/gateway/api-reference/inference/#additional_tools) for full documentation on custom tool formats including grammar-based constraints.
+See the [API Reference](/gateway/api-reference/inference-openai-compatible/#tools) for full documentation on custom tool formats including grammar-based constraints.
 
 ## Learn More
 
 <Columns cols={2}>
-  <Card
-    title="API Reference: Inference"
-    href="/gateway/api-reference/inference/"
-  ></Card>
   <Card
     title="API Reference: Inference (OpenAI-Compatible)"
     href="/gateway/api-reference/inference-openai-compatible/"

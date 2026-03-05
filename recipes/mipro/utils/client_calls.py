@@ -1,65 +1,83 @@
 import asyncio
-from typing import Any, AsyncIterator, Dict, Optional, Union
+import json
+from typing import Any, Optional
 
-from tensorzero import (
-    AsyncTensorZeroGateway,
-    InferenceChunk,
-    InferenceInput,
-    InferenceResponse,
-)
+from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageParam
+from openai.types.shared_params import ResponseFormatJSONSchema
+
+_GENERATE_INSTRUCTION_SCHEMA: ResponseFormatJSONSchema = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "generate_instruction",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {"instructions": {"type": "string", "description": "The system prompt instructions."}},
+            "required": ["instructions"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+_JUDGE_ANSWER_SCHEMA: ResponseFormatJSONSchema = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "judge_answer",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "number"},
+                "thinking": {"type": "string"},
+            },
+            "required": ["score", "thinking"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 
 async def get_instructions(
-    client: AsyncTensorZeroGateway,
-    example_instructions: str,
-    example_schema: str,
+    client: AsyncOpenAI,
+    system_prompt: str,
     semaphore: asyncio.Semaphore,
-    variant_name: str = "baseline",
-    dryrun: bool = True,
-) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
+) -> Optional[dict[str, Any]]:
     """
-    Get instructions from the client with retries.
+    Generate candidate instructions using direct OpenAI API call.
     """
-    system_args: Dict[str, Any] = {
-        "example_instructions": example_instructions,
-    }
-
-    if example_schema:
-        system_args["example_schema"] = example_schema
-
-    inputs = InferenceInput(system=system_args, messages=[])
-
     try:
         async with semaphore:
-            return await client.inference(
-                function_name="generate_instruction",
-                input=inputs,
-                variant_name=variant_name,
-                dryrun=dryrun,
+            response = await client.chat.completions.create(
+                model="o1",
+                messages=[{"role": "user", "content": system_prompt}],
+                response_format=_GENERATE_INSTRUCTION_SCHEMA,
             )
+            content = response.choices[0].message.content
+            return json.loads(content) if content else None
     except Exception as e:
         print(f"Error generating instructions: {e}")
         return None
 
 
 async def candidate_inference(
-    client: AsyncTensorZeroGateway,
-    input: InferenceInput,
+    client: AsyncOpenAI,
+    messages: list[ChatCompletionMessageParam],
     system_prompt: str,
     model_name: str,
     semaphore: asyncio.Semaphore,
-    dryrun: bool = True,
-) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
-    messages = []
-    for message in input.messages:  # type: ignore
-        messages.append({"role": message.role, "content": message.content})  # type: ignore
-    adjusted_input = {"system": system_prompt, "messages": messages}  # type: ignore
+) -> Optional[Any]:
+    """
+    Run inference with a candidate prompt using direct OpenAI API call.
+    """
+    openai_messages: list[ChatCompletionMessageParam] = [{"role": "system", "content": system_prompt}]
+    openai_messages.extend(messages)
+
     try:
         async with semaphore:
-            return await client.inference(
-                input=adjusted_input,  # type: ignore
-                model_name=model_name,
-                dryrun=dryrun,
+            return await client.chat.completions.create(
+                model=model_name,
+                messages=openai_messages,
             )
     except Exception as e:
         print(f"Error generating answer: {e}")
@@ -67,45 +85,26 @@ async def candidate_inference(
 
 
 async def judge_answer(
-    client: AsyncTensorZeroGateway,
-    task_description: str,
-    metric_properties: str,
-    prediction: str,
-    ground_truth: str,
+    client: AsyncOpenAI,
+    system_prompt: str,
+    user_prompt: str,
     semaphore: asyncio.Semaphore,
-    variant_name: str = "baseline",
-    dryrun: bool = True,
-) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
+) -> Optional[dict[str, Any]]:
+    """
+    Score a prediction using an LLM judge via direct OpenAI API call.
+    """
     try:
         async with semaphore:
-            system_args: Dict[str, Any] = {
-                "task_description": task_description,
-                "metric_properties": metric_properties,
-            }
-
-            inputs = InferenceInput(
-                system=system_args,
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini-2024-07-18",
                 messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "arguments": {
-                                    "prediction": prediction,
-                                    "ground_truth": ground_truth,
-                                },
-                            }
-                        ],
-                    },
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
                 ],
+                response_format=_JUDGE_ANSWER_SCHEMA,
             )
-            return await client.inference(
-                function_name="judge_answer",
-                input=inputs,
-                variant_name=variant_name,
-                dryrun=dryrun,
-            )
+            content = response.choices[0].message.content
+            return json.loads(content) if content else None
     except Exception as e:
         print(f"Error judging answer: {e}")
         return None

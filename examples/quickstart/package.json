@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "tsx after_openai.ts"
+    "start": "tsx after.ts"
   },
   "dependencies": {
     "openai": "^6.4.0"

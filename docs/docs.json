@@ -69,8 +69,8 @@
                 "group": "API Reference",
                 "expanded": true,
                 "pages": [
-                  "gateway/api-reference/inference",
                   "gateway/api-reference/inference-openai-compatible",
+                  "gateway/api-reference/inference",
                   "gateway/api-reference/feedback",
                   "gateway/api-reference/batch-inference",
                   "gateway/api-reference/datasets-datapoints"

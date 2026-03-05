@@ -19,21 +19,19 @@ type = "chat_completion"
 model = "hyperbolic::openai/gpt-oss-20b"
 ```
 
-Additionally, you can set `model_name` in the inference request to use a specific Hyperbolic model, without having to configure a function and variant in TensorZero.
+Additionally, you can set the model in the inference request to use a specific Hyperbolic model, without having to configure a function and variant in TensorZero.
 
 ```bash {4}
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "hyperbolic::openai/gpt-oss-20b",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::hyperbolic::openai/gpt-oss-20b",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 
@@ -114,17 +112,15 @@ You can start the gateway with `docker compose up`.
 Make an inference request to the gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "my_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```

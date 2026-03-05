@@ -8,7 +8,7 @@
 
 **[Quick Start (5min)](https://www.tensorzero.com/docs/quickstart)** ·
 **[Deployment Guide](https://www.tensorzero.com/docs/gateway/deployment)** ·
-**[API Reference](https://www.tensorzero.com/docs/gateway/api-reference/inference)** ·
+**[API Reference](https://www.tensorzero.com/docs/gateway/api-reference/inference-openai-compatible)** ·
 **[Configuration Reference](https://www.tensorzero.com/docs/gateway/configuration-reference)**
 
 The `tensorzero` package provides a Python client for the TensorZero Gateway.

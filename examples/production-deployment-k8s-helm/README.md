@@ -197,18 +197,16 @@ helm install tensorzero ./tensorzero -n tensorzero -f custom-values.yaml
 After successful deployment, you can call the gateway endpoint using curl. Here's an example:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "openai::gpt-4o-mini",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::openai::gpt-4o-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 

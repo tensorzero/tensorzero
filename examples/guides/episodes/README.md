@@ -4,10 +4,10 @@ This directory contains the code for the **[Episodes](https://www.tensorzero.com
 
 ## Running the Example
 
-1. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
+1. Set the `OPENAI_API_KEY` environment variable:
 
 ```bash
-uv sync
+export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 ```
 
 2. Launch the TensorZero Gateway and ClickHouse database:
@@ -16,8 +16,14 @@ uv sync
 docker compose up
 ```
 
-3. Run the example:
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
-uv run python run.py
+uv sync
+```
+
+4. Run the example:
+
+```bash
+uv run main.py
 ```

@@ -7,19 +7,11 @@ description: API reference for the `/openai/v1/chat/completions` endpoint.
 ## `POST /openai/v1/chat/completions`
 
 The `/openai/v1/chat/completions` endpoint allows TensorZero users to make TensorZero inferences with the OpenAI client.
-The gateway translates the OpenAI request parameters into the arguments expected by the `inference` endpoint and calls the same underlying implementation.
-This endpoint supports most of the features supported by the `inference` endpoint, but there are some limitations.
-Most notably, this endpoint doesn't support dynamic credentials, so they must be specified with a different method.
-
-<Tip>
-
-See the [API Reference for `POST /inference`](/gateway/api-reference/inference/) for more details on inference with the native TensorZero API.
-
-</Tip>
+The gateway translates the OpenAI request parameters and calls the desired model providers.
 
 ### Request
 
-The OpenAI-compatible inference endpoints translate the OpenAI request parameters into the arguments expected by the `inference` endpoint.
+The OpenAI-compatible inference endpoint accepts standard OpenAI request parameters along with TensorZero-specific extensions.
 
 TensorZero-specific parameters are prefixed with `tensorzero::` (e.g. `tensorzero::episode_id`).
 These fields should be provided as extra body parameters in the request body.
@@ -27,7 +19,7 @@ These fields should be provided as extra body parameters in the request body.
 <Warning>
 
 The gateway will use the credentials specified in the `tensorzero.toml` file.
-In most cases, these credentials will be environment variables available to the TensorZero gateway &mdash; _not_ your OpenAI client.
+In most cases, these credentials will be environment variables available to the TensorZero Gateway &mdash; _not_ your OpenAI client.
 
 API keys sent from the OpenAI client will be ignored.
 
@@ -330,7 +322,6 @@ The namespace is also validated against namespaced models: if the selected varia
 
 The value must be a non-empty string.
 It is stored as the `tensorzero::namespace` tag on the inference record.
-Behaves the same as the [`namespace`](/gateway/api-reference/inference#namespace) parameter in the native API.
 
 Provide this as an extra body parameter:
 
@@ -866,16 +857,6 @@ In regular (non-streaming) mode, the response is a JSON object with the followin
     - **`tool_calls`**: List of tool calls made by the model (optional). The format is the same as in the request.
     - **`role`**: The role of the message sender (always `"assistant"`).
 
-<Warning>
-
-The OpenAI-compatible inference endpoint can't handle unknown content blocks in the response.
-If the model provider returns an unknown content block, the gateway will drop the content block from the response and log a warning.
-
-If you need to access unknown content blocks, use the native TensorZero API.
-See the [Inference API Reference](/gateway/api-reference/inference/) for details.
-
-</Warning>
-
 #### `created`
 
 - **Type:** integer
@@ -1088,7 +1069,7 @@ system_schema = "functions/draft_email/system_schema.json"
 <Tabs>
 <Tab title="Python">
 
-```python frame="code" title="POST /inference" mark="draft_email"
+```python frame="code" title="POST /openai/v1/chat/completions" mark="draft_email"
 from openai import AsyncOpenAI
 
 async with AsyncOpenAI(
@@ -1117,7 +1098,7 @@ async with AsyncOpenAI(
 </Tab>
 <Tab title="HTTP">
 
-```bash frame="code" title="POST /inference" mark="draft_email"
+```bash frame="code" title="POST /openai/v1/chat/completions" mark="draft_email"
 curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "episode_id: your_episode_id_here" \
@@ -1146,7 +1127,7 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
 <Tabs>
 <Tab title="Regular">
 
-```json frame="code" title="POST /inference"
+```json frame="code" title="POST /openai/v1/chat/completions"
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "episode_id": "11111111-1111-1111-1111-111111111111",
@@ -1177,7 +1158,7 @@ In streaming mode, the response is an <a href="https://developer.mozilla.org/en-
 
 Each JSON message has the following fields:
 
-```json frame="code" title="POST /inference"
+```json frame="code" title="POST /openai/v1/chat/completions"
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "episode_id": "11111111-1111-1111-1111-111111111111",
@@ -1232,7 +1213,7 @@ type = "chat"
 <Tabs>
 <Tab title="Python">
 
-```python frame="code" title="POST /inference" mark="weather_bot"
+```python frame="code" title="POST /openai/v1/chat/completions" mark="weather_bot"
 from openai import AsyncOpenAI
 
 async with AsyncOpenAI(
@@ -1240,14 +1221,12 @@ async with AsyncOpenAI(
 ) as client:
     result = await client.chat.completions.create(
         model="tensorzero::function_name::weather_bot",
-        input={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the weather like in Tokyo?"
-                }
-            ]
-        },
+        messages=[
+            {
+                "role": "user",
+                "content": "What is the weather like in Tokyo?"
+            }
+        ],
         tools=[
             {
               "type": "function",
@@ -1281,19 +1260,17 @@ async with AsyncOpenAI(
 </Tab>
 <Tab title="HTTP">
 
-```bash frame="code" title="POST /inference" mark="weather_bot"
+```bash frame="code" title="POST /openai/v1/chat/completions" mark="weather_bot"
 curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "tensorzero::function_name::weather_bot",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the weather like in Tokyo?"
-        }
-      ]
-    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the weather like in Tokyo?"
+      }
+    ],
     "tools": [
       {
         "type": "function",
@@ -1332,7 +1309,7 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
 <Tabs>
 <Tab title="Regular">
 
-```json frame="code" title="POST /inference" mark="get_temperature"
+```json frame="code" title="POST /openai/v1/chat/completions" mark="get_temperature"
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "episode_id": "11111111-1111-1111-1111-111111111111",
@@ -1373,7 +1350,7 @@ In streaming mode, the response is an <a href="https://developer.mozilla.org/en-
 
 Each JSON message has the following fields:
 
-```json frame="code" title="POST /inference"
+```json frame="code" title="POST /openai/v1/chat/completions"
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "episode_id": "11111111-1111-1111-1111-111111111111",
@@ -1447,7 +1424,7 @@ output_schema = "output_schema.json"
 <Tabs>
 <Tab title="Python">
 
-```python frame="code" title="POST /inference" mark="extract_email"
+```python frame="code" title="POST /openai/v1/chat/completions" mark="extract_email"
 from openai import AsyncOpenAI
 
 dynamic_output_schema = {
@@ -1465,15 +1442,16 @@ async with AsyncOpenAI(
 ) as client:
     result = await client.chat.completions.create(
         model="tensorzero::function_name::extract_email",
-        input={
-            "system": "You are an AI assistant...",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "...blah blah blah hello@tensorzero.com blah blah blah..."
-                }
-            ]
-        }
+        messages=[
+            {
+                "role": "system",
+                "content": "You are an AI assistant..."
+            },
+            {
+                "role": "user",
+                "content": "...blah blah blah hello@tensorzero.com blah blah blah..."
+            }
+        ],
         # Override the output schema using the `response_format` field
         response_format={"type": "json_schema", "schema": dynamic_output_schema}
         # optional: stream=True,
@@ -1483,20 +1461,21 @@ async with AsyncOpenAI(
 </Tab>
 <Tab title="HTTP">
 
-```bash frame="code" title="POST /inference" mark="extract_email"
+```bash frame="code" title="POST /openai/v1/chat/completions" mark="extract_email"
 curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "tensorzero::function_name::extract_email",
-    "input": {
-      "system": "You are an AI assistant...",
-      "messages": [
-        {
-          "role": "user",
-          "content": "...blah blah blah hello@tensorzero.com blah blah blah..."
-        }
-      ]
-    },
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are an AI assistant..."
+      },
+      {
+        "role": "user",
+        "content": "...blah blah blah hello@tensorzero.com blah blah blah..."
+      }
+    ],
     "response_format": {
       "type": "json_schema",
       "schema": {
@@ -1521,7 +1500,7 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
 <Tabs>
 <Tab title="Regular">
 
-```json frame="code" title="POST /inference" mark="email"
+```json frame="code" title="POST /openai/v1/chat/completions" mark="email"
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "episode_id": "11111111-1111-1111-1111-111111111111",
@@ -1551,7 +1530,7 @@ In streaming mode, the response is an <a href="https://developer.mozilla.org/en-
 
 Each JSON message has the following fields:
 
-```json frame="code" title="POST /inference" mark="email"
+```json frame="code" title="POST /openai/v1/chat/completions" mark="email"
 {
   "id": "00000000-0000-0000-0000-000000000000",
   "episode_id": "11111111-1111-1111-1111-111111111111",

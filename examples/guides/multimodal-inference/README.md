@@ -21,78 +21,14 @@ docker compose up
 > You can use any S3-compatible object storage service (e.g. AWS S3, GCP Storage, Cloudflare R2).
 > We use a local MinIO instance in this example for convenience.
 
-3. Run the example:
-
-<details>
-<summary><b>Python</b></summary>
-
-a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
+3. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
 uv sync
 ```
 
-b. Run the example:
+4. Run the example:
 
 ```bash
-uv run tensorzero_sdk.py
+uv run main.py
 ```
-
-</details>
-
-<details>
-<summary><b>Python (OpenAI)</b></summary>
-
-a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
-
-```bash
-uv sync
-```
-
-b. Run the example:
-
-```bash
-uv run openai_sdk.py
-```
-
-</details>
-
-<details>
-<summary><b>HTTP</b></summary>
-
-Run the following commands to make a multimodal inference request to the TensorZero Gateway.
-The first image is a remote image of Ferris the crab, and the second image is a one-pixel orange image encoded as a base64 string.
-
-```bash
-curl -X POST http://localhost:3000/inference \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model_name": "openai::gpt-4o-mini",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": "Do the images share any common features?"
-            },
-            {
-              "type": "file",
-              "file_type": "url",
-              "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/eac2a230d4a4db1ea09e9c876e45bdb23a300364/tensorzero-core/tests/e2e/providers/ferris.png"
-            },
-            {
-              "type": "file",
-              "file_type": "base64",
-              "mime_type": "image/png",
-              "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+O/P8B8ABe0CTsv8mHgAAAAASUVORK5CYII="
-            }
-          ]
-        }
-      ]
-    }
-  }'
-```
-
-</details>

@@ -188,6 +188,7 @@ repos:
         args: ["--project", "recipes/pyrightconfig.json"]
         additional_dependencies:
           - clickhouse-connect
+          - openai
           - pandas
           - pandas-stubs
           - pydantic

@@ -90,20 +90,18 @@ You must set up Postgres to use TensorZero's automated experimentation features.
 
 <Step title="Make inference requests">
 
-Make an inference request just like you normally would and keep track of the inference ID or episode ID.
-You can use the TensorZero Inference API or the OpenAI-compatible Inference API.
+Make an inference request just like you normally would and keep track of the inference ID.
+The response `id` field contains the TensorZero inference ID.
 
 ```python
-response = t0.inference(
-    function_name="extract_entities",
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": datapoint.input,
-            }
-        ]
-    },
+response = client.chat.completions.create(
+    model="tensorzero::function_name::extract_entities",
+    messages=[
+        {
+            "role": "user",
+            "content": datapoint.input,
+        }
+    ],
 )
 ```
 
@@ -114,10 +112,15 @@ response = t0.inference(
 Send feedback for your metric and assign it to the inference ID or episode ID.
 
 ```python
-t0.feedback(
-    metric_name="exact_match",
-    value=True,
-    inference_id=response.inference_id,
+import httpx
+
+httpx.post(
+    "http://localhost:3000/feedback",
+    json={
+        "metric_name": "exact_match",
+        "value": True,
+        "inference_id": response.id,
+    },
 )
 ```
 

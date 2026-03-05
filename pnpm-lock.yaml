@@ -107,19 +107,6 @@ importers:
         specifier: ^4.20.3
         version: 4.20.3
 
-  examples/integrations/helicone:
-    dependencies:
-      openai:
-        specifier: ^6.4.0
-        version: 6.4.0(ws@8.18.3)(zod@3.25.76)
-      process:
-        specifier: ^0.11.10
-        version: 0.11.10
-    devDependencies:
-      tsx:
-        specifier: ^4.20.3
-        version: 4.20.3
-
   examples/quickstart:
     dependencies:
       openai:

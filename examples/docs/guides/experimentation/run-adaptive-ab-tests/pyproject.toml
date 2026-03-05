@@ -4,9 +4,9 @@ version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "httpx>=0.28.0",
     "openai>=2.6.1",
     "pandas>=2.3.3",
-    "tensorzero>=2025.11.0",
     "tqdm>=4.66.0",
 ]
 

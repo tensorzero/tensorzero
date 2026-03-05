@@ -78,21 +78,6 @@ Once you've configured a function and its variants, you can make inference reque
 
 <Tabs>
 
-<Tab title="Python">
-
-```python
-result = t0.inference(
-    function_name="answer_customer",
-    input={
-        "messages": [
-            {"role": "user", "content": "What is your return policy?"},
-        ],
-    },
-)
-```
-
-</Tab>
-
 <Tab title="Python (OpenAI SDK)">
 
 ```python
@@ -125,18 +110,16 @@ const response = await client.chat.completions.create({
 <Tab title="HTTP">
 
 ```bash
-curl -X POST "http://localhost:3000/inference" \
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "answer_customer",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is your return policy?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::answer_customer",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is your return policy?"
+      }
+    ]
   }'
 ```
 

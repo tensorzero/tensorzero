@@ -87,7 +87,7 @@ This is the inference request you'd make if you had called the model provider di
 | `finish_reason`       | Nullable(Enum('stop', 'length', 'tool_call', 'content_filter', 'unknown', 'stop_sequence')) | Reason the model stopped generating                        |
 | `snapshot_hash`       |                                      Nullable(UInt256)                                      | Configuration snapshot hash for data provenance            |
 
-A `RequestMessage` is an object with shape `{role: "user" | "assistant", content: List[ContentBlock]}` (content blocks are defined [here](/gateway/api-reference/inference/#content-block)).
+A `RequestMessage` is an object with shape `{role: "user" | "assistant", content: List[ContentBlock]}` (content blocks are defined [here](/gateway/api-reference/inference-openai-compatible#messages)).
 
 ## `DynamicInContextLearningExample`
 

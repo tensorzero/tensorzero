@@ -114,33 +114,6 @@ When there is a conflict between static and dynamic headers, the latter takes pr
 
 <Tabs>
 
-<Tab title="Python (TensorZero SDK)">
-
-When using the TensorZero Python SDK, you can pass dynamic OTLP headers using the `otlp_traces_extra_headers` parameter in the `inference` method.
-The headers will be automatically prefixed with `tensorzero-otlp-traces-extra-header-` for you:
-
-```python
-response = t0.inference(
-    function_name="your_function_name",
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": "Write a haiku about TensorZero.",
-            }
-        ]
-    },
-    otlp_traces_extra_headers={
-        "user-id": "user-123",
-        "request-source": "mobile-app",
-    },
-)
-```
-
-This will attach the headers `user-id: user-123` and `request-source: mobile-app` when exporting any span associated with that specific inference request.
-
-</Tab>
-
 <Tab title="Python (OpenAI SDK)">
 
 When using the OpenAI Python SDK with the TensorZero OpenAI-compatible endpoint, you can pass dynamic OTLP headers using the `extra_headers` parameter.
@@ -206,32 +179,6 @@ This will attach the headers `user-id: user-123` and `request-source: mobile-app
 
 </Tab>
 
-<Tab title="HTTP">
-
-When making a request to a TensorZero HTTP endpoint, add a header prefixed with `tensorzero-otlp-traces-extra-header-`:
-
-```bash
-curl -X POST http://localhost:3000/inference \
-  -H "Content-Type: application/json" \
-  -H "tensorzero-otlp-traces-extra-header-user-id: user-123" \
-  -H "tensorzero-otlp-traces-extra-header-request-source: mobile-app" \
-  -d '{
-    "function_name": "your_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    }
-  }'
-```
-
-This will attach the headers `user-id: user-123` and `request-source: mobile-app` when exporting any span associated with that specific API request.
-
-</Tab>
-
 </Tabs>
 
 ### Send custom OpenTelemetry attributes
@@ -241,39 +188,63 @@ The values must be valid JSON; TensorZero currently supports strings and boolean
 
 <Tabs>
 
-<Tab title="Python (TensorZero SDK)">
+<Tab title="Python (OpenAI SDK)">
 
-When using the TensorZero Python SDK, you can pass custom attributes using the `otlp_traces_extra_attributes` parameter:
+When using the OpenAI Python SDK with the TensorZero OpenAI-compatible endpoint, you can pass custom attributes using the `extra_headers` parameter.
+You must prefix header names with `tensorzero-otlp-traces-extra-attribute-`:
 
 ```python
-response = t0.inference(
-    function_name="your_function_name",
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": "Write a haiku about TensorZero.",
-            }
-        ]
-    },
-    otlp_traces_extra_attributes={
-        "user_id": "\"user-123\"",
-        "is_premium": "true",
+from openai import OpenAI
+
+client = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
+
+result = client.chat.completions.create(
+    model="tensorzero::function_name::your_function",
+    messages=[
+        {
+            "role": "user",
+            "content": "Write a haiku about TensorZero.",
+        }
+    ],
+    extra_headers={
+        "tensorzero-otlp-traces-extra-attribute-user_id": "\"user-123\"",
+        "tensorzero-otlp-traces-extra-attribute-is_premium": "true",
     },
 )
 ```
 
 </Tab>
 
-<Tab title="HTTP">
+<Tab title="Node (OpenAI SDK)">
 
-When making a request to a TensorZero HTTP endpoint, add headers prefixed with `tensorzero-otlp-traces-extra-attribute-`:
+When using the OpenAI Node SDK with the TensorZero OpenAI-compatible endpoint, you can pass custom attributes using the `headers` option in the second parameter.
+You must prefix header names with `tensorzero-otlp-traces-extra-attribute-`:
 
-```bash
-curl -X POST http://localhost:3000/inference \
-  -H "tensorzero-otlp-traces-extra-attribute-user_id: \"user-123\"" \
-  -H "tensorzero-otlp-traces-extra-attribute-is_premium: true" \
-  -d '{ ... }'
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: "not-used",
+  baseURL: "http://localhost:3000/openai/v1",
+});
+
+const result = await client.chat.completions.create(
+  {
+    model: "tensorzero::function_name::your_function",
+    messages: [
+      {
+        role: "user",
+        content: "Write a haiku about TensorZero.",
+      },
+    ],
+  },
+  {
+    headers: {
+      "tensorzero-otlp-traces-extra-attribute-user_id": '"user-123"',
+      "tensorzero-otlp-traces-extra-attribute-is_premium": "true",
+    },
+  },
+);
 ```
 
 </Tab>
@@ -286,37 +257,61 @@ You can attach custom resource attributes to OTLP trace exports.
 
 <Tabs>
 
-<Tab title="Python (TensorZero SDK)">
+<Tab title="Python (OpenAI SDK)">
 
-When using the TensorZero Python SDK, you can pass custom resources using the `otlp_traces_extra_resources` parameter:
+When using the OpenAI Python SDK with the TensorZero OpenAI-compatible endpoint, you can pass custom resources using the `extra_headers` parameter.
+You must prefix header names with `tensorzero-otlp-traces-extra-resource-`:
 
 ```python
-response = t0.inference(
-    function_name="your_function_name",
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": "Write a haiku about TensorZero.",
-            }
-        ]
-    },
-    otlp_traces_extra_resources={
-        "service.namespace": "production",
+from openai import OpenAI
+
+client = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
+
+result = client.chat.completions.create(
+    model="tensorzero::function_name::your_function",
+    messages=[
+        {
+            "role": "user",
+            "content": "Write a haiku about TensorZero.",
+        }
+    ],
+    extra_headers={
+        "tensorzero-otlp-traces-extra-resource-service.namespace": "production",
     },
 )
 ```
 
 </Tab>
 
-<Tab title="HTTP">
+<Tab title="Node (OpenAI SDK)">
 
-When making a request to a TensorZero HTTP endpoint, add headers prefixed with `tensorzero-otlp-traces-extra-resource-`:
+When using the OpenAI Node SDK with the TensorZero OpenAI-compatible endpoint, you can pass custom resources using the `headers` option in the second parameter.
+You must prefix header names with `tensorzero-otlp-traces-extra-resource-`:
 
-```bash
-curl -X POST http://localhost:3000/inference \
-  -H "tensorzero-otlp-traces-extra-resource-service.namespace: production" \
-  -d '{ ... }'
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: "not-used",
+  baseURL: "http://localhost:3000/openai/v1",
+});
+
+const result = await client.chat.completions.create(
+  {
+    model: "tensorzero::function_name::your_function",
+    messages: [
+      {
+        role: "user",
+        content: "Write a haiku about TensorZero.",
+      },
+    ],
+  },
+  {
+    headers: {
+      "tensorzero-otlp-traces-extra-resource-service.namespace": "production",
+    },
+  },
+);
 ```
 
 </Tab>
@@ -328,11 +323,62 @@ curl -X POST http://localhost:3000/inference \
 TensorZero automatically handles incoming `traceparent` headers for distributed tracing when OTLP is enabled.
 This follows the [W3C Trace Context standard](https://www.w3.org/TR/trace-context/).
 
-```bash
-curl -X POST http://localhost:3000/inference \
-  -H "traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" \
-  -d '{ ... }'
+<Tabs>
+
+<Tab title="Python (OpenAI SDK)">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
+
+result = client.chat.completions.create(
+    model="tensorzero::function_name::your_function",
+    messages=[
+        {
+            "role": "user",
+            "content": "Write a haiku about TensorZero.",
+        }
+    ],
+    extra_headers={
+        "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+    },
+)
 ```
+
+</Tab>
+
+<Tab title="Node (OpenAI SDK)">
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: "not-used",
+  baseURL: "http://localhost:3000/openai/v1",
+});
+
+const result = await client.chat.completions.create(
+  {
+    model: "tensorzero::function_name::your_function",
+    messages: [
+      {
+        role: "user",
+        content: "Write a haiku about TensorZero.",
+      },
+    ],
+  },
+  {
+    headers: {
+      traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+    },
+  },
+);
+```
+
+</Tab>
+
+</Tabs>
 
 TensorZero spans will become children of the incoming trace, preserving the trace ID across services.
 
