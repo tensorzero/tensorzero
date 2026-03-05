@@ -4,7 +4,7 @@ from openai import OpenAI
 
 
 def main(gateway_url: str):
-    with OpenAI(base_url=f"{gateway_url}/openai/v1") as client:
+    with OpenAI(base_url=f"{gateway_url}/openai/v1", api_key="not-used") as client:
         stream = client.chat.completions.create(
             model="tensorzero::function_name::chatbot",
             messages=[
