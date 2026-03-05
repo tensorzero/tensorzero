@@ -231,15 +231,15 @@ function FeedbackSectionContent({
   const { feedbacks, bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
 
-  const metricsCount = filterToLatestFeedback(
+  const filteredCount = filterToLatestFeedback(
     feedbacks,
     bounds,
     latestFeedbackByMetric,
-  ).filter((f) => f.type === "boolean" || f.type === "float").length;
+  ).length;
 
   useEffect(() => {
-    onCountUpdate(metricsCount);
-  }, [metricsCount, onCountUpdate]);
+    onCountUpdate(filteredCount);
+  }, [filteredCount, onCountUpdate]);
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
   const bottomFeedback = feedbacks[feedbacks.length - 1] as

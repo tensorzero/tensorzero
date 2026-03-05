@@ -71,15 +71,15 @@ function FeedbackContent({
   const { feedback, feedback_bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
 
-  const metricsCount = filterToLatestFeedback(
+  const filteredCount = filterToLatestFeedback(
     feedback,
     feedback_bounds,
     latestFeedbackByMetric,
-  ).filter((f) => f.type === "boolean" || f.type === "float").length;
+  ).length;
 
   useEffect(() => {
-    onCountUpdate(metricsCount);
-  }, [metricsCount, onCountUpdate]);
+    onCountUpdate(filteredCount);
+  }, [filteredCount, onCountUpdate]);
 
   const topFeedback = feedback[0] as { id: string } | undefined;
   const bottomFeedback = feedback[feedback.length - 1] as
