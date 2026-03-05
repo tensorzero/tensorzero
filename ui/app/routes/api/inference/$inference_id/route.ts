@@ -50,7 +50,7 @@ export async function loader({
       demonstration_feedback,
       feedback_bounds: FeedbackBounds,
       feedback: FeedbackRow[],
-      latestFeedbackByMetric: Record<string, string>;
+      latestByMetric: Record<string, string>;
 
     if (newFeedbackId) {
       // When there's new feedback, wait for polling to complete before querying
@@ -64,7 +64,7 @@ export async function loader({
         ]);
 
       // Query these after polling completes to avoid race condition with materialized views
-      [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
+      [feedback_bounds, latestByMetric] = await Promise.all([
         client.getFeedbackBoundsByTargetId(inference_id),
         client.getLatestFeedbackIdByMetric(inference_id),
       ]);
@@ -76,7 +76,7 @@ export async function loader({
         demonstration_feedback,
         feedback_bounds,
         feedback,
-        latestFeedbackByMetric,
+        latestByMetric,
       ] = await Promise.all([
         inferencesPromise,
         modelInferencesPromise,
@@ -110,7 +110,7 @@ export async function loader({
       feedback: filterToLatestFeedback(
         feedback,
         feedback_bounds,
-        latestFeedbackByMetric,
+        latestByMetric,
       ),
       hasDemonstration: demonstration_feedback.length > 0,
       usedVariants,
