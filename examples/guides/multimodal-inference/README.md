@@ -35,7 +35,7 @@ uv sync
 b. Run the example:
 
 ```bash
-uv run main_openai.py
+uv run openai_sdk.py
 ```
 
 </details>
