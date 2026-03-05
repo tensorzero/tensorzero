@@ -1,8 +1,6 @@
 import { data, type LoaderFunctionArgs } from "react-router";
-import {
-  pollForFeedbackItem,
-  filterToLatest,
-} from "~/utils/clickhouse/feedback";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
+import { filterToLatestFeedback } from "~/components/feedback/FeedbackTable";
 import { resolveModelInferences } from "~/utils/resolve.server";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { logger } from "~/utils/logger";
@@ -109,7 +107,7 @@ export async function loader({
       inference,
       input: resolvedInput,
       model_inferences,
-      feedback: filterToLatest(
+      feedback: filterToLatestFeedback(
         feedback,
         feedback_bounds,
         latestFeedbackByMetric,
