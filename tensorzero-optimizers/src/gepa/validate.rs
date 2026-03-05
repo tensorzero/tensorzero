@@ -573,7 +573,7 @@ pub fn validate_gepa_config_uninitialized(
         .ok_or_else(|| {
             Error::new(ErrorDetails::Config {
                 message: format!(
-                    "Function '{}' not found in configuration",
+                    "Function `{}` not found in configuration",
                     config.function_name
                 ),
             })
@@ -592,7 +592,7 @@ pub fn validate_gepa_config_uninitialized(
         .ok_or_else(|| {
             Error::new(ErrorDetails::Config {
                 message: format!(
-                    "Evaluation '{}' not found in config",
+                    "Evaluation `{}` not found in config",
                     config.evaluation_name
                 ),
             })
@@ -615,7 +615,7 @@ pub fn validate_gepa_config_uninitialized(
             if !function_variants.contains_key(variant_name) {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Variant '{}' specified in initial_variants not found in Function '{}'",
+                        "Variant `{}` specified in `initial_variants` not found in Function `{}`",
                         variant_name, config.function_name
                     ),
                 }));
@@ -624,7 +624,7 @@ pub fn validate_gepa_config_uninitialized(
         if initial_variants.is_empty() {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "`initial_variants` is empty for Function '{}'",
+                    "`initial_variants` is empty for Function `{}`",
                     config.function_name
                 ),
             }));
@@ -636,7 +636,7 @@ pub fn validate_gepa_config_uninitialized(
             {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "Variant '{}' in Function '{}' is not a ChatCompletion variant. GEPA only supports ChatCompletion variants.",
+                        "Variant `{}` in Function `{}` is not a ChatCompletion variant. GEPA only supports ChatCompletion variants.",
                         variant_name, config.function_name
                     ),
                 }));
@@ -707,7 +707,7 @@ pub fn validate_gepa_config_uninitialized(
                 uninitialized_config.tools.get(tool_name).ok_or_else(|| {
                     Error::new(ErrorDetails::Config {
                         message: format!(
-                            "Tool '{}' referenced by Function '{}' not found in configuration",
+                            "Tool `{}` referenced by Function `{}` not found in configuration",
                             tool_name, config.function_name
                         ),
                     })

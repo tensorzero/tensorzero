@@ -140,7 +140,7 @@ pub struct EvalStepParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InitEvalStepParams {
     pub evaluation_name: String,
-    pub val_dataset_name: String,
+    pub datapoint_ids: Vec<Uuid>,
     pub variants: HashMap<String, UninitializedChatCompletionConfig>,
     pub max_concurrency: u32,
 }
