@@ -16,9 +16,9 @@ import { DemonstrationCard } from "~/components/feedback/FeedbackCard";
 export function filterToLatestFeedback(
   feedback: FeedbackRow[],
   feedbackBounds?: FeedbackBounds,
-  latestByMetric?: Record<string, string>,
+  latestFeedbackByMetric?: Record<string, string>,
 ): FeedbackRow[] {
-  if (!feedbackBounds || !latestByMetric) return feedback;
+  if (!feedbackBounds || !latestFeedbackByMetric) return feedback;
   return feedback.filter((item) => {
     if (item.type === "comment") {
       const lastId = feedbackBounds.by_type.comment.last_id;
@@ -28,7 +28,7 @@ export function filterToLatestFeedback(
       const lastId = feedbackBounds.by_type.demonstration.last_id;
       return lastId === undefined || item.id === lastId;
     }
-    return latestByMetric[item.metric_name] === item.id;
+    return latestFeedbackByMetric[item.metric_name] === item.id;
   });
 }
 
@@ -76,7 +76,7 @@ export function FeedbackTableSkeleton({
 interface FeedbackTableProps {
   feedback: FeedbackRow[];
   feedbackBounds?: FeedbackBounds;
-  latestByMetric?: Record<string, string>;
+  latestFeedbackByMetric?: Record<string, string>;
   pagination?: React.ReactNode;
   showDemonstrations?: boolean;
 }
@@ -84,7 +84,7 @@ interface FeedbackTableProps {
 export default function FeedbackTable({
   feedback,
   feedbackBounds,
-  latestByMetric,
+  latestFeedbackByMetric,
   pagination,
   showDemonstrations = true,
 }: FeedbackTableProps) {
@@ -92,7 +92,7 @@ export default function FeedbackTable({
     const items = filterToLatestFeedback(
       feedback,
       feedbackBounds,
-      latestByMetric,
+      latestFeedbackByMetric,
     );
 
     return {
@@ -105,7 +105,7 @@ export default function FeedbackTable({
           f.type === "demonstration",
       ),
     };
-  }, [feedback, feedbackBounds, latestByMetric]);
+  }, [feedback, feedbackBounds, latestFeedbackByMetric]);
 
   return (
     <div className="space-y-6">

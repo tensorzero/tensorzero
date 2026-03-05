@@ -53,7 +53,7 @@ export type InferencesData = {
 export type FeedbackData = {
   feedbacks: FeedbackRow[];
   bounds: FeedbackBounds;
-  latestByMetric: Record<string, string>;
+  latestFeedbackByMetric: Record<string, string>;
 };
 
 export const handle: RouteHandle = {
@@ -135,14 +135,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? // Sequential case: poll first, then query bounds/metrics
       pollForFeedbackItem(episode_id, newFeedbackId, limit).then(
         async (feedbacks) => {
-          const [bounds, latestByMetric] = await Promise.all([
+          const [bounds, latestFeedbackByMetric] = await Promise.all([
             tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
             tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
           ]);
           return {
             feedbacks,
             bounds,
-            latestByMetric,
+            latestFeedbackByMetric,
           };
         },
       )
@@ -155,10 +155,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }),
         tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
         tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
-      ]).then(([feedbacks, bounds, latestByMetric]) => ({
+      ]).then(([feedbacks, bounds, latestFeedbackByMetric]) => ({
         feedbacks,
         bounds,
-        latestByMetric,
+        latestFeedbackByMetric,
       }));
 
   return {
@@ -224,7 +224,7 @@ function FeedbackSectionError() {
 }
 
 function FeedbackSectionContent({ data }: { data: FeedbackData }) {
-  const { feedbacks, bounds, latestByMetric } = data;
+  const { feedbacks, bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
@@ -263,7 +263,7 @@ function FeedbackSectionContent({ data }: { data: FeedbackData }) {
     <FeedbackTable
       feedback={feedbacks}
       feedbackBounds={bounds}
-      latestByMetric={latestByMetric}
+      latestFeedbackByMetric={latestFeedbackByMetric}
       showDemonstrations={false}
       pagination={
         showPagination ? (

@@ -68,13 +68,13 @@ function FeedbackContent({
   data: FeedbackData;
   onCountUpdate: (count: number) => void;
 }) {
-  const { feedback, feedback_bounds, latestByMetric } = data;
+  const { feedback, feedback_bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
 
   const metricsCount = filterToLatestFeedback(
     feedback,
     feedback_bounds,
-    latestByMetric,
+    latestFeedbackByMetric,
   ).filter((f) => f.type === "boolean" || f.type === "float").length;
 
   useEffect(() => {
@@ -120,7 +120,7 @@ function FeedbackContent({
     <FeedbackTable
       feedback={feedback}
       feedbackBounds={feedback_bounds}
-      latestByMetric={latestByMetric}
+      latestFeedbackByMetric={latestFeedbackByMetric}
       pagination={
         showPagination ? (
           <PageButtons

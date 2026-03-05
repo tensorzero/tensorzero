@@ -19,7 +19,7 @@ export type ModelInferencesData = ParsedModelInferenceRow[];
 export type FeedbackData = {
   feedback: FeedbackRow[];
   feedback_bounds: FeedbackBounds;
-  latestByMetric: Record<string, string>;
+  latestFeedbackByMetric: Record<string, string>;
 };
 
 // Fetch functions for independent streaming
@@ -85,31 +85,33 @@ export async function fetchFeedbackData(
       newFeedbackId,
       limit,
     );
-    const [feedback_bounds, latestByMetric] = await Promise.all([
+    const [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
       tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
       tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);
     return {
       feedback,
       feedback_bounds,
-      latestByMetric,
+      latestFeedbackByMetric,
     };
   }
 
   // Normal case: execute all queries in parallel
-  const [feedback, feedback_bounds, latestByMetric] = await Promise.all([
-    tensorZeroClient.getFeedbackByTargetId(inference_id, {
-      before: beforeFeedback || undefined,
-      after: afterFeedback || undefined,
-      limit,
-    }),
-    tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
-    tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
-  ]);
+  const [feedback, feedback_bounds, latestFeedbackByMetric] = await Promise.all(
+    [
+      tensorZeroClient.getFeedbackByTargetId(inference_id, {
+        before: beforeFeedback || undefined,
+        after: afterFeedback || undefined,
+        limit,
+      }),
+      tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
+      tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
+    ],
+  );
   return {
     feedback,
     feedback_bounds,
-    latestByMetric,
+    latestFeedbackByMetric,
   };
 }
 
