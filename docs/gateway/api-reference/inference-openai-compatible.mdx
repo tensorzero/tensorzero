@@ -336,7 +336,7 @@ Provide this as an extra body parameter:
 
 ```python
 response = client.chat.completions.create(
-    model="tensorzero::function_name=draft_email",
+    model="tensorzero::function_name::draft_email",
     messages=[...],
     extra_body={
         "tensorzero::namespace": "mobile",
