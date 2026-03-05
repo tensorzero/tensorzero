@@ -1,29 +1,20 @@
-from tensorzero import TensorZeroGateway
+from openai import OpenAI
 
-t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 
 def call_llm(user_id):
     try:
-        return t0.inference(
-            model_name="openai::gpt-4.1-mini",
-            input={
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Tell me a fun fact.",
-                    }
-                ]
-            },
-            # We have rate limits on tokens, so we must be conservative and provide `max_tokens`
-            params={
-                "chat_completion": {
-                    "max_tokens": 1000,
+        return client.chat.completions.create(
+            model="tensorzero::model_name::openai::gpt-4.1-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Tell me a fun fact.",
                 }
-            },
-            tags={
-                "user_id": user_id,
-            },
+            ],
+            max_tokens=1000,
+            extra_body={"tensorzero::tags": {"user_id": user_id}},
         )
     except Exception as e:
         print(f"Error calling LLM: {e}")

@@ -1,46 +1,42 @@
 import os
 
-from tensorzero import TensorZeroGateway
+from openai import OpenAI
 
 # Good request
 
-t0 = TensorZeroGateway.build_http(
-    api_key=os.environ["TENSORZERO_API_KEY"],  # if not set, SDK automatically reads the environment variable
-    gateway_url="http://localhost:3000",
+client = OpenAI(
+    api_key=os.environ["TENSORZERO_API_KEY"],
+    base_url="http://localhost:3000/openai/v1",
 )
 
-response = t0.inference(
-    model_name="openai::gpt-5-mini",
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": "Tell me a fun fact.",
-            }
-        ]
-    },
+response = client.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-5-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": "Tell me a fun fact.",
+        }
+    ],
 )
 
 print(response)
 
 # Bad request
 
-t0 = TensorZeroGateway.build_http(
+client = OpenAI(
     api_key="sk-t0-evilevilevil-hackerhackerhackerhackerhackerhackerhackerhacker",
-    gateway_url="http://localhost:3000",
+    base_url="http://localhost:3000/openai/v1",
 )
 
 try:
-    response = t0.inference(
-        model_name="openai::gpt-5-mini",
-        input={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Tell me a fun fact.",
-                }
-            ]
-        },
+    response = client.chat.completions.create(
+        model="tensorzero::model_name::openai::gpt-5-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": "Tell me a fun fact.",
+            }
+        ],
     )
 
     print(response)
