@@ -38,6 +38,7 @@ import { BasicInfoStreaming } from "./BasicInfo";
 import { InferenceActionBar } from "./InferenceActionBar";
 import { InputSection } from "./InputSection";
 import { FeedbackSection } from "./FeedbackSection";
+import { HumanFeedbackAction } from "./HumanFeedbackAction";
 import { ModelInferencesSection } from "./ModelInferencesSection";
 
 export const handle: RouteHandle = {
@@ -217,6 +218,13 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           onCountUpdate={setFeedbackCount}
           episodeId={inference.episode_id}
           episodeFeedbackCount={episodeFeedbackCount}
+          addFeedbackButton={
+            <HumanFeedbackAction
+              key={`human-feedback-${location.key}`}
+              inference={inference}
+              onFeedbackAdded={handleFeedbackAdded}
+            />
+          }
         />
 
         <SectionLayout>

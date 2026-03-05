@@ -11,7 +11,6 @@ import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { CopyMessagesButton } from "~/components/inference/CopyMessagesButton";
 import { TryWithVariantAction } from "./TryWithVariantAction";
-import { HumanFeedbackAction } from "./HumanFeedbackAction";
 import type { ModelInferencesData } from "./inference-data.server";
 
 interface InferenceActionBarProps {
@@ -47,11 +46,6 @@ export function InferenceActionBar({
         key={`dataset-${locationKey}`}
         inference={inference}
         hasDemonstrationPromise={hasDemonstrationPromise}
-      />
-      <HumanFeedbackAction
-        key={`human-${locationKey}`}
-        inference={inference}
-        onFeedbackAdded={onFeedbackAdded}
       />
       <AskAutopilotButton
         message={`Inference ID: ${inference.inference_id}\n\n`}

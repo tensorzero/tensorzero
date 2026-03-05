@@ -31,6 +31,7 @@ import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
+import { HelpTooltip } from "~/components/ui/HelpTooltip";
 import type {
   StoredInference,
   FeedbackRow,
@@ -256,22 +257,24 @@ function FeedbackSectionContent({ data }: { data: FeedbackData }) {
     !bounds.first_id ||
     bounds.first_id === bottomFeedback.id;
 
+  const showPagination = !disablePrevious || !disableNext;
+
   return (
-    <>
-      <FeedbackTable
-        feedback={feedbacks}
-        feedbackBounds={bounds}
-        latestByMetric={latestByMetric}
-        pagination={
+    <FeedbackTable
+      feedback={feedbacks}
+      feedbackBounds={bounds}
+      latestByMetric={latestByMetric}
+      pagination={
+        showPagination ? (
           <PageButtons
             onPreviousPage={handlePreviousPage}
             onNextPage={handleNextPage}
             disablePrevious={disablePrevious}
             disableNext={disableNext}
           />
-        }
-      />
-    </>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -334,31 +337,6 @@ export default function EpisodeDetailPage({
         name={episode_id}
       >
         <ActionBar>
-          <HumanFeedbackModal
-            isOpen={isModalOpen}
-            onOpenChange={(isOpen) => {
-              if (humanFeedbackFetcher.state !== "idle") {
-                return;
-              }
-
-              if (!isOpen) {
-                humanFeedbackFetcher.reset();
-              }
-              setIsModalOpen(isOpen);
-            }}
-            trigger={<HumanFeedbackButton />}
-          >
-            <humanFeedbackFetcher.Form method="post" action="/api/feedback">
-              <HumanFeedbackForm
-                episodeId={episode_id}
-                formError={formError}
-                isSubmitting={
-                  humanFeedbackFetcher.state === "submitting" ||
-                  humanFeedbackFetcher.state === "loading"
-                }
-              />
-            </humanFeedbackFetcher.Form>
-          </HumanFeedbackModal>
           <AskAutopilotButton message={`Episode ID: ${episode_id}\n\n`} />
         </ActionBar>
       </PageHeader>
@@ -385,15 +363,44 @@ export default function EpisodeDetailPage({
         </SectionLayout>
 
         <SectionLayout>
-          <SectionHeader
-            heading="Feedback"
-            count={num_feedbacks}
-            badge={{
-              name: "episode",
-              tooltip:
-                "This table only includes episode-level feedback. To see inference-level feedback, open the detail page for that inference.",
-            }}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SectionHeader
+              heading="Episode Feedback"
+              count={num_feedbacks}
+              help={
+                <HelpTooltip>
+                  This table only includes episode-level feedback. To see
+                  inference-level feedback, open the detail page for that
+                  inference.
+                </HelpTooltip>
+              }
+            />
+            <HumanFeedbackModal
+              isOpen={isModalOpen}
+              onOpenChange={(isOpen) => {
+                if (humanFeedbackFetcher.state !== "idle") {
+                  return;
+                }
+
+                if (!isOpen) {
+                  humanFeedbackFetcher.reset();
+                }
+                setIsModalOpen(isOpen);
+              }}
+              trigger={<HumanFeedbackButton />}
+            >
+              <humanFeedbackFetcher.Form method="post" action="/api/feedback">
+                <HumanFeedbackForm
+                  episodeId={episode_id}
+                  formError={formError}
+                  isSubmitting={
+                    humanFeedbackFetcher.state === "submitting" ||
+                    humanFeedbackFetcher.state === "loading"
+                  }
+                />
+              </humanFeedbackFetcher.Form>
+            </HumanFeedbackModal>
+          </div>
           <Suspense
             fallback={
               <FeedbackTableSkeleton pagination={<PageButtons disabled />} />

@@ -4,7 +4,7 @@ import {
   TableErrorNotice,
   getErrorMessage,
 } from "~/components/ui/error/ErrorContentPrimitives";
-import { AlertCircle, ArrowRight } from "lucide-react";
+import { AlertCircle, MoveUpRight } from "lucide-react";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
 import FeedbackTable, {
@@ -19,6 +19,7 @@ interface FeedbackSectionProps {
   onCountUpdate: (count: number) => void;
   episodeId: string;
   episodeFeedbackCount: Promise<number>;
+  addFeedbackButton: React.ReactNode;
 }
 
 export function FeedbackSection({
@@ -28,35 +29,31 @@ export function FeedbackSection({
   onCountUpdate,
   episodeId,
   episodeFeedbackCount,
+  addFeedbackButton,
 }: FeedbackSectionProps) {
   return (
     <SectionLayout>
-      <SectionHeader
-        heading="Feedback"
-        count={count}
-        badge={{
-          name: "inference",
-          tooltip:
-            "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
-        }}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SectionHeader heading="Inference Feedback" count={count} />
+        <div className="flex items-center gap-6">
+          <Suspense fallback={null}>
+            <Await resolve={episodeFeedbackCount} errorElement={null}>
+              {(count) => (
+                <EpisodeFeedbackNotice
+                  episodeId={episodeId}
+                  feedbackCount={count}
+                />
+              )}
+            </Await>
+          </Suspense>
+          {addFeedbackButton}
+        </div>
+      </div>
       <Suspense key={`feedback-${locationKey}`} fallback={<FeedbackSkeleton />}>
         <Await resolve={promise} errorElement={<FeedbackError />}>
           {(data) => (
             <FeedbackContent data={data} onCountUpdate={onCountUpdate} />
           )}
-        </Await>
-      </Suspense>
-      <Suspense fallback={null}>
-        <Await resolve={episodeFeedbackCount} errorElement={null}>
-          {(count) =>
-            count > 0 ? (
-              <EpisodeFeedbackNotice
-                episodeId={episodeId}
-                feedbackCount={count}
-              />
-            ) : null
-          }
         </Await>
       </Suspense>
     </SectionLayout>
@@ -110,22 +107,24 @@ function FeedbackContent({
     !feedback_bounds.first_id ||
     feedback_bounds.first_id === bottomFeedback.id;
 
+  const showPagination = !disablePrevious || !disableNext;
+
   return (
-    <>
-      <FeedbackTable
-        feedback={feedback}
-        feedbackBounds={feedback_bounds}
-        latestByMetric={latestByMetric}
-        pagination={
+    <FeedbackTable
+      feedback={feedback}
+      feedbackBounds={feedback_bounds}
+      latestByMetric={latestByMetric}
+      pagination={
+        showPagination ? (
           <PageButtons
             onPreviousPage={handlePreviousPage}
             onNextPage={handleNextPage}
             disablePrevious={disablePrevious}
             disableNext={disableNext}
           />
-        }
-      />
-    </>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -163,11 +162,10 @@ function EpisodeFeedbackNotice({
   return (
     <Link
       to={`/observability/episodes/${episodeId}`}
-      className="text-fg-muted hover:text-fg-secondary mt-2 flex items-center gap-1.5 text-sm transition-colors"
+      className="text-fg-muted hover:text-fg-secondary flex items-center gap-1.5 text-sm transition-colors"
     >
-      This episode has {feedbackCount} feedback{" "}
-      {feedbackCount === 1 ? "entry" : "entries"}
-      <ArrowRight className="h-3.5 w-3.5" />
+      Episode Feedback ({feedbackCount})
+      <MoveUpRight className="h-3.5 w-3.5" />
     </Link>
   );
 }
