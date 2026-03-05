@@ -98,12 +98,6 @@ result = client.chat.completions.create(
 <Tab title="Node">
 
 ```ts
-import OpenAI from "openai";
-
-const client = new OpenAI({
-  baseURL: "http://localhost:3000/openai/v1",
-});
-
 const response = await client.chat.completions.create({
   model: "tensorzero::function_name::answer_customer",
   messages: [
