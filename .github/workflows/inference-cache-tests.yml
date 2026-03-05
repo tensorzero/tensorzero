@@ -1,0 +1,71 @@
+name: Inference Cache Tests
+
+on:
+  workflow_call:
+
+env:
+  CARGO_INCREMENTAL: 0
+  FORCE_COLOR: 1
+  SQLX_OFFLINE: 1
+  TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
+
+jobs:
+  cache-tests:
+    if: github.repository == 'tensorzero/tensorzero'
+    name: "cache-tests (backend: ${{ matrix.cache_backend }})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - cache_backend: clickhouse
+            test_filter: "test(_clickhouse)"
+            cache_backend_env: clickhouse
+            services: "clickhouse"
+          - cache_backend: valkey
+            test_filter: "test(valkey)"
+            cache_backend_env: valkey
+            valkey_url: "redis://valkey:6379"
+            services: "clickhouse postgres valkey"
+          - cache_backend: redis
+            test_filter: "test(valkey)"
+            cache_backend_env: valkey
+            valkey_url: "redis://redis:6379"
+            services: "clickhouse postgres redis"
+      fail-fast: ${{ github.event_name == 'merge_group' }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+      - name: Pull live-tests container image
+        run: docker pull tensorzero/live-tests:sha-${{ github.sha }}
+
+      - name: Start infrastructure services
+        run: >
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml
+          up ${{ matrix.services }} -d --wait
+
+      - name: Run cache tests
+        run: >
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml
+          run --no-deps --rm
+          -e TENSORZERO_CI=1
+          -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }}
+          ${{ matrix.valkey_url && format('-e TENSORZERO_VALKEY_URL={0}', matrix.valkey_url) || '' }}
+          live-tests
+          sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst
+          --workspace-remap /app --config-file /app/crates/.config/nextest.toml
+          --profile cache -E '${{ matrix.test_filter }}' -j 4"
+
+      - name: Print logs
+        if: always()
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml logs -t

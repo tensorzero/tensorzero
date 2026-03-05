@@ -1,0 +1,6 @@
+# Override file for tests that force Valkey as the inference cache backend.
+# Include this alongside the tensorzero.*.toml and postgres.*.toml files via a glob like:
+#   {tensorzero,postgres,cache-valkey}.*.toml
+
+[gateway.cache]
+backend = "valkey"
