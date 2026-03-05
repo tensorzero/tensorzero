@@ -6,7 +6,6 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Map, Value, json};
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
 use tensorzero_core::db::inferences::{FunctionInfo, InferenceQueries};
@@ -783,7 +782,6 @@ async fn create_test_chat_datapoint(client: &Client, dataset_name: &str) -> Uuid
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_success() {
     let http_client = Client::new();
-    let _clickhouse = get_clickhouse().await;
 
     // Create a unique dataset with test datapoints
     let dataset_name = format!("test-eval-dataset-{}", Uuid::now_v7());
@@ -1011,7 +1009,6 @@ async fn test_run_evaluation_streaming_nonexistent_dataset() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
     let http_client = Client::new();
-    let _clickhouse = get_clickhouse().await;
 
     // Create a unique dataset with test datapoints
     let dataset_name = format!("test-eval-ids-dataset-{}", Uuid::now_v7());
@@ -1092,7 +1089,6 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_datapoint_ids_mixed_datasets() {
     let http_client = Client::new();
-    let _clickhouse = get_clickhouse().await;
 
     // Create datapoints in two different datasets
     let dataset_a = format!("test-eval-mixed-a-{}", Uuid::now_v7());
