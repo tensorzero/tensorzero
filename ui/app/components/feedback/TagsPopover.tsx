@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 
-export function formatTagKey(key: string): string {
+function formatTagKey(key: string): string {
   if (key.startsWith("tensorzero::")) {
     return key.slice("tensorzero::".length);
   }
