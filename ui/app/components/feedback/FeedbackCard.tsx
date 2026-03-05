@@ -9,10 +9,7 @@ import {
   TagsPopover,
   filterStringTags,
 } from "~/components/feedback/TagsPopover";
-import type {
-  CommentFeedbackRow,
-  DemonstrationFeedbackRow,
-} from "~/types/tensorzero";
+import type { FeedbackRow } from "~/types/tensorzero";
 
 function NoData() {
   return <p className="text-fg-muted text-sm">No data</p>;
@@ -68,7 +65,7 @@ function FeedbackCard({
 // ---------------------------------------------------------------------------
 
 interface CommentCardProps {
-  comment: (CommentFeedbackRow & { type: "comment" }) | undefined;
+  comment: Extract<FeedbackRow, { type: "comment" }> | undefined;
 }
 
 export function CommentCard({ comment }: CommentCardProps) {
@@ -95,9 +92,7 @@ export function CommentCard({ comment }: CommentCardProps) {
 // ---------------------------------------------------------------------------
 
 interface DemonstrationCardProps {
-  demonstration:
-    | (DemonstrationFeedbackRow & { type: "demonstration" })
-    | undefined;
+  demonstration: Extract<FeedbackRow, { type: "demonstration" }> | undefined;
 }
 
 export function DemonstrationCard({ demonstration }: DemonstrationCardProps) {
@@ -112,15 +107,13 @@ export function DemonstrationCard({ demonstration }: DemonstrationCardProps) {
           : "feedback-demonstration"
       }
     >
-      {demonstration ? (
-        <div className="p-4">
+      <div className="p-4">
+        {demonstration ? (
           <DemonstrationPreview value={demonstration.value} />
-        </div>
-      ) : (
-        <div className="p-4">
+        ) : (
           <NoData />
-        </div>
-      )}
+        )}
+      </div>
     </FeedbackCard>
   );
 }

@@ -6,8 +6,10 @@ import {
   MetricFeedbackTable,
   MetricFeedbackTableHeaders,
 } from "~/components/feedback/MetricFeedbackTable";
-import { CommentCard } from "~/components/feedback/FeedbackCard";
-import { DemonstrationCard } from "~/components/feedback/FeedbackCard";
+import {
+  CommentCard,
+  DemonstrationCard,
+} from "~/components/feedback/FeedbackCard";
 
 // ---------------------------------------------------------------------------
 // Filtering utility

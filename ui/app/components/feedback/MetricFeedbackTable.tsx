@@ -2,8 +2,10 @@ import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow, MetricConfig } from "~/types/tensorzero";
 import { useConfig } from "~/context/config";
-import { getFeedbackConfig } from "~/utils/config/feedback";
-import type { FeedbackConfig } from "~/utils/config/feedback";
+import {
+  getFeedbackConfig,
+  type FeedbackConfig,
+} from "~/utils/config/feedback";
 import { TableItemTime } from "~/components/ui/TableItems";
 import {
   Table,
