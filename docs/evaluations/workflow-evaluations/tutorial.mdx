@@ -248,10 +248,7 @@ Pass the `episode_id` from the workflow evaluation run episode via `extra_body` 
 ```python
 from openai import OpenAI
 
-openai_client = OpenAI(
-    base_url="http://localhost:3000/openai/v1",
-    api_key="not-used",
-)
+openai_client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 generate_database_query_response = openai_client.chat.completions.create(
     model="tensorzero::function_name::generate_database_query",
@@ -283,10 +280,7 @@ t0.feedback(
 ```python
 from openai import AsyncOpenAI
 
-openai_client = AsyncOpenAI(
-    base_url="http://localhost:3000/openai/v1",
-    api_key="not-used",
-)
+openai_client = AsyncOpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 generate_database_query_response = await openai_client.chat.completions.create(
     model="tensorzero::function_name::generate_database_query",
@@ -309,45 +303,6 @@ await t0.feedback(
     episode_id=episode_info.episode_id,
     value=task_success_score,
 )
-```
-
-</Tab>
-
-<Tab title="HTTP">
-
-```bash
-# First inference call (OpenAI-compatible)
-curl -X POST http://localhost:3000/openai/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tensorzero::function_name::generate_database_query",
-    "messages": [...],
-    "tensorzero::episode_id": "00000000-0000-0000-0000-000000000000"
-  }'
-
-# Run your custom search function with the result...
-my_blackbox_search_function(...)
-
-# Second inference call (OpenAI-compatible)
-curl -X POST http://localhost:3000/openai/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tensorzero::function_name::generate_final_answer",
-    "messages": [...],
-    "tensorzero::episode_id": "00000000-0000-0000-0000-000000000000"
-  }'
-
-# Run your custom scoring function with the result...
-my_blackbox_scoring_function(...)
-
-# Feedback call
-curl -X POST http://localhost:3000/feedback \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metric_name": "task_success",
-    "episode_id": "00000000-0000-0000-0000-000000000000",
-    "value": 0.85
-  }'
 ```
 
 </Tab>
