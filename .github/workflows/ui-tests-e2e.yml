@@ -106,7 +106,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -233,7 +233,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -367,7 +367,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
