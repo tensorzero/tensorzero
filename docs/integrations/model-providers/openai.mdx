@@ -21,21 +21,19 @@ type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 ```
 
-Additionally, you can set `model_name` in the inference request to use a specific OpenAI model, without having to configure a function and variant in TensorZero.
+Additionally, you can set the `model` parameter in the [OpenAI-compatible inference endpoint](/gateway/api-reference/inference-openai-compatible) to use a specific OpenAI model, without having to configure a function and variant in TensorZero.
 
 ```bash {4}
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "openai::gpt-4o-mini-2024-07-18",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::openai::gpt-4o-mini-2024-07-18",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 
@@ -49,21 +47,19 @@ type = "chat_completion"
 model = "openai::responses::gpt-5-codex"
 ```
 
-You can also use `model_name` in inference requests:
+You can also use the `model` parameter in OpenAI-compatible inference requests:
 
 ```bash {4}
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "openai::responses::gpt-5-codex",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::openai::responses::gpt-5-codex",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 
@@ -151,18 +147,16 @@ You can start the gateway with `docker compose up`.
 Make an inference request to the gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "my_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 
