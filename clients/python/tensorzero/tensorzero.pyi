@@ -36,7 +36,6 @@ from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
     EvaluatorStatsDict,
     JsonInferenceOutput,
-    OrderBy,
 )
 
 # Generated types
@@ -49,7 +48,6 @@ from .generated_types import (
     DeleteDatapointsResponse,
     GetDatapointsResponse,
     GetInferencesResponse,
-    InferenceFilter,
     ListDatapointsRequest,
     ListInferencesRequest,
     StoredInference,
@@ -770,30 +768,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetInferencesResponse` object.
         """
 
-    def experimental_list_inferences(
-        self,
-        *,
-        function_name: str,
-        variant_name: Optional[str] = None,
-        filters: Optional[InferenceFilter] = None,
-        output_source: str = "inference",
-        order_by: Optional[List[OrderBy]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[StoredInference]:
-        """
-        Query the Clickhouse database for inferences.
-        This function is only available in EmbeddedGateway mode.
-
-        :param function_name: The name of the function to query.
-        :param variant_name: The name of the variant to query. Optional
-        :param filters: A filter tree to apply to the query. Optional
-        :param output_source: The source of the output to query. "inference" or "demonstration"
-        :param limit: The maximum number of inferences to return. Optional
-        :param offset: The offset to start from. Optional
-        :return: A list of `StoredInference` instances.
-        """
-
     def experimental_render_samples(
         self,
         *,
@@ -1249,30 +1223,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param request: A `ListInferencesRequest` object with filter parameters.
         :return: A `GetInferencesResponse` object.
-        """
-
-    async def experimental_list_inferences(
-        self,
-        *,
-        function_name: str,
-        variant_name: Optional[str] = None,
-        filters: Optional[InferenceFilter] = None,
-        output_source: str = "inference",
-        order_by: Optional[List[OrderBy]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[StoredInference]:
-        """
-        Query the Clickhouse database for inferences.
-        This function is only available in EmbeddedGateway mode.
-
-        :param function_name: The name of the function to query.
-        :param variant_name: The name of the variant to query. Optional
-        :param filters: A filter tree to apply to the query. Optional
-        :param output_source: The source of the output to query. "inference" or "demonstration"
-        :param limit: The maximum number of inferences to return. Optional
-        :param offset: The offset to start from. Optional
-        :return: A list of `StoredInference` instances.
         """
 
     async def experimental_render_samples(

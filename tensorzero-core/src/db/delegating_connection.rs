@@ -1061,10 +1061,9 @@ impl DICLQueries for DelegatingDatabaseConnection {
         &self,
         function_name: &str,
         variant_name: &str,
-        namespace: Option<&str>,
     ) -> Result<u64, Error> {
         self.get_database()
-            .delete_dicl_examples(function_name, variant_name, namespace)
+            .delete_dicl_examples(function_name, variant_name)
             .await
     }
 }

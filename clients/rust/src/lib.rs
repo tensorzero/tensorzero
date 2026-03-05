@@ -12,7 +12,6 @@ use tensorzero_core::config::snapshot::ConfigSnapshot;
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
-use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::endpoints::stored_inferences::render_samples;
 use tensorzero_core::endpoints::validate_tags;
 use tensorzero_core::endpoints::workflow_evaluation_run::{
@@ -407,12 +406,6 @@ pub trait ClientExt {
         tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput,
         TensorZeroError,
     >;
-
-    #[deprecated(since = "2025.11.4", note = "Use `list_inferences` instead.")]
-    async fn experimental_list_inferences(
-        &self,
-        params: ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, TensorZeroError>;
 
     /// Gets specific inferences by their IDs.
     ///
@@ -1027,50 +1020,6 @@ impl ClientExt for Client {
                 .await
             }
         }
-    }
-
-    /// Query the Clickhouse database for inferences.
-    ///
-    /// This function is only available in EmbeddedGateway mode.
-    ///
-    /// # Arguments
-    ///
-    /// * `function_name` - The name of the function to query.
-    /// * `variant_name` - The name of the variant to query. Optional
-    /// * `filters` - A filter tree to apply to the query. Optional
-    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
-    /// * `limit` - The maximum number of inferences to return. Optional
-    /// * `offset` - The offset to start from. Optional
-    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
-    async fn experimental_list_inferences(
-        &self,
-        params: ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, TensorZeroError> {
-        // TODO: consider adding a flag that returns the generated sql query
-        let ClientMode::EmbeddedGateway { gateway, .. } = self.mode() else {
-            return Err(TensorZeroError::Other {
-                source: Error::new(ErrorDetails::InvalidClientMode {
-                    mode: "Http".to_string(),
-                    message: "This function is only available in EmbeddedGateway mode".to_string(),
-                })
-                .into(),
-            });
-        };
-        let inferences = gateway
-            .handle
-            .app_state
-            .get_delegating_database()
-            .list_inferences(&gateway.handle.app_state.config, &params)
-            .await
-            .map_err(err_to_http)?;
-
-        // Convert storage types to wire types
-        let wire_inferences: Result<Vec<StoredInference>, _> = inferences
-            .into_iter()
-            .map(StoredInferenceDatabase::into_stored_inference)
-            .collect();
-
-        wire_inferences.map_err(|e| TensorZeroError::Other { source: e.into() })
     }
 
     async fn get_inferences(

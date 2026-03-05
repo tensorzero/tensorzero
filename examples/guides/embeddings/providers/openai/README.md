@@ -8,7 +8,13 @@
 export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 ```
 
-2. Run the example:
+2. Launch the TensorZero Gateway:
+
+```bash
+docker compose up
+```
+
+3. Run the example (in a separate terminal):
 
 <details open>
 <summary><b>Python (OpenAI SDK)</b></summary>

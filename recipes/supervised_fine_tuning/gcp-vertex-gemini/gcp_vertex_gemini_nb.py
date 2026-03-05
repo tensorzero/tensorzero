@@ -62,6 +62,7 @@ from google.cloud.aiplatform_v1.types import JobState
 from IPython.display import clear_output
 from tensorzero import (
     InferenceFilterFloatMetric,
+    ListInferencesRequest,
     RawText,
     TensorZeroGateway,
     Text,
@@ -116,13 +117,15 @@ metric_node
 #
 
 # %%
-stored_inferences = tensorzero_client.experimental_list_inferences(
-    function_name=FUNCTION_NAME,
-    variant_name=None,
-    output_source="inference",  # could also be "demonstration"
-    filters=metric_node,
-    limit=MAX_SAMPLES,
+response = tensorzero_client.list_inferences(
+    request=ListInferencesRequest(
+        function_name=FUNCTION_NAME,
+        output_source="inference",  # could also be "demonstration"
+        filters=metric_node,
+        limit=MAX_SAMPLES,
+    )
 )
+stored_inferences = response.inferences
 
 # %% [markdown]
 # Render the stored inferences
