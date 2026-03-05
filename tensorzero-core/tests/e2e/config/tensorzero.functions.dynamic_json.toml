@@ -4,9 +4,12 @@ type = "json"
 system_schema = "../../../fixtures/config/functions/dynamic_json/system_schema.json"
 user_schema = "../../../fixtures/config/functions/dynamic_json/user_schema.json"
 
+[functions.dynamic_json.experimentation]
+type = "static"
+candidate_variants = { "test" = 1.0 }
+
 [functions.dynamic_json.variants.test]
 type = "chat_completion"
-weight = 1
 model = "json"
 system_template = "../../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"

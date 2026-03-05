@@ -10,7 +10,6 @@ use uuid::Uuid;
 fn make_dicl_example(
     function_name: &str,
     variant_name: &str,
-    namespace: &str,
     input: &str,
     output: &str,
     embedding: Vec<f32>,
@@ -19,7 +18,6 @@ fn make_dicl_example(
         id: Uuid::now_v7(),
         function_name: function_name.to_string(),
         variant_name: variant_name.to_string(),
-        namespace: namespace.to_string(),
         input: input.to_string(),
         output: output.to_string(),
         embedding,
@@ -53,7 +51,6 @@ async fn test_insert_and_has_dicl_examples(conn: impl DICLQueries + TestDatabase
     let example = make_dicl_example(
         &function_name,
         variant_name,
-        "",
         r#"{"messages":[]}"#,
         "hello",
         vec![1.0, 0.0, 0.0],
@@ -84,7 +81,6 @@ async fn test_insert_dicl_examples_batch(conn: impl DICLQueries + TestDatabaseHe
             make_dicl_example(
                 &function_name,
                 variant_name,
-                "",
                 &format!(r#"{{"messages":[{i}]}}"#),
                 &format!("output_{i}"),
                 vec![i as f32, 0.0, 0.0],
@@ -121,7 +117,6 @@ async fn test_insert_dicl_examples_special_characters(
     let example = make_dicl_example(
         &function_name,
         variant_name,
-        "",
         r#"{"messages":[{"role":"user","content":"input with \"quotes\" and \n newlines"}]}"#,
         "output with special chars: àáâã",
         vec![1.0, 0.0, 0.0],
@@ -167,7 +162,6 @@ async fn test_has_dicl_examples_isolates_by_function_and_variant(
         make_dicl_example(
             &function_name,
             &variant_name,
-            "",
             r#"{"messages":["test"]}"#,
             "output",
             vec![1.0, 0.0, 0.0],
@@ -175,7 +169,6 @@ async fn test_has_dicl_examples_isolates_by_function_and_variant(
         make_dicl_example(
             &function_name,
             &variant_name,
-            "",
             r#"{"messages":["test2"]}"#,
             "output2",
             vec![0.0, 1.0, 0.0],
@@ -230,7 +223,6 @@ async fn test_get_similar_dicl_examples_returns_sorted_by_distance(
         make_dicl_example(
             &function_name,
             variant_name,
-            "",
             r#"{"messages":["close"]}"#,
             "close_output",
             vec![1.0, 0.0, 0.0],
@@ -238,7 +230,6 @@ async fn test_get_similar_dicl_examples_returns_sorted_by_distance(
         make_dicl_example(
             &function_name,
             variant_name,
-            "",
             r#"{"messages":["mid"]}"#,
             "mid_output",
             vec![0.7, 0.7, 0.0],
@@ -246,7 +237,6 @@ async fn test_get_similar_dicl_examples_returns_sorted_by_distance(
         make_dicl_example(
             &function_name,
             variant_name,
-            "",
             r#"{"messages":["far"]}"#,
             "far_output",
             vec![0.0, 1.0, 0.0],
@@ -292,7 +282,6 @@ async fn test_get_similar_dicl_examples_respects_limit(
             make_dicl_example(
                 &function_name,
                 variant_name,
-                "",
                 &format!(r#"{{"messages":[{i}]}}"#),
                 &format!("output_{i}"),
                 vec![i as f32, 1.0, 0.0],
@@ -323,7 +312,6 @@ async fn test_get_similar_dicl_examples_filters_by_function_and_variant(
     let example = make_dicl_example(
         &function_name,
         variant_name,
-        "",
         r#"{"messages":["ours"]}"#,
         "our_output",
         vec![1.0, 0.0, 0.0],
@@ -334,7 +322,6 @@ async fn test_get_similar_dicl_examples_filters_by_function_and_variant(
     let other_example = make_dicl_example(
         &other_function,
         variant_name,
-        "",
         r#"{"messages":["other"]}"#,
         "other_output",
         vec![1.0, 0.0, 0.0],
@@ -383,7 +370,6 @@ async fn test_delete_dicl_examples_all_for_variant(conn: impl DICLQueries + Test
             make_dicl_example(
                 &function_name,
                 variant_name,
-                &format!("ns_{i}"),
                 &format!(r#"{{"messages":[{i}]}}"#),
                 &format!("output_{i}"),
                 vec![i as f32, 0.0, 0.0],
@@ -394,9 +380,9 @@ async fn test_delete_dicl_examples_all_for_variant(conn: impl DICLQueries + Test
     conn.insert_dicl_examples(&examples).await.unwrap();
     conn.sleep_for_writes_to_be_visible().await;
 
-    // Delete all examples for this function/variant (no namespace filter)
+    // Delete all examples for this function/variant
     let deleted = conn
-        .delete_dicl_examples(&function_name, variant_name, None)
+        .delete_dicl_examples(&function_name, variant_name)
         .await
         .unwrap();
     assert_eq!(deleted, 3, "Should report deleting all 3 examples");
@@ -414,74 +400,13 @@ async fn test_delete_dicl_examples_all_for_variant(conn: impl DICLQueries + Test
 }
 make_db_test!(test_delete_dicl_examples_all_for_variant);
 
-async fn test_delete_dicl_examples_by_namespace(conn: impl DICLQueries + TestDatabaseHelpers) {
-    let function_name = format!("test_fn_{}", Uuid::now_v7());
-    let variant_name = "test_var";
-
-    // Insert examples in two different namespaces
-    let ns_a = make_dicl_example(
-        &function_name,
-        variant_name,
-        "namespace_a",
-        r#"{"messages":["a"]}"#,
-        "output_a",
-        vec![1.0, 0.0, 0.0],
-    );
-    let ns_b = make_dicl_example(
-        &function_name,
-        variant_name,
-        "namespace_b",
-        r#"{"messages":["b"]}"#,
-        "output_b",
-        vec![0.0, 1.0, 0.0],
-    );
-
-    conn.insert_dicl_examples(&[ns_a, ns_b]).await.unwrap();
-    conn.sleep_for_writes_to_be_visible().await;
-
-    // Delete only namespace_a
-    let deleted = conn
-        .delete_dicl_examples(&function_name, variant_name, Some("namespace_a"))
-        .await
-        .unwrap();
-    assert_eq!(
-        deleted, 1,
-        "Should report deleting 1 example from namespace_a"
-    );
-
-    conn.sleep_for_writes_to_be_visible().await;
-
-    // namespace_b examples should still exist
-    let exists = conn
-        .has_dicl_examples(&function_name, variant_name)
-        .await
-        .unwrap();
-    assert!(
-        exists,
-        "Should still have examples from namespace_b after deleting namespace_a"
-    );
-
-    // Query should return only the namespace_b example
-    let results = conn
-        .get_similar_dicl_examples(&function_name, variant_name, &[0.0, 1.0, 0.0], 10)
-        .await
-        .unwrap();
-    assert_eq!(
-        results.len(),
-        1,
-        "Should have exactly 1 example remaining after namespace delete"
-    );
-    assert_eq!(results[0].output, "output_b");
-}
-make_db_test!(test_delete_dicl_examples_by_namespace);
-
 async fn test_delete_dicl_examples_returns_zero_when_none_exist(
     conn: impl DICLQueries + TestDatabaseHelpers,
 ) {
     let function_name = format!("test_fn_{}", Uuid::now_v7());
 
     let deleted = conn
-        .delete_dicl_examples(&function_name, "nonexistent", None)
+        .delete_dicl_examples(&function_name, "nonexistent")
         .await
         .unwrap();
     assert_eq!(deleted, 0, "Should return 0 when no examples match");

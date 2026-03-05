@@ -377,7 +377,6 @@ async fn test_config_from_toml_table_missing_credentials() {
         toml::Value::Table({
             let mut table = toml::Table::new();
             table.insert("type".into(), "chat_completion".into());
-            table.insert("weight".into(), 1.0.into());
             table.insert("model".into(), "dummy".into());
             table.insert(
                 "system_template".into(),
@@ -816,6 +815,12 @@ async fn test_config_system_schema_is_needed() {
         .unwrap()
         .remove("best_of_n");
 
+    // Update experimentation to only reference the remaining variant
+    sample_config["functions"]["templates_with_variables_chat"]
+        .as_table_mut()
+        .unwrap()
+        .remove("experimentation");
+
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
     assert_eq!(
             result.unwrap_err(),
@@ -850,6 +855,10 @@ async fn test_config_user_schema_is_needed() {
         .as_table_mut()
         .unwrap()
         .remove("best_of_n");
+    sample_config["functions"]["templates_with_variables_chat"]
+        .as_table_mut()
+        .unwrap()
+        .remove("experimentation");
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
     assert_eq!(
@@ -887,6 +896,10 @@ async fn test_config_assistant_schema_is_needed() {
         .as_table_mut()
         .unwrap()
         .remove("best_of_n");
+    sample_config["functions"]["templates_with_variables_chat"]
+        .as_table_mut()
+        .unwrap()
+        .remove("experimentation");
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
     assert_eq!(
@@ -940,8 +953,15 @@ async fn test_config_best_of_n_candidate_not_found() {
 #[tokio::test]
 async fn test_config_validate_function_variant_negative_weight() {
     let mut config = get_sample_valid_config();
-    config["functions"]["generate_draft"]["variants"]["openai_promptA"]["weight"] =
-        toml::Value::Float(-1.0);
+    // Remove the experimentation section so we can test weight validation
+    config["functions"]["generate_draft"]
+        .as_table_mut()
+        .unwrap()
+        .remove("experimentation");
+    config["functions"]["generate_draft"]["variants"]["openai_promptA"]
+        .as_table_mut()
+        .unwrap()
+        .insert("weight".into(), toml::Value::Float(-1.0));
 
     let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
     assert_eq!(
@@ -1227,6 +1247,12 @@ async fn test_config_validate_chat_function_json_mode() {
 #[tokio::test]
 async fn test_config_validate_variant_name_tensorzero_prefix() {
     let mut config = get_sample_valid_config();
+
+    // Remove the experimentation section so it doesn't interfere with validation order
+    config["functions"]["generate_draft"]
+        .as_table_mut()
+        .unwrap()
+        .remove("experimentation");
 
     // For demonstration, rename an existing variant inside `generate_draft`:
     let old_variant_entry = config["functions"]["generate_draft"]["variants"]

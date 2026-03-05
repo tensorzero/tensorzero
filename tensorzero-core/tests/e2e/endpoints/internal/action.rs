@@ -68,6 +68,7 @@ async fn call_action(
 
 /// Test that the action endpoint can execute inference using a historical config
 /// that has a function not present in the running gateway config.
+#[expect(clippy::disallowed_methods)]
 async fn test_action_with_historical_config_impl(client: Client) {
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
@@ -198,6 +199,7 @@ async fn test_action_nonexistent_snapshot_hash_impl_http_gateway() {
 }
 
 /// Test that the action endpoint rejects streaming requests.
+#[expect(clippy::disallowed_methods)]
 async fn test_action_streaming_rejected_impl(client: Client) {
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
@@ -270,6 +272,7 @@ async fn test_action_streaming_rejected_impl_http_gateway() {
 }
 
 /// Test that the action endpoint returns an error when evaluation is not found in config.
+#[expect(clippy::disallowed_methods)]
 async fn test_action_run_evaluation_missing_evaluation_impl(client: Client) {
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
@@ -339,6 +342,7 @@ async fn test_action_run_evaluation_missing_evaluation_impl_http_gateway() {
 
 /// Test that the action endpoint returns an error when validation fails
 /// (neither dataset_name nor datapoint_ids provided).
+#[expect(clippy::disallowed_methods)]
 async fn test_action_run_evaluation_validation_error_impl(client: Client) {
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
@@ -424,6 +428,7 @@ async fn test_action_run_evaluation_validation_error_impl_http_gateway() {
 }
 
 /// Test that the action endpoint returns an error when both dataset_name AND datapoint_ids are provided.
+#[expect(clippy::disallowed_methods)]
 async fn test_action_run_evaluation_both_dataset_and_ids_impl(client: Client) {
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();
@@ -509,6 +514,7 @@ async fn test_action_run_evaluation_both_dataset_and_ids_impl_http_gateway() {
 }
 
 /// Test that the action endpoint can successfully run an evaluation with a historical config.
+#[expect(clippy::disallowed_methods)]
 async fn test_action_run_evaluation_basic_impl(client: Client) {
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let id = Uuid::now_v7();

@@ -120,25 +120,17 @@ impl DICLQueries for ClickHouseConnectionInfo {
         &self,
         function_name: &str,
         variant_name: &str,
-        namespace: Option<&str>,
     ) -> Result<u64, Error> {
-        let mut params: HashMap<&str, &str> = HashMap::from([
+        let params: HashMap<&str, &str> = HashMap::from([
             ("function_name", function_name),
             ("variant_name", variant_name),
         ]);
 
         // ClickHouse doesn't return affected row count directly for DELETE,
         // so we first count the rows that will be deleted
-        let count_query = if let Some(ns) = namespace {
-            params.insert("namespace", ns);
-            r"SELECT count() FROM DynamicInContextLearningExample
-              WHERE function_name = {function_name:String} AND variant_name = {variant_name:String} AND namespace = {namespace:String}"
-                .to_string()
-        } else {
-            r"SELECT count() FROM DynamicInContextLearningExample
+        let count_query = r"SELECT count() FROM DynamicInContextLearningExample
               WHERE function_name = {function_name:String} AND variant_name = {variant_name:String}"
-                .to_string()
-        };
+            .to_string();
 
         let count_result = self.run_query_synchronous(count_query, &params).await?;
         let count: u64 = count_result.response.trim().parse().unwrap_or(0);
@@ -148,15 +140,9 @@ impl DICLQueries for ClickHouseConnectionInfo {
         }
 
         // Now perform the actual delete
-        let delete_query = if namespace.is_some() {
-            r"ALTER TABLE DynamicInContextLearningExample DELETE
-              WHERE function_name = {function_name:String} AND variant_name = {variant_name:String} AND namespace = {namespace:String}"
-                .to_string()
-        } else {
-            r"ALTER TABLE DynamicInContextLearningExample DELETE
+        let delete_query = r"ALTER TABLE DynamicInContextLearningExample DELETE
               WHERE function_name = {function_name:String} AND variant_name = {variant_name:String}"
-                .to_string()
-        };
+            .to_string();
 
         self.run_query_synchronous(delete_query, &params).await?;
 
@@ -193,11 +179,12 @@ async fn insert_dicl_batch(
             // Convert f32 embedding to f64 for JSON serialization consistency
             let embedding_f64: Vec<f64> = example.embedding.iter().map(|&v| v as f64).collect();
 
+            // namespace is deprecated; always write empty string
             let row = json!({
                 "id": example.id,
                 "function_name": example.function_name,
                 "variant_name": example.variant_name,
-                "namespace": example.namespace,
+                "namespace": "",
                 "input": example.input,
                 "output": example.output,
                 "embedding": embedding_f64,
@@ -469,7 +456,6 @@ mod tests {
                 id: Uuid::now_v7(),
                 function_name: "test_fn".to_string(),
                 variant_name: "test_var".to_string(),
-                namespace: String::new(),
                 input: r#"{"messages":[]}"#.to_string(),
                 output: "output1".to_string(),
                 embedding: vec![0.1, 0.2, 0.3],
@@ -479,7 +465,6 @@ mod tests {
                 id: Uuid::now_v7(),
                 function_name: "test_fn".to_string(),
                 variant_name: "test_var".to_string(),
-                namespace: String::new(),
                 input: r#"{"messages":[]}"#.to_string(),
                 output: "output2".to_string(),
                 embedding: vec![0.4, 0.5, 0.6],
@@ -502,7 +487,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_dicl_examples_with_namespace() {
+    async fn test_delete_dicl_examples() {
         let mut mock = MockClickHouseClient::new();
         let mut seq = mockall::Sequence::new();
 
@@ -512,12 +497,12 @@ mod tests {
             .in_sequence(&mut seq)
             .returning(|query, params| {
                 assert_query_contains(&query, "SELECT count()");
-                assert_query_contains(&query, "namespace = {namespace:String}");
+                assert_query_contains(&query, "function_name = {function_name:String}");
+                assert_query_contains(&query, "variant_name = {variant_name:String}");
                 assert_eq!(params.get("function_name"), Some(&"fn1"));
                 assert_eq!(params.get("variant_name"), Some(&"var1"));
-                assert_eq!(params.get("namespace"), Some(&"ns1"));
                 Ok(ClickHouseResponse {
-                    response: "5\n".to_string(),
+                    response: "3\n".to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -533,8 +518,8 @@ mod tests {
                 assert_query_contains(&query, "ALTER TABLE DynamicInContextLearningExample DELETE");
                 assert_query_contains(&query, "function_name = {function_name:String}");
                 assert_query_contains(&query, "variant_name = {variant_name:String}");
-                assert_query_contains(&query, "namespace = {namespace:String}");
-                assert_eq!(params.get("namespace"), Some(&"ns1"));
+                assert_eq!(params.get("function_name"), Some(&"fn1"));
+                assert_eq!(params.get("variant_name"), Some(&"var1"));
                 Ok(ClickHouseResponse {
                     response: String::new(),
                     metadata: ClickHouseResponseMetadata {
@@ -545,61 +530,7 @@ mod tests {
             });
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
-        let deleted = conn
-            .delete_dicl_examples("fn1", "var1", Some("ns1"))
-            .await
-            .unwrap();
-        assert_eq!(deleted, 5, "Should report 5 rows deleted");
-    }
-
-    #[tokio::test]
-    async fn test_delete_dicl_examples_without_namespace() {
-        let mut mock = MockClickHouseClient::new();
-        let mut seq = mockall::Sequence::new();
-
-        // First call: count query (no namespace filter)
-        mock.expect_run_query_synchronous()
-            .times(1)
-            .in_sequence(&mut seq)
-            .returning(|query, _params| {
-                assert_query_contains(&query, "SELECT count()");
-                assert!(
-                    !query.contains("namespace"),
-                    "Count query should not filter by namespace"
-                );
-                Ok(ClickHouseResponse {
-                    response: "3\n".to_string(),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 1,
-                        written_rows: 0,
-                    },
-                })
-            });
-
-        // Second call: delete query (no namespace filter)
-        mock.expect_run_query_synchronous()
-            .times(1)
-            .in_sequence(&mut seq)
-            .returning(|query, _params| {
-                assert_query_contains(&query, "ALTER TABLE DynamicInContextLearningExample DELETE");
-                assert!(
-                    !query.contains("namespace"),
-                    "Delete query should not filter by namespace"
-                );
-                Ok(ClickHouseResponse {
-                    response: String::new(),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 0,
-                    },
-                })
-            });
-
-        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
-        let deleted = conn
-            .delete_dicl_examples("fn1", "var1", None)
-            .await
-            .unwrap();
+        let deleted = conn.delete_dicl_examples("fn1", "var1").await.unwrap();
         assert_eq!(deleted, 3, "Should report 3 rows deleted");
     }
 
@@ -619,10 +550,7 @@ mod tests {
         });
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
-        let deleted = conn
-            .delete_dicl_examples("fn1", "var1", None)
-            .await
-            .unwrap();
+        let deleted = conn.delete_dicl_examples("fn1", "var1").await.unwrap();
         assert_eq!(deleted, 0, "Should return 0 when no examples to delete");
     }
 }

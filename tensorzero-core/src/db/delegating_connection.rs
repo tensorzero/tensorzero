@@ -258,6 +258,7 @@ impl ConfigQueries for DelegatingDatabaseConnection {
     }
 
     async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        #[expect(clippy::disallowed_methods)]
         self.get_database().write_config_snapshot(snapshot).await
     }
 }
@@ -1061,10 +1062,9 @@ impl DICLQueries for DelegatingDatabaseConnection {
         &self,
         function_name: &str,
         variant_name: &str,
-        namespace: Option<&str>,
     ) -> Result<u64, Error> {
         self.get_database()
-            .delete_dicl_examples(function_name, variant_name, namespace)
+            .delete_dicl_examples(function_name, variant_name)
             .await
     }
 }

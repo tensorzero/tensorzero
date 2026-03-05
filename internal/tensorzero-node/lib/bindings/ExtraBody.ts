@@ -4,34 +4,6 @@ import type { JsonValue } from "./serde_json/JsonValue";
 export type ExtraBody =
   | {
       /**
-       * A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-       */
-      model_provider_name: string;
-      /**
-       * A JSON Pointer to the field to update (e.g. `/enable_agi`)
-       */
-      pointer: string;
-      /**
-       * The value to set the field to
-       */
-      value: JsonValue;
-    }
-  | {
-      /**
-       * A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-       */
-      model_provider_name: string;
-      /**
-       * A JSON Pointer to the field to update (e.g. `/enable_agi`)
-       */
-      pointer: string;
-      /**
-       * Set to true to remove the field from the model provider request's body
-       */
-      delete: null;
-    }
-  | {
-      /**
        * A variant name in your configuration (e.g. `my_variant`)
        */
       variant_name: string;

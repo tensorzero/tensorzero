@@ -196,6 +196,7 @@ pub use executor::{ToolExecutor, ToolExecutorBuilder};
 pub use registry::{ErasedSimpleTool, ErasedTaskToolWrapper, ErasedTool, ToolRegistry};
 pub use simple_tool::SimpleTool;
 pub use task_tool::{TaskTool, TaskToolAdapter};
+pub use tensorzero_types::ToolFailure;
 pub use tool_metadata::ToolMetadata;
 
 // Re-export TensorZero client trait and helpers

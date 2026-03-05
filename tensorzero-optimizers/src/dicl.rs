@@ -510,7 +510,6 @@ pub async fn insert_dicl_examples_with_batching(
                     id: Uuid::now_v7(),
                     function_name: function_name.to_string(),
                     variant_name: variant_name.to_string(),
-                    namespace: String::new(),
                     input: input_text,
                     output,
                     embedding: embedding.iter().map(|&v| v as f32).collect(),
