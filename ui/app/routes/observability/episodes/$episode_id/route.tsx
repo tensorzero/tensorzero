@@ -250,6 +250,7 @@ function FeedbackSectionContent({
     if (!bottomFeedback?.id) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterFeedback");
+    searchParams.delete("newFeedbackId");
     searchParams.set("beforeFeedback", bottomFeedback.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
@@ -258,6 +259,7 @@ function FeedbackSectionContent({
     if (!topFeedback?.id) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeFeedback");
+    searchParams.delete("newFeedbackId");
     searchParams.set("afterFeedback", topFeedback.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
