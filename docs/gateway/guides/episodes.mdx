@@ -87,9 +87,6 @@ This time, we'll create a multi-step workflow that first generates a haiku and t
 We won't provide an `episode_id` in the first inference request, so the gateway will generate a new one for us.
 We'll then use that value in our second inference request.
 
-<Tabs>
-<Tab title="Python">
-
 ```python
 from openai import OpenAI
 
@@ -129,56 +126,6 @@ with OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used") as c
 
     print(analysis_response)
 ```
-
-</Tab>
-<Tab title="Node">
-
-```typescript
-import OpenAI from "openai";
-
-const client = new OpenAI({
-  baseURL: "http://localhost:3000/openai/v1",
-  apiKey: "not-used",
-});
-
-const haikuResponse = await client.chat.completions.create({
-  model: "tensorzero::function_name::generate_haiku",
-  // We don't provide an episode_id for the first inference in the episode
-  messages: [
-    {
-      role: "user",
-      content: "Write a haiku about TensorZero.",
-    },
-  ],
-});
-
-console.log(JSON.stringify(haikuResponse, null, 2));
-
-// When we don't provide an episode_id, the gateway will generate a new one for us
-// @ts-expect-error - custom TensorZero property
-const episodeId = haikuResponse.episode_id;
-
-// In a production application, we'd first validate the response to ensure the model returned the correct fields
-const haiku = haikuResponse.choices[0].message.content;
-
-const analysisResponse = await client.chat.completions.create({
-  model: "tensorzero::function_name::analyze_haiku",
-  // For future inferences in that episode, we provide the episode_id that we received
-  messages: [
-    {
-      role: "user",
-      content: `Write a one-paragraph analysis of the following haiku:\n\n${haiku}`,
-    },
-  ],
-  // @ts-expect-error - custom TensorZero property
-  "tensorzero::episode_id": episodeId,
-});
-
-console.log(JSON.stringify(analysisResponse, null, 2));
-```
-
-</Tab>
-</Tabs>
 
 <Accordion title="Sample Output">
 
