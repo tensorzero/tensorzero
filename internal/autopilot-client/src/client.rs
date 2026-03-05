@@ -1107,6 +1107,9 @@ impl AutopilotClient {
                 source: ToolCallDecisionSource::Whitelist,
                 tool_call_event_id,
                 status: ToolCallAuthorizationStatus::Approved,
+                // Populated by the server from the ToolCall event
+                tool_call_name: String::new(),
+                tool_call_arguments: serde_json::Value::Null,
             }),
             previous_user_message_event_id: None,
             config_snapshot_hash: None,

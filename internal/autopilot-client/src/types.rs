@@ -197,6 +197,17 @@ pub struct EventPayloadStatusUpdate {
 pub struct EventPayloadToolResult {
     pub tool_call_event_id: Uuid,
     pub outcome: ToolOutcome,
+    pub tool_call_name: String,
+    pub tool_call_arguments: serde_json::Value,
+    /// Authorization source (Ui/Automatic/Whitelist). Optional because interrupted
+    /// tool results may not have a corresponding authorization event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_authorization_source: Option<ToolCallDecisionSource>,
+    /// Authorization status (Approved/Rejected/NotAvailable). Optional for same reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_authorization_status: Option<ToolCallAuthorizationStatus>,
 }
 
 /// Internal event payload type - consumers should use `GatewayEventPayload` instead.
@@ -460,6 +471,8 @@ pub struct EventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
     pub status: ToolCallAuthorizationStatus,
+    pub tool_call_name: String,
+    pub tool_call_arguments: serde_json::Value,
 }
 
 /// Tool call authorization payload as seen by gateway consumers.
@@ -471,6 +484,8 @@ pub struct GatewayEventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
     pub status: GatewayToolCallAuthorizationStatus,
+    pub tool_call_name: String,
+    pub tool_call_arguments: serde_json::Value,
 }
 
 impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallAuthorization {
@@ -481,6 +496,8 @@ impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallA
             source: auth.source,
             tool_call_event_id: auth.tool_call_event_id,
             status: auth.status.try_into()?,
+            tool_call_name: auth.tool_call_name,
+            tool_call_arguments: auth.tool_call_arguments,
         })
     }
 }

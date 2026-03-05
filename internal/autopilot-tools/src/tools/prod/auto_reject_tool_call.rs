@@ -107,6 +107,9 @@ impl TaskTool for AutoRejectToolCallTool {
                             source: ToolCallDecisionSource::Automatic,
                             tool_call_event_id: side_info.tool_call_event_id,
                             status: ToolCallAuthorizationStatus::NotAvailable,
+                            // Populated by the server from the ToolCall event
+                            tool_call_name: String::new(),
+                            tool_call_arguments: serde_json::Value::Null,
                         },
                     ),
                     previous_user_message_event_id: None,
