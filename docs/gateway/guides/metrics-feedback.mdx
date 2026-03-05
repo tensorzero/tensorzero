@@ -111,8 +111,8 @@ print(inference_response)
 
 inference_id = inference_response.id
 
-with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as t0_client:
-    feedback_response = t0_client.feedback(
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as t0:
+    feedback_response = t0.feedback(
         metric_name="haiku_rating",
         inference_id=inference_id,  # alternatively, you can assign feedback to an episode_id
         value=True,  # let's assume it deserves a 👍
@@ -238,7 +238,7 @@ You can't assign demonstrations to an episode.
 <Tab title="Python">
 
 ```python
-feedback_response = t0_client.feedback(
+feedback_response = t0.feedback(
     metric_name="demonstration",
     inference_id=inference_id,
     value="Silicon dreams float\nMinds born of human design\nLearning without end",  # the haiku we wish the LLM had written
@@ -274,7 +274,7 @@ You can assign natural-language feedback to an inference or episode using the sp
 <Tab title="Python">
 
 ```python
-feedback_response = t0_client.feedback(
+feedback_response = t0.feedback(
     metric_name="comment",
     inference_id=inference_id,
     value="Never mention you're an artificial intelligence, AI, bot, or anything like that.",
