@@ -16,10 +16,7 @@ use tensorzero_core::endpoints::stored_inferences::v1::types::{InferenceFilter, 
 use tensorzero_core::optimization::{
     OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo,
 };
-use tensorzero_optimizers::endpoints::{
-    DatasetDataSource, InferencesDataSource, LaunchOptimizationWorkflowParams,
-    OptimizationDataSource,
-};
+use tensorzero_optimizers::endpoints::{LaunchOptimizationWorkflowParams, OptimizationDataSource};
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -469,48 +466,16 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
         // Step 1: Launch the optimization workflow
         let job_handle: OptimizationJobHandle = ctx
             .step("launch", llm_params.clone(), |params, state| async move {
-                let data_source = match (params.output_source, params.dataset_name) {
-                    (Some(_), Some(_)) => {
-                        return Err(anyhow::anyhow!(
-                            "provide either `output_source` or `dataset_name`, not both"
-                        ));
-                    }
-                    (None, Some(dataset_name)) => {
-                        let inference_fields = [
-                            params
-                                .query_variant_name
-                                .as_ref()
-                                .map(|_| "query_variant_name"),
-                            params.filters.as_ref().map(|_| "filters"),
-                            params.order_by.as_ref().map(|_| "order_by"),
-                            params.limit.map(|_| "limit"),
-                            params.offset.map(|_| "offset"),
-                        ];
-                        let present: Vec<&str> = inference_fields.into_iter().flatten().collect();
-                        if !present.is_empty() {
-                            return Err(anyhow::anyhow!(
-                                "inference-specific fields [{}] cannot be used with `dataset_name`",
-                                present.join(", ")
-                            ));
-                        }
-                        OptimizationDataSource::Dataset(DatasetDataSource { dataset_name })
-                    }
-                    (Some(output_source), None) => {
-                        OptimizationDataSource::Inferences(InferencesDataSource {
-                            output_source,
-                            query_variant_name: params.query_variant_name,
-                            filters: params.filters,
-                            order_by: params.order_by,
-                            limit: params.limit,
-                            offset: params.offset,
-                        })
-                    }
-                    (None, None) => {
-                        return Err(anyhow::anyhow!(
-                            "you must provide either `output_source` or `dataset_name`"
-                        ));
-                    }
-                };
+                let data_source = OptimizationDataSource::from_flat_fields(
+                    params.output_source,
+                    params.dataset_name,
+                    params.query_variant_name,
+                    params.filters,
+                    params.order_by,
+                    params.limit,
+                    params.offset,
+                )
+                .map_err(|e| anyhow::anyhow!(e))?;
                 let launch_params = LaunchOptimizationWorkflowParams {
                     function_name: params.function_name,
                     template_variant_name: params.template_variant_name,

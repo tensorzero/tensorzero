@@ -83,6 +83,58 @@ pub struct DatasetDataSource {
     pub dataset_name: String,
 }
 
+impl OptimizationDataSource {
+    /// Build an `OptimizationDataSource` from flat fields, validating mutual exclusivity
+    /// between inference-query fields and `dataset_name`.
+    pub fn from_flat_fields(
+        output_source: Option<InferenceOutputSource>,
+        dataset_name: Option<String>,
+        query_variant_name: Option<String>,
+        filters: Option<InferenceFilter>,
+        order_by: Option<Vec<OrderBy>>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Self, String> {
+        match (output_source, dataset_name) {
+            (Some(output_source), None) => {
+                Ok(OptimizationDataSource::Inferences(InferencesDataSource {
+                    output_source,
+                    query_variant_name,
+                    filters,
+                    order_by,
+                    limit,
+                    offset,
+                }))
+            }
+            (None, Some(dataset_name)) => {
+                let inference_fields = [
+                    query_variant_name.as_ref().map(|_| "query_variant_name"),
+                    filters.as_ref().map(|_| "filters"),
+                    order_by.as_ref().map(|_| "order_by"),
+                    limit.map(|_| "limit"),
+                    offset.map(|_| "offset"),
+                ];
+                let present: Vec<&str> = inference_fields.into_iter().flatten().collect();
+                if !present.is_empty() {
+                    return Err(format!(
+                        "inference-specific fields [{}] cannot be used with `dataset_name`",
+                        present.join(", ")
+                    ));
+                }
+                Ok(OptimizationDataSource::Dataset(DatasetDataSource {
+                    dataset_name,
+                }))
+            }
+            (Some(_), Some(_)) => {
+                Err("provide either `output_source` or `dataset_name`, not both".to_string())
+            }
+            (None, None) => {
+                Err("you must provide either `output_source` or `dataset_name`".to_string())
+            }
+        }
+    }
+}
+
 /// Custom `Deserialize` that rejects payloads containing both `output_source` and `dataset_name`.
 impl<'de> Deserialize<'de> for OptimizationDataSource {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -102,46 +154,16 @@ impl<'de> Deserialize<'de> for OptimizationDataSource {
 
         let helper = Helper::deserialize(deserializer)?;
 
-        match (helper.output_source, helper.dataset_name) {
-            (Some(output_source), None) => {
-                Ok(OptimizationDataSource::Inferences(InferencesDataSource {
-                    output_source,
-                    query_variant_name: helper.query_variant_name,
-                    filters: helper.filters,
-                    order_by: helper.order_by,
-                    limit: helper.limit,
-                    offset: helper.offset,
-                }))
-            }
-            (None, Some(dataset_name)) => {
-                let inference_fields = [
-                    helper
-                        .query_variant_name
-                        .as_ref()
-                        .map(|_| "query_variant_name"),
-                    helper.filters.as_ref().map(|_| "filters"),
-                    helper.order_by.as_ref().map(|_| "order_by"),
-                    helper.limit.map(|_| "limit"),
-                    helper.offset.map(|_| "offset"),
-                ];
-                let present: Vec<&str> = inference_fields.into_iter().flatten().collect();
-                if !present.is_empty() {
-                    return Err(serde::de::Error::custom(format!(
-                        "inference-specific fields [{}] cannot be used with `dataset_name`",
-                        present.join(", ")
-                    )));
-                }
-                Ok(OptimizationDataSource::Dataset(DatasetDataSource {
-                    dataset_name,
-                }))
-            }
-            (Some(_), Some(_)) => Err(serde::de::Error::custom(
-                "provide either `output_source` or `dataset_name`, not both",
-            )),
-            (None, None) => Err(serde::de::Error::custom(
-                "you must provide either `output_source` or `dataset_name`",
-            )),
-        }
+        OptimizationDataSource::from_flat_fields(
+            helper.output_source,
+            helper.dataset_name,
+            helper.query_variant_name,
+            helper.filters,
+            helper.order_by,
+            helper.limit,
+            helper.offset,
+        )
+        .map_err(serde::de::Error::custom)
     }
 }
 
