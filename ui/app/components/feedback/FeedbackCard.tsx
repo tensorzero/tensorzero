@@ -33,25 +33,26 @@ function FeedbackCard({
   const allTags = tags ? filterStringTags(tags) : [];
 
   return (
-    <div data-testid={testId}>
-      <div className="bg-bg-primary border-border overflow-hidden rounded-lg border [&_[data-testid=chat-output]]:!rounded-none [&_[data-testid=chat-output]]:!border-0 [&_[data-testid=chat-output]]:!p-0">
-        <div className="bg-bg-secondary text-fg-tertiary flex h-10 items-center border-b px-3 text-sm font-medium">
-          {label}
-        </div>
-        {children}
-        {(allTags.length > 0 || timestamp) && (
-          <div className="bg-bg-primary text-fg-tertiary flex items-center justify-between border-t px-3 py-2 text-xs">
-            <span>
-              {allTags.length > 0 ? <TagsPopover tags={allTags} /> : null}
-            </span>
-            {timestamp && (
-              <span>
-                Updated <TableItemTime timestamp={timestamp} />
-              </span>
-            )}
-          </div>
-        )}
+    <div
+      data-testid={testId}
+      className="bg-bg-primary border-border overflow-hidden rounded-lg border [&_[data-testid=chat-output]]:!rounded-none [&_[data-testid=chat-output]]:!border-0 [&_[data-testid=chat-output]]:!p-0"
+    >
+      <div className="bg-bg-secondary text-fg-tertiary flex h-10 items-center border-b px-3 text-sm font-medium">
+        {label}
       </div>
+      {children}
+      {(allTags.length > 0 || timestamp) && (
+        <div className="bg-bg-primary text-fg-tertiary flex items-center justify-between border-t px-3 py-2 text-xs">
+          <span>
+            {allTags.length > 0 ? <TagsPopover tags={allTags} /> : null}
+          </span>
+          {timestamp && (
+            <span>
+              Updated <TableItemTime timestamp={timestamp} />
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -107,10 +108,6 @@ export function DemonstrationCard({ demonstration }: DemonstrationCardProps) {
 }
 
 function DemonstrationPreview({ value }: { value: string }) {
-  if (!value) {
-    return <NoData />;
-  }
-
   try {
     const parsedOutput = parseInferenceOutput(value);
     return isJsonOutput(parsedOutput) ? (

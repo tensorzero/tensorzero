@@ -60,20 +60,20 @@ function FeedbackContent({
   const { feedback, feedbackBounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
 
-  const filteredCount = filterToLatestFeedback(
+  const filteredFeedback = filterToLatestFeedback(
     feedback,
     feedbackBounds,
     latestFeedbackByMetric,
-  ).length;
+  );
 
   useEffect(() => {
-    onCountUpdate(filteredCount);
-  }, [filteredCount, onCountUpdate]);
+    onCountUpdate(filteredFeedback.length);
+  }, [filteredFeedback.length, onCountUpdate]);
 
-  const topFeedback = feedback[0] as { id: string } | undefined;
-  const bottomFeedback = feedback[feedback.length - 1] as
-    | { id: string }
-    | undefined;
+  // Pagination uses the raw (unfiltered) feedback array since cursor pagination
+  // is based on position in the full result set, not the filtered view.
+  const topFeedback = feedback[0];
+  const bottomFeedback = feedback[feedback.length - 1];
 
   const handleNextPage = () => {
     if (!bottomFeedback?.id) return;
@@ -107,9 +107,7 @@ function FeedbackContent({
 
   return (
     <FeedbackDisplay
-      feedback={feedback}
-      feedbackBounds={feedbackBounds}
-      latestFeedbackByMetric={latestFeedbackByMetric}
+      feedback={filteredFeedback}
       showDemonstrations={showDemonstrations}
       pagination={
         showPagination ? (

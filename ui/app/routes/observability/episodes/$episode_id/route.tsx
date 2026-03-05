@@ -214,6 +214,11 @@ export default function EpisodeDetailPage({
     setOpenSheetInferenceId(null);
   }, []);
 
+  // Reset feedback count on navigation so stale count doesn't linger
+  useEffect(() => {
+    setFeedbackCount(undefined);
+  }, [location.key]);
+
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {

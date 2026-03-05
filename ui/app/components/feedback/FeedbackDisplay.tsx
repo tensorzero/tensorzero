@@ -88,37 +88,32 @@ export function FeedbackDisplaySkeleton({
 
 interface FeedbackDisplayProps {
   feedback: FeedbackRow[];
-  feedbackBounds?: FeedbackBounds;
-  latestFeedbackByMetric?: Record<string, string>;
   pagination?: React.ReactNode;
   showDemonstrations?: boolean;
 }
 
+// Pure renderer — expects already-filtered feedback.
+// Filtering is done by FeedbackSection (for full pages) or the API route
+// (for the preview sheet in InferenceDetailContent).
 export default function FeedbackDisplay({
   feedback,
-  feedbackBounds,
-  latestFeedbackByMetric,
   pagination,
   showDemonstrations = true,
 }: FeedbackDisplayProps) {
   const { metrics, comments, demonstrations } = useMemo(() => {
-    const items = filterToLatestFeedback(
-      feedback,
-      feedbackBounds,
-      latestFeedbackByMetric,
-    );
-
     return {
-      metrics: items.filter((f) => f.type === "boolean" || f.type === "float"),
-      comments: items.filter(
+      metrics: feedback.filter(
+        (f) => f.type === "boolean" || f.type === "float",
+      ),
+      comments: feedback.filter(
         (f): f is FeedbackRow & { type: "comment" } => f.type === "comment",
       ),
-      demonstrations: items.filter(
+      demonstrations: feedback.filter(
         (f): f is FeedbackRow & { type: "demonstration" } =>
           f.type === "demonstration",
       ),
     };
-  }, [feedback, feedbackBounds, latestFeedbackByMetric]);
+  }, [feedback]);
 
   return (
     <div className="space-y-6">

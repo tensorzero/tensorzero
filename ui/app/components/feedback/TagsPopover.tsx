@@ -32,6 +32,9 @@ interface TagCellProps {
   tooltipSide: "left" | "right";
 }
 
+// Intentionally shows a tooltip only when displayText differs from fullText
+// (e.g. tensorzero:: keys get their prefix stripped). For user tags and values
+// where the two are identical, we skip the tooltip and dotted underline.
 function TagCell({
   displayText,
   fullText,
