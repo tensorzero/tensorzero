@@ -131,6 +131,7 @@ interface FeedbackTableProps {
   feedbackBounds?: FeedbackBounds;
   latestByMetric?: Record<string, string>;
   pagination?: React.ReactNode;
+  showDemonstrations?: boolean;
 }
 
 export default function FeedbackTable({
@@ -138,6 +139,7 @@ export default function FeedbackTable({
   feedbackBounds,
   latestByMetric,
   pagination,
+  showDemonstrations = true,
 }: FeedbackTableProps) {
   const config = useConfig();
 
@@ -179,6 +181,48 @@ export default function FeedbackTable({
 
   return (
     <div className="space-y-6">
+      {metrics.length > 0 && (
+        <Table className="table-fixed">
+          <MetricsTableHeaders />
+          <TableBody>
+            {metrics.map((item) => (
+              <MetricRowItem
+                key={item.id}
+                item={item}
+                metricConfig={config.metrics[getMetricName(item)]}
+                feedbackConfig={getFeedbackConfig(getMetricName(item), config)}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      )}
+
+      {showDemonstrations && (
+        <FeedbackCard
+          label="Demonstration"
+          tags={demonstrations[0]?.tags}
+          timestamp={demonstrations[0]?.timestamp}
+          testId={
+            demonstrations[0]
+              ? `feedback-row-${demonstrations[0].id}`
+              : "feedback-demonstration"
+          }
+          modal={
+            demonstrations[0] ? (
+              <DemonstrationModal feedback={demonstrations[0]} />
+            ) : undefined
+          }
+        >
+          {demonstrations[0] ? (
+            <DemonstrationPreview value={demonstrations[0].value} />
+          ) : (
+            <div className="p-4">
+              <p className="text-fg-muted text-sm italic">No data</p>
+            </div>
+          )}
+        </FeedbackCard>
+      )}
+
       <FeedbackCard
         label="Comment"
         tags={comments[0]?.tags}
@@ -200,46 +244,6 @@ export default function FeedbackTable({
           )}
         </div>
       </FeedbackCard>
-
-      <FeedbackCard
-        label="Demonstration"
-        tags={demonstrations[0]?.tags}
-        timestamp={demonstrations[0]?.timestamp}
-        testId={
-          demonstrations[0]
-            ? `feedback-row-${demonstrations[0].id}`
-            : "feedback-demonstration"
-        }
-        modal={
-          demonstrations[0] ? (
-            <DemonstrationModal feedback={demonstrations[0]} />
-          ) : undefined
-        }
-      >
-        {demonstrations[0] ? (
-          <DemonstrationPreview value={demonstrations[0].value} />
-        ) : (
-          <div className="p-4">
-            <p className="text-fg-muted text-sm italic">No data</p>
-          </div>
-        )}
-      </FeedbackCard>
-
-      {metrics.length > 0 && (
-        <Table className="table-fixed">
-          <MetricsTableHeaders />
-          <TableBody>
-            {metrics.map((item) => (
-              <MetricRowItem
-                key={item.id}
-                item={item}
-                metricConfig={config.metrics[getMetricName(item)]}
-                feedbackConfig={getFeedbackConfig(getMetricName(item), config)}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      )}
 
       {pagination}
     </div>

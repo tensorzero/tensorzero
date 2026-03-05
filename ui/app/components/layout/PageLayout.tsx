@@ -118,8 +118,8 @@ function SectionHeader({
   return (
     <h2 className="flex items-center gap-2 text-xl font-medium">
       {heading}
-      {help}
       {count !== undefined && <SectionCount count={count} />}
+      {help}
       {badge && (
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>

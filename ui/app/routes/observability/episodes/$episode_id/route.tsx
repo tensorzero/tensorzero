@@ -264,6 +264,7 @@ function FeedbackSectionContent({ data }: { data: FeedbackData }) {
       feedback={feedbacks}
       feedbackBounds={bounds}
       latestByMetric={latestByMetric}
+      showDemonstrations={false}
       pagination={
         showPagination ? (
           <PageButtons

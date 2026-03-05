@@ -40,7 +40,7 @@ export function HelpTooltip({
           className="inline-flex cursor-help"
           aria-label="Help"
         >
-          <CircleHelp className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+          <CircleHelp className="text-fg-muted h-3.5 w-3.5 shrink-0" />
         </button>
       </HoverCard.Trigger>
       <HoverCard.Portal>
