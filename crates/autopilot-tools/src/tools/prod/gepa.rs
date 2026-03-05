@@ -2,8 +2,11 @@
 //!
 //! Implements the GEPA algorithm as a `TaskTool` so it can be spawned via
 //! `SpawnClient` and polled for results. Each major operation (setup, initial
-//! evaluation, per-iteration analyze/mutate/update) is wrapped in a
+//! evaluation, per-iteration eval/mutate/update) is wrapped in a
 //! `ctx.step()` call for fine-grained checkpointing.
+//!
+//! Step params are lightweight — we never clone the full `SetupResult` into
+//! subsequent steps. Instead, each step receives only the fields it needs.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -14,7 +17,7 @@ use durable_tools::{
     RunEvaluationParams, RunEvaluationResponse, TaskTool, ToolAppState, ToolContext, ToolMetadata,
     ToolResult,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::from_value;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::ClientInferenceParams;
@@ -28,59 +31,14 @@ use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
-use durable_tools::EvaluatorStats;
-use tensorzero_optimizers::gepa::durable::types::{GepaToolOutput, GepaToolParams};
+use tensorzero_optimizers::gepa::durable::types::{
+    EvalResult, EvalStepParams, GepaToolOutput, GepaToolParams, InitEvalStepParams,
+    MutateStepParams, MutationResult, ResolvedGEPAConfig, SetupResult,
+};
 use tensorzero_optimizers::gepa::evaluate::{EvaluatorName, VariantName, VariantScores};
 use tensorzero_optimizers::gepa::pareto::{Candidate, ParetoFrontier, is_improvement};
-use tensorzero_optimizers::gepa::validate::SerializableFunctionContext;
 
 use crate::error::AutopilotToolError;
-
-// ── Checkpoint types ────────────────────────────────────────────────────
-
-/// Result of the "setup" step.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SetupResult {
-    function_context: SerializableFunctionContext,
-    original_variants: HashMap<String, UninitializedChatCompletionConfig>,
-    val_dataset_name: String,
-    val_datapoint_ids: Vec<Uuid>,
-    evaluator_configs: HashMap<String, EvaluatorConfig>,
-    run_id: Uuid,
-    gepa_config: SerializedGEPAConfig,
-}
-
-/// Serializable subset of GEPAConfig for step params.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SerializedGEPAConfig {
-    function_name: String,
-    evaluation_name: String,
-    initial_variants: Option<Vec<String>>,
-    variant_prefix: Option<String>,
-    batch_size: usize,
-    max_iterations: u32,
-    max_concurrency: u32,
-    analysis_model: String,
-    mutation_model: String,
-    seed: Option<u32>,
-    include_inference_for_mutation: bool,
-    max_tokens: Option<u32>,
-}
-
-/// Result of a single variant evaluation step.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct EvalResult {
-    variant_name: VariantName,
-    scores: VariantScores,
-    stats: HashMap<EvaluatorName, EvaluatorStats>,
-}
-
-/// Result of a mutation step.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct MutationResult {
-    child_name: VariantName,
-    child_config: UninitializedChatCompletionConfig,
-}
 
 // ── Tool struct ─────────────────────────────────────────────────────────
 
@@ -148,8 +106,15 @@ impl TaskTool for GepaTool {
         let evaluator_configs = &setup.evaluator_configs;
 
         // ── Step "init_eval": evaluate all initial variants ─────────
-        let init_scores: HashMap<VariantName, VariantScores> =
-            ctx.step("init_eval", setup.clone(), init_eval_step).await?;
+        let init_eval_params = InitEvalStepParams {
+            evaluation_name: setup.gepa_config.evaluation_name.clone(),
+            val_dataset_name: setup.val_dataset_name.clone(),
+            variants: setup.original_variants.clone(),
+            max_concurrency: setup.gepa_config.max_concurrency,
+        };
+        let init_scores: HashMap<VariantName, VariantScores> = ctx
+            .step("init_eval", init_eval_params, init_eval_step)
+            .await?;
 
         if init_scores.is_empty() {
             return Err(AutopilotToolError::validation(
@@ -219,22 +184,17 @@ impl TaskTool for GepaTool {
             );
             temporary_datasets.push(mutation_dataset_name.clone());
 
-            // Build evaluation params
-            let parent_variant_info = UninitializedVariantInfo {
-                inner: UninitializedVariantConfig::ChatCompletion(parent.config.clone()),
-                timeouts: None,
-            };
-
             // ── Step: evaluate parent on minibatch ──────────────────
             let parent_eval: Option<EvalResult> = ctx
                 .step(
                     &format!("iter_{iteration}_eval_parent"),
-                    (
-                        setup.clone(),
-                        parent.name.clone(),
-                        parent_variant_info.clone(),
-                        mutation_dataset_name.clone(),
-                    ),
+                    EvalStepParams {
+                        evaluation_name: setup.gepa_config.evaluation_name.clone(),
+                        dataset_name: mutation_dataset_name.clone(),
+                        variant_name: parent.name.clone(),
+                        variant_config: parent.config.clone(),
+                        max_concurrency: setup.gepa_config.max_concurrency,
+                    },
                     eval_variant_step,
                 )
                 .await?;
@@ -250,12 +210,13 @@ impl TaskTool for GepaTool {
             let mutation: Option<MutationResult> = ctx
                 .step(
                     &format!("iter_{iteration}_mutate"),
-                    (
-                        setup.clone(),
-                        parent.name.clone(),
-                        parent.config.clone(),
-                        iteration as u32,
-                    ),
+                    MutateStepParams {
+                        function_context: setup.function_context.clone(),
+                        gepa_config: setup.gepa_config.clone(),
+                        parent_name: parent.name.clone(),
+                        parent_config: parent.config.clone(),
+                        iteration: iteration as u32,
+                    },
                     mutate_step,
                 )
                 .await?;
@@ -265,21 +226,17 @@ impl TaskTool for GepaTool {
                 continue;
             };
 
-            let child_variant_info = UninitializedVariantInfo {
-                inner: UninitializedVariantConfig::ChatCompletion(mutation.child_config.clone()),
-                timeouts: None,
-            };
-
             // ── Step: evaluate child on minibatch ────────────────────
             let child_eval: Option<EvalResult> = ctx
                 .step(
                     &format!("iter_{iteration}_eval_child"),
-                    (
-                        setup.clone(),
-                        mutation.child_name.clone(),
-                        child_variant_info.clone(),
-                        mutation_dataset_name.clone(),
-                    ),
+                    EvalStepParams {
+                        evaluation_name: setup.gepa_config.evaluation_name.clone(),
+                        dataset_name: mutation_dataset_name.clone(),
+                        variant_name: mutation.child_name.clone(),
+                        variant_config: mutation.child_config.clone(),
+                        max_concurrency: setup.gepa_config.max_concurrency,
+                    },
                     eval_variant_step,
                 )
                 .await?;
@@ -306,12 +263,13 @@ impl TaskTool for GepaTool {
             let child_val_eval: Option<EvalResult> = ctx
                 .step(
                     &format!("iter_{iteration}_eval_child_val"),
-                    (
-                        setup.clone(),
-                        mutation.child_name.clone(),
-                        child_variant_info,
-                        setup.val_dataset_name.clone(),
-                    ),
+                    EvalStepParams {
+                        evaluation_name: setup.gepa_config.evaluation_name.clone(),
+                        dataset_name: setup.val_dataset_name.clone(),
+                        variant_name: mutation.child_name.clone(),
+                        variant_config: mutation.child_config.clone(),
+                        max_concurrency: setup.gepa_config.max_concurrency,
+                    },
                     eval_variant_step,
                 )
                 .await?;
@@ -452,7 +410,7 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
         ));
     }
 
-    let serialized_config = SerializedGEPAConfig {
+    let resolved_config = ResolvedGEPAConfig {
         function_name: gepa_config.function_name,
         evaluation_name: gepa_config.evaluation_name,
         initial_variants: gepa_config.initial_variants,
@@ -474,31 +432,30 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
         val_datapoint_ids,
         evaluator_configs,
         run_id,
-        gepa_config: serialized_config,
+        gepa_config: resolved_config,
     })
 }
 
 /// Initial evaluation step: evaluate all initial variants on validation set.
 async fn init_eval_step(
-    setup: SetupResult,
+    params: InitEvalStepParams,
     state: ToolAppState,
 ) -> anyhow::Result<HashMap<VariantName, VariantScores>> {
     let client = state.t0_client();
     let mut all_scores: HashMap<VariantName, VariantScores> = HashMap::new();
 
-    let num_variants = setup.original_variants.len();
-    let per_variant_concurrency =
-        (setup.gepa_config.max_concurrency as usize / num_variants).max(1);
+    let num_variants = params.variants.len();
+    let per_variant_concurrency = (params.max_concurrency as usize / num_variants).max(1);
 
-    for (variant_name, variant_config) in &setup.original_variants {
+    for (variant_name, variant_config) in &params.variants {
         let variant_info = UninitializedVariantInfo {
             inner: UninitializedVariantConfig::ChatCompletion(variant_config.clone()),
             timeouts: None,
         };
 
         let eval_params = RunEvaluationParams {
-            evaluation_name: setup.gepa_config.evaluation_name.clone(),
-            dataset_name: Some(setup.val_dataset_name.clone()),
+            evaluation_name: params.evaluation_name.clone(),
+            dataset_name: Some(params.val_dataset_name.clone()),
             datapoint_ids: None,
             variant_name: variant_name.clone(),
             concurrency: per_variant_concurrency,
@@ -528,18 +485,22 @@ async fn init_eval_step(
 
 /// Evaluate a variant on a dataset (used for parent, child, and validation evaluations).
 async fn eval_variant_step(
-    params: (SetupResult, VariantName, UninitializedVariantInfo, String),
+    params: EvalStepParams,
     state: ToolAppState,
 ) -> anyhow::Result<Option<EvalResult>> {
-    let (setup, variant_name, variant_info, dataset_name) = params;
     let client = state.t0_client();
 
+    let variant_info = UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(params.variant_config),
+        timeouts: None,
+    };
+
     let eval_params = RunEvaluationParams {
-        evaluation_name: setup.gepa_config.evaluation_name.clone(),
-        dataset_name: Some(dataset_name),
+        evaluation_name: params.evaluation_name,
+        dataset_name: Some(params.dataset_name),
         datapoint_ids: None,
-        variant_name: variant_name.clone(),
-        concurrency: setup.gepa_config.max_concurrency as usize,
+        variant_name: params.variant_name.clone(),
+        concurrency: params.max_concurrency as usize,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
         precision_targets: HashMap::new(),
@@ -555,13 +516,16 @@ async fn eval_variant_step(
                 return Ok(None);
             }
             Ok(Some(EvalResult {
-                variant_name,
+                variant_name: params.variant_name,
                 scores,
                 stats: response.stats,
             }))
         }
         Err(e) => {
-            tracing::warn!("Evaluation failed for variant `{variant_name}`: {e}");
+            tracing::warn!(
+                "Evaluation failed for variant `{}`: {e}",
+                params.variant_name
+            );
             Ok(None)
         }
     }
@@ -572,33 +536,27 @@ async fn eval_variant_step(
 /// This builds the mutate variant config and input, calls inference via the
 /// TensorZero client, then parses the mutation response to extract new templates.
 async fn mutate_step(
-    params: (
-        SetupResult,
-        VariantName,
-        UninitializedChatCompletionConfig,
-        u32,
-    ),
+    params: MutateStepParams,
     state: ToolAppState,
 ) -> anyhow::Result<Option<MutationResult>> {
-    let (setup, parent_name, parent_config, iteration) = params;
     let client = state.t0_client();
 
     // Reconstruct GEPAConfig for analysis/mutation
     let gepa_config = GEPAConfig {
-        function_name: setup.gepa_config.function_name.clone(),
-        evaluation_name: setup.gepa_config.evaluation_name.clone(),
-        initial_variants: setup.gepa_config.initial_variants.clone(),
-        variant_prefix: setup.gepa_config.variant_prefix.clone(),
-        batch_size: setup.gepa_config.batch_size,
-        max_iterations: setup.gepa_config.max_iterations,
-        max_concurrency: setup.gepa_config.max_concurrency,
-        analysis_model: setup.gepa_config.analysis_model.clone(),
-        mutation_model: setup.gepa_config.mutation_model.clone(),
-        seed: setup.gepa_config.seed,
+        function_name: params.gepa_config.function_name.clone(),
+        evaluation_name: params.gepa_config.evaluation_name.clone(),
+        initial_variants: params.gepa_config.initial_variants.clone(),
+        variant_prefix: params.gepa_config.variant_prefix.clone(),
+        batch_size: params.gepa_config.batch_size,
+        max_iterations: params.gepa_config.max_iterations,
+        max_concurrency: params.gepa_config.max_concurrency,
+        analysis_model: params.gepa_config.analysis_model.clone(),
+        mutation_model: params.gepa_config.mutation_model.clone(),
+        seed: params.gepa_config.seed,
         timeout: 300,
-        include_inference_for_mutation: setup.gepa_config.include_inference_for_mutation,
+        include_inference_for_mutation: params.gepa_config.include_inference_for_mutation,
         retries: Default::default(),
-        max_tokens: setup.gepa_config.max_tokens,
+        max_tokens: params.gepa_config.max_tokens,
     };
 
     // Reconstruct FunctionContext from serializable form
@@ -607,11 +565,10 @@ async fn mutate_step(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to get config: {e}"))?;
 
-    let function_context = setup
+    let function_context = params
         .function_context
-        .clone()
         .load(
-            &setup.gepa_config.function_name,
+            &params.gepa_config.function_name,
             &config_response.config.metrics,
         )
         .map_err(|e| anyhow::anyhow!("Failed to load function context: {e}"))?;
@@ -623,7 +580,7 @@ async fn mutate_step(
     let mutate_input = tensorzero_optimizers::gepa::mutate::build_mutate_input(
         &[], // empty analyses — in the durable path we skip per-inference analysis
         &function_context,
-        &parent_config,
+        &params.parent_config,
     )
     .map_err(|e| anyhow::anyhow!("Failed to build mutate input: {e}"))?;
 
@@ -652,7 +609,9 @@ async fn mutate_step(
         Ok(response) => response,
         Err(e) => {
             tracing::warn!(
-                "GEPA iteration {iteration}: mutation inference failed for parent `{parent_name}`: {e}"
+                "GEPA iteration {}: mutation inference failed for parent `{}`: {e}",
+                params.iteration,
+                params.parent_name,
             );
             return Ok(None);
         }
@@ -661,17 +620,19 @@ async fn mutate_step(
     // Parse mutation response to extract new templates
     let child = parse_mutate_response(
         &mutate_response,
-        &parent_name,
-        &parent_config,
+        &params.parent_name,
+        &params.parent_config,
         &gepa_config,
-        iteration as usize,
+        params.iteration as usize,
     )?;
 
     match child {
         Some(result) => Ok(Some(result)),
         None => {
             tracing::warn!(
-                "GEPA iteration {iteration}: failed to parse mutation response for parent `{parent_name}`"
+                "GEPA iteration {}: failed to parse mutation response for parent `{}`",
+                params.iteration,
+                params.parent_name,
             );
             Ok(None)
         }
