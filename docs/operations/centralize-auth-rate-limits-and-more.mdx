@@ -94,18 +94,16 @@ You can use either the TensorZero Inference API or the OpenAI-compatible Inferen
 To keep things simple, let's make a request using `curl`:
 
 ```bash
-curl -X POST "http://localhost:3000/inference" \
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "openai::gpt-5-mini",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::openai::gpt-5-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a haiku about TensorZero."
+      }
+    ]
   }'
 ```
 
@@ -113,18 +111,24 @@ curl -X POST "http://localhost:3000/inference" \
 
 ```json
 {
-  "inference_id": "01940627-935f-7fa1-a398-e1f57f18064a",
-  "episode_id": "01940627-8fe2-75d3-9b65-91be2c7ba622",
-  "variant_name": "gpt-5-mini",
-  "content": [
+  "id": "01940627-935f-7fa1-a398-e1f57f18064a",
+  "object": "chat.completion",
+  "created": 1738000000,
+  "model": "tensorzero::model_name::openai::gpt-5-mini",
+  "choices": [
     {
-      "type": "text",
-      "text": "Wires hum with pure thought,  \nDreams of codes in twilight's glow,  \nBeyond human touch."
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Wires hum with pure thought,  \nDreams of codes in twilight's glow,  \nBeyond human touch."
+      },
+      "finish_reason": "stop"
     }
   ],
   "usage": {
-    "input_tokens": 15,
-    "output_tokens": 23
+    "prompt_tokens": 15,
+    "completion_tokens": 23,
+    "total_tokens": 38
   }
 }
 ```
@@ -239,19 +243,17 @@ Pass the credentials in your inference request to the edge gateway.
 The edge gateway will forward them to the relay gateway.
 
 ```bash
-curl -X POST "http://localhost:3000/inference" \
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "openai::gpt-5-mini",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    },
-    "credentials": {
+    "model": "tensorzero::model_name::openai::gpt-5-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a haiku about TensorZero."
+      }
+    ],
+    "tensorzero::credentials": {
       "openai_api_key": "sk-..."
     }
   }'

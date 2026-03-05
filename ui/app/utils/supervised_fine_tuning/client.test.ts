@@ -17,7 +17,6 @@ describe("sft via HTTP client", () => {
     const job = await client.experimentalLaunchOptimizationWorkflow({
       function_name: "extract_entities",
       template_variant_name: "baseline",
-      query_variant_name: null,
       filters: filters,
       output_source: "inference",
       limit: 100,
@@ -30,7 +29,6 @@ describe("sft via HTTP client", () => {
         learning_rate_multiplier: 1,
         n_epochs: 1,
       },
-      order_by: null,
     });
 
     let status = await client.experimentalPollOptimization(job);
