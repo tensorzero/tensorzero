@@ -19,21 +19,19 @@ type = "chat_completion"
 model = "deepseek::deepseek-chat"
 ```
 
-Additionally, you can set `model_name` in the inference request to use a specific DeepSeek model, without having to configure a function and variant in TensorZero.
+Additionally, you can set the `model` parameter in the [OpenAI-compatible inference endpoint](/gateway/api-reference/inference-openai-compatible) to use a specific DeepSeek model, without having to configure a function and variant in TensorZero.
 
 ```bash {4}
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "deepseek::deepseek-chat",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::deepseek::deepseek-chat",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 
@@ -99,7 +97,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:?Environment variable DEEPSEEK_API_KEY must be set.}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Environment variable DEEPSEEK_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -113,17 +111,15 @@ You can start the gateway with `docker compose up`.
 Make an inference request to the gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "my_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```

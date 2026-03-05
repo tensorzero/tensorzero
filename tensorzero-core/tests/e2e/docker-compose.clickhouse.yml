@@ -2,9 +2,9 @@ services:
   clickhouse:
     image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-lts}
     environment:
-      CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
     volumes:
       # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
       # an empty dir will get mounted in the container
@@ -67,13 +67,13 @@ services:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PASSWORD=chpassword
-      - CLICKHOUSE_USER=chuser
-      - R2_ACCESS_KEY_ID
-      - R2_SECRET_ACCESS_KEY
-      # - TENSORZERO_SKIP_LARGE_FIXTURES=1
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      # TENSORZERO_SKIP_LARGE_FIXTURES: 1
     depends_on:
       gateway:
         condition: service_healthy
@@ -95,10 +95,10 @@ services:
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.clickhouse
     environment:
       # Test environment variables
+      TENSORZERO_CI: 1
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_LARGE_FIXTURES_PATH: /app/ui/fixtures/large-fixtures
-      TENSORZERO_CI: 1
     volumes:
       - ./config/:/app/tensorzero-core/tests/e2e/config/:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
