@@ -122,15 +122,12 @@ where
         let (outcome, output_value) = match result {
             Ok(output) => {
                 let value = serde_json::to_value(&output)?;
-                let result_json = serde_json::to_string(&output)?;
-                let outcome = ToolOutcome::Success(AutopilotToolResult {
-                    result: result_json,
-                });
+                let outcome = ToolOutcome::Success(AutopilotToolResult::typed(value.clone()));
                 (outcome, value)
             }
             Err(e) => {
                 let outcome = ToolOutcome::Failure {
-                    error: tool_error_to_json(ToolError::NonControl(e)),
+                    error: ToolFailure::Tool { error: e },
                 };
                 (outcome, serde_json::Value::Null)
             }
@@ -290,10 +287,7 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
         let (outcome, output_value) = match step_result {
             Ok(output) => {
                 let value = serde_json::to_value(&output)?;
-                let result_json = serde_json::to_string(&output)?;
-                let outcome = ToolOutcome::Success(AutopilotToolResult {
-                    result: result_json,
-                });
+                let outcome = ToolOutcome::Success(AutopilotToolResult::typed(value.clone()));
                 (outcome, value)
             }
             Err(error) => {
