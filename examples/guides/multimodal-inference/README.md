@@ -35,24 +35,7 @@ uv sync
 b. Run the example:
 
 ```bash
-uv run tensorzero_sdk.py
-```
-
-</details>
-
-<details>
-<summary><b>Python (OpenAI)</b></summary>
-
-a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
-
-```bash
-uv sync
-```
-
-b. Run the example:
-
-```bash
-uv run openai_sdk.py
+uv run main_openai.py
 ```
 
 </details>
