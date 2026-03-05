@@ -294,7 +294,7 @@ async def async_openai_client(request: FixtureRequest):
         async with AsyncOpenAI(api_key="donotuse") as client:
             await cast(
                 Awaitable[Any],
-                patch_openai_client(
+                patch_openai_client(  # pyright: ignore[reportDeprecated]
                     client,
                     config_file=TEST_CONFIG_FILE,
                     clickhouse_url=CLICKHOUSE_URL,
