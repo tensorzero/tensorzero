@@ -47,6 +47,9 @@ impl EvaluationStats {
             OutputFormat::Jsonl => {
                 let json = match &evaluation_update {
                     EvaluationUpdate::RunInfo(run_info) => serde_json::to_string(run_info)?,
+                    EvaluationUpdate::FatalError(msg) => {
+                        serde_json::to_string(&serde_json::json!({"message": msg}))?
+                    }
                     other => serde_json::to_string(other)?,
                 };
                 writeln!(writer, "{json}")?;
