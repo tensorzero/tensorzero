@@ -185,7 +185,7 @@ impl ToolVisitor for LocalToolVisitor<'_> {
 
     async fn visit_standalone_task_tool<T>(&self, tool: T) -> Result<(), ToolError>
     where
-        T: TaskTool<SideInfo = (), ExtraState = ()>,
+        T: TaskTool<ExtraState = ()>,
     {
         // Register directly — no ClientTaskToolWrapper, no result publishing
         self.executor.register_task_tool_instance(tool).await?;
