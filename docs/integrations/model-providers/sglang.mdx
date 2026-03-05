@@ -108,7 +108,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     # environment:
-    #   - SGLANG_API_KEY=${SGLANG_API_KEY:?Environment variable SGLANG_API_KEY must be set.}
+    #   SGLANG_API_KEY: ${SGLANG_API_KEY:?Environment variable SGLANG_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:

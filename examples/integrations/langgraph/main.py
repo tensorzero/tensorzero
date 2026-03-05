@@ -11,7 +11,6 @@ from tensorzero import (
 )
 from typing_extensions import TypedDict
 
-# Initialize TensorZero Client
 t0 = TensorZeroGateway.build_http(
     gateway_url="http://localhost:3000",
 )
