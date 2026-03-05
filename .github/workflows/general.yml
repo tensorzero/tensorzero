@@ -1316,14 +1316,28 @@ jobs:
         with:
           node-version: "24.13.0"
 
-      - name: Install Mintlify CLI
+      - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if npm install -g mint@4.2.390; then
+            if npm install -g pnpm@latest; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Mintlify CLI after 3 attempts"
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+
+      - name: Install dependencies
+        working-directory: docs
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install docs dependencies after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -1331,7 +1345,7 @@ jobs:
 
       - name: Check for broken links
         working-directory: docs
-        run: mint broken-links --check-anchors
+        run: pnpm exec mint broken-links --check-anchors
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
