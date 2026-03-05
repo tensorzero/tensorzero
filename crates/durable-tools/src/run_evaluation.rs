@@ -18,6 +18,7 @@ use evaluations::run_evaluation_with_app_state;
 use evaluations::stats::{EvaluationStats, EvaluationUpdate};
 use evaluations::types::{EvaluationVariant, RunEvaluationWithAppStateParams};
 use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::utils::gateway::AppStateData;
 
@@ -96,6 +97,13 @@ pub struct RunEvaluationParams {
     /// taking precedence in case of conflicts.
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    /// Internal: dynamic variant config for GEPA.
+    /// When set, uses `EvaluationVariant::Info` instead of `EvaluationVariant::Name`.
+    /// Not exposed to the LLM-facing tool.
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
 /// Result for a single datapoint evaluation.
@@ -220,6 +228,12 @@ pub async fn run_evaluation(
             ))
         })?;
 
+    let variant = if let Some(config) = params.internal_dynamic_variant_config.clone() {
+        EvaluationVariant::Info(Box::new(config))
+    } else {
+        EvaluationVariant::Name(params.variant_name.clone())
+    };
+
     let run_params = RunEvaluationWithAppStateParams {
         function_name: inference_config.function_name.clone(),
         function_config,
@@ -227,7 +241,7 @@ pub async fn run_evaluation(
         evaluation_name: Some(params.evaluation_name.clone()),
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: params.datapoint_ids.clone(),
-        variant: EvaluationVariant::Name(params.variant_name.clone()),
+        variant,
         concurrency: params.concurrency,
         cache_mode: params.inference_cache,
         max_datapoints: params.max_datapoints,

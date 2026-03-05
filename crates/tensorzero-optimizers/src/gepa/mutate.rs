@@ -49,7 +49,7 @@ struct TemplateEntry {
 /// Builds uninitialized chat completion config with embedded templates using GEPAConfig settings.
 ///
 /// Returns configured UninitializedChatCompletionConfig with system and user templates.
-fn create_mutate_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCompletionConfig {
+pub fn create_mutate_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCompletionConfig {
     let mut mutate_config = UninitializedChatCompletionConfig {
         model: gepa_config.mutation_model.clone().into(),
         weight: None,
@@ -89,7 +89,7 @@ fn create_mutate_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCo
 /// templates_map, and analyses.
 ///
 /// Returns error if serialization fails.
-fn build_mutate_input(
+pub fn build_mutate_input(
     analyses: &[Analysis],
     function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,

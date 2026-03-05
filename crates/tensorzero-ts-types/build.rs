@@ -57,6 +57,7 @@ const ROOT_TYPES: &[(&str, &str)] = &[
         "UpdateDatapointsToolParams",
     ),
     ("WRITE_CONFIG_TOOL_PARAMS", "WriteConfigToolParams"),
+    ("GEPA_TOOL_PARAMS", "GepaToolParams"),
     // Output types
     ("CREATE_DATAPOINTS_RESPONSE", "CreateDatapointsResponse"),
     ("DELETE_DATAPOINTS_RESPONSE", "DeleteDatapointsResponse"),
@@ -81,6 +82,7 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("RUN_EVALUATION_RESPONSE", "RunEvaluationResponse"),
     ("UPDATE_DATAPOINTS_RESPONSE", "UpdateDatapointsResponse"),
     ("UPLOAD_DATASET_TOOL_OUTPUT", "UploadDatasetToolOutput"),
+    ("GEPA_TOOL_OUTPUT", "GepaToolOutput"),
     ("WRITE_CONFIG_RESPONSE", "WriteConfigResponse"),
     ("GET_CONFIG_RESPONSE", "GetConfigResponse"),
     ("FEEDBACK_BY_VARIANT", "FeedbackByVariant"),
