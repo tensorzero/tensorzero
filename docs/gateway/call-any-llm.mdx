@@ -235,27 +235,31 @@ const response = await client.chat.completions.create({
 
 <Accordion title="Sample Response">
 
-```ts
+```json
 {
-  id: '0198d345-4bd5-79a2-a235-ebaea8c16d91',
-  episode_id: '0198d345-4bd5-79a2-a235-ebbf6eb49cb8',
-  choices: [
+  "id": "0198d345-4bd5-79a2-a235-ebaea8c16d91",
+  "episode_id": "0198d345-4bd5-79a2-a235-ebbf6eb49cb8",
+  "choices": [
     {
-      index: 0,
-      finish_reason: 'stop',
-      message: {
-        content: 'Sure! Did you know that honey never spoils? Archaeologists have found pots of honey in ancient Egyptian tombs that are over 3,000 years old—and still perfectly edible!',
-        tool_calls: [],
-        role: 'assistant'
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "content": "Sure! Did you know that honey never spoils? Archaeologists have found pots of honey in ancient Egyptian tombs that are over 3,000 years old\u2014and still perfectly edible!",
+        "tool_calls": [],
+        "role": "assistant"
       }
     }
   ],
-  created: 1755891192,
-  model: 'tensorzero::model_name::openai::gpt-5-mini',
-  system_fingerprint: '',
-  service_tier: null,
-  object: 'chat.completion',
-  usage: { prompt_tokens: 13, completion_tokens: 37, total_tokens: 50 }
+  "created": 1755891192,
+  "model": "tensorzero::model_name::openai::gpt-5-mini",
+  "system_fingerprint": "",
+  "service_tier": null,
+  "object": "chat.completion",
+  "usage": {
+    "prompt_tokens": 13,
+    "completion_tokens": 37,
+    "total_tokens": 50
+  }
 }
 ```
 
