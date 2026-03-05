@@ -28,6 +28,7 @@ object_store = { workspace = true }
 arrow = { workspace = true }
 parquet = { workspace = true }
 serde_arrow = { workspace = true }
+rand.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 schemars.workspace = true
