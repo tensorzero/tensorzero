@@ -91,6 +91,8 @@ pub struct GepaToolOutput {
 pub struct SetupResult {
     pub function_context: SerializableFunctionContext,
     pub original_variants: HashMap<String, UninitializedChatCompletionConfig>,
+    pub train_dataset_name: String,
+    pub train_datapoint_ids: Vec<Uuid>,
     pub val_dataset_name: String,
     pub val_datapoint_ids: Vec<Uuid>,
     pub evaluator_configs: HashMap<String, EvaluatorConfig>,
@@ -117,11 +119,18 @@ pub struct ResolvedGEPAConfig {
 
 // ── Lightweight step params (avoid cloning full SetupResult) ────────────
 
-/// Params for evaluating a single variant on a dataset.
+/// Params for evaluating a single variant.
+///
+/// Exactly one of `dataset_name` or `datapoint_ids` must be set.
+/// Use `dataset_name` for validation-set evaluation and `datapoint_ids`
+/// for sampled minibatch evaluation (avoids creating temporary datasets).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalStepParams {
     pub evaluation_name: String,
-    pub dataset_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dataset_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datapoint_ids: Option<Vec<Uuid>>,
     pub variant_name: VariantName,
     pub variant_config: UninitializedChatCompletionConfig,
     pub max_concurrency: u32,

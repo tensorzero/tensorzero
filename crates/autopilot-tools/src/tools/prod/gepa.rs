@@ -17,6 +17,8 @@ use durable_tools::{
     RunEvaluationParams, RunEvaluationResponse, TaskTool, ToolAppState, ToolContext, ToolMetadata,
     ToolResult,
 };
+use rand::seq::IndexedRandom;
+use rand::{SeedableRng, rngs::StdRng};
 use serde::Deserialize;
 use serde_json::from_value;
 use tensorzero_core::cache::CacheEnabledMode;
@@ -154,8 +156,11 @@ impl TaskTool for GepaTool {
 
         let max_iterations = setup.gepa_config.max_iterations as usize;
 
-        // Track temporary datasets for cleanup
-        let mut temporary_datasets = vec![setup.val_dataset_name.clone()];
+        // Initialize RNG for minibatch sampling from training data
+        let mut sampling_rng = match setup.gepa_config.seed {
+            Some(seed) => StdRng::seed_from_u64(seed as u64),
+            None => StdRng::from_rng(&mut rand::rng()),
+        };
 
         // ── Main iteration loop ─────────────────────────────────────
         for iteration in 0..max_iterations {
@@ -177,12 +182,16 @@ impl TaskTool for GepaTool {
                 parent.name
             );
 
-            // Create minibatch dataset name
-            let mutation_dataset_name = format!(
-                "{}_gepa_mutation_{}_{}",
-                setup.gepa_config.evaluation_name, iteration, setup.run_id,
-            );
-            temporary_datasets.push(mutation_dataset_name.clone());
+            // Sample minibatch datapoint IDs from training dataset
+            let batch_size = setup
+                .gepa_config
+                .batch_size
+                .min(setup.train_datapoint_ids.len());
+            let sampled_ids: Vec<Uuid> = setup
+                .train_datapoint_ids
+                .sample(&mut sampling_rng, batch_size)
+                .copied()
+                .collect();
 
             // ── Step: evaluate parent on minibatch ──────────────────
             let parent_eval: Option<EvalResult> = ctx
@@ -190,7 +199,8 @@ impl TaskTool for GepaTool {
                     &format!("iter_{iteration}_eval_parent"),
                     EvalStepParams {
                         evaluation_name: setup.gepa_config.evaluation_name.clone(),
-                        dataset_name: mutation_dataset_name.clone(),
+                        dataset_name: None,
+                        datapoint_ids: Some(sampled_ids.clone()),
                         variant_name: parent.name.clone(),
                         variant_config: parent.config.clone(),
                         max_concurrency: setup.gepa_config.max_concurrency,
@@ -232,7 +242,8 @@ impl TaskTool for GepaTool {
                     &format!("iter_{iteration}_eval_child"),
                     EvalStepParams {
                         evaluation_name: setup.gepa_config.evaluation_name.clone(),
-                        dataset_name: mutation_dataset_name.clone(),
+                        dataset_name: None,
+                        datapoint_ids: Some(sampled_ids),
                         variant_name: mutation.child_name.clone(),
                         variant_config: mutation.child_config.clone(),
                         max_concurrency: setup.gepa_config.max_concurrency,
@@ -265,7 +276,8 @@ impl TaskTool for GepaTool {
                     &format!("iter_{iteration}_eval_child_val"),
                     EvalStepParams {
                         evaluation_name: setup.gepa_config.evaluation_name.clone(),
-                        dataset_name: setup.val_dataset_name.clone(),
+                        dataset_name: Some(setup.val_dataset_name.clone()),
+                        datapoint_ids: None,
                         variant_name: mutation.child_name.clone(),
                         variant_config: mutation.child_config.clone(),
                         max_concurrency: setup.gepa_config.max_concurrency,
@@ -308,9 +320,6 @@ impl TaskTool for GepaTool {
             new_variants.len()
         );
 
-        // ── Step "cleanup": delete temporary datasets ───────────────
-        let _ = ctx.step("cleanup", temporary_datasets, cleanup_step).await;
-
         // Build statistics from the Pareto frontier
         let statistics = build_statistics(&pareto_frontier, evaluator_configs);
 
@@ -336,10 +345,11 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
     let uninitialized_config = &config_response.config;
 
     // Build GEPAConfig from params
-    let evaluation_name = params
-        .evaluation_name
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("evaluation_name is required"))?;
+    let evaluation_name = params.evaluation_name.clone().ok_or_else(|| {
+        anyhow::anyhow!(
+            "`evaluation_name` is required (inline `evaluators` mode is not yet supported)"
+        )
+    })?;
 
     let gepa_config = GEPAConfig {
         function_name: params.function_name.clone(),
@@ -374,7 +384,15 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
         )
         .map_err(|e| anyhow::anyhow!("Failed to get initial variants: {e}"))?;
 
-    // Resolve val dataset name
+    // Resolve dataset names
+    let train_dataset_name = params
+        .train_dataset_name
+        .clone()
+        .or_else(|| params.dataset_name.clone())
+        .ok_or_else(|| {
+            anyhow::anyhow!("Either `dataset_name` or `train_dataset_name` must be provided")
+        })?;
+
     let val_dataset_name = params
         .val_dataset_name
         .clone()
@@ -390,7 +408,28 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
 
     let run_id = Uuid::now_v7();
 
-    // Get validation datapoint IDs by listing from the dataset
+    // Get training datapoint IDs for minibatch sampling
+    let train_datapoints = client
+        .list_datapoints(
+            train_dataset_name.clone(),
+            ListDatapointsRequest {
+                limit: None,
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to list training datapoints: {e}"))?;
+
+    let train_datapoint_ids: Vec<Uuid> =
+        train_datapoints.datapoints.iter().map(|d| d.id()).collect();
+
+    if train_datapoint_ids.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Training dataset `{train_dataset_name}` contains no datapoints"
+        ));
+    }
+
+    // Get validation datapoint IDs
     let val_datapoints = client
         .list_datapoints(
             val_dataset_name.clone(),
@@ -428,6 +467,8 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
     Ok(SetupResult {
         function_context: function_context.to_serializable(),
         original_variants,
+        train_dataset_name,
+        train_datapoint_ids,
         val_dataset_name,
         val_datapoint_ids,
         evaluator_configs,
@@ -497,8 +538,8 @@ async fn eval_variant_step(
 
     let eval_params = RunEvaluationParams {
         evaluation_name: params.evaluation_name,
-        dataset_name: Some(params.dataset_name),
-        datapoint_ids: None,
+        dataset_name: params.dataset_name,
+        datapoint_ids: params.datapoint_ids,
         variant_name: params.variant_name.clone(),
         concurrency: params.max_concurrency as usize,
         inference_cache: CacheEnabledMode::Off,
@@ -637,17 +678,6 @@ async fn mutate_step(
             Ok(None)
         }
     }
-}
-
-/// Cleanup step: delete temporary datasets.
-async fn cleanup_step(datasets: Vec<String>, state: ToolAppState) -> anyhow::Result<()> {
-    let client = state.t0_client();
-    for dataset_name in &datasets {
-        if let Err(e) = client.delete_dataset(dataset_name.clone()).await {
-            tracing::warn!("Failed to delete temporary GEPA dataset `{dataset_name}`: {e}");
-        }
-    }
-    Ok(())
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────

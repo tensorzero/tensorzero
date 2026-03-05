@@ -573,6 +573,7 @@ dependencies = [
  "mockall",
  "object_store",
  "parquet",
+ "rand 0.10.0",
  "schemars 1.2.1",
  "serde",
  "serde_arrow",
