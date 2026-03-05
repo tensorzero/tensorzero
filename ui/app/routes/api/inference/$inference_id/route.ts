@@ -1,6 +1,6 @@
 import { data, type LoaderFunctionArgs } from "react-router";
 import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
-import { filterToLatestFeedback } from "~/components/feedback/FeedbackSection";
+import { filterToLatestFeedback } from "~/utils/feedback";
 import { resolveModelInferences } from "~/utils/resolve.server";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { logger } from "~/utils/logger";

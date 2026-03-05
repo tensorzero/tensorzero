@@ -6,7 +6,7 @@ import {
 } from "~/utils/resolve.server";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import type { StoredInference, Input } from "~/types/tensorzero";
-import type { FeedbackData } from "~/components/feedback/FeedbackSection";
+import type { FeedbackData } from "~/utils/feedback";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 // Types for streamed data

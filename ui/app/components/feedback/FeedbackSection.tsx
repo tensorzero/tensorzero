@@ -1,7 +1,8 @@
 import { Suspense, useEffect } from "react";
 import { Await, useAsyncError, useNavigate } from "react-router";
 import { AlertCircle } from "lucide-react";
-import type { FeedbackRow, FeedbackBounds } from "~/types/tensorzero";
+import type { FeedbackRow } from "~/types/tensorzero";
+import { filterToLatestFeedback, type FeedbackData } from "~/utils/feedback";
 import { Table, TableBody, TableCell, TableRow } from "~/components/ui/table";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
@@ -17,31 +18,6 @@ import {
   CommentCard,
   DemonstrationCard,
 } from "~/components/feedback/FeedbackCard";
-
-export type FeedbackData = {
-  feedback: FeedbackRow[];
-  feedbackBounds: FeedbackBounds;
-  latestFeedbackByMetric: Record<string, string>;
-};
-
-export function filterToLatestFeedback(
-  feedback: FeedbackRow[],
-  feedbackBounds?: FeedbackBounds,
-  latestFeedbackByMetric?: Record<string, string>,
-): FeedbackRow[] {
-  if (!feedbackBounds || !latestFeedbackByMetric) return feedback;
-  return feedback.filter((item) => {
-    if (item.type === "comment") {
-      const lastId = feedbackBounds.by_type.comment.last_id;
-      return lastId === undefined || item.id === lastId;
-    }
-    if (item.type === "demonstration") {
-      const lastId = feedbackBounds.by_type.demonstration.last_id;
-      return lastId === undefined || item.id === lastId;
-    }
-    return latestFeedbackByMetric[item.metric_name] === item.id;
-  });
-}
 
 // --- Skeleton ---
 
