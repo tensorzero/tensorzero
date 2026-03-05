@@ -96,14 +96,12 @@ export async function launch_sft_job(
   const job = await client.experimentalLaunchOptimizationWorkflow({
     function_name: data.function,
     template_variant_name: data.variant,
-    query_variant_name: null,
-    filters: filters,
-    output_source: output_source,
-    limit: data.maxSamples ? data.maxSamples : 0,
+    filters: filters ?? undefined,
+    output_source,
+    limit: data.maxSamples || 0,
     offset: 0,
     val_fraction: data.validationSplitPercent / 100,
     optimizer_config: optimizerConfig,
-    order_by: null,
   });
   return job;
 }
@@ -122,15 +120,15 @@ export async function createFilters(
     return {
       type: "float_metric",
       metric_name: metric,
-      comparison_operator: comparison_operator,
+      comparison_operator,
       value: threshold,
     };
   } else if (metricConfig.type === "boolean") {
-    const value = metricConfig.optimize === "max" ? true : false;
+    const value = metricConfig.optimize === "max";
     return {
       type: "boolean_metric",
       metric_name: metric,
-      value: value,
+      value,
     };
   } else {
     throw new Error(`Unsupported metric type: ${metricConfig.type}`);
