@@ -27,9 +27,6 @@ You can also find a runnable example on [GitHub](https://github.com/tensorzero/t
 
 </Tip>
 
-<Tabs>
-<Tab title="Python">
-
 ```python
 from openai import OpenAI  # or AsyncOpenAI
 
@@ -49,55 +46,6 @@ with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
         if chunk.choices and chunk.choices[0].delta.content:
             print(chunk.choices[0].delta.content, end="")
 ```
-
-</Tab>
-<Tab title="Node">
-
-```typescript
-import OpenAI from "openai";
-
-const client = new OpenAI({
-  baseURL: "http://localhost:3000/openai/v1",
-});
-
-const stream = await client.chat.completions.create({
-  model: "tensorzero::function_name::chatbot",
-  messages: [
-    {
-      role: "user",
-      content: "Share an extensive list of fun facts about Japan.",
-    },
-  ],
-  stream: true,
-});
-
-for await (const chunk of stream) {
-  if (chunk.choices[0]?.delta?.content) {
-    process.stdout.write(chunk.choices[0].delta.content);
-  }
-}
-```
-
-</Tab>
-<Tab title="HTTP">
-
-```bash
-curl -X POST http://localhost:3000/openai/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tensorzero::function_name::chatbot",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Share an extensive list of fun facts about Japan."
-      }
-    ],
-    "stream": true
-  }'
-```
-
-</Tab>
-</Tabs>
 
 ### Chat Functions
 
