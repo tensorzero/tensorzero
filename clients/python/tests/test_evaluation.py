@@ -725,7 +725,7 @@ def test_sync_run_evaluation_datapoint_ids_and_max_datapoints_error(
     sync_client: TensorZeroGateway,
 ):
     """Test sync client rejects both datapoint_ids and max_datapoints."""
-    with pytest.raises(RuntimeError, match="Cannot provide both datapoint_ids and max_datapoints"):
+    with pytest.raises(RuntimeError, match="Cannot provide both `datapoint_ids` and `max_datapoints`"):
         sync_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
@@ -741,7 +741,7 @@ async def test_async_run_evaluation_datapoint_ids_and_max_datapoints_error(
     async_client: AsyncTensorZeroGateway,
 ):
     """Test async client rejects both datapoint_ids and max_datapoints."""
-    with pytest.raises(RuntimeError, match="Cannot provide both datapoint_ids and max_datapoints"):
+    with pytest.raises(RuntimeError, match="Cannot provide both `datapoint_ids` and `max_datapoints`"):
         await async_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
