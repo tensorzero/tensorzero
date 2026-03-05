@@ -87,10 +87,6 @@ level = "inference"
 Let's make an inference call like we did in the Quickstart, and then assign some (positive) feedback to it.
 We'll use the inference response's `inference_id` we receive from the first API call to link the two.
 
-<Tabs>
-
-<Tab title="Python">
-
 ```python title="main.py"
 from openai import OpenAI
 from tensorzero import TensorZeroGateway
@@ -152,79 +148,6 @@ FeedbackResponse(feedback_id='01920c75-d11a-7150-81d8-15d497ce7eb8')
 
 </Accordion>
 
-</Tab>
-
-<Tab title="Node">
-
-```typescript title="main.ts"
-import OpenAI from "openai";
-
-const openaiClient = new OpenAI({
-  baseURL: "http://localhost:3000/openai/v1",
-});
-
-const inferenceResponse = await openaiClient.chat.completions.create({
-  model: "tensorzero::function_name::generate_haiku",
-  messages: [
-    {
-      role: "user",
-      content: "Write a haiku about TensorZero.",
-    },
-  ],
-});
-
-console.log(JSON.stringify(inferenceResponse, null, 2));
-
-const inferenceId = inferenceResponse.id;
-
-const feedbackResponse = await fetch("http://localhost:3000/feedback", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    metric_name: "haiku_rating",
-    inference_id: inferenceId, // alternatively, you can assign feedback to an episode_id
-    value: true, // let's assume it deserves a 👍
-  }),
-});
-
-console.log(await feedbackResponse.json());
-```
-
-<Accordion title="Sample Output">
-
-```json
-{
-  "id": "01920c75-d114-7aa1-aadb-26a31bb3c7a0",
-  "choices": [
-    {
-      "index": 0,
-      "finish_reason": "stop",
-      "message": {
-        "content": "Silent circuits hum, \nWisdom spun from lines of code, \nDreams in data bloom.",
-        "role": "assistant"
-      }
-    }
-  ],
-  "created": 1755890789,
-  "model": "tensorzero::function_name::generate_haiku",
-  "object": "chat.completion",
-  "usage": {
-    "prompt_tokens": 15,
-    "completion_tokens": 20,
-    "total_tokens": 35
-  },
-  "episode_id": "01920c75-cdcb-7fa3-bd69-fd28cf615f91"
-}
-
-{ "feedback_id": "01920c75-d11a-7150-81d8-15d497ce7eb8" }
-```
-
-</Accordion>
-
-</Tab>
-
-</Tabs>
-
 ## Demonstrations
 
 Demonstrations are a special type of feedback that represent the ideal output for an inference.
@@ -232,10 +155,6 @@ For example, you can use demonstrations to provide corrections from human review
 
 You can assign demonstrations to an inference using the special metric name `demonstration`.
 You can't assign demonstrations to an episode.
-
-<Tabs>
-
-<Tab title="Python">
 
 ```python
 feedback_response = t0.feedback(
@@ -245,33 +164,9 @@ feedback_response = t0.feedback(
 )
 ```
 
-</Tab>
-
-<Tab title="Node">
-
-```typescript
-const demonstrationResponse = await fetch("http://localhost:3000/feedback", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    metric_name: "demonstration",
-    inference_id: inferenceId,
-    value: "Silicon dreams float\nMinds born of human design\nLearning without end", // the haiku we wish the LLM had written
-  }),
-});
-```
-
-</Tab>
-
-</Tabs>
-
 ## Comments
 
 You can assign natural-language feedback to an inference or episode using the special metric name `comment`.
-
-<Tabs>
-
-<Tab title="Python">
 
 ```python
 feedback_response = t0.feedback(
@@ -280,27 +175,6 @@ feedback_response = t0.feedback(
     value="Never mention you're an artificial intelligence, AI, bot, or anything like that.",
 )
 ```
-
-</Tab>
-
-<Tab title="Node">
-
-```typescript
-const commentResponse = await fetch("http://localhost:3000/feedback", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    metric_name: "comment",
-    inference_id: inferenceId,
-    value:
-      "Never mention you're an artificial intelligence, AI, bot, or anything like that.",
-  }),
-});
-```
-
-</Tab>
-
-</Tabs>
 
 ## Conclusion & Next Steps
 
