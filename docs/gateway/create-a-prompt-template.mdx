@@ -81,10 +81,6 @@ You can configure multiple templates for a variant.
 
 <Step title="Use your template during inference">
 
-<Tabs>
-
-<Tab title="Python">
-
 Use your template during inference by sending a `tensorzero::template` content block with the template name and arguments.
 
 ```python
@@ -108,38 +104,6 @@ result = client.chat.completions.create(
     ],
 )
 ```
-
-</Tab>
-
-<Tab title="HTTP">
-
-Use your template during inference by sending a `tensorzero::template` content block with the template name and arguments.
-
-```bash
-curl -X POST http://localhost:3000/openai/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tensorzero::function_name::fun_fact",
-    "messages": [
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "tensorzero::template",
-            "name": "fun_fact_topic",
-            "arguments": {
-              "topic": "artificial intelligence"
-            }
-          }
-        ]
-      }
-    ]
-  }'
-```
-
-</Tab>
-
-</Tabs>
 
 </Step>
 
