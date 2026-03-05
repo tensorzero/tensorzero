@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import FeedbackDisplay from "./FeedbackDisplay";
+import { FeedbackSection } from "./FeedbackSection";
 import { ConfigProvider } from "~/context/config";
 import type { UiConfig } from "~/types/tensorzero";
 
@@ -61,14 +61,14 @@ const config: UiConfig = {
 };
 
 const meta = {
-  title: "FeedbackDisplay",
-  component: FeedbackDisplay,
+  title: "FeedbackSection",
+  component: FeedbackSection,
   render: (args) => (
     <StoryWrapper>
-      <FeedbackDisplay {...args} />
+      <FeedbackSection {...args} />
     </StoryWrapper>
   ),
-} satisfies Meta<typeof FeedbackDisplay>;
+} satisfies Meta<typeof FeedbackSection>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

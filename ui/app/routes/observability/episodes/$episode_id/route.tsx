@@ -11,8 +11,10 @@ import { listInferencesWithPagination } from "~/utils/clickhouse/inference.serve
 import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
-import type { FeedbackData } from "~/components/feedback/FeedbackDisplay";
-import { FeedbackSection } from "~/components/feedback/FeedbackSection";
+import {
+  FeedbackSection,
+  type FeedbackData,
+} from "~/components/feedback/FeedbackSection";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import PageButtons from "~/components/utils/PageButtons";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
