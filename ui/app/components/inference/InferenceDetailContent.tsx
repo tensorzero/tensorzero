@@ -368,7 +368,10 @@ export function InferenceDetailContent({
         <SectionLayout>
           <SectionHeader
             heading="Feedback"
-            count={feedback.length}
+            count={
+              feedback.filter((f) => f.type === "boolean" || f.type === "float")
+                .length
+            }
             badge={{
               name: "inference",
               tooltip:

@@ -13,6 +13,7 @@ import {
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
 import FeedbackTable, {
   FeedbackTableSkeleton,
+  filterToLatestFeedback,
 } from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
@@ -109,8 +110,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // Count is already fetched, wrap in resolved promise for streaming
   const numInferencesPromise = Promise.resolve(numInferences);
-  const numFeedbacksPromise =
-    tensorZeroClient.countFeedbackByTargetId(episode_id);
 
   // Stream inferences data - will be resolved in the component
   const inferencesDataPromise: Promise<InferencesData> =
@@ -167,7 +166,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     feedbackData: feedbackDataPromise,
     // Stream counts to section headers
     num_inferences: numInferencesPromise,
-    num_feedbacks: numFeedbacksPromise,
     newFeedbackId,
   };
 }
@@ -223,9 +221,25 @@ function FeedbackSectionError() {
   );
 }
 
-function FeedbackSectionContent({ data }: { data: FeedbackData }) {
+function FeedbackSectionContent({
+  data,
+  onCountUpdate,
+}: {
+  data: FeedbackData;
+  onCountUpdate: (count: number) => void;
+}) {
   const { feedbacks, bounds, latestFeedbackByMetric } = data;
   const navigate = useNavigate();
+
+  const metricsCount = filterToLatestFeedback(
+    feedbacks,
+    bounds,
+    latestFeedbackByMetric,
+  ).filter((f) => f.type === "boolean" || f.type === "float").length;
+
+  useEffect(() => {
+    onCountUpdate(metricsCount);
+  }, [metricsCount, onCountUpdate]);
 
   const topFeedback = feedbacks[0] as { id: string } | undefined;
   const bottomFeedback = feedbacks[feedbacks.length - 1] as
@@ -287,11 +301,13 @@ export default function EpisodeDetailPage({
     inferencesData,
     feedbackData,
     num_inferences,
-    num_feedbacks,
     newFeedbackId,
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [feedbackCount, setFeedbackCount] = useState<number | undefined>(
+    undefined,
+  );
   const [openSheetInferenceId, setOpenSheetInferenceId] = useState<
     string | null
   >(null);
@@ -367,7 +383,7 @@ export default function EpisodeDetailPage({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <SectionHeader
               heading="Episode Feedback"
-              count={num_feedbacks}
+              count={feedbackCount}
               help={
                 <HelpTooltip>
                   This table only includes episode-level feedback. To see
@@ -411,7 +427,12 @@ export default function EpisodeDetailPage({
               resolve={feedbackData}
               errorElement={<FeedbackSectionError />}
             >
-              {(resolvedData) => <FeedbackSectionContent data={resolvedData} />}
+              {(resolvedData) => (
+                <FeedbackSectionContent
+                  data={resolvedData}
+                  onCountUpdate={setFeedbackCount}
+                />
+              )}
             </Await>
           </Suspense>
         </SectionLayout>
