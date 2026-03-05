@@ -172,7 +172,7 @@ test("should be able to add float feedback via the inference page", async ({
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
 
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
@@ -224,7 +224,7 @@ test("should be able to add boolean feedback via the inference page", async ({
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
 
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
@@ -271,7 +271,7 @@ test("should be able to add json demonstration feedback via the inference page",
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
 
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
@@ -319,7 +319,7 @@ test("should be able to add chat demonstration feedback via the inference page",
     "/observability/inferences/0196374b-0d7d-7422-b6dc-e94c572cc79b",
   );
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
   // Sleep for a little bit to ensure the dialog is open
   await page.waitForTimeout(500);
 

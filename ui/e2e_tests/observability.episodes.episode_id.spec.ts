@@ -22,7 +22,7 @@ test("should be able to add comment feedback via the episode page", async ({
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
 
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
