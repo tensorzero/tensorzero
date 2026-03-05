@@ -1,10 +1,12 @@
 import asyncio
+import json
 
 from ner import Row, load_dataset
 from tensorzero import (
     AsyncTensorZeroGateway,
     CreateDatapointRequestJson,
     GEPAConfig,
+    JsonDatapointOutputUpdate,
 )
 
 FUNCTION_NAME = "extract_entities"
@@ -42,7 +44,7 @@ def make_datapoint(row: Row) -> CreateDatapointRequestJson:
                 }
             ]
         },
-        output=row.label,
+        output=JsonDatapointOutputUpdate(raw=json.dumps(row.label)),
     )
 
 

@@ -24,7 +24,7 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway
+    image: tensorzero/gateway-dev:sha-083a3c7f29ba411dbae1e7e8467d020f342f664b
     volumes:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml

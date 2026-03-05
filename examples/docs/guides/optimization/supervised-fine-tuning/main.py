@@ -1,9 +1,11 @@
 import asyncio
+import json
 
 from ner import Row, load_dataset
 from tensorzero import (
     AsyncTensorZeroGateway,
     CreateDatapointRequestJson,
+    JsonDatapointOutputUpdate,
     OpenAISFTConfig,
     OptimizationJobStatus,
 )
@@ -34,7 +36,7 @@ def make_datapoint(row: Row) -> CreateDatapointRequestJson:
                 }
             ]
         },
-        output=row.label,
+        output=JsonDatapointOutputUpdate(raw=json.dumps(row.label)),
     )
 
 
@@ -82,9 +84,7 @@ async def main():
         val_fraction=VAL_FRACTION,
     )
 
-    print("\nJob launched!")
-    print(f"  - Job ID: {job_handle.job_id}")
-    print(f"  - Monitor at: {job_handle.job_url}")
+    print("Job launched!")
 
     # Poll for completion
     print("\nWaiting for fine-tuning to complete...")
