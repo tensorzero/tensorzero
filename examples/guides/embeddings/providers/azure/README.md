@@ -10,7 +10,13 @@ export AZURE_API_KEY="..." # Replace with your Azure OpenAI API key
 
 2. Set your Azure `endpoint` in `config/tensorzero.toml`.
 
-3. Run the example:
+3. Launch the TensorZero Gateway:
+
+```bash
+docker compose up
+```
+
+4. Run the example (in a separate terminal):
 
 <details open>
 <summary><b>Python (OpenAI SDK)</b></summary>

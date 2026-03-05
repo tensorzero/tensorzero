@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 // Re-export types from tensorzero-types that InputMessage depends on
 use schemars::JsonSchema;
 pub use tensorzero_types::{
@@ -409,10 +410,39 @@ impl AutopilotSideInfo {
     }
 }
 
+/// Tool result that can carry either a structured JSON value or a legacy serialized string.
+///
+/// New producers should use `AutopilotToolResult::typed`. Consumers should use
+/// `AutopilotToolResult::value()` which returns the structured value directly
+/// or parses the legacy string as a fallback.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutopilotToolResult {
-    pub result: String,
+#[serde(untagged)]
+pub enum AutopilotToolResult {
+    Typed {
+        result_value: JsonValue,
+    },
+    #[deprecated = "Use `AutopilotToolResult::typed` instead. This variant exists only for backwards compatibility with old serialized data."]
+    Legacy {
+        result: String,
+    },
+}
+
+impl AutopilotToolResult {
+    pub fn typed(value: JsonValue) -> Self {
+        Self::Typed {
+            result_value: value,
+        }
+    }
+
+    /// Get the structured value, parsing the legacy string as a fallback.
+    #[expect(deprecated)]
+    pub fn value(&self) -> Result<JsonValue, serde_json::Error> {
+        match self {
+            Self::Typed { result_value, .. } => Ok(result_value.clone()),
+            Self::Legacy { result } => serde_json::from_str(result),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -509,9 +539,7 @@ pub enum ToolOutcome {
     },
     Failure {
         /// Structured error data from the tool.
-        /// For autopilot tools, this is typically a serialized `AutopilotToolError`
-        /// with a `kind` field discriminator (e.g., "ClientError", "Validation").
-        error: serde_json::Value,
+        error: tensorzero_types::ToolFailure,
     },
     Missing,
     #[serde(other)]

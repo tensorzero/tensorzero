@@ -42,7 +42,6 @@ from tensorzero import (
     AlwaysExtraBodyDelete,
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
-    DynamicEvaluationRunResponse,
     FeedbackResponse,
     FileBase64,
     FileUrl,
@@ -64,6 +63,7 @@ from tensorzero import (
     ToolResult,
     VariantExtraBody,
     VariantExtraBodyDelete,
+    WorkflowEvaluationRunResponse,
 )
 from tensorzero.types import (
     ChatChunk,
@@ -2852,7 +2852,7 @@ def test_uuid7_import():
 
 def test_patch_sync_openai_client_sync_setup():
     client = OpenAI()
-    tensorzero.patch_openai_client(
+    tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         clickhouse_url=None,
@@ -2873,7 +2873,7 @@ def test_patch_sync_openai_client_sync_setup():
 @pytest.mark.asyncio
 async def test_patch_sync_openai_client_async_setup():
     client = OpenAI()
-    patch_fut = tensorzero.patch_openai_client(
+    patch_fut = tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         async_setup=True,
@@ -2895,7 +2895,7 @@ async def test_patch_sync_openai_client_async_setup():
 def test_patch_openai_client_no_config():
     client = OpenAI()
     with pytest.warns(UserWarning, match="No config file provided"):
-        tensorzero.patch_openai_client(client, async_setup=False)
+        tensorzero.patch_openai_client(client, async_setup=False)  # pyright: ignore[reportDeprecated]
     response = client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
         messages=[
@@ -2910,7 +2910,7 @@ def test_patch_openai_client_no_config():
 
 def test_patch_openai_client_with_config():
     client = OpenAI()
-    tensorzero.patch_openai_client(
+    tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         client,
         config_file="../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         async_setup=False,
@@ -2944,7 +2944,7 @@ def test_patch_openai_client_with_config():
 @pytest.mark.asyncio
 async def test_patch_async_openai_client_sync_setup():
     client = AsyncOpenAI()
-    tensorzero.patch_openai_client(
+    tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         clickhouse_url=None,
@@ -2965,7 +2965,7 @@ async def test_patch_async_openai_client_sync_setup():
 @pytest.mark.asyncio
 async def test_patch_async_openai_client_async_setup():
     client = AsyncOpenAI()
-    patch_fut = tensorzero.patch_openai_client(
+    patch_fut = tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         async_setup=True,
@@ -2987,7 +2987,7 @@ async def test_patch_async_openai_client_async_setup():
 @pytest.mark.asyncio
 async def test_patch_openai_missing_await():
     client = OpenAI()
-    patch_fut = tensorzero.patch_openai_client(
+    patch_fut = tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         clickhouse_url=None,
@@ -3016,7 +3016,7 @@ async def test_patch_openai_missing_await():
 @pytest.mark.asyncio
 async def test_patch_async_openai_missing_await():
     client = AsyncOpenAI()
-    patch_fut = tensorzero.patch_openai_client(
+    patch_fut = tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         clickhouse_url=None,
@@ -3043,13 +3043,13 @@ async def test_patch_async_openai_missing_await():
 
 def test_repeated_patch_openai_client_sync_setup():
     sync_client = OpenAI()
-    tensorzero.patch_openai_client(
+    tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         sync_client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         async_setup=False,
     )
     with pytest.raises(RuntimeError) as exc_info:
-        tensorzero.patch_openai_client(
+        tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
             sync_client,
             config_file="../../examples/quickstart/config/tensorzero.toml",
             async_setup=False,
@@ -3057,13 +3057,13 @@ def test_repeated_patch_openai_client_sync_setup():
     assert str(exc_info.value) == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
 
     async_client = AsyncOpenAI()
-    tensorzero.patch_openai_client(
+    tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         async_client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         async_setup=False,
     )
     with pytest.raises(RuntimeError) as exc_info:
-        tensorzero.patch_openai_client(
+        tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
             async_client,
             config_file="../../examples/quickstart/config/tensorzero.toml",
             async_setup=False,
@@ -3074,7 +3074,7 @@ def test_repeated_patch_openai_client_sync_setup():
 @pytest.mark.asyncio
 async def test_repeated_patch_openai_client_async_setup():
     sync_client = OpenAI()
-    patch_fut = tensorzero.patch_openai_client(
+    patch_fut = tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         sync_client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         async_setup=True,
@@ -3083,7 +3083,7 @@ async def test_repeated_patch_openai_client_async_setup():
     await patch_fut
 
     with pytest.raises(RuntimeError) as exc_info:
-        new_patch_fut = tensorzero.patch_openai_client(
+        new_patch_fut = tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
             sync_client,
             config_file="../../examples/quickstart/config/tensorzero.toml",
         )
@@ -3092,7 +3092,7 @@ async def test_repeated_patch_openai_client_async_setup():
     assert str(exc_info.value) == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
 
     async_client = AsyncOpenAI()
-    async_patch_fut = tensorzero.patch_openai_client(
+    async_patch_fut = tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         async_client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         async_setup=True,
@@ -3100,7 +3100,7 @@ async def test_repeated_patch_openai_client_async_setup():
     assert isinstance(async_patch_fut, t.Awaitable)
     await async_patch_fut
     with pytest.raises(RuntimeError) as exc_info:
-        new_async_patch_fut = tensorzero.patch_openai_client(
+        new_async_patch_fut = tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
             async_client,
             config_file="../../examples/quickstart/config/tensorzero.toml",
         )
@@ -3112,7 +3112,7 @@ async def test_repeated_patch_openai_client_async_setup():
 @pytest.mark.asyncio
 async def test_close_patch_openai_client():
     sync_client = OpenAI()
-    patch_fut = tensorzero.patch_openai_client(
+    patch_fut = tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         sync_client,
         config_file="../../examples/quickstart/config/tensorzero.toml",
         async_setup=True,
@@ -3277,18 +3277,18 @@ def test_content_block_text_init_validation():
     assert text.arguments == arguments
 
 
-def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
-    response = sync_client.dynamic_evaluation_run(
+def test_sync_workflow_evaluation_run(sync_client: TensorZeroGateway):
+    response = sync_client.workflow_evaluation_run(
         variants={"basic_test": "test2"},
         tags={"foo": "bar"},
     )
-    assert isinstance(response, DynamicEvaluationRunResponse)
+    assert isinstance(response, WorkflowEvaluationRunResponse)
     run_id = response.run_id
     assert isinstance(run_id, UUID)
     assert run_id is not None
 
     # Get the episode id
-    episode_id = sync_client.dynamic_evaluation_run_episode(
+    episode_id = sync_client.workflow_evaluation_run_episode(
         run_id=run_id,
         task_name="basic_test",
     ).episode_id
@@ -3310,20 +3310,20 @@ def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
 
 
 @pytest.mark.asyncio
-async def test_async_dynamic_evaluation_run(
+async def test_async_workflow_evaluation_run(
     async_client: AsyncTensorZeroGateway,
 ):
-    response = await async_client.dynamic_evaluation_run(
+    response = await async_client.workflow_evaluation_run(
         variants={"basic_test": "test2"},
         tags={"foo": "bar"},
     )
-    assert isinstance(response, DynamicEvaluationRunResponse)
+    assert isinstance(response, WorkflowEvaluationRunResponse)
     run_id = response.run_id
     assert isinstance(run_id, UUID)
     assert run_id is not None
 
     # Get the episode id
-    episode_response = await async_client.dynamic_evaluation_run_episode(
+    episode_response = await async_client.workflow_evaluation_run_episode(
         run_id=run_id,
         task_name="basic_test",
     )
