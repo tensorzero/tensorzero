@@ -329,7 +329,10 @@ impl AutopilotClient {
                 true
             }
             EventPayload::ToolCall(tool_call) if !available_tools.contains(&tool_call.name) => {
-                tracing::warn!("Ignoring autopilot tool call of unknown tool `{}`", tool_call.name);
+                tracing::warn!(
+                    "Ignoring autopilot tool call of unknown tool `{}`",
+                    tool_call.name
+                );
                 true
             }
             _ => false,
