@@ -3,12 +3,17 @@ import { approveAllToolCalls } from "~/utils/autopilot/approve-all";
 import { submitToolCallAuthorization } from "~/utils/autopilot/authorize";
 import { approvedStatus, rejectedStatus } from "~/utils/autopilot/types";
 
+interface ToolCallInfo {
+  name: string;
+  arguments: unknown;
+}
+
 interface UseManualAuthorizationResult {
   /** Approve a single tool call. Throws on error. */
-  approve: (eventId: string) => Promise<void>;
+  approve: (eventId: string, toolCall: ToolCallInfo) => Promise<void>;
 
   /** Reject a single tool call. Throws on error. */
-  reject: (eventId: string) => Promise<void>;
+  reject: (eventId: string, toolCall: ToolCallInfo) => Promise<void>;
 
   /** Approve all pending tool calls. Throws on error. */
   approveAll: (eventIds: string[], lastEventId: string) => Promise<void>;
@@ -39,12 +44,18 @@ export function useManualAuthorization(
   const processedRef = useRef<Set<string>>(new Set());
 
   const approve = useCallback(
-    async (eventId: string): Promise<void> => {
+    async (eventId: string, toolCall: ToolCallInfo): Promise<void> => {
       if (processedRef.current.has(eventId)) return;
       processedRef.current.add(eventId);
 
       try {
-        await submitToolCallAuthorization(sessionId, eventId, approvedStatus());
+        await submitToolCallAuthorization(
+          sessionId,
+          eventId,
+          approvedStatus(),
+          toolCall.name,
+          toolCall.arguments,
+        );
       } catch (err) {
         processedRef.current.delete(eventId);
         throw err;
@@ -54,7 +65,7 @@ export function useManualAuthorization(
   );
 
   const reject = useCallback(
-    async (eventId: string): Promise<void> => {
+    async (eventId: string, toolCall: ToolCallInfo): Promise<void> => {
       if (processedRef.current.has(eventId)) return;
       processedRef.current.add(eventId);
 
@@ -63,6 +74,8 @@ export function useManualAuthorization(
           sessionId,
           eventId,
           rejectedStatus("The user rejected the tool call."),
+          toolCall.name,
+          toolCall.arguments,
         );
       } catch (err) {
         processedRef.current.delete(eventId);

@@ -1,11 +1,14 @@
 import type { ActionFunctionArgs } from "react-router";
 import { getAutopilotClient } from "~/utils/tensorzero.server";
 import type { GatewayToolCallAuthorizationStatus } from "~/types/tensorzero";
+import type { JsonValue } from "~/types/tensorzero";
 import { logger } from "~/utils/logger";
 
 type AuthorizeRequest = {
   tool_call_event_id: string;
   status: GatewayToolCallAuthorizationStatus;
+  tool_call_name: string;
+  tool_call_arguments: JsonValue;
 };
 
 /**
@@ -63,6 +66,8 @@ export async function action({ params, request }: ActionFunctionArgs) {
         source: { type: "ui" },
         tool_call_event_id: body.tool_call_event_id,
         status: body.status,
+        tool_call_name: body.tool_call_name,
+        tool_call_arguments: body.tool_call_arguments,
       },
     });
 
