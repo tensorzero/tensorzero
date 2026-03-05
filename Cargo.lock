@@ -586,6 +586,7 @@ dependencies = [
  "tensorzero-ts-types",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
  "ts-rs",
  "uuid",
 ]

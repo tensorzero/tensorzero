@@ -151,7 +151,9 @@ pub struct Analysis {
 /// Builds uninitialized chat completion config with embedded templates using GEPAConfig settings.
 ///
 /// Returns configured UninitializedChatCompletionConfig with system and user templates.
-fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCompletionConfig {
+pub fn create_analyze_variant_config(
+    gepa_config: &GEPAConfig,
+) -> UninitializedChatCompletionConfig {
     let mut analyze_config = UninitializedChatCompletionConfig {
         model: gepa_config.analysis_model.clone().into(),
         weight: None,
