@@ -18,48 +18,14 @@ docker compose up
 
 3. Run the example:
 
-<details>
-<summary><b>Python</b></summary>
-
-a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
+Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
 uv sync
 ```
 
-b. Run the example:
+Run the example:
 
 ```bash
 uv run openai_sdk.py
 ```
-
-</details>
-
-<details>
-<summary><b>HTTP</b></summary>
-
-Run the following command to make an inference request to the TensorZero Gateway.
-
-```bash
-curl -X POST http://localhost:3000/openai/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tensorzero::function_name::fun_fact",
-    "messages": [
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "tensorzero::template",
-            "name": "fun_fact_topic",
-            "arguments": {
-              "topic": "artificial intelligence"
-            }
-          }
-        ]
-      }
-    ]
-  }'
-```
-
-</details>
