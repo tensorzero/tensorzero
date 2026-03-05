@@ -116,7 +116,8 @@ from typing import Any, Dict
 import toml
 from datasets import Dataset
 from tensorzero import (
-    FloatMetricFilter,
+    InferenceFilterFloatMetric,
+    ListInferencesRequest,
     TensorZeroGateway,
 )
 from tensorzero.util import uuid7
@@ -142,13 +143,13 @@ tensorzero_client = TensorZeroGateway.build_embedded(
 
 # %%
 comparison_operator = ">="
-metric_node = FloatMetricFilter(
+metric_node = InferenceFilterFloatMetric(
     metric_name=METRIC_NAME,
     value=FLOAT_METRIC_THRESHOLD,
     comparison_operator=comparison_operator,
 )
-# from tensorzero import BooleanMetricFilter
-# metric_node = BooleanMetricFilter(
+# from tensorzero import InferenceFilterBooleanMetric
+# metric_node = InferenceFilterBooleanMetric(
 #     metric_name=METRIC_NAME,
 #     value=True  # or False
 # )
@@ -159,13 +160,15 @@ metric_node
 # Query the inferences and feedback from ClickHouse.
 
 # %%
-stored_inferences = tensorzero_client.experimental_list_inferences(
-    function_name=FUNCTION_NAME,
-    variant_name=None,
-    output_source="inference",  # could also be "demonstration"
-    filters=metric_node,
-    limit=MAX_SAMPLES,
+response = tensorzero_client.list_inferences(
+    request=ListInferencesRequest(
+        function_name=FUNCTION_NAME,
+        output_source="inference",  # could also be "demonstration"
+        filters=metric_node,
+        limit=MAX_SAMPLES,
+    )
 )
+stored_inferences = response.inferences
 
 # %% [markdown]
 # Render the stored inferences

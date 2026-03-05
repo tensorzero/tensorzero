@@ -127,46 +127,6 @@ Detail = Literal["low", "high", "auto"]
 
 
 @dataclass(kw_only=True)
-class ProviderExtraBody:
-    """
-    DEPRECATED: Use `ModelProvider` instead.
-    """
-
-    model_provider_name: str
-    """
-    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-    """
-    pointer: str
-    """
-    A JSON Pointer to the field to update (e.g. `/enable_agi`)
-    """
-    value: Any
-    """
-    The value to set the field to
-    """
-
-
-@dataclass(kw_only=True)
-class ProviderExtraBodyDelete:
-    """
-    DEPRECATED: Use `ModelProviderDelete` instead.
-    """
-
-    delete: Literal[True] = True
-    """
-    Set to true to remove the field from the model provider request's body
-    """
-    model_provider_name: str
-    """
-    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-    """
-    pointer: str
-    """
-    A JSON Pointer to the field to update (e.g. `/enable_agi`)
-    """
-
-
-@dataclass(kw_only=True)
 class VariantExtraBody:
     pointer: str
     """
@@ -263,9 +223,7 @@ class AlwaysExtraBodyDelete:
 
 
 ExtraBody = (
-    ProviderExtraBody
-    | ProviderExtraBodyDelete
-    | VariantExtraBody
+    VariantExtraBody
     | VariantExtraBodyDelete
     | ModelProviderExtraBody
     | ModelProviderExtraBodyDelete
@@ -280,46 +238,6 @@ class ExtraBodyReplacementKindValue:
 
 
 ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKindValue
-
-
-@dataclass(kw_only=True)
-class ProviderExtraHeader:
-    """
-    DEPRECATED: Use `ModelProvider` instead.
-    """
-
-    model_provider_name: str
-    """
-    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-    """
-    name: str
-    """
-    The name of the HTTP header (e.g. `anthropic-beta`)
-    """
-    value: str
-    """
-    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
-    """
-
-
-@dataclass(kw_only=True)
-class ProviderExtraHeaderDelete:
-    """
-    DEPRECATED: Use `ModelProviderDelete` instead.
-    """
-
-    delete: Literal[True] = True
-    """
-    Set to true to remove the header from the model provider request
-    """
-    model_provider_name: str
-    """
-    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-    """
-    name: str
-    """
-    The name of the HTTP header (e.g. `anthropic-beta`)
-    """
 
 
 @dataclass(kw_only=True)
@@ -419,9 +337,7 @@ class AlwaysExtraHeaderDelete:
 
 
 ExtraHeader = (
-    ProviderExtraHeader
-    | ProviderExtraHeaderDelete
-    | VariantExtraHeader
+    VariantExtraHeader
     | VariantExtraHeaderDelete
     | ModelProviderExtraHeader
     | ModelProviderExtraHeaderDelete

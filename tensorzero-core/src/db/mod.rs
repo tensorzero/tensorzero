@@ -244,7 +244,6 @@ pub struct StoredDICLExample {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
-    pub namespace: String,
     pub input: String,
     pub output: String,
     pub embedding: Vec<f32>,
@@ -291,13 +290,10 @@ pub trait DICLQueries: Send + Sync {
     ) -> Result<bool, Error>;
 
     /// Delete DICL examples for a given function and variant.
-    ///
-    /// If namespace is provided, only deletes examples in that namespace.
     async fn delete_dicl_examples(
         &self,
         function_name: &str,
         variant_name: &str,
-        namespace: Option<&str>,
     ) -> Result<u64, Error>;
 }
 

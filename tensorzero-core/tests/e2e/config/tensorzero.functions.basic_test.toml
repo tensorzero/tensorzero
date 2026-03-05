@@ -2,9 +2,12 @@
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.basic_test.experimentation]
+type = "static"
+candidate_variants = { "test" = 1.0 }
+
 [functions.basic_test.variants.test]
 type = "chat_completion"
-weight = 1
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 temperature = 1.0
