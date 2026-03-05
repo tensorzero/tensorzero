@@ -313,6 +313,7 @@ model = "eval_test_model_{id}"
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
             tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
         })),
     };
 
@@ -399,6 +400,7 @@ json_mode = "on"
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
             tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
         })),
     };
 
@@ -484,6 +486,7 @@ json_mode = "on"
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
             tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
         })),
     };
 
@@ -637,6 +640,7 @@ json_mode = "on"
             precision_targets: HashMap::new(),
             include_datapoint_results: true,
             tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
         })),
     };
 

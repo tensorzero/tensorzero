@@ -463,8 +463,10 @@ pub struct GepaProgress {
     pub current_step: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GepaEvaluatorStats {
     pub mean: f64,
     pub stdev: f64,

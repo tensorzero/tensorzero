@@ -5,7 +5,10 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tensorzero_core::{
-    config::{Config, MetricConfig, UninitializedFunctionConfig, UninitializedToolConfig},
+    config::{
+        Config, MetricConfig, UninitializedConfig, UninitializedFunctionConfig,
+        UninitializedToolConfig,
+    },
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
     function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson},
@@ -552,6 +555,174 @@ fn extract_chat_completion_from_variant_info(
             None
         }
     }
+}
+
+/// Validates a GEPA config using an `UninitializedConfig` (from `get_config_snapshot`).
+///
+/// This is the durable-tool equivalent of [`validate_gepa_config`], which needs a fully
+/// initialized `Config`. Here we load only the pieces we need (one function, one evaluation,
+/// referenced tools) so the durable tool can validate without the full gateway config.
+pub fn validate_gepa_config_uninitialized(
+    config: &GEPAConfig,
+    uninitialized_config: &UninitializedConfig,
+) -> Result<FunctionContext, Error> {
+    // Load the target function
+    let uninitialized_fn = uninitialized_config
+        .functions
+        .get(&config.function_name)
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Function '{}' not found in configuration",
+                    config.function_name
+                ),
+            })
+        })?;
+
+    let function_config = Arc::new(
+        uninitialized_fn
+            .clone()
+            .load(&config.function_name, &uninitialized_config.metrics)?,
+    );
+
+    // Load the evaluation
+    let uninitialized_eval = uninitialized_config
+        .evaluations
+        .get(&config.evaluation_name)
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Evaluation '{}' not found in config",
+                    config.evaluation_name
+                ),
+            })
+        })?;
+
+    // Build a minimal functions map for evaluation loading
+    let mut functions_for_eval: HashMap<String, Arc<FunctionConfig>> = HashMap::new();
+    functions_for_eval.insert(config.function_name.clone(), function_config.clone());
+
+    let (eval_config, _extra_functions, _metrics) = uninitialized_eval
+        .clone()
+        .load(&functions_for_eval, &config.evaluation_name)?;
+
+    let evaluation_config = Arc::new(EvaluationConfig::Inference(eval_config));
+
+    // Validate initial_variants if specified
+    if let Some(initial_variants) = &config.initial_variants {
+        let function_variants = function_config.variants();
+        for variant_name in initial_variants {
+            if !function_variants.contains_key(variant_name) {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Variant '{}' specified in initial_variants not found in Function '{}'",
+                        variant_name, config.function_name
+                    ),
+                }));
+            }
+        }
+        if initial_variants.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`initial_variants` is empty for Function '{}'",
+                    config.function_name
+                ),
+            }));
+        }
+        // Validate that specified initial_variants are ChatCompletion
+        for variant_name in initial_variants {
+            if let Some(variant_info) = function_variants.get(variant_name)
+                && !matches!(variant_info.inner, VariantConfig::ChatCompletion(_))
+            {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Variant '{}' in Function '{}' is not a ChatCompletion variant. GEPA only supports ChatCompletion variants.",
+                        variant_name, config.function_name
+                    ),
+                }));
+            }
+        }
+    }
+
+    // Build filtered function config (same logic as validate_gepa_config)
+    let filtered_function_config: Arc<FunctionConfig> = {
+        let variants_to_include: Vec<&String> =
+            if let Some(initial_variants) = &config.initial_variants {
+                initial_variants.iter().collect()
+            } else {
+                function_config
+                    .variants()
+                    .iter()
+                    .filter(|(_, info)| matches!(info.inner, VariantConfig::ChatCompletion(_)))
+                    .map(|(name, _)| name)
+                    .collect()
+            };
+
+        let filtered_variants = function_config
+            .variants()
+            .iter()
+            .filter(|(name, _)| variants_to_include.contains(name))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        match &*function_config {
+            FunctionConfig::Chat(chat_config) => {
+                Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+                    variants: filtered_variants,
+                    schemas: Default::default(),
+                    tools: chat_config.tools.clone(),
+                    tool_choice: chat_config.tool_choice.clone(),
+                    parallel_tool_calls: chat_config.parallel_tool_calls,
+                    description: chat_config.description.clone(),
+                    all_explicit_templates_names: Default::default(),
+                    experimentation: Default::default(),
+                }))
+            }
+            FunctionConfig::Json(json_config) => {
+                Arc::new(FunctionConfig::Json(FunctionConfigJson {
+                    variants: filtered_variants,
+                    schemas: Default::default(),
+                    output_schema: json_config.output_schema.clone(),
+                    json_mode_tool_call_config: json_config.json_mode_tool_call_config.clone(),
+                    description: json_config.description.clone(),
+                    all_explicit_template_names: Default::default(),
+                    experimentation: Default::default(),
+                }))
+            }
+        }
+    };
+
+    // Load static tools
+    let function_tool_names: Vec<String> = match &*function_config {
+        FunctionConfig::Chat(chat_config) => chat_config.tools.clone(),
+        FunctionConfig::Json(_) => Vec::new(),
+    };
+
+    let static_tools = if function_tool_names.is_empty() {
+        None
+    } else {
+        let mut tools = HashMap::new();
+        for tool_name in &function_tool_names {
+            let uninitialized_tool =
+                uninitialized_config.tools.get(tool_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Tool '{}' referenced by Function '{}' not found in configuration",
+                            tool_name, config.function_name
+                        ),
+                    })
+                })?;
+            let loaded = uninitialized_tool.clone().load(tool_name.clone())?;
+            tools.insert(tool_name.clone(), Arc::new(loaded));
+        }
+        Some(tools)
+    };
+
+    Ok(FunctionContext {
+        function_config: filtered_function_config,
+        static_tools,
+        evaluation_config,
+    })
 }
 
 #[cfg(test)]

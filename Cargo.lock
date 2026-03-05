@@ -586,6 +586,7 @@ dependencies = [
  "tensorzero-ts-types",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
  "ts-rs",
  "uuid",
 ]
@@ -7089,6 +7090,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "chrono",
+ "durable-tools-spawn",
  "evaluations",
  "futures",
  "http 1.4.0",
@@ -7098,6 +7100,7 @@ dependencies = [
  "paste",
  "rand 0.10.0",
  "reqwest 0.12.28",
+ "schemars 1.2.1",
  "secrecy",
  "serde",
  "serde_json",
