@@ -258,6 +258,7 @@ impl ConfigQueries for DelegatingDatabaseConnection {
     }
 
     async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        #[expect(clippy::disallowed_methods)]
         self.get_database().write_config_snapshot(snapshot).await
     }
 }

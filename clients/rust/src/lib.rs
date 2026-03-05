@@ -2,7 +2,6 @@
 
 use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::config::snapshot::ConfigSnapshot;
-use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::endpoints::stored_inferences::render_samples;
@@ -1336,8 +1335,7 @@ impl ClientExt for Client {
                     gateway
                         .handle
                         .app_state
-                        .get_delegating_database()
-                        .write_config_snapshot(&snapshot)
+                        .validate_and_write_config_snapshot(&snapshot)
                         .await
                         .map_err(err_to_http)?;
 

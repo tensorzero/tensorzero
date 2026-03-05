@@ -290,8 +290,7 @@ impl TensorZeroClient for EmbeddedClient {
         let hash = snapshot.hash.to_string();
 
         self.app_state
-            .get_delegating_database()
-            .write_config_snapshot(&snapshot)
+            .validate_and_write_config_snapshot(&snapshot)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })

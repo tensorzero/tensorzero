@@ -251,6 +251,7 @@ impl ConfigQueries for MockClickHouseConnectionInfo {
     }
 
     async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        #[expect(clippy::disallowed_methods)]
         self.config_queries.write_config_snapshot(snapshot).await
     }
 }

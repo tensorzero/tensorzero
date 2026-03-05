@@ -33,9 +33,9 @@ services:
   clickhouse:
     image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-lts}
     environment:
-      CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
     volumes:
       # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
       # an empty dir will get mounted in the container
@@ -59,9 +59,9 @@ services:
       - "8000:9000" # API port
       - "9001:9001" # Console port
     environment:
-      MINIO_ROOT_USER: tensorzero-root
-      MINIO_ROOT_PASSWORD: tensorzero-root
       MINIO_DEFAULT_BUCKETS: tensorzero-e2e-tests
+      MINIO_ROOT_PASSWORD: tensorzero-root
+      MINIO_ROOT_USER: tensorzero-root
     healthcheck:
       test: "mc ls local/tensorzero-e2e-tests || exit 1"
       start_period: 30s
@@ -74,8 +74,8 @@ services:
     ports:
       - "11211:11211"
     environment:
-      - MEMCACHED_MAX_MEMORY=64m # Set the maximum memory usage
-      - MEMCACHED_THREADS=4 # Number of threads to use
+      MEMCACHED_MAX_MEMORY: 64m # Set the maximum memory usage
+      MEMCACHED_THREADS: 4 # Number of threads to use
 
   valkey:
     image: valkey/valkey:8
@@ -116,8 +116,8 @@ services:
     image: tensorzero/postgres-dev:14-trixie-slim
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
-      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
     command: ["postgres", "-c", "cron.database_name=tensorzero-e2e-tests"]
     ports:
       - "5432:5432"
