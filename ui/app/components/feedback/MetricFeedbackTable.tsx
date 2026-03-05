@@ -26,10 +26,6 @@ import {
   filterStringTags,
 } from "~/components/feedback/TagsPopover";
 
-// ---------------------------------------------------------------------------
-// Headers (shared with skeleton)
-// ---------------------------------------------------------------------------
-
 export function MetricFeedbackTableHeaders() {
   return (
     <TableHeader>
@@ -42,10 +38,6 @@ export function MetricFeedbackTableHeaders() {
     </TableHeader>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Table
-// ---------------------------------------------------------------------------
 
 interface MetricFeedbackTableProps {
   metrics: FeedbackRow[];
@@ -81,10 +73,6 @@ export function MetricFeedbackTable({ metrics }: MetricFeedbackTableProps) {
     </Table>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Row
-// ---------------------------------------------------------------------------
 
 interface MetricRowItemProps {
   item: FeedbackRow;
@@ -138,10 +126,6 @@ function MetricRowItem({
     </TableRow>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Tooltip
-// ---------------------------------------------------------------------------
 
 interface MetricTooltipContentProps {
   id: string;

@@ -25,10 +25,6 @@ export function filterStringTags(
   );
 }
 
-// ---------------------------------------------------------------------------
-// Tag cell (shows tooltip only when display text differs from full text)
-// ---------------------------------------------------------------------------
-
 interface TagCellProps {
   displayText: string;
   fullText: string;
@@ -61,10 +57,6 @@ function TagCell({
     </Tooltip>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Tags popover (hover-triggered)
-// ---------------------------------------------------------------------------
 
 interface TagsPopoverProps {
   tags: [string, string][];

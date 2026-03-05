@@ -11,10 +11,6 @@ import {
   DemonstrationCard,
 } from "~/components/feedback/FeedbackCard";
 
-// ---------------------------------------------------------------------------
-// Filtering utility
-// ---------------------------------------------------------------------------
-
 export function filterToLatestFeedback(
   feedback: FeedbackRow[],
   feedbackBounds?: FeedbackBounds,
@@ -33,10 +29,6 @@ export function filterToLatestFeedback(
     return latestFeedbackByMetric[item.metric_name] === item.id;
   });
 }
-
-// ---------------------------------------------------------------------------
-// Skeleton
-// ---------------------------------------------------------------------------
 
 export function FeedbackTableSkeleton({
   pagination,
@@ -70,10 +62,6 @@ export function FeedbackTableSkeleton({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Orchestrator
-// ---------------------------------------------------------------------------
 
 interface FeedbackTableProps {
   feedback: FeedbackRow[];

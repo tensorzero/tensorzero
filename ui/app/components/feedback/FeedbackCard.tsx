@@ -15,10 +15,6 @@ function NoData() {
   return <p className="text-fg-muted text-sm">No data</p>;
 }
 
-// ---------------------------------------------------------------------------
-// Card shell (shared by comments and demonstrations)
-// ---------------------------------------------------------------------------
-
 interface FeedbackCardProps {
   label: string;
   children: React.ReactNode;
@@ -60,10 +56,6 @@ function FeedbackCard({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Comment card
-// ---------------------------------------------------------------------------
-
 interface CommentCardProps {
   comment: Extract<FeedbackRow, { type: "comment" }> | undefined;
 }
@@ -86,10 +78,6 @@ export function CommentCard({ comment }: CommentCardProps) {
     </FeedbackCard>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Demonstration card
-// ---------------------------------------------------------------------------
 
 interface DemonstrationCardProps {
   demonstration: Extract<FeedbackRow, { type: "demonstration" }> | undefined;
@@ -117,10 +105,6 @@ export function DemonstrationCard({ demonstration }: DemonstrationCardProps) {
     </FeedbackCard>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Demonstration preview
-// ---------------------------------------------------------------------------
 
 function DemonstrationPreview({ value }: { value: string }) {
   if (!value) {
