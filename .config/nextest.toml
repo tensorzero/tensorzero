@@ -71,6 +71,14 @@ default-filter = 'package(evaluations)'
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 slow-timeout = { period = "30s", terminate-after = 2 }
 
+# Run only cache e2e tests. Used in the inference-cache-tests CI job with a matrix
+# of cache backends (clickhouse, valkey, redis).
+[profile.cache]
+default-filter = 'binary(e2e) and test(cache::)'
+retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
+slow-timeout = { period = "30s", terminate-after = 2 }
+junit.path = "junit.xml"
+
 [profile.optimization]
 default-filter = 'binary(optimization-live)'
 
