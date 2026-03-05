@@ -85,35 +85,13 @@ You can configure multiple templates for a variant.
 
 <Tab title="Python">
 
-Use your template during inference by sending a content block with the template name and arguments.
-
-```python
-result = t0.inference(
-    function_name="fun_fact",
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "template",
-                        "name": "fun_fact_topic",
-                        "arguments": {"topic": "artificial intelligence"},
-                    }
-                ],
-            }
-        ],
-    },
-)
-```
-
-</Tab>
-
-<Tab title="Python (OpenAI SDK)">
-
 Use your template during inference by sending a `tensorzero::template` content block with the template name and arguments.
 
 ```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
+
 result = client.chat.completions.create(
     model="tensorzero::function_name::fun_fact",
     messages=[
