@@ -17,7 +17,9 @@ use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 /// Response containing a config snapshot.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetConfigResponse {
     /// The config in a form suitable for serialization.
     pub config: UninitializedConfig,

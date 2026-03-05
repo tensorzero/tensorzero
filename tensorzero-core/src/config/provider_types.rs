@@ -1,7 +1,9 @@
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use serde::{Deserialize, Serialize};
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct ProviderTypesConfig {
     #[serde(default)]
@@ -42,13 +44,17 @@ pub struct ProviderTypesConfig {
 
 // Anthropic
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AnthropicProviderTypeConfig {
     #[serde(default)]
     pub defaults: AnthropicDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AnthropicDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -65,13 +71,17 @@ impl Default for AnthropicDefaults {
 
 // Azure
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AzureProviderTypeConfig {
     #[serde(default)]
     pub defaults: AzureDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AzureDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -88,13 +98,17 @@ impl Default for AzureDefaults {
 
 // DeepSeek
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DeepSeekProviderTypeConfig {
     #[serde(default)]
     pub defaults: DeepSeekDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DeepSeekDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -111,7 +125,9 @@ impl Default for DeepSeekDefaults {
 
 // Fireworks
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct FireworksProviderTypeConfig {
     #[serde(default)]
     pub sft: Option<FireworksSFTConfig>,
@@ -119,14 +135,18 @@ pub struct FireworksProviderTypeConfig {
     pub defaults: FireworksDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub struct FireworksSFTConfig {
     pub account_id: String,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FireworksDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -143,7 +163,9 @@ impl Default for FireworksDefaults {
 
 // GCP Vertex Gemini
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub struct GCPVertexGeminiProviderTypeConfig {
@@ -157,14 +179,18 @@ pub struct GCPVertexGeminiProviderTypeConfig {
 
 // GCP Vertex Anthropic
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct GCPVertexAnthropicProviderTypeConfig {
     #[serde(default)]
     pub defaults: GCPDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "storage_type", rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum GCPBatchConfigType {
@@ -174,7 +200,9 @@ pub enum GCPBatchConfigType {
     CloudStorage(GCPBatchConfigCloudStorage),
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub struct GCPBatchConfigCloudStorage {
@@ -182,7 +210,9 @@ pub struct GCPBatchConfigCloudStorage {
     pub output_uri_prefix: String,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub struct GCPSFTConfig {
@@ -197,7 +227,9 @@ pub struct GCPSFTConfig {
     pub kms_key_name: Option<String>,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GCPDefaults {
     pub credential_location: CredentialLocationWithFallback,
 }
@@ -214,13 +246,17 @@ impl Default for GCPDefaults {
 
 // Google AI Studio
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GoogleAIStudioGeminiProviderTypeConfig {
     #[serde(default)]
     pub defaults: GoogleAIStudioGeminiDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GoogleAIStudioGeminiDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -237,13 +273,17 @@ impl Default for GoogleAIStudioGeminiDefaults {
 
 // Groq
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GroqProviderTypeConfig {
     #[serde(default)]
     pub defaults: GroqDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GroqDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -260,13 +300,17 @@ impl Default for GroqDefaults {
 
 // Hyperbolic
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct HyperbolicProviderTypeConfig {
     #[serde(default)]
     pub defaults: HyperbolicDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct HyperbolicDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -283,13 +327,17 @@ impl Default for HyperbolicDefaults {
 
 // Mistral
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MistralProviderTypeConfig {
     #[serde(default)]
     pub defaults: MistralDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MistralDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -306,13 +354,17 @@ impl Default for MistralDefaults {
 
 // OpenAI
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OpenAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: OpenAIDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OpenAIDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -329,13 +381,17 @@ impl Default for OpenAIDefaults {
 
 // Openrouter
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OpenRouterProviderTypeConfig {
     #[serde(default)]
     pub defaults: OpenRouterDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OpenRouterDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -352,13 +408,17 @@ impl Default for OpenRouterDefaults {
 
 // SGLang
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct SGLangProviderTypeConfig {
     #[serde(default)]
     pub defaults: SGLangDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct SGLangDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -375,13 +435,17 @@ impl Default for SGLangDefaults {
 
 // TGI
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TGIProviderTypeConfig {
     #[serde(default)]
     pub defaults: TGIDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TGIDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -398,7 +462,9 @@ impl Default for TGIDefaults {
 
 // Together
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct TogetherProviderTypeConfig {
     #[serde(default)]
     pub sft: Option<TogetherSFTConfig>,
@@ -406,7 +472,9 @@ pub struct TogetherProviderTypeConfig {
     pub defaults: TogetherDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub struct TogetherSFTConfig {
@@ -420,7 +488,9 @@ pub struct TogetherSFTConfig {
     pub hf_api_token: Option<String>,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TogetherDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -437,13 +507,17 @@ impl Default for TogetherDefaults {
 
 // vLLM
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VLLMProviderTypeConfig {
     #[serde(default)]
     pub defaults: VLLMDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VLLMDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }
@@ -460,13 +534,17 @@ impl Default for VLLMDefaults {
 
 // xAI
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct XAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: XAIDefaults,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct XAIDefaults {
     pub api_key_location: CredentialLocationWithFallback,
 }

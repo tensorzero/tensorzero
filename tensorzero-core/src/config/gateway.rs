@@ -16,7 +16,9 @@ use crate::{
 
 use super::ObjectStoreInfo;
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
     #[serde(default = "default_gateway_auth_cache_enabled")]
@@ -42,7 +44,9 @@ fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     pub enabled: bool,
@@ -54,7 +58,9 @@ fn default_tensorzero_inference_latency_overhead_seconds_buckets() -> Vec<f64> {
     vec![0.001, 0.01, 0.1]
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct MetricsConfig {
     /// Histogram buckets for the `tensorzero_inference_latency_overhead_seconds` metric.
@@ -111,7 +117,9 @@ impl MetricsConfig {
 }
 
 /// Which backend to use for model inference caching.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum InferenceCacheBackend {
     /// Automatically select based on primary datastore:
@@ -123,7 +131,9 @@ pub enum InferenceCacheBackend {
     Valkey,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct ModelInferenceCacheConfig {
     /// Whether caching is enabled.
@@ -142,7 +152,9 @@ pub struct ModelInferenceCacheConfig {
 // By default, cache entries in Valkey are retained for 24 hours.
 const DEFAULT_VALKEY_CACHE_TTL_S: u64 = 86400; // 24 hours
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct ValkeyModelInferenceCacheConfig {
     #[serde(default = "default_valkey_cache_ttl_s")]
@@ -161,10 +173,13 @@ impl Default for ValkeyModelInferenceCacheConfig {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<String>"))]
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
     pub observability: ObservabilityConfig,
