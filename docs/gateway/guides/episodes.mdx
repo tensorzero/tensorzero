@@ -17,11 +17,11 @@ An episode will include one or more functions, and sometimes multiple calls to t
 Your application can run arbitrary actions (e.g. interact with users, retrieve documents, actuate robotics) between function calls within an episode.
 Though these are outside the scope of TensorZero, it is fine (and encouraged) to build your LLM systems this way.
 
-The gateway accepts an optional `episode_id` field in inference requests.
-When you make the first inference request, you don't have to provide an `episode_id`.
+The gateway accepts an optional `tensorzero::episode_id` field in inference requests (passed via `extra_body` when using the OpenAI SDK).
+When you make the first inference request, you don't have to provide an episode ID.
 The gateway will create a new episode for you and return the `episode_id` in the response.
 When you make the second inference request, you must provide the `episode_id` you received in the first response.
-The gateway will use the `episode_id` to associate the two inference requests together.
+The gateway will use the episode ID to associate the two inference requests together.
 
 <Tip>
 
@@ -88,7 +88,7 @@ This time, we'll create a multi-step workflow that first generates a haiku and t
 We won't provide an `episode_id` in the first inference request, so the gateway will generate a new one for us.
 We'll then use that value in our second inference request.
 
-```python title="run.py"
+```python title="main.py"
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")

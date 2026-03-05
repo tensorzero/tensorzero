@@ -254,12 +254,12 @@ See "Advanced Usage" below for information on how to customize the tool calling 
 
 ### Restricting allowed tools at inference time
 
-You can restrict the set of tools that can be called at inference time by using the `allowed_tools` parameter.
+You can restrict the set of tools that can be called at inference time by using the `allowed_tools` variant of the `tool_choice` parameter.
 
 The names should be the configuration keys (e.g. `foo` from `[tools.foo]`), not the display names shown to the LLM (e.g. `bar` from `tools.foo.name = "bar"`).
 
 For example, suppose your TensorZero function has access to several tools, but you only want to allow the `get_temperature` tool to be called during a particular inference.
-You can achieve this by setting `allowed_tools=["get_temperature"]` in your inference request.
+You can achieve this by setting `tool_choice` to `{"type": "allowed_tools", "allowed_tools": {"tools": ["get_temperature"], "mode": "auto"}}` in your inference request.
 
 ### Defining tools dynamically at inference time
 
@@ -276,12 +276,12 @@ This field accepts a list of objects following the standard OpenAI tool format.
 You can control how and when tools are called by using the `tool_choice` parameter.
 The supported tool choice strategies are:
 
-- `none`: The function should not use any tools.
-- `auto`: The model decides whether or not to use a tool. If it decides to use a tool, it also decides which tools to use.
-- `required`: The model should use a tool. If multiple tools are available, the model decides which tool to use.
-- `{ specific = "tool_name" }`: The model should use a specific tool. The tool must be defined in the `tools` section of the configuration file or provided in `tools`.
+- `"none"`: The function should not use any tools.
+- `"auto"`: The model decides whether or not to use a tool. If it decides to use a tool, it also decides which tools to use.
+- `"required"`: The model should use a tool. If multiple tools are available, the model decides which tool to use.
+- `{"type": "function", "function": {"name": "tool_name"}}`: The model should use a specific tool. The tool must be defined in the `tools` section of the configuration file or provided in `tools`.
 
-The `tool_choice` parameter can be set either in your configuration file or directly in your inference request.
+The `tool_choice` parameter can be set either in your configuration file (using TOML syntax, e.g. `{ specific = "tool_name" }`) or directly in your inference request (using the JSON format shown above).
 
 ### Calling multiple tools in parallel
 
