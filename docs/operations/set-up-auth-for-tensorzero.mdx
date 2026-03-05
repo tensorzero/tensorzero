@@ -211,13 +211,6 @@ The client will automatically read the `TENSORZERO_API_KEY` environment variable
 
 </Tip>
 
-<Note>
-
-Authentication is not supported in the embedded (in-memory) gateway in Python.
-Please use the HTTP client with a standalone gateway to make authenticated requests.
-
-</Note>
-
 </Tab>
 
 <Tab title="Python (OpenAI SDK)">
@@ -246,13 +239,6 @@ response = client.chat.completions.create(
 
 print(response)
 ```
-
-<Note>
-
-Authentication is not supported in the embedded (in-memory) gateway in Python.
-Please use the HTTP client with a standalone gateway to make authenticated requests.
-
-</Note>
 
 </Tab>
 
