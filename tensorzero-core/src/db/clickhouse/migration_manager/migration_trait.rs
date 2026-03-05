@@ -34,7 +34,11 @@ pub trait Migration {
             })?;
         Ok(id)
     }
+    /// Checks whether the prerequisites for this migration are met (e.g. required tables exist).
+    /// Returns `Ok(())` if the migration can proceed, or an error describing what's missing.
     async fn can_apply(&self) -> Result<(), Error>;
+    /// Checks whether this migration still needs to run. Return `false` to skip it
+    /// (e.g. the table already exists, or the migration manager has already recorded success).
     async fn should_apply(&self) -> Result<bool, Error>;
     async fn apply(&self, clean_start: bool) -> Result<(), Error>;
     /// ClickHouse queries that can be used to rollback the migration.
