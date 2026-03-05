@@ -41,26 +41,24 @@ uv run openai_sdk.py
 Run the following command to make an inference request to the TensorZero Gateway.
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "fun_fact",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "template",
-              "name": "fun_fact_topic",
-              "arguments": {
-                "topic": "artificial intelligence"
-              }
+    "model": "tensorzero::function_name::fun_fact",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tensorzero::template",
+            "name": "fun_fact_topic",
+            "arguments": {
+              "topic": "artificial intelligence"
             }
-          ]
-        }
-      ]
-    }
+          }
+        ]
+      }
+    ]
   }'
 ```
 

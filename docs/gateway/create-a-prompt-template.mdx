@@ -113,29 +113,27 @@ result = client.chat.completions.create(
 
 <Tab title="HTTP">
 
-Use your template during inference by sending a `template` content block with the template name and arguments.
+Use your template during inference by sending a `tensorzero::template` content block with the template name and arguments.
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "fun_fact",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "template",
-              "name": "fun_fact_topic",
-              "arguments": {
-                "topic": "artificial intelligence"
-              }
+    "model": "tensorzero::function_name::fun_fact",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tensorzero::template",
+            "name": "fun_fact_topic",
+            "arguments": {
+              "topic": "artificial intelligence"
             }
-          ]
-        }
-      ]
-    }
+          }
+        ]
+      }
+    ]
   }'
 ```
 
