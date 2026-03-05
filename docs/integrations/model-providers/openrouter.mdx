@@ -101,7 +101,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:?Environment variable OPENROUTER_API_KEY must be set.}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Environment variable OPENROUTER_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:

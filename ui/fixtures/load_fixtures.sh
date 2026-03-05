@@ -140,9 +140,13 @@ metrics_by_run AS (
 run_function_types AS (
     SELECT
         ei.run_id AS run_id,
-        if(count(ci.id) > 0, 'chat', 'json') AS function_type
+        if(
+            countIf(ji.id != toUUID('00000000-0000-0000-0000-000000000000')) > 0,
+            'json',
+            'chat'
+        ) AS function_type
     FROM evaluation_inferences ei
-    LEFT JOIN ChatInference ci ON ci.id = ei.inference_id
+    LEFT JOIN JsonInference ji ON ji.id = ei.inference_id
     GROUP BY ei.run_id
 )
 SELECT

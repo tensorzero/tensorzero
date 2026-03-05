@@ -41,6 +41,7 @@ impl UnwrittenConfig {
     /// The hash is used to track which config version was used for each inference request.
     pub async fn into_config(self, db: &impl ConfigQueries) -> Result<Config, Error> {
         let UnwrittenConfig { config, snapshot } = self;
+        #[expect(clippy::disallowed_methods)]
         db.write_config_snapshot(&snapshot).await?;
         Ok(config)
     }
