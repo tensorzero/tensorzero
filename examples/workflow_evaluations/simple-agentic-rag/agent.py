@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+)
 from tools import load_wikipedia_page, parse_tool_arguments, search_wikipedia
 
 # ## Agentic RAG
@@ -76,6 +79,7 @@ async def ask_question(
 
         # Process each tool call
         for tool_call in tool_calls:
+            assert isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
             name = tool_call.function.name
             arguments = parse_tool_arguments(tool_call.function.arguments)
 
