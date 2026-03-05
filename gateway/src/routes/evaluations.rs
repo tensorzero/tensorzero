@@ -21,9 +21,7 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::db::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
-use tensorzero_core::evaluations::{
-    EvaluationConfig, EvaluationFunctionConfig, EvaluatorConfig, InferenceEvaluationConfig,
-};
+use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig, EvaluatorConfig};
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 // =============================================================================
@@ -289,8 +287,9 @@ fn create_evaluation_stream(
 
 /// Resolved evaluation configuration from either the old or new request path.
 struct ResolvedEvaluationConfig {
-    evaluation_config: EvaluationConfig,
+    function_name: String,
     function_config: EvaluationFunctionConfig,
+    evaluators: HashMap<String, EvaluatorConfig>,
     /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
     evaluation_name: Option<String>,
 }
@@ -305,11 +304,15 @@ fn resolve_evaluation_config(
             evaluation_config,
             evaluation_name,
             function_config,
-        } => Ok(ResolvedEvaluationConfig {
-            evaluation_config: evaluation_config.clone(),
-            function_config: function_config.clone(),
-            evaluation_name: Some(evaluation_name.clone()),
-        }),
+        } => {
+            let EvaluationConfig::Inference(ref inference_config) = *evaluation_config;
+            Ok(ResolvedEvaluationConfig {
+                function_name: inference_config.function_name.clone(),
+                function_config: function_config.clone(),
+                evaluators: inference_config.evaluators.clone(),
+                evaluation_name: Some(evaluation_name.clone()),
+            })
+        }
         EvaluationIdentifier::Evaluators {
             function_name,
             evaluator_names,
@@ -325,14 +328,10 @@ fn resolve_evaluation_config(
                         })
                     })?;
             let evaluators = resolve_evaluators(evaluator_names, app_state)?;
-            let inference_eval_config = InferenceEvaluationConfig {
-                evaluators,
-                function_name: function_name.clone(),
-                description: None,
-            };
             Ok(ResolvedEvaluationConfig {
-                evaluation_config: EvaluationConfig::Inference(inference_eval_config),
+                function_name: function_name.clone(),
                 function_config: EvaluationFunctionConfig::from(function_config.as_ref()),
+                evaluators,
                 evaluation_name: None,
             })
         }
@@ -438,8 +437,9 @@ pub async fn run_evaluation_handler(
 
     // Build the params for run_evaluation_with_app_state
     let params = RunEvaluationWithAppStateParams {
-        evaluation_config: resolved.evaluation_config,
+        function_name: resolved.function_name,
         function_config: resolved.function_config,
+        evaluators: resolved.evaluators,
         evaluation_name: resolved.evaluation_name,
         dataset_name: request.dataset_name,
         datapoint_ids: request.datapoint_ids,

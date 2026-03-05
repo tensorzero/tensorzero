@@ -4,14 +4,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use evaluations::{
-    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable, EvaluationVariant,
-    run_evaluation_core_streaming, stats::EvaluationUpdate,
+    EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationVariant, run_evaluation_core_streaming,
+    stats::EvaluationUpdate,
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::datasets::v1::{list_datapoints, types::ListDatapointsRequest};
-use tensorzero_core::evaluations::{EvaluationConfig, InferenceEvaluationConfig};
 use tokio::time::sleep;
 use uuid::Uuid;
 
@@ -57,7 +56,7 @@ async fn test_top_level_exact_match_evaluator() {
     assert_eq!(dataset.len(), 2, "Should have loaded at least 2 datapoints");
     let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp| dp.id()).collect();
 
-    // Build evaluation config using the top-level evaluator (as the gateway's Named path does)
+    // Build evaluators using the top-level evaluator (as the gateway's Named path does)
     let top_level_evaluator = config
         .evaluators
         .get("exact_match")
@@ -66,23 +65,12 @@ async fn test_top_level_exact_match_evaluator() {
     let mut evaluators = HashMap::new();
     evaluators.insert("exact_match".to_string(), (**top_level_evaluator).clone());
 
-    let inference_eval_config = InferenceEvaluationConfig {
-        evaluators,
-        function_name: "write_haiku".to_string(),
-        description: None,
-    };
-    let evaluation_config = Arc::new(EvaluationConfig::Inference(inference_eval_config));
-
-    // Build function config table
+    // Look up function config
     let write_haiku_func = config
         .functions
         .get("write_haiku")
         .expect("`write_haiku` function should exist");
-    let mut function_configs = EvaluationFunctionConfigTable::new();
-    function_configs.insert(
-        "write_haiku".to_string(),
-        EvaluationFunctionConfig::from(write_haiku_func.as_ref()),
-    );
+    let function_config = EvaluationFunctionConfig::from(write_haiku_func.as_ref());
 
     // Build the inference executor using embedded gateway
     let tensorzero_client = get_tensorzero_client().await;
@@ -93,8 +81,9 @@ async fn test_top_level_exact_match_evaluator() {
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(db.clone()),
-        evaluation_config,
-        function_configs: Arc::new(function_configs),
+        function_name: "write_haiku".to_string(),
+        function_config,
+        evaluators,
         evaluation_name: None, // Top-level evaluator: no evaluation name
         evaluation_run_id,
         dataset_name: None,

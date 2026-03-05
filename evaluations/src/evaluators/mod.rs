@@ -7,7 +7,7 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{FeedbackParams, InferenceResponse, Input};
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
-use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig, get_evaluator_metric_name};
+use tensorzero_core::evaluations::{EvaluatorConfig, get_evaluator_metric_name};
 
 mod exact_match;
 use exact_match::run_exact_match_evaluator;
@@ -30,9 +30,8 @@ pub struct EvaluateInferenceParams {
     pub inference_response: Arc<InferenceResponse>,
     pub datapoint: Arc<Datapoint>,
     pub input: Arc<Input>,
-    /// Config for the evaluation.
-    // TODO(#6676): support running evaluations with a list of evaluators instead of a named evaluation.
-    pub evaluation_config: Arc<EvaluationConfig>,
+    /// Evaluator configurations to run.
+    pub evaluators: HashMap<String, EvaluatorConfig>,
     /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
     pub evaluation_name: Option<Arc<String>>,
     pub clients: Arc<Clients>,
@@ -66,7 +65,7 @@ pub(crate) async fn evaluate_inference(
         inference_response,
         datapoint,
         input,
-        evaluation_config,
+        evaluators,
         evaluation_name,
         clients,
         evaluation_run_id,
@@ -74,19 +73,15 @@ pub(crate) async fn evaluate_inference(
         external_tags,
         send_feedback,
     } = params;
-    let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
 
     // Filter evaluators based on cancellation tokens
-    let evaluators_to_run = inference_evaluation_config
-        .evaluators
-        .keys()
-        .filter(|name| {
-            // Only run evaluators whose tokens are not in the map or not cancelled
-            // Empty map means no adaptive stopping, so all evaluators run
-            cancellation_tokens
-                .get(*name)
-                .is_none_or(|token| !token.is_cancelled())
-        });
+    let evaluators_to_run = evaluators.keys().filter(|name| {
+        // Only run evaluators whose tokens are not in the map or not cancelled
+        // Empty map means no adaptive stopping, so all evaluators run
+        cancellation_tokens
+            .get(*name)
+            .is_none_or(|token| !token.is_cancelled())
+    });
 
     info!(
         evaluators = ?evaluators_to_run,
@@ -97,7 +92,7 @@ pub(crate) async fn evaluate_inference(
         FuturesUnordered::from_iter(evaluators_to_run.into_iter().map(
             |evaluator_name| async {
                 let inference_response = inference_response.clone();
-                let evaluation_config = evaluation_config.clone();
+                let evaluators = evaluators.clone();
                 let evaluator_name = evaluator_name.clone();
                 debug!(evaluator_name = %evaluator_name, "Starting evaluator");
                 let datapoint = datapoint.clone();
@@ -109,7 +104,7 @@ pub(crate) async fn evaluate_inference(
                 let external_tags_for_feedback = external_tags.clone();
 
                 let result = run_evaluator(RunEvaluatorParams {
-                    evaluation_config: &evaluation_config,
+                    evaluators: &evaluators,
                     evaluator_name: evaluator_name_clone,
                     inference_response: &inference_response,
                     clients: &clients,
@@ -212,7 +207,7 @@ pub(crate) async fn evaluate_inference(
 }
 
 struct RunEvaluatorParams<'a> {
-    evaluation_config: &'a EvaluationConfig,
+    evaluators: &'a HashMap<String, EvaluatorConfig>,
     evaluator_name: String,
     inference_response: &'a InferenceResponse,
     clients: &'a Clients,
@@ -236,7 +231,7 @@ struct RunEvaluatorParams<'a> {
 #[instrument(skip_all, fields(evaluator_name = %params.evaluator_name, datapoint_id = %params.datapoint.id()))]
 async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult> {
     let RunEvaluatorParams {
-        evaluation_config,
+        evaluators,
         evaluator_name,
         inference_response,
         clients,
@@ -247,8 +242,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
         inference_cache,
         external_tags,
     } = params;
-    let EvaluationConfig::Inference(inference_evaluation_config) = evaluation_config;
-    let evaluator_config = match inference_evaluation_config.evaluators.get(&evaluator_name) {
+    let evaluator_config = match evaluators.get(&evaluator_name) {
         Some(evaluator_config) => {
             debug!("Evaluator config found");
             evaluator_config

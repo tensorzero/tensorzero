@@ -15,7 +15,7 @@ use tensorzero_core::{
     db::BatchWriterHandle,
     db::delegating_connection::DelegatingDatabaseQueries,
     error::Error,
-    evaluations::{EvaluationConfig, EvaluationFunctionConfigTable},
+    evaluations::{EvaluationFunctionConfig, EvaluatorConfig},
     inference::types::storage::StoragePath,
     utils::gateway::AppStateData,
 };
@@ -170,13 +170,14 @@ pub struct EvaluationCoreArgs {
     /// Database connection for dataset and evaluation queries
     pub db: Arc<dyn DelegatingDatabaseQueries>,
 
-    // TODO(#6676): support running evaluations with a list of evaluators instead of a named evaluation.
-    /// The evaluation configuration (pre-resolved by caller)
-    pub evaluation_config: Arc<EvaluationConfig>,
+    /// Name of the function to evaluate
+    pub function_name: String,
 
-    /// A table of function configurations for output schema validation (pre-resolved by caller)
-    /// Maps function name to its minimal evaluation configuration
-    pub function_configs: Arc<EvaluationFunctionConfigTable>,
+    /// Function configuration for output schema validation
+    pub function_config: EvaluationFunctionConfig,
+
+    /// Evaluator configurations (pre-resolved by caller)
+    pub evaluators: HashMap<String, EvaluatorConfig>,
 
     /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
     pub evaluation_name: Option<String>,
@@ -219,7 +220,8 @@ pub struct RunInfo {
 pub struct EvaluationStreamResult {
     pub receiver: mpsc::Receiver<EvaluationUpdate>,
     pub run_info: RunInfo,
-    pub evaluation_config: Arc<EvaluationConfig>,
+    /// Evaluator configurations, for computing summary stats after the run completes.
+    pub evaluators: HashMap<String, EvaluatorConfig>,
     /// Join handles for batch writers (ClickHouse, Postgres, etc.).
     /// The caller may want to wait for these to finish.
     pub batcher_join_handles: Vec<BatchWriterHandle>,
@@ -228,11 +230,14 @@ pub struct EvaluationStreamResult {
 /// Parameters for running an evaluation using the app state directly.
 /// This is used by the gateway handler and embedded mode in durable-tools.
 pub struct RunEvaluationWithAppStateParams {
-    /// The evaluation configuration
-    pub evaluation_config: EvaluationConfig,
+    /// Name of the function to evaluate
+    pub function_name: String,
 
     /// Function configuration for output schema validation
-    pub function_config: tensorzero_core::evaluations::EvaluationFunctionConfig,
+    pub function_config: EvaluationFunctionConfig,
+
+    /// Evaluator configurations (pre-resolved by caller)
+    pub evaluators: HashMap<String, EvaluatorConfig>,
 
     /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
     pub evaluation_name: Option<String>,
