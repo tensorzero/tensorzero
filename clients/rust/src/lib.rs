@@ -1513,6 +1513,7 @@ impl ClientExt for Client {
         // it is safe for the gateway to shut down without waiting for it.
         #[expect(clippy::disallowed_methods)]
         tokio::spawn(async move {
+            let mut completed = false;
             while let Some(event_result) = event_source.next().await {
                 let message = match event_result {
                     Err(e) => {
@@ -1524,7 +1525,7 @@ impl ClientExt for Client {
                                 "SSE stream error: {e}"
                             )))
                             .await;
-                        break;
+                        return;
                     }
                     Ok(reqwest_sse_stream::Event::Open) => continue,
                     Ok(reqwest_sse_stream::Event::Message(m)) => m,
@@ -1546,7 +1547,7 @@ impl ClientExt for Client {
                                 "Failed to deserialize SSE event: {e}"
                             )))
                             .await;
-                        break;
+                        return;
                     }
                 };
 
@@ -1560,7 +1561,7 @@ impl ClientExt for Client {
                                     "Failed to convert success event: {e}"
                                 )))
                                 .await;
-                            break;
+                            return;
                         }
                     },
                     EvaluationRunEvent::Error(error) => EvaluationUpdate::Error(EvaluationError {
@@ -1574,15 +1575,28 @@ impl ClientExt for Client {
                         let _ = sender
                             .send(EvaluationUpdate::FatalError(fatal.message))
                             .await;
+                        return;
+                    }
+                    EvaluationRunEvent::Complete(_) => {
+                        completed = true;
                         break;
                     }
-                    EvaluationRunEvent::Complete(_) => break,
                     EvaluationRunEvent::Start(_) => continue, // unexpected second Start event
                 };
 
                 if sender.send(update).await.is_err() {
-                    break; // receiver dropped
+                    return; // receiver dropped
                 }
+            }
+
+            if !completed {
+                tracing::error!("Evaluation SSE stream ended unexpectedly before Complete event");
+                let _ = sender
+                    .send(EvaluationUpdate::FatalError(
+                        "SSE stream ended unexpectedly before receiving a Complete event"
+                            .to_string(),
+                    ))
+                    .await;
             }
         });
 
