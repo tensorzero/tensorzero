@@ -84,7 +84,6 @@ t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
 <Tip>
 
 The TensorZero Python SDK includes a synchronous `TensorZeroGateway` client and an asynchronous `AsyncTensorZeroGateway` client.
-Both options support connecting to a standalone gateway with `build_http` or running the gateway embedded in your application with `build_embedded`.
 See [Clients](/gateway/clients/) for more details.
 
 </Tip>
@@ -177,7 +176,7 @@ pip install openai
 
 <Step title="Deploy the TensorZero Gateway">
 
-Let's deploy a standalone TensorZero Gateway using Docker.
+Let's deploy the TensorZero Gateway using Docker.
 For simplicity, we'll use the gateway without observability or custom configuration.
 
 ```bash
