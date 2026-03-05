@@ -349,7 +349,7 @@ Using custom tools with other providers will result in an error.
 
 OpenAI offers custom tools that support alternative output formats beyond JSON Schema, such as freeform text or grammar-constrained output (using Lark or regex syntax).
 
-Custom tools are passed dynamically at inference time via `tools` with `type: "openai_custom"`:
+Custom tools are passed dynamically at inference time via `tools` with `type: "custom"`:
 
 ```json
 {
@@ -362,10 +362,12 @@ Custom tools are passed dynamically at inference time via `tools` with `type: "o
   ],
   "tools": [
     {
-      "type": "openai_custom",
-      "name": "code_generator",
-      "description": "Generates Python code snippets",
-      "format": { "type": "text" }
+      "type": "custom",
+      "custom": {
+        "name": "code_generator",
+        "description": "Generates Python code snippets",
+        "format": { "type": "text" }
+      }
     }
   ]
 }
