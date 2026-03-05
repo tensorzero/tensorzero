@@ -26,18 +26,16 @@ docker compose up
 Run the following command to make a streaming inference request to the TensorZero Gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "chatbot",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Share an extensive list of fun facts about Japan."
-        }
-      ]
-    },
+    "model": "tensorzero::function_name::chatbot",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Share an extensive list of fun facts about Japan."
+      }
+    ],
     "stream": true
   }'
 ```

@@ -1,27 +1,24 @@
-import asyncio
 import os
 
-from tensorzero import AsyncTensorZeroGateway
+from openai import OpenAI
 
 
-async def main(gateway_url: str):
-    async with await AsyncTensorZeroGateway.build_http(gateway_url=gateway_url) as client:
-        stream = await client.inference(
-            function_name="chatbot",
-            input={
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Share an extensive list of fun facts about Japan.",
-                    },
-                ],
-            },
+def main(gateway_url: str):
+    with OpenAI(base_url=f"{gateway_url}/openai/v1") as client:
+        stream = client.chat.completions.create(
+            model="tensorzero::function_name::chatbot",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Share an extensive list of fun facts about Japan.",
+                },
+            ],
             stream=True,
         )
 
-        async for chunk in stream:
-            if len(chunk.content) > 0:
-                print(chunk.content[0].text, end="")
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                print(chunk.choices[0].delta.content, end="")
 
 
 if __name__ == "__main__":
@@ -29,4 +26,4 @@ if __name__ == "__main__":
     if not gateway_url:
         gateway_url = "http://localhost:3000"
 
-    asyncio.run(main(gateway_url))
+    main(gateway_url)
