@@ -24,7 +24,10 @@ use tensorzero_core::{
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo},
+    optimization::{
+        OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo,
+        gepa::GepaLaunchRequest,
+    },
     stored_inference::RenderedSample,
     utils::gateway::{AppState, AppStateData, StructuredJson},
 };
@@ -207,6 +210,26 @@ pub async fn poll_optimization(
             provider_types,
         )
         .await
+}
+
+#[expect(clippy::unused_async, reason = "axum handler must be async")]
+pub async fn gepa_launch_handler(
+    State(_app_state): AppState,
+    StructuredJson(_req): StructuredJson<GepaLaunchRequest>,
+) -> Result<Response<Body>, Error> {
+    Err(Error::new(ErrorDetails::NotImplemented {
+        message: "GEPA launch endpoint is not yet implemented".to_string(),
+    }))
+}
+
+#[expect(clippy::unused_async, reason = "axum handler must be async")]
+pub async fn gepa_get_handler(
+    State(_app_state): AppState,
+    Path(_task_id): Path<String>,
+) -> Result<Response<Body>, Error> {
+    Err(Error::new(ErrorDetails::NotImplemented {
+        message: "GEPA get endpoint is not yet implemented".to_string(),
+    }))
 }
 
 /// Randomly split examples into train and val sets.
