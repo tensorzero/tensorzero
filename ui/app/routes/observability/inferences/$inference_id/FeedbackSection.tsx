@@ -9,6 +9,7 @@ import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
 import FeedbackTable, {
   FeedbackTableSkeleton,
+  filterToLatestFeedback,
 } from "~/components/feedback/FeedbackTable";
 import type { FeedbackData } from "./inference-data.server";
 
@@ -70,9 +71,15 @@ function FeedbackContent({
   const { feedback, feedback_bounds, latestByMetric } = data;
   const navigate = useNavigate();
 
+  const filteredCount = filterToLatestFeedback(
+    feedback,
+    feedback_bounds,
+    latestByMetric,
+  ).length;
+
   useEffect(() => {
-    onCountUpdate(feedback.length);
-  }, [feedback.length, onCountUpdate]);
+    onCountUpdate(filteredCount);
+  }, [filteredCount, onCountUpdate]);
 
   const topFeedback = feedback[0] as { id: string } | undefined;
   const bottomFeedback = feedback[feedback.length - 1] as

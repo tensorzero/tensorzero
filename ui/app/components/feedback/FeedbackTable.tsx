@@ -60,6 +60,21 @@ function NoData() {
   return <p className="text-fg-muted text-sm">No data</p>;
 }
 
+export function filterToLatestFeedback(
+  feedback: FeedbackRow[],
+  feedbackBounds?: FeedbackBounds,
+  latestByMetric?: Record<string, string>,
+): FeedbackRow[] {
+  if (!feedbackBounds || !latestByMetric) return feedback;
+  return feedback.filter((item) => {
+    if (item.type === "comment")
+      return item.id === feedbackBounds.by_type.comment.last_id;
+    if (item.type === "demonstration")
+      return item.id === feedbackBounds.by_type.demonstration.last_id;
+    return latestByMetric[item.metric_name] === item.id;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Metrics table
 // ---------------------------------------------------------------------------
@@ -132,16 +147,11 @@ export default function FeedbackTable({
   const config = useConfig();
 
   const { metrics, comments, demonstrations } = useMemo(() => {
-    let items = feedback;
-    if (feedbackBounds && latestByMetric) {
-      items = feedback.filter((item) => {
-        if (item.type === "comment")
-          return item.id === feedbackBounds.by_type.comment.last_id;
-        if (item.type === "demonstration")
-          return item.id === feedbackBounds.by_type.demonstration.last_id;
-        return latestByMetric[item.metric_name] === item.id;
-      });
-    }
+    const items = filterToLatestFeedback(
+      feedback,
+      feedbackBounds,
+      latestByMetric,
+    );
 
     return {
       metrics: items.filter((f) => f.type === "boolean" || f.type === "float"),
