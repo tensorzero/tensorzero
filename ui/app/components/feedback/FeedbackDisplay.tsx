@@ -43,7 +43,7 @@ function CardSkeleton({ label }: { label: string }) {
   );
 }
 
-export function FeedbackTableSkeleton({
+export function FeedbackDisplaySkeleton({
   pagination,
   showDemonstrations = true,
 }: {
@@ -80,7 +80,7 @@ export function FeedbackTableSkeleton({
   );
 }
 
-interface FeedbackTableProps {
+interface FeedbackDisplayProps {
   feedback: FeedbackRow[];
   feedbackBounds?: FeedbackBounds;
   latestFeedbackByMetric?: Record<string, string>;
@@ -88,13 +88,13 @@ interface FeedbackTableProps {
   showDemonstrations?: boolean;
 }
 
-export default function FeedbackTable({
+export default function FeedbackDisplay({
   feedback,
   feedbackBounds,
   latestFeedbackByMetric,
   pagination,
   showDemonstrations = true,
-}: FeedbackTableProps) {
+}: FeedbackDisplayProps) {
   const { metrics, comments, demonstrations } = useMemo(() => {
     const items = filterToLatestFeedback(
       feedback,

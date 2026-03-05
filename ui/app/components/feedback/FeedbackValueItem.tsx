@@ -3,30 +3,15 @@ import { getFeedbackIcon } from "~/utils/icon";
 import { UserFeedback } from "../icons/Icons";
 
 interface ValueItemProps {
-  iconType:
-    | "success"
-    | "failure"
-    | "default"
-    | "unknown"
-    | "float"
-    | "comment"
-    | "demonstration";
+  iconType: "success" | "failure" | "default" | "unknown" | "float";
   children: ReactNode;
-  onClick?: (event: React.MouseEvent) => void;
 }
 
-function ValueItem({ iconType, children, onClick }: ValueItemProps) {
+function ValueItem({ iconType, children }: ValueItemProps) {
   const { icon, iconBg } = getFeedbackIcon(iconType);
 
   return (
-    <div
-      className={
-        onClick
-          ? "flex cursor-pointer items-center gap-2 transition-colors duration-300 hover:text-gray-500"
-          : "flex items-center gap-2"
-      }
-      onClick={onClick}
-    >
+    <div className="flex items-center gap-2">
       <div
         className={`flex h-5 w-5 min-w-[1.25rem] items-center justify-center rounded-md ${iconBg}`}
       >
@@ -77,41 +62,4 @@ function FloatItem({
   );
 }
 
-function CommentItem({
-  value,
-  isHumanFeedback,
-  onClick,
-}: {
-  value: string;
-  isHumanFeedback: boolean;
-  onClick?: (event: React.MouseEvent) => void;
-}) {
-  return (
-    <ValueItem iconType="comment" onClick={onClick}>
-      <ValueItemText>{value}</ValueItemText>
-      {isHumanFeedback && <UserFeedback />}
-    </ValueItem>
-  );
-}
-
-function DemonstrationItem({
-  value,
-  isHumanFeedback,
-  onClick,
-}: {
-  value: string;
-  isHumanFeedback: boolean;
-  onClick?: (event: React.MouseEvent) => void;
-}) {
-  return (
-    <ValueItem iconType="demonstration" onClick={onClick}>
-      <ValueItemText>
-        <span className="font-mono">{value}</span>
-      </ValueItemText>
-      {isHumanFeedback && <UserFeedback />}
-    </ValueItem>
-  );
-}
-
-// Exports
-export { ValueItem, BooleanItem, FloatItem, CommentItem, DemonstrationItem };
+export { ValueItem, BooleanItem, FloatItem };

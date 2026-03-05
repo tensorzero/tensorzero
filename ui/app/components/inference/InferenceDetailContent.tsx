@@ -7,7 +7,7 @@ import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import { BasicInfo } from "~/routes/observability/inferences/$inference_id/BasicInfo";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
-import FeedbackTable from "~/components/feedback/FeedbackTable";
+import FeedbackDisplay from "~/components/feedback/FeedbackDisplay";
 import { ParameterCard } from "~/routes/observability/inferences/$inference_id/ParameterCard";
 import { ToolParametersSection } from "~/components/inference/ToolParametersSection";
 import { TagsTable } from "~/components/tags/TagsTable";
@@ -375,7 +375,7 @@ export function InferenceDetailContent({
                 "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
             }}
           />
-          <FeedbackTable feedback={feedback} />
+          <FeedbackDisplay feedback={feedback} />
           {feedbackFooter}
         </SectionLayout>
 

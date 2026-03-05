@@ -7,10 +7,10 @@ import {
 import { AlertCircle, MoveUpRight } from "lucide-react";
 import { SectionHeader, SectionLayout } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import FeedbackTable, {
-  FeedbackTableSkeleton,
+import FeedbackDisplay, {
+  FeedbackDisplaySkeleton,
   filterToLatestFeedback,
-} from "~/components/feedback/FeedbackTable";
+} from "~/components/feedback/FeedbackDisplay";
 import type { FeedbackData } from "./inference-data.server";
 
 interface FeedbackSectionProps {
@@ -117,7 +117,7 @@ function FeedbackContent({
   const showPagination = !disablePrevious || !disableNext;
 
   return (
-    <FeedbackTable
+    <FeedbackDisplay
       feedback={feedback}
       feedbackBounds={feedback_bounds}
       latestFeedbackByMetric={latestFeedbackByMetric}
@@ -136,7 +136,7 @@ function FeedbackContent({
 }
 
 function FeedbackSkeleton() {
-  return <FeedbackTableSkeleton pagination={<PageButtons disabled />} />;
+  return <FeedbackDisplaySkeleton pagination={<PageButtons disabled />} />;
 }
 
 function FeedbackError() {

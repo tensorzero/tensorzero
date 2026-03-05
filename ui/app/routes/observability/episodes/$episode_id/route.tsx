@@ -11,10 +11,10 @@ import {
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
-import FeedbackTable, {
-  FeedbackTableSkeleton,
+import FeedbackDisplay, {
+  FeedbackDisplaySkeleton,
   filterToLatestFeedback,
-} from "~/components/feedback/FeedbackTable";
+} from "~/components/feedback/FeedbackDisplay";
 import PageButtons from "~/components/utils/PageButtons";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import {
@@ -276,7 +276,7 @@ function FeedbackSectionContent({
   const showPagination = !disablePrevious || !disableNext;
 
   return (
-    <FeedbackTable
+    <FeedbackDisplay
       feedback={feedbacks}
       feedbackBounds={bounds}
       latestFeedbackByMetric={latestFeedbackByMetric}
@@ -422,7 +422,7 @@ export default function EpisodeDetailPage({
           </div>
           <Suspense
             fallback={
-              <FeedbackTableSkeleton
+              <FeedbackDisplaySkeleton
                 pagination={<PageButtons disabled />}
                 showDemonstrations={false}
               />
