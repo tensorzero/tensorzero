@@ -1330,10 +1330,9 @@ jobs:
           done
 
       - name: Install dependencies
-        working-directory: docs
         run: |
           for attempt in 1 2 3; do
-            if pnpm install --frozen-lockfile; then
+            if pnpm install --frozen-lockfile --filter tensorzero-docs; then
               break
             fi
             if [ $attempt -eq 3 ]; then

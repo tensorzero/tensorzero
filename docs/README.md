@@ -7,7 +7,7 @@ TensorZero uses [Mintlify](https://mintlify.com) for its documentation.
 Install dependencies from the repository root:
 
 ```bash
-pnpm install --filter @tensorzero/docs
+pnpm install --filter tensorzero-docs
 ```
 
 ## Local Development
