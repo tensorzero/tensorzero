@@ -1013,6 +1013,12 @@ function AutopilotSessionEventsPageContent({
                           p.name,
                           p.arguments,
                         );
+                      } else {
+                        toast.error({
+                          title: "Approval failed",
+                          description:
+                            "Unable to approve this event due to an unexpected payload type.",
+                        });
                       }
                     }}
                     onReject={() => {
@@ -1023,6 +1029,12 @@ function AutopilotSessionEventsPageContent({
                           p.name,
                           p.arguments,
                         );
+                      } else {
+                        toast.error({
+                          title: "Rejection failed",
+                          description:
+                            "Unable to reject this event due to an unexpected payload type.",
+                        });
                       }
                     }}
                     onApproveAll={handleApproveAll}
