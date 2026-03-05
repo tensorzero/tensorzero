@@ -1,10 +1,5 @@
 import { useMemo } from "react";
-import type {
-  FeedbackRow,
-  FeedbackBounds,
-  CommentFeedbackRow,
-  DemonstrationFeedbackRow,
-} from "~/types/tensorzero";
+import type { FeedbackRow, FeedbackBounds } from "~/types/tensorzero";
 import { Table, TableBody, TableCell, TableRow } from "~/components/ui/table";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
@@ -25,10 +20,14 @@ export function filterToLatestFeedback(
 ): FeedbackRow[] {
   if (!feedbackBounds || !latestByMetric) return feedback;
   return feedback.filter((item) => {
-    if (item.type === "comment")
-      return item.id === feedbackBounds.by_type.comment.last_id;
-    if (item.type === "demonstration")
-      return item.id === feedbackBounds.by_type.demonstration.last_id;
+    if (item.type === "comment") {
+      const lastId = feedbackBounds.by_type.comment.last_id;
+      return lastId === undefined || item.id === lastId;
+    }
+    if (item.type === "demonstration") {
+      const lastId = feedbackBounds.by_type.demonstration.last_id;
+      return lastId === undefined || item.id === lastId;
+    }
     return latestByMetric[item.metric_name] === item.id;
   });
 }
@@ -100,11 +99,11 @@ export default function FeedbackTable({
       metrics: items.filter((f) => f.type === "boolean" || f.type === "float"),
       comments: items.filter(
         (f): f is FeedbackRow & { type: "comment" } => f.type === "comment",
-      ) as (CommentFeedbackRow & { type: "comment" })[],
+      ),
       demonstrations: items.filter(
         (f): f is FeedbackRow & { type: "demonstration" } =>
           f.type === "demonstration",
-      ) as (DemonstrationFeedbackRow & { type: "demonstration" })[],
+      ),
     };
   }, [feedback, feedbackBounds, latestByMetric]);
 

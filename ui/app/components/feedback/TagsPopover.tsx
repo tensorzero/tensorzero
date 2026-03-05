@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -83,6 +83,14 @@ export function TagsPopover({ tags }: TagsPopoverProps) {
       clearTimeout(closeTimeout.current);
       closeTimeout.current = null;
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeout.current) {
+        clearTimeout(closeTimeout.current);
+      }
+    };
   }, []);
 
   return (
