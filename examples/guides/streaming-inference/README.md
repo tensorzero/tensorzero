@@ -43,7 +43,7 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
 </details>
 
 <details>
-<summary><b>Python</b></summary>
+<summary><b>Python (OpenAI SDK)</b></summary>
 
 a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
 

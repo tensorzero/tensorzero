@@ -24,7 +24,7 @@ docker compose up
 3. Run the example:
 
 <details>
-<summary><b>Python</b></summary>
+<summary><b>Python (OpenAI SDK)</b></summary>
 
 a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
 
