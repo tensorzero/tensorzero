@@ -9,7 +9,7 @@ check-all = "check --all-targets --all-features"
 test-unit = "nextest run --lib --bins"
 test-unit-fast = "nextest run --lib --bins --retries 0 --no-fail-fast"
 test-all = "nextest run --features e2e_tests"
-# Note - 'test-batch', 'test-e2e', and 'test-clickhouse' must be kept in sync
+# Note - 'test-live-batch', 'test-e2e', and 'test-clickhouse' must be kept in sync
 # Running all of them should cover all of our tests, and not miss any
 test-live-batch = [
     "nextest",
