@@ -6,8 +6,8 @@ services:
     image: tensorzero/postgres-dev:14-trixie-slim
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
-      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
     command: ["postgres", "-c", "cron.database_name=tensorzero-e2e-tests"]
     ports:
       - "5432:5432"
@@ -102,9 +102,9 @@ services:
       - "8000:9000" # API port
       - "9001:9001" # Console port
     environment:
-      MINIO_ROOT_USER: tensorzero-root
-      MINIO_ROOT_PASSWORD: tensorzero-root
       MINIO_DEFAULT_BUCKETS: tensorzero-e2e-tests
+      MINIO_ROOT_PASSWORD: tensorzero-root
+      MINIO_ROOT_USER: tensorzero-root
     healthcheck:
       test: "mc ls local/tensorzero-e2e-tests || exit 1"
       start_period: 30s
@@ -162,8 +162,8 @@ services:
   gateway:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse-01:8123/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests}
       TENSORZERO_CLICKHOUSE_CLUSTER_NAME: tensorzero_e2e_tests_cluster
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse-01:8123/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests}
     depends_on:
       clickhouse-01:
         condition: service_healthy
@@ -193,13 +193,13 @@ services:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_HOST=clickhouse-01
-      - CLICKHOUSE_PASSWORD=chpassword
-      - CLICKHOUSE_USER=chuser
-      - R2_ACCESS_KEY_ID
-      - R2_SECRET_ACCESS_KEY
-      - TENSORZERO_SKIP_LARGE_FIXTURES
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_HOST: clickhouse-01
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      TENSORZERO_SKIP_LARGE_FIXTURES: ${TENSORZERO_SKIP_LARGE_FIXTURES:-}
     depends_on:
       gateway:
         condition: service_healthy
