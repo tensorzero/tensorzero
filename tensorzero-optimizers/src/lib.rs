@@ -8,6 +8,7 @@
 //! This crate was extracted from `tensorzero-core` to avoid circular dependencies when
 //! optimizers need to depend on the `evaluations` crate.
 
+use durable_tools_spawn::SpawnClient;
 use std::future::Future;
 use std::sync::Arc;
 use tensorzero_core::{
@@ -42,41 +43,84 @@ impl JobHandle for OptimizationJobHandle {
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
         provider_types: &ProviderTypesConfig,
+        spawn_client: Option<&SpawnClient>,
     ) -> Result<OptimizationJobInfo, Error> {
         match self {
             OptimizationJobHandle::Dicl(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials, provider_types)
+                    .poll(
+                        client,
+                        credentials,
+                        default_credentials,
+                        provider_types,
+                        spawn_client,
+                    )
                     .await
             }
             OptimizationJobHandle::OpenAISFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials, provider_types)
+                    .poll(
+                        client,
+                        credentials,
+                        default_credentials,
+                        provider_types,
+                        spawn_client,
+                    )
                     .await
             }
             OptimizationJobHandle::OpenAIRFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials, provider_types)
+                    .poll(
+                        client,
+                        credentials,
+                        default_credentials,
+                        provider_types,
+                        spawn_client,
+                    )
                     .await
             }
             OptimizationJobHandle::FireworksSFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials, provider_types)
+                    .poll(
+                        client,
+                        credentials,
+                        default_credentials,
+                        provider_types,
+                        spawn_client,
+                    )
                     .await
             }
             OptimizationJobHandle::GCPVertexGeminiSFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials, provider_types)
+                    .poll(
+                        client,
+                        credentials,
+                        default_credentials,
+                        provider_types,
+                        spawn_client,
+                    )
                     .await
             }
             OptimizationJobHandle::TogetherSFT(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials, provider_types)
+                    .poll(
+                        client,
+                        credentials,
+                        default_credentials,
+                        provider_types,
+                        spawn_client,
+                    )
                     .await
             }
             OptimizationJobHandle::GEPA(job_handle) => {
                 job_handle
-                    .poll(client, credentials, default_credentials, provider_types)
+                    .poll(
+                        client,
+                        credentials,
+                        default_credentials,
+                        provider_types,
+                        spawn_client,
+                    )
                     .await
             }
         }
@@ -90,12 +134,14 @@ pub trait JobHandle {
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
         provider_types: &ProviderTypesConfig,
+        spawn_client: Option<&SpawnClient>,
     ) -> impl Future<Output = Result<OptimizationJobInfo, Error>> + Send;
 }
 
 pub trait Optimizer {
     type Handle: JobHandle;
 
+    #[expect(clippy::too_many_arguments)]
     fn launch(
         &self,
         client: &TensorzeroHttpClient,
@@ -104,6 +150,7 @@ pub trait Optimizer {
         credentials: &InferenceCredentials,
         db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
+        spawn_client: Option<&SpawnClient>,
     ) -> impl Future<Output = Result<Self::Handle, Error>> + Send;
 }
 
@@ -118,6 +165,7 @@ impl Optimizer for OptimizerInfo {
         credentials: &InferenceCredentials,
         db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
+        spawn_client: Option<&SpawnClient>,
     ) -> Result<Self::Handle, Error> {
         match &self.inner {
             OptimizerConfig::Dicl(optimizer_config) => optimizer_config
@@ -128,6 +176,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     db,
                     config.clone(),
+                    spawn_client,
                 )
                 .await
                 .map(OptimizationJobHandle::Dicl),
@@ -139,6 +188,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     db,
                     config.clone(),
+                    spawn_client,
                 )
                 .await
                 .map(OptimizationJobHandle::OpenAISFT),
@@ -150,6 +200,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     db,
                     config.clone(),
+                    spawn_client,
                 )
                 .await
                 .map(OptimizationJobHandle::OpenAIRFT),
@@ -161,6 +212,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     db,
                     config.clone(),
+                    spawn_client,
                 )
                 .await
                 .map(OptimizationJobHandle::FireworksSFT),
@@ -172,6 +224,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     db,
                     config.clone(),
+                    spawn_client,
                 )
                 .await
                 .map(OptimizationJobHandle::GCPVertexGeminiSFT),
@@ -183,6 +236,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     db,
                     config.clone(),
+                    spawn_client,
                 )
                 .await
                 .map(OptimizationJobHandle::TogetherSFT),
@@ -194,6 +248,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     db,
                     config.clone(),
+                    spawn_client,
                 )
                 .await
                 .map(OptimizationJobHandle::GEPA),

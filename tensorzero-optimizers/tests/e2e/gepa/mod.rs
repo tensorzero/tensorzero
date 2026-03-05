@@ -1,12 +1,13 @@
 #![expect(clippy::expect_used)]
 
+use evaluations::{ClientInferenceExecutor, EvaluationsInferenceExecutor};
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::DynamicToolParams;
-use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
+use tensorzero_core::client::{ClientBuilder, ClientBuilderMode};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
@@ -173,8 +174,8 @@ pub async fn build_gateway_client(
     clickhouse: ClickHouseConnectionInfo,
     http_client: TensorzeroHttpClient,
     timeout_secs: u64,
-) -> Client {
-    ClientBuilder::new(ClientBuilderMode::FromComponents {
+) -> Arc<dyn EvaluationsInferenceExecutor> {
+    let client = ClientBuilder::new(ClientBuilderMode::FromComponents {
         config,
         clickhouse_connection_info: clickhouse,
         postgres_connection_info: PostgresConnectionInfo::Disabled,
@@ -185,7 +186,8 @@ pub async fn build_gateway_client(
     })
     .build()
     .await
-    .expect("Failed to build gateway client")
+    .expect("Failed to build gateway client");
+    Arc::new(ClientInferenceExecutor::new(client))
 }
 
 /// Helper function to create a GEPA config for Chat function tests

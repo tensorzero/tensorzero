@@ -23,6 +23,7 @@ use tensorzero_core::{
 use crate::gepa::{
     GEPAVariant,
     evaluate::{DatapointId, EvaluatorName, VariantName, VariantScores},
+    types::ParetoCheckpoint,
 };
 
 /// Threshold for warning about high missing score rates
@@ -86,6 +87,9 @@ pub struct ParetoFrontier {
     /// Private to enforce validation through update methods.
     optimize_directions: BTreeMap<EvaluatorName, MetricConfigOptimize>,
 
+    /// Original RNG seed for checkpoint reproducibility (None = random)
+    seed: Option<u64>,
+
     /// RNG for deterministic frequency sampling (seeded in constructor)
     rng: RefCell<StdRng>,
 }
@@ -120,6 +124,7 @@ impl ParetoFrontier {
             objective_vector_cache: HashMap::new(),
             datapoint_ids,
             optimize_directions,
+            seed: rng_seed,
             rng: RefCell::new(rng),
         }
     }
@@ -137,6 +142,61 @@ impl ParetoFrontier {
     /// Returns a reference to the frequency map (instance-wise Pareto set membership counts) for read-only access (e.g., diagnostics)
     pub fn variant_frequencies(&self) -> &HashMap<VariantName, usize> {
         &self.variant_frequencies
+    }
+
+    /// Serialize the Pareto frontier state into a checkpoint for durable task checkpointing.
+    ///
+    /// The `objective_vector_cache` is not included because it can be rebuilt
+    /// from the scores and layout on restore.
+    pub fn to_checkpoint(&self) -> ParetoCheckpoint {
+        ParetoCheckpoint {
+            variant_configs: self.variant_configs.clone(),
+            variant_scores_map: self.variant_scores_map.clone(),
+            variant_frequencies: self.variant_frequencies.clone(),
+            datapoint_ids: self.datapoint_ids.clone(),
+            optimize_directions: self.optimize_directions.clone(),
+            seed: self.seed,
+        }
+    }
+
+    /// Restore a Pareto frontier from a checkpoint.
+    ///
+    /// Rebuilds the `objective_vector_cache` from the restored scores and layout.
+    /// The `iteration` offset ensures the RNG advances across checkpoint boundaries,
+    /// so different parents are sampled even when the frontier is unchanged.
+    pub fn from_checkpoint(checkpoint: ParetoCheckpoint, iteration: u64) -> Self {
+        let rng = match checkpoint.seed {
+            Some(seed) => StdRng::seed_from_u64(seed.wrapping_add(iteration)),
+            None => {
+                let mut thread_rng = rand::rng();
+                StdRng::from_rng(&mut thread_rng)
+            }
+        };
+        let sorted_directions: Vec<(&String, &MetricConfigOptimize)> =
+            checkpoint.optimize_directions.iter().collect();
+
+        // Rebuild the objective vector cache from existing scores
+        let mut objective_vector_cache = HashMap::new();
+        for variant_name in checkpoint.variant_scores_map.keys() {
+            let vec = compute_objective_vector(
+                variant_name,
+                &checkpoint.variant_scores_map,
+                &checkpoint.datapoint_ids,
+                &sorted_directions,
+            );
+            objective_vector_cache.insert(variant_name.clone(), Arc::new(vec));
+        }
+
+        Self {
+            variant_configs: checkpoint.variant_configs,
+            variant_scores_map: checkpoint.variant_scores_map,
+            variant_frequencies: checkpoint.variant_frequencies,
+            objective_vector_cache,
+            datapoint_ids: checkpoint.datapoint_ids,
+            optimize_directions: checkpoint.optimize_directions,
+            seed: checkpoint.seed,
+            rng: RefCell::new(rng),
+        }
     }
 
     /// Update the Pareto frontier with new candidates (variant config + scores)

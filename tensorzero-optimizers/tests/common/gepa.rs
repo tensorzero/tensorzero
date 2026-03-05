@@ -13,12 +13,11 @@ use tensorzero_core::{
         ResolvedContentBlock, ResolvedRequestMessage, StoredInput, StoredInputMessage,
         StoredInputMessageContent, Template, Text,
     },
-    model_table::ProviderTypeDefaultCredentials,
-    optimization::{OptimizationJobInfo, OptimizerOutput, gepa::GEPAConfig},
+    optimization::gepa::GEPAConfig,
     stored_inference::StoredOutput,
     utils::retries::RetryConfig,
 };
-use tensorzero_optimizers::{JobHandle, Optimizer};
+use tensorzero_optimizers::gepa::{build_inference_executor, run_gepa};
 use uuid::Uuid;
 
 /// Core test for GEPA optimization using Pinocchio pattern (Chat)
@@ -50,9 +49,8 @@ pub async fn test_gepa_optimization_chat() {
 
     // Use Pinocchio examples for training and validation
     let train_examples = get_gepa_chat_examples();
-    let val_examples = Some(get_gepa_chat_examples());
+    let val_examples = get_gepa_chat_examples();
 
-    let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
     let clickhouse = get_clickhouse().await;
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -69,92 +67,56 @@ pub async fn test_gepa_optimization_chat() {
         .into_config_without_writing_for_tests(),
     );
 
-    // Launch GEPA optimization
+    // Run GEPA optimization directly
     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
-    let job_handle = gepa_config
-        .launch(
-            &client,
-            train_examples,
-            val_examples,
-            &credentials,
-            &db,
-            config.clone(),
-        )
+    let executor = build_inference_executor(&client, &config, gepa_config.timeout)
         .await
         .unwrap();
+    let result = run_gepa(
+        executor.clone(),
+        executor,
+        &gepa_config,
+        train_examples,
+        val_examples,
+        &db,
+        &config,
+        &client,
+    )
+    .await
+    .unwrap();
 
-    // Poll (GEPA completes synchronously, so should be done immediately)
-    let status = job_handle
-        .poll(
-            &client,
-            &credentials,
-            &ProviderTypeDefaultCredentials::default(),
-            &config.provider_types,
-        )
-        .await
-        .unwrap();
+    // GEPA returns GepaToolOutput with variants HashMap
+    if result.variants.is_empty() {
+        println!("GEPA optimization completed but found no improvements");
+        println!("GEPA error handling test passed - gracefully handled failure case");
+    } else {
+        assert!(
+            result.variants.len() <= gepa_config.max_iterations as usize,
+            "Should not exceed max_iterations variants, got {}",
+            result.variants.len()
+        );
 
-    // Validate output - GEPA may succeed with variants or fail to find improvements
-    match status {
-        OptimizationJobInfo::Completed { output } => {
-            match output {
-                OptimizerOutput::Variants(variants) => {
-                    // GEPA found improvements - validate the variants
-                    assert!(
-                        !variants.is_empty(),
-                        "GEPA should produce at least one evolved variant"
-                    );
-                    assert!(
-                        variants.len() <= gepa_config.max_iterations as usize,
-                        "Should not exceed max_iterations variants, got {}",
-                        variants.len()
-                    );
+        for (variant_name, variant_config) in &result.variants {
+            assert!(
+                variant_name.starts_with(&variant_prefix),
+                "Variant name '{variant_name}' should have prefix '{variant_prefix}'"
+            );
 
-                    // Validate each variant structure
-                    for (variant_name, variant_config) in &variants {
-                        assert!(
-                            variant_name.starts_with(&variant_prefix),
-                            "Variant name '{variant_name}' should have prefix '{variant_prefix}'"
-                        );
+            // variant_config is UninitializedChatCompletionConfig directly
+            assert!(
+                !variant_config.templates.inner.is_empty(),
+                "Variant should have at least one template"
+            );
 
-                        let chat_config = match &**variant_config {
-                            tensorzero_core::config::UninitializedVariantConfig::ChatCompletion(
-                                config,
-                            ) => config,
-                            _ => panic!("Expected ChatCompletion variant"),
-                        };
-
-                        // Validate required templates exist
-                        assert!(
-                            !chat_config.templates.inner.is_empty(),
-                            "Variant should have at least one template"
-                        );
-
-                        // Log template names that were evolved
-                        for template_name in chat_config.templates.inner.keys() {
-                            println!(
-                                "Evolved template variant includes template: '{template_name}'"
-                            );
-                        }
-                    }
-
-                    println!(
-                        "GEPA Pinocchio optimization test passed with {} evolved variants",
-                        variants.len()
-                    );
-                }
-                _ => panic!("Expected Variants output from GEPA"),
+            for template_name in variant_config.templates.inner.keys() {
+                println!("Evolved template variant includes template: '{template_name}'");
             }
         }
-        OptimizationJobInfo::Failed { message, .. } => {
-            // GEPA failed to find improvements - this is a valid outcome
-            println!("GEPA optimization completed but found no improvements:");
-            println!("   {message}");
-            println!("GEPA error handling test passed - gracefully handled failure case");
-        }
-        OptimizationJobInfo::Pending { .. } => {
-            panic!("Expected Completed or Failed status, got: Pending");
-        }
+
+        println!(
+            "GEPA Pinocchio optimization test passed with {} evolved variants",
+            result.variants.len()
+        );
     }
 }
 
@@ -187,9 +149,8 @@ pub async fn test_gepa_optimization_json() {
 
     // Use Pinocchio examples for training and validation (JSON mode)
     let train_examples = get_gepa_json_examples();
-    let val_examples = Some(get_gepa_json_examples());
+    let val_examples = get_gepa_json_examples();
 
-    let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
     let clickhouse = get_clickhouse().await;
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -206,92 +167,56 @@ pub async fn test_gepa_optimization_json() {
         .into_config_without_writing_for_tests(),
     );
 
-    // Launch GEPA optimization
+    // Run GEPA optimization directly
     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
-    let job_handle = gepa_config
-        .launch(
-            &client,
-            train_examples,
-            val_examples,
-            &credentials,
-            &db,
-            config.clone(),
-        )
+    let executor = build_inference_executor(&client, &config, gepa_config.timeout)
         .await
         .unwrap();
+    let result = run_gepa(
+        executor.clone(),
+        executor,
+        &gepa_config,
+        train_examples,
+        val_examples,
+        &db,
+        &config,
+        &client,
+    )
+    .await
+    .unwrap();
 
-    // Poll (GEPA completes synchronously, so should be done immediately)
-    let status = job_handle
-        .poll(
-            &client,
-            &credentials,
-            &ProviderTypeDefaultCredentials::default(),
-            &config.provider_types,
-        )
-        .await
-        .unwrap();
+    // GEPA returns GepaToolOutput with variants HashMap
+    if result.variants.is_empty() {
+        println!("GEPA JSON optimization completed but found no improvements");
+        println!("GEPA JSON error handling test passed - gracefully handled failure case");
+    } else {
+        assert!(
+            result.variants.len() <= gepa_config.max_iterations as usize,
+            "Should not exceed max_iterations variants, got {}",
+            result.variants.len()
+        );
 
-    // Validate output - GEPA may succeed with variants or fail to find improvements
-    match status {
-        OptimizationJobInfo::Completed { output } => {
-            match output {
-                OptimizerOutput::Variants(variants) => {
-                    // GEPA found improvements - validate the variants
-                    assert!(
-                        !variants.is_empty(),
-                        "GEPA should produce at least one evolved variant"
-                    );
-                    assert!(
-                        variants.len() <= gepa_config.max_iterations as usize,
-                        "Should not exceed max_iterations variants, got {}",
-                        variants.len()
-                    );
+        for (variant_name, variant_config) in &result.variants {
+            assert!(
+                variant_name.starts_with(&variant_prefix),
+                "Variant name '{variant_name}' should have prefix '{variant_prefix}'"
+            );
 
-                    // Validate each variant structure
-                    for (variant_name, variant_config) in &variants {
-                        assert!(
-                            variant_name.starts_with(&variant_prefix),
-                            "Variant name '{variant_name}' should have prefix '{variant_prefix}'"
-                        );
+            // variant_config is UninitializedChatCompletionConfig directly
+            assert!(
+                !variant_config.templates.inner.is_empty(),
+                "Variant should have at least one template"
+            );
 
-                        let json_config = match &**variant_config {
-                            tensorzero_core::config::UninitializedVariantConfig::ChatCompletion(
-                                config,
-                            ) => config,
-                            _ => panic!("Expected ChatCompletion variant"),
-                        };
-
-                        // Validate required templates exist
-                        assert!(
-                            !json_config.templates.inner.is_empty(),
-                            "Variant should have at least one template"
-                        );
-
-                        // Log template names that were evolved
-                        for template_name in json_config.templates.inner.keys() {
-                            println!(
-                                "Evolved JSON template variant includes template: '{template_name}'"
-                            );
-                        }
-                    }
-
-                    println!(
-                        "GEPA Pinocchio JSON optimization test passed with {} evolved variants",
-                        variants.len()
-                    );
-                }
-                _ => panic!("Expected Variants output from GEPA"),
+            for template_name in variant_config.templates.inner.keys() {
+                println!("Evolved JSON template variant includes template: '{template_name}'");
             }
         }
-        OptimizationJobInfo::Failed { message, .. } => {
-            // GEPA failed to find improvements - this is a valid outcome
-            println!("GEPA JSON optimization completed but found no improvements:");
-            println!("   {message}");
-            println!("GEPA JSON error handling test passed - gracefully handled failure case");
-        }
-        OptimizationJobInfo::Pending { .. } => {
-            panic!("Expected Completed or Failed status, got: Pending");
-        }
+
+        println!(
+            "GEPA Pinocchio JSON optimization test passed with {} evolved variants",
+            result.variants.len()
+        );
     }
 }
 

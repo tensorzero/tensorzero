@@ -1146,6 +1146,7 @@ impl ClientExt for Client {
                         params,
                         db,
                         gateway.handle.app_state.config.clone(),
+                        gateway.handle.app_state.spawn_client.as_deref(),
                     )
                     .await
                     .map_err(err_to_http)
@@ -1189,6 +1190,7 @@ impl ClientExt for Client {
                         gateway.handle.app_state.config.clone(),
                         &db,
                         params,
+                        gateway.handle.app_state.spawn_client.as_deref(),
                     )
                     .await
                     .map_err(err_to_http)
@@ -1229,6 +1231,7 @@ impl ClientExt for Client {
                         job_handle,
                         &gateway.handle.app_state.config.models.default_credentials,
                         &gateway.handle.app_state.config.provider_types,
+                        gateway.handle.app_state.spawn_client.as_deref(),
                     )
                     .await
                     .map_err(err_to_http)

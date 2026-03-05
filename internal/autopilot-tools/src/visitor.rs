@@ -51,6 +51,16 @@ pub trait ToolVisitor {
     async fn visit_simple_tool<T>(&self) -> Result<(), Self::Error>
     where
         T: SimpleTool<SideInfo = AutopilotSideInfo> + Default;
+
+    /// Visit a standalone `TaskTool` that uses a custom `SideInfo` type.
+    ///
+    /// Standalone tools bypass the autopilot wrapper (`ClientTaskToolWrapper`)
+    /// and are registered directly with the executor. They are NOT included
+    /// in the autopilot server's available tool set — they are spawned
+    /// directly (e.g. by `GEPAConfig::launch()`), not by the autopilot LLM.
+    async fn visit_standalone_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
+    where
+        T: TaskTool<ExtraState = ()>;
 }
 
 /// A visitor that collects tool names from `for_each_tool`.
@@ -109,6 +119,14 @@ impl ToolVisitor for ToolNameCollector {
             .lock()
             .map_err(|e| format!("Failed to acquire lock: {e}"))?;
         names.insert(T::default().name().to_string());
+        Ok(())
+    }
+
+    async fn visit_standalone_task_tool<T>(&self, _tool: T) -> Result<(), Self::Error>
+    where
+        T: TaskTool<ExtraState = ()>,
+    {
+        // Standalone tools are not visible to the autopilot server
         Ok(())
     }
 }

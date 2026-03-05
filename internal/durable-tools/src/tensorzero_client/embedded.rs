@@ -486,6 +486,7 @@ impl TensorZeroClient for EmbeddedClient {
             self.app_state.config.clone(),
             &db,
             params,
+            self.app_state.spawn_client.as_deref(),
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
@@ -500,6 +501,7 @@ impl TensorZeroClient for EmbeddedClient {
             job_handle,
             &self.app_state.config.models.default_credentials,
             &self.app_state.config.provider_types,
+            self.app_state.spawn_client.as_deref(),
         )
         .await
         .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
@@ -563,5 +565,122 @@ impl TensorZeroClient for EmbeddedClient {
         crate::run_evaluation::run_evaluation(self.app_state.clone(), &params)
             .await
             .map_err(|e| TensorZeroClientError::Evaluation(e.to_string()))
+    }
+
+    // ========== GEPA Sub-step Operations ==========
+
+    async fn gepa_setup(
+        &self,
+        params: tensorzero_optimizers::gepa::GepaSetupParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaSetupResult, TensorZeroClientError> {
+        let executor: Arc<dyn evaluations::EvaluationsInferenceExecutor> = Arc::new(
+            evaluations::AppStateInferenceExecutor::new(self.app_state.clone()),
+        );
+        let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+            Arc::new(self.app_state.get_delegating_database());
+        tensorzero_optimizers::gepa::run_gepa_setup(
+            executor,
+            params,
+            &db,
+            &self.app_state.config,
+            &self.app_state.http_client,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn gepa_iter_sample(
+        &self,
+        params: tensorzero_optimizers::gepa::GepaSampleParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaSampleResult, TensorZeroClientError> {
+        let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+            Arc::new(self.app_state.get_delegating_database());
+        tensorzero_optimizers::gepa::run_gepa_iter_sample(
+            params,
+            &db,
+            &self.app_state.config,
+            &self.app_state.http_client,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn gepa_iter_eval_parent(
+        &self,
+        params: tensorzero_optimizers::gepa::GepaEvalParentParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaEvalParentResult, TensorZeroClientError> {
+        let executor: Arc<dyn evaluations::EvaluationsInferenceExecutor> = Arc::new(
+            evaluations::AppStateInferenceExecutor::new(self.app_state.clone()),
+        );
+        let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+            Arc::new(self.app_state.get_delegating_database());
+        tensorzero_optimizers::gepa::run_gepa_iter_eval_parent(
+            executor,
+            params,
+            &db,
+            &self.app_state.config,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn gepa_iter_analyze(
+        &self,
+        params: tensorzero_optimizers::gepa::GepaAnalyzeParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaAnalyzeResult, TensorZeroClientError> {
+        let executor: Arc<dyn evaluations::EvaluationsInferenceExecutor> = Arc::new(
+            evaluations::AppStateInferenceExecutor::new(self.app_state.clone()),
+        );
+        tensorzero_optimizers::gepa::run_gepa_iter_analyze(executor, params, &self.app_state.config)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
+    }
+
+    async fn gepa_iter_mutate(
+        &self,
+        params: tensorzero_optimizers::gepa::GepaMutateParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaMutateResult, TensorZeroClientError> {
+        let executor: Arc<dyn evaluations::EvaluationsInferenceExecutor> = Arc::new(
+            evaluations::AppStateInferenceExecutor::new(self.app_state.clone()),
+        );
+        tensorzero_optimizers::gepa::run_gepa_iter_mutate(executor, params, &self.app_state.config)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
+    }
+
+    async fn gepa_iter_eval_and_update(
+        &self,
+        params: tensorzero_optimizers::gepa::GepaEvalAndUpdateParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaIterUpdateResult, TensorZeroClientError> {
+        let executor: Arc<dyn evaluations::EvaluationsInferenceExecutor> = Arc::new(
+            evaluations::AppStateInferenceExecutor::new(self.app_state.clone()),
+        );
+        let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+            Arc::new(self.app_state.get_delegating_database());
+        tensorzero_optimizers::gepa::run_gepa_iter_eval_and_update(
+            executor,
+            params,
+            &db,
+            &self.app_state.config,
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
+    }
+
+    async fn gepa_cleanup(
+        &self,
+        params: tensorzero_optimizers::gepa::GepaCleanupParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaToolOutput, TensorZeroClientError> {
+        let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
+            Arc::new(self.app_state.get_delegating_database());
+        tensorzero_optimizers::gepa::run_gepa_cleanup(params, &db)
+            .await
+            .map_err(|e| {
+                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+            })
     }
 }

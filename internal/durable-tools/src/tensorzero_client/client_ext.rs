@@ -642,6 +642,7 @@ impl TensorZeroClient for Client {
                     gateway.handle.app_state.config.clone(),
                     &db,
                     params,
+                    gateway.handle.app_state.spawn_client.as_deref(),
                 )
                 .await
                 .map_err(|e| {
@@ -680,6 +681,7 @@ impl TensorZeroClient for Client {
                 job_handle,
                 &gateway.handle.app_state.config.models.default_credentials,
                 &gateway.handle.app_state.config.provider_types,
+                gateway.handle.app_state.spawn_client.as_deref(),
             )
             .await
             .map_err(|e| {
@@ -847,5 +849,70 @@ impl TensorZeroClient for Client {
                 .await
                 .map_err(|e| TensorZeroClientError::Evaluation(e.to_string())),
         }
+    }
+
+    // ========== GEPA Sub-step Operations ==========
+
+    async fn gepa_setup(
+        &self,
+        _params: tensorzero_optimizers::gepa::GepaSetupParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaSetupResult, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "GEPA operations are only supported in embedded mode".to_string(),
+        ))
+    }
+
+    async fn gepa_iter_sample(
+        &self,
+        _params: tensorzero_optimizers::gepa::GepaSampleParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaSampleResult, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "GEPA operations are only supported in embedded mode".to_string(),
+        ))
+    }
+
+    async fn gepa_iter_eval_parent(
+        &self,
+        _params: tensorzero_optimizers::gepa::GepaEvalParentParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaEvalParentResult, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "GEPA operations are only supported in embedded mode".to_string(),
+        ))
+    }
+
+    async fn gepa_iter_analyze(
+        &self,
+        _params: tensorzero_optimizers::gepa::GepaAnalyzeParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaAnalyzeResult, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "GEPA operations are only supported in embedded mode".to_string(),
+        ))
+    }
+
+    async fn gepa_iter_mutate(
+        &self,
+        _params: tensorzero_optimizers::gepa::GepaMutateParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaMutateResult, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "GEPA operations are only supported in embedded mode".to_string(),
+        ))
+    }
+
+    async fn gepa_iter_eval_and_update(
+        &self,
+        _params: tensorzero_optimizers::gepa::GepaEvalAndUpdateParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaIterUpdateResult, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "GEPA operations are only supported in embedded mode".to_string(),
+        ))
+    }
+
+    async fn gepa_cleanup(
+        &self,
+        _params: tensorzero_optimizers::gepa::GepaCleanupParams,
+    ) -> Result<tensorzero_optimizers::gepa::GepaToolOutput, TensorZeroClientError> {
+        Err(TensorZeroClientError::NotSupported(
+            "GEPA operations are only supported in embedded mode".to_string(),
+        ))
     }
 }

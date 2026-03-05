@@ -23,6 +23,8 @@ use tensorzero_core::{
     utils::mock::get_mock_provider_api_base,
 };
 
+use durable_tools_spawn::SpawnClient;
+
 use crate::{
     JobHandle, Optimizer,
     openai::{
@@ -45,6 +47,7 @@ impl Optimizer for OpenAIRFTConfig {
         credentials: &InferenceCredentials,
         _db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: Arc<Config>,
+        _spawn_client: Option<&SpawnClient>,
     ) -> Result<Self::Handle, Error> {
         // Get credentials from provider defaults
         let openai_credentials = OpenAIKind
@@ -207,6 +210,7 @@ impl JobHandle for OpenAIRFTJobHandle {
         credentials: &InferenceCredentials,
         default_credentials: &ProviderTypeDefaultCredentials,
         _provider_types: &ProviderTypesConfig,
+        _spawn_client: Option<&SpawnClient>,
     ) -> Result<OptimizationJobInfo, Error> {
         // Get credentials from provider defaults
         let openai_credentials = OpenAIKind

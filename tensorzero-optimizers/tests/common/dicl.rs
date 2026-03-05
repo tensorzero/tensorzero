@@ -127,6 +127,7 @@ pub async fn test_dicl_optimization_chat() {
             &credentials,
             &db,
             config.clone(),
+            None,
         )
         .await
         .unwrap();
@@ -139,6 +140,7 @@ pub async fn test_dicl_optimization_chat() {
                 &credentials,
                 &ProviderTypeDefaultCredentials::default(),
                 &config.provider_types,
+                None,
             )
             .await
             .unwrap();
@@ -414,6 +416,7 @@ pub async fn test_dicl_optimization_json() {
             &credentials,
             &db,
             config.clone(),
+            None,
         )
         .await
         .unwrap();
@@ -426,6 +429,7 @@ pub async fn test_dicl_optimization_json() {
                 &credentials,
                 &ProviderTypeDefaultCredentials::default(),
                 &config.provider_types,
+                None,
             )
             .await
             .unwrap();

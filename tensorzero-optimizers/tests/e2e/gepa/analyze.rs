@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use evaluations::ClientInferenceExecutor;
 use evaluations::EvaluationInfo;
 use serde_json::Value;
 use tensorzero::test_helpers::make_embedded_gateway;
@@ -607,7 +608,8 @@ fn assert_tool_params_payload(payload: &Value) {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_inferences_invalid_model() {
     // Setup: Test that invalid model causes all analyses to fail with proper error
-    let client = make_embedded_gateway().await;
+    let client: Arc<dyn evaluations::EvaluationsInferenceExecutor> =
+        Arc::new(ClientInferenceExecutor::new(make_embedded_gateway().await));
 
     let eval_infos = vec![create_test_evaluation_info(
         "test_function",
@@ -630,7 +632,7 @@ async fn test_analyze_inferences_invalid_model() {
 
     // Execute: Should fail when all analyses fail
     let result = analyze_inferences(
-        &client,
+        client.as_ref(),
         &eval_infos,
         &function_context,
         &variant_config,
@@ -655,7 +657,8 @@ async fn test_analyze_inferences_invalid_model() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_inferences_with_schemas() {
     // Setup: Use function config with schemas
-    let client = make_embedded_gateway().await;
+    let client: Arc<dyn evaluations::EvaluationsInferenceExecutor> =
+        Arc::new(ClientInferenceExecutor::new(make_embedded_gateway().await));
 
     let eval_infos = vec![create_test_evaluation_info(
         "test_function",
@@ -677,7 +680,7 @@ async fn test_analyze_inferences_with_schemas() {
 
     // Execute: Should handle schemas correctly
     let result = analyze_inferences(
-        &client,
+        client.as_ref(),
         &eval_infos,
         &function_context,
         &variant_config,
@@ -706,7 +709,8 @@ async fn test_analyze_input_echo_helper(
     static_tools: Option<HashMap<String, Arc<StaticToolConfig>>>,
     eval_config: EvaluationConfig,
 ) -> Value {
-    let client = make_embedded_gateway().await;
+    let client: Arc<dyn evaluations::EvaluationsInferenceExecutor> =
+        Arc::new(ClientInferenceExecutor::new(make_embedded_gateway().await));
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config_echo();
 
@@ -717,7 +721,7 @@ async fn test_analyze_input_echo_helper(
     };
 
     let result = analyze_inferences(
-        &client,
+        client.as_ref(),
         &eval_infos,
         &function_context,
         &variant_config,

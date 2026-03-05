@@ -6,14 +6,13 @@
 use std::sync::Arc;
 
 use futures::future::join_all;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json, to_value};
 use tokio::sync::Semaphore;
 
+use evaluations::EvaluationsInferenceExecutor;
 use tensorzero_core::{
-    client::{
-        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
-    },
+    client::{ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent},
     config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
     endpoints::{
         datasets::{ChatInferenceDatapoint, Datapoint},
@@ -123,7 +122,7 @@ fn strip_signatures_from_chat_datapoint(datapoint: &mut ChatInferenceDatapoint) 
 /// Inference input/output pair for GEPA mutation phase.
 ///
 /// Conditionally included in Analysis via include_inference_for_mutation config flag.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Inference {
     /// Inference input (messages, system prompt, etc.)
     pub input: StoredInput,
@@ -134,12 +133,12 @@ pub struct Inference {
 /// Analysis result with optional inference context.
 ///
 /// Contains analysis feedback from the analyze function and optional inference context for mutation.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Analysis {
     /// Optional inference context (included if include_inference_for_mutation is true).
     /// Flattened during serialization so input/output appear at top level.
     /// Skipped if None to avoid bloating mutate function input.
-    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    #[serde(flatten, skip_serializing_if = "Option::is_none", default)]
     pub inference: Option<Inference>,
     /// Analysis feedback text from the analyze function.
     /// Typically XML-formatted reports (error, improvement, or optimal).
@@ -284,7 +283,7 @@ pub fn build_analyze_input(
 /// Returns error if semaphore acquisition, input building, API call, or response parsing fails.
 async fn analyze_inference(
     semaphore: Arc<Semaphore>,
-    gateway_client: &Client,
+    inference_executor: &dyn EvaluationsInferenceExecutor,
     function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
@@ -326,7 +325,7 @@ async fn analyze_inference(
     };
 
     // Call the inference API
-    let inference_output = gateway_client.inference(params).await.map_err(|e| {
+    let inference_output = inference_executor.inference(params).await.map_err(|e| {
         Error::new(ErrorDetails::Inference {
             message: format!("Failed to call analyze function: {e}"),
         })
@@ -418,7 +417,7 @@ async fn analyze_inference(
 ///
 /// Returns error only if all analyses fail.
 pub async fn analyze_inferences(
-    gateway_client: &Client,
+    inference_executor: &dyn EvaluationsInferenceExecutor,
     evaluation_infos: &[EvaluationInfo],
     function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
@@ -451,7 +450,7 @@ pub async fn analyze_inferences(
 
             analyze_inference(
                 semaphore,
-                gateway_client,
+                inference_executor,
                 function_context,
                 variant_config,
                 gepa_config,

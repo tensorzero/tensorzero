@@ -2,6 +2,7 @@
 //!
 //! These endpoints handle launching and polling optimization jobs.
 
+use durable_tools_spawn::SpawnClient;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
@@ -59,8 +60,14 @@ pub async fn launch_optimization_workflow_handler(
 ) -> Result<Response<Body>, Error> {
     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
         Arc::new(app_state.get_delegating_database());
-    let job_handle =
-        launch_optimization_workflow(&app_state.http_client, app_state.config, &db, params).await?;
+    let job_handle = launch_optimization_workflow(
+        &app_state.http_client,
+        app_state.config,
+        &db,
+        params,
+        app_state.spawn_client.as_deref(),
+    )
+    .await?;
     let encoded_job_handle = job_handle.to_base64_urlencoded()?;
     Ok(encoded_job_handle.into_response())
 }
@@ -75,6 +82,7 @@ pub async fn launch_optimization_workflow(
     config: Arc<Config>,
     db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
     params: LaunchOptimizationWorkflowParams,
+    spawn_client: Option<&SpawnClient>,
 ) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationWorkflowParams {
         function_name,
@@ -131,6 +139,7 @@ pub async fn launch_optimization_workflow(
             &InferenceCredentials::default(),
             db,
             config.clone(),
+            spawn_client,
         )
         .await
 }
@@ -154,6 +163,7 @@ pub async fn launch_optimization(
     params: LaunchOptimizationParams,
     db: Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
     config: Arc<Config>,
+    spawn_client: Option<&SpawnClient>,
     // For the TODO above: will need to pass config in here
 ) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationParams {
@@ -178,6 +188,7 @@ pub async fn launch_optimization(
             &InferenceCredentials::default(),
             &db,
             config.clone(),
+            spawn_client,
         )
         .await
 }
@@ -186,6 +197,7 @@ pub async fn poll_optimization_handler(
     State(AppStateData {
         http_client,
         config,
+        spawn_client,
         ..
     }): AppState,
     Path(job_handle): Path<String>,
@@ -197,6 +209,7 @@ pub async fn poll_optimization_handler(
         &job_handle,
         default_credentials,
         &config.provider_types,
+        spawn_client.as_deref(),
     )
     .await?;
     Ok(Json(info).into_response())
@@ -209,6 +222,7 @@ pub async fn poll_optimization(
     job_handle: &OptimizationJobHandle,
     default_credentials: &ProviderTypeDefaultCredentials,
     provider_types: &ProviderTypesConfig,
+    spawn_client: Option<&SpawnClient>,
 ) -> Result<OptimizationJobInfo, Error> {
     job_handle
         .poll(
@@ -216,6 +230,7 @@ pub async fn poll_optimization(
             &InferenceCredentials::default(),
             default_credentials,
             provider_types,
+            spawn_client,
         )
         .await
 }
@@ -223,7 +238,7 @@ pub async fn poll_optimization(
 /// Randomly split examples into train and val sets.
 /// Returns a tuple of (train_examples, val_examples).
 /// val_examples is None if val_fraction is None.
-fn split_examples<T>(
+pub fn split_examples<T>(
     stored_inferences: Vec<T>,
     val_fraction: Option<f64>,
 ) -> Result<(Vec<T>, Option<Vec<T>>), Error> {
