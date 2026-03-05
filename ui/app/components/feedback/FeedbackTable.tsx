@@ -1,9 +1,6 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
-import {
-  getMetricName,
-  getDisplayMetricName,
-} from "~/utils/clickhouse/helpers";
+import { getMetricName } from "~/utils/clickhouse/helpers";
 import type {
   FeedbackRow,
   FeedbackBounds,
@@ -34,8 +31,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import { Sheet, SheetContent } from "~/components/ui/sheet";
-import { CommentModal, DemonstrationModal } from "./FeedbackTableModal";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
   parseInferenceOutput,
@@ -44,6 +39,10 @@ import {
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
 function formatTagKey(key: string): string {
   if (key.startsWith("tensorzero::")) {
     return key.slice("tensorzero::".length);
@@ -51,22 +50,31 @@ function formatTagKey(key: string): string {
   return key;
 }
 
+function filterStringTags(tags: Record<string, unknown>): [string, string][] {
+  return Object.entries(tags).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
+}
+
+function NoData() {
+  return <p className="text-fg-muted text-sm">No data</p>;
+}
+
+// ---------------------------------------------------------------------------
+// Metrics table
+// ---------------------------------------------------------------------------
+
 function MetricsTableHeaders() {
   return (
     <TableHeader>
       <TableRow>
-        <TableHead className="w-[24%]">Metric</TableHead>
-        <TableHead className="w-[16%]">Value</TableHead>
-        <TableHead className="w-[10%]">Tags</TableHead>
-        <TableHead className="w-[26%]">Config</TableHead>
-        <TableHead className="w-[24%]">Date</TableHead>
+        <TableHead className="w-[40%]">Metric</TableHead>
+        <TableHead className="w-[20%]">Value</TableHead>
+        <TableHead className="w-[14%]">Tags</TableHead>
+        <TableHead className="w-[26%]">Date</TableHead>
       </TableRow>
     </TableHeader>
   );
-}
-
-export function FeedbackTableHeaders() {
-  return <MetricsTableHeaders />;
 }
 
 export function FeedbackTableSkeleton({
@@ -91,9 +99,6 @@ export function FeedbackTableSkeleton({
                 <Skeleton className="h-4 w-16" />
               </TableCell>
               <TableCell>
-                <Skeleton className="h-4 w-24" />
-              </TableCell>
-              <TableCell>
                 <Skeleton className="h-4 w-28" />
               </TableCell>
             </TableRow>
@@ -105,26 +110,9 @@ export function FeedbackTableSkeleton({
   );
 }
 
-interface MetricTooltipContentProps {
-  id: string;
-  rawMetricName: string | null;
-}
-
-function MetricTooltipContent({
-  id,
-  rawMetricName,
-}: MetricTooltipContentProps) {
-  return (
-    <div className="max-w-xs space-y-2 text-xs">
-      {rawMetricName && (
-        <div className="break-all font-mono text-xs text-white/70">
-          {rawMetricName}
-        </div>
-      )}
-      <div className="break-all font-mono text-xs text-white/40">ID: {id}</div>
-    </div>
-  );
-}
+// ---------------------------------------------------------------------------
+// Main feedback component
+// ---------------------------------------------------------------------------
 
 interface FeedbackTableProps {
   feedback: FeedbackRow[];
@@ -144,7 +132,6 @@ export default function FeedbackTable({
   const config = useConfig();
 
   const { metrics, comments, demonstrations } = useMemo(() => {
-    // Filter to latest-only when bounds are available
     let items = feedback;
     if (feedbackBounds && latestByMetric) {
       items = feedback.filter((item) => {
@@ -168,20 +155,9 @@ export default function FeedbackTable({
     };
   }, [feedback, feedbackBounds, latestByMetric]);
 
-  if (feedback.length === 0) {
-    return (
-      <Table className="table-fixed">
-        <MetricsTableHeaders />
-        <TableBody>
-          <TableEmptyState message="No feedback found" />
-        </TableBody>
-      </Table>
-    );
-  }
-
   return (
     <div className="space-y-6">
-      {metrics.length > 0 && (
+      {metrics.length > 0 ? (
         <Table className="table-fixed">
           <MetricsTableHeaders />
           <TableBody>
@@ -193,6 +169,13 @@ export default function FeedbackTable({
                 feedbackConfig={getFeedbackConfig(getMetricName(item), config)}
               />
             ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <Table className="table-fixed">
+          <MetricsTableHeaders />
+          <TableBody>
+            <TableEmptyState message="No data" />
           </TableBody>
         </Table>
       )}
@@ -207,17 +190,14 @@ export default function FeedbackTable({
               ? `feedback-row-${demonstrations[0].id}`
               : "feedback-demonstration"
           }
-          modal={
-            demonstrations[0] ? (
-              <DemonstrationModal feedback={demonstrations[0]} />
-            ) : undefined
-          }
         >
           {demonstrations[0] ? (
-            <DemonstrationPreview value={demonstrations[0].value} />
+            <div className="p-4">
+              <DemonstrationPreview value={demonstrations[0].value} />
+            </div>
           ) : (
             <div className="p-4">
-              <p className="text-fg-muted text-sm italic">No data</p>
+              <NoData />
             </div>
           )}
         </FeedbackCard>
@@ -230,17 +210,12 @@ export default function FeedbackTable({
         testId={
           comments[0] ? `feedback-row-${comments[0].id}` : "feedback-comment"
         }
-        modal={
-          comments[0] ? <CommentModal feedback={comments[0]} /> : undefined
-        }
       >
         <div className="p-4">
           {comments[0]?.value ? (
-            <p className="text-fg-primary line-clamp-2 text-sm">
-              {comments[0].value}
-            </p>
+            <p className="text-fg-primary text-sm">{comments[0].value}</p>
           ) : (
-            <p className="text-fg-muted text-sm italic">No data</p>
+            <NoData />
           )}
         </div>
       </FeedbackCard>
@@ -251,7 +226,7 @@ export default function FeedbackTable({
 }
 
 // ---------------------------------------------------------------------------
-// Metrics table row
+// Metric table row
 // ---------------------------------------------------------------------------
 
 interface MetricRowItemProps {
@@ -265,11 +240,8 @@ function MetricRowItem({
   metricConfig,
   feedbackConfig,
 }: MetricRowItemProps) {
-  const displayMetric = getDisplayMetricName(item);
-
-  const allTags = Object.entries(item.tags).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string",
-  );
+  const metricName = getMetricName(item);
+  const allTags = filterStringTags(item.tags);
 
   return (
     <TableRow data-testid={`feedback-row-${item.id}`}>
@@ -277,16 +249,16 @@ function MetricRowItem({
         <Tooltip>
           <TooltipTrigger asChild>
             <span
-              className="cursor-default font-mono text-sm underline decoration-dotted decoration-border underline-offset-4"
+              className="cursor-default break-all font-mono text-sm underline decoration-dotted decoration-border underline-offset-4"
               tabIndex={0}
             >
-              {displayMetric.display}
+              {metricName}
             </span>
           </TooltipTrigger>
           <TooltipContent sideOffset={5}>
             <MetricTooltipContent
               id={item.id}
-              rawMetricName={displayMetric.raw}
+              feedbackConfig={feedbackConfig}
             />
           </TooltipContent>
         </Tooltip>
@@ -302,9 +274,6 @@ function MetricRowItem({
         )}
       </TableCell>
       <TableCell>
-        <MetricConfigInfo feedbackConfig={feedbackConfig} />
-      </TableCell>
-      <TableCell>
         <span className="text-fg-tertiary text-xs">
           <TableItemTime timestamp={item.timestamp} />
         </span>
@@ -313,52 +282,37 @@ function MetricRowItem({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Metric config info (only for boolean/float metrics now)
-// ---------------------------------------------------------------------------
-
-interface MetricConfigInfoProps {
+interface MetricTooltipContentProps {
+  id: string;
   feedbackConfig: FeedbackConfig | undefined;
 }
 
-function MetricConfigInfo({ feedbackConfig }: MetricConfigInfoProps) {
-  if (
-    !feedbackConfig ||
-    feedbackConfig.type === "comment" ||
-    feedbackConfig.type === "demonstration"
-  ) {
-    return <span className="text-fg-muted text-xs">&mdash;</span>;
-  }
-
-  const parts = [
-    feedbackConfig.type,
-    feedbackConfig.optimize,
-    feedbackConfig.level,
-  ];
+function MetricTooltipContent({
+  id,
+  feedbackConfig,
+}: MetricTooltipContentProps) {
+  const configParts =
+    feedbackConfig &&
+    feedbackConfig.type !== "comment" &&
+    feedbackConfig.type !== "demonstration"
+      ? [feedbackConfig.type, feedbackConfig.optimize, feedbackConfig.level]
+      : null;
 
   return (
-    <span className="text-fg-tertiary text-xs">
-      {parts.map((part, i) => (
-        <span key={i}>
-          {i > 0 && (
-            <span className="text-fg-muted mx-1" aria-hidden>
-              &middot;
-            </span>
-          )}
-          {part}
-        </span>
-      ))}
-    </span>
+    <div className="max-w-xs space-y-1.5 font-mono text-xs">
+      <div className="break-all">ID: {id}</div>
+      {configParts && <div>{configParts.join(" · ")}</div>}
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Demonstration preview (renders parsed output in code block)
+// Demonstration preview
 // ---------------------------------------------------------------------------
 
 function DemonstrationPreview({ value }: { value: string }) {
   if (!value) {
-    return <p className="text-fg-muted text-sm italic">No data</p>;
+    return <NoData />;
   }
 
   try {
@@ -387,7 +341,6 @@ interface FeedbackCardProps {
   tags?: Record<string, unknown>;
   timestamp?: string;
   testId: string;
-  modal?: React.ReactNode;
 }
 
 function FeedbackCard({
@@ -396,52 +349,72 @@ function FeedbackCard({
   tags,
   timestamp,
   testId,
-  modal,
 }: FeedbackCardProps) {
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-
-  const allTags = tags
-    ? Object.entries(tags).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
-      )
-    : [];
+  const allTags = tags ? filterStringTags(tags) : [];
 
   return (
     <div data-testid={testId}>
-      <div
-        className={`bg-bg-primary border-border overflow-hidden rounded-lg border [&_[data-testid=chat-output]]:!rounded-none [&_[data-testid=chat-output]]:!border-0 [&_[data-testid=chat-output]]:!p-0${modal ? " hover:bg-bg-secondary cursor-pointer" : ""}`}
-        onClick={modal ? () => setIsSheetOpen(true) : undefined}
-      >
+      <div className="bg-bg-primary border-border overflow-hidden rounded-lg border [&_[data-testid=chat-output]]:!rounded-none [&_[data-testid=chat-output]]:!border-0 [&_[data-testid=chat-output]]:!p-0">
         <div className="bg-bg-secondary text-fg-tertiary flex h-10 items-center border-b px-3 text-sm font-medium">
           {label}
         </div>
         {children}
         {(allTags.length > 0 || timestamp) && (
           <div className="bg-bg-primary text-fg-tertiary flex items-center justify-between border-t px-3 py-2 text-xs">
-            <span onClick={(e) => e.stopPropagation()}>
+            <span>
               {allTags.length > 0 ? <TagsPopover tags={allTags} /> : null}
             </span>
             {timestamp && (
               <span>
-                Last updated <TableItemTime timestamp={timestamp} />
+                Updated <TableItemTime timestamp={timestamp} />
               </span>
             )}
           </div>
         )}
       </div>
-      {modal && (
-        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-          <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
-            {modal}
-          </SheetContent>
-        </Sheet>
-      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Tags popover (shared)
+// Tag cell (shows tooltip only when display text differs from full text)
+// ---------------------------------------------------------------------------
+
+interface TagCellProps {
+  displayText: string;
+  fullText: string;
+  className: string;
+  tooltipSide: "left" | "right";
+}
+
+function TagCell({
+  displayText,
+  fullText,
+  className,
+  tooltipSide,
+}: TagCellProps) {
+  if (displayText === fullText) {
+    return <span className={className}>{displayText}</span>;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={`${className} underline decoration-dotted decoration-border underline-offset-2`}
+        >
+          {displayText}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side={tooltipSide}>
+        <span className="break-all font-mono text-xs">{fullText}</span>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tags popover
 // ---------------------------------------------------------------------------
 
 interface TagsPopoverProps {
@@ -489,24 +462,18 @@ function TagsPopover({ tags }: TagsPopoverProps) {
         <div className="space-y-1.5">
           {tags.map(([key, val]) => (
             <div key={key} className="flex gap-2 font-mono text-xs">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-fg-secondary w-40 shrink-0 truncate">
-                    {formatTagKey(key)}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="left">
-                  <span className="font-mono text-xs">{key}</span>
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-fg-primary truncate">{val}</span>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <span className="font-mono text-xs break-all">{val}</span>
-                </TooltipContent>
-              </Tooltip>
+              <TagCell
+                displayText={formatTagKey(key)}
+                fullText={key}
+                className="text-fg-secondary w-40 shrink-0"
+                tooltipSide="left"
+              />
+              <TagCell
+                displayText={val}
+                fullText={val}
+                className="text-fg-primary"
+                tooltipSide="right"
+              />
             </div>
           ))}
         </div>

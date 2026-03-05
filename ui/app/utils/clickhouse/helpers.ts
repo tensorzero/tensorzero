@@ -14,28 +14,6 @@ export const getMetricName = (feedback: FeedbackRow) => {
   return "comment";
 };
 
-export interface DisplayMetricName {
-  display: string;
-  raw: string | null;
-  isEvaluationMetric: boolean;
-}
-
-// Parses metric names for display, extracting the evaluator name from
-// tensorzero:: prefixed names (e.g., "tensorzero::evaluation_name::haiku::evaluator_name::exact_match" → "exact_match")
-export function getDisplayMetricName(feedback: FeedbackRow): DisplayMetricName {
-  const raw = getMetricName(feedback);
-  if (raw.startsWith("tensorzero::")) {
-    const parts = raw.split("::");
-    const lastPart = parts[parts.length - 1];
-    return {
-      display: lastPart || raw,
-      raw,
-      isEvaluationMetric: true,
-    };
-  }
-  return { display: raw, raw: null, isEvaluationMetric: false };
-}
-
 export const inferenceUsageSchema = z.object({
   input_tokens: z.number().nullish(),
   output_tokens: z.number().nullish(),

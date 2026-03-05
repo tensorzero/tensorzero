@@ -666,7 +666,7 @@ export const UserFeedback: React.FC = () => (
         <UserPen size={14} />
       </span>
     </TooltipTrigger>
-    <TooltipContent>Human feedback</TooltipContent>
+    <TooltipContent>Human Feedback</TooltipContent>
   </Tooltip>
 );
 
