@@ -2,11 +2,11 @@
 import type { EventPayloadError } from "./EventPayloadError";
 import type { EventPayloadMessage } from "./EventPayloadMessage";
 import type { EventPayloadStatusUpdate } from "./EventPayloadStatusUpdate";
-import type { EventPayloadToolCall } from "./EventPayloadToolCall";
 import type { EventPayloadToolResult } from "./EventPayloadToolResult";
 import type { EventPayloadUserQuestions } from "./EventPayloadUserQuestions";
 import type { EventPayloadUserQuestionsAnswers } from "./EventPayloadUserQuestionsAnswers";
 import type { EventPayloadVisualization } from "./EventPayloadVisualization";
+import type { GatewayEventPayloadToolCall } from "./GatewayEventPayloadToolCall";
 import type { GatewayEventPayloadToolCallAuthorization } from "./GatewayEventPayloadToolCallAuthorization";
 
 /**
@@ -18,7 +18,7 @@ export type GatewayEventPayload =
   | ({ type: "message" } & EventPayloadMessage)
   | ({ type: "error" } & EventPayloadError)
   | ({ type: "status_update" } & EventPayloadStatusUpdate)
-  | ({ type: "tool_call" } & EventPayloadToolCall)
+  | ({ type: "tool_call" } & GatewayEventPayloadToolCall)
   | ({
       type: "tool_call_authorization";
     } & GatewayEventPayloadToolCallAuthorization)

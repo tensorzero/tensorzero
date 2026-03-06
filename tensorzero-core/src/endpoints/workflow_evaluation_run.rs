@@ -215,38 +215,3 @@ pub async fn validate_inference_episode_id_and_apply_workflow_evaluation_run(
 
     Ok(())
 }
-
-// ============================================================================
-// DEPRECATED HANDLERS - For backward compatibility
-// ============================================================================
-
-/// DEPRECATED: Use the POST `/workflow_evaluation_run` endpoint instead.
-#[debug_handler(state = AppStateData)]
-pub async fn dynamic_evaluation_run_handler(
-    State(app_state): AppState,
-    StructuredJson(params): StructuredJson<WorkflowEvaluationRunParams>,
-) -> Result<Json<WorkflowEvaluationRunResponse>, Error> {
-    tracing::warn!(
-        "DEPRECATED: The `/dynamic_evaluation_run` endpoint is deprecated. Please use `/workflow_evaluation_run` instead. Support for `/dynamic_evaluation_run` will be removed in a future version."
-    );
-    workflow_evaluation_run_handler(State(app_state), StructuredJson(params)).await
-}
-
-/// DEPRECATED: Use the POST `/workflow_evaluation_run/{run_id}/episode` endpoint instead.
-#[debug_handler(state = AppStateData)]
-pub async fn dynamic_evaluation_run_episode_handler(
-    State(app_state): AppState,
-    Path(path_params): Path<WorkflowEvaluationRunEpisodePathParams>,
-    StructuredJson(params): StructuredJson<WorkflowEvaluationRunEpisodeParams>,
-) -> Result<Json<WorkflowEvaluationRunEpisodeResponse>, Error> {
-    tracing::warn!(
-        run_id = %path_params.run_id,
-        "DEPRECATED: The `/dynamic_evaluation_run/{{run_id}}/episode` endpoint is deprecated. Please use `/workflow_evaluation_run/{{run_id}}/episode` instead. Support for `/dynamic_evaluation_run/{{run_id}}/episode` will be removed in a future version."
-    );
-    workflow_evaluation_run_episode_handler(
-        State(app_state),
-        Path(path_params),
-        StructuredJson(params),
-    )
-    .await
-}

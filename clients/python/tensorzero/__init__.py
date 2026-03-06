@@ -1,5 +1,4 @@
 import typing as t
-import warnings
 from importlib.metadata import version
 
 import httpx
@@ -56,10 +55,6 @@ from .generated_types import (
     ModelProviderExtraBodyDelete,
     ModelProviderExtraHeader,
     ModelProviderExtraHeaderDelete,
-    ProviderExtraBody,  # DEPRECATED
-    ProviderExtraBodyDelete,  # DEPRECATED
-    ProviderExtraHeader,  # DEPRECATED
-    ProviderExtraHeaderDelete,  # DEPRECATED
     StorageKind,
     StorageKindDisabled,
     StorageKindFilesystem,
@@ -113,21 +108,16 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
-    AndFilter,  # pyright: ignore[reportDeprecated]
     ApiType,
     BaseTensorZeroError,
-    BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
     ChatDatapointInsert,
     ChatInferenceResponse,
     ContentBlock,
-    DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
-    DynamicEvaluationRunResponse,  # DEPRECATED
     EvaluatorStatsDict,
     FeedbackResponse,
     FileBase64,
     FileUrl,
     FinishReason,
-    FloatMetricFilter,  # pyright: ignore[reportDeprecated]
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -136,14 +126,11 @@ from .types import (
     JsonDatapointInsert,
     JsonInferenceResponse,
     Message,
-    NotFilter,  # pyright: ignore[reportDeprecated]
     OrderBy,
-    OrFilter,  # pyright: ignore[reportDeprecated]
     RawResponseEntry,
     RawText,
     RawUsageEntry,
     System,
-    TagFilter,  # pyright: ignore[reportDeprecated]
     Template,
     TensorZeroError,
     TensorZeroInternalError,
@@ -151,7 +138,6 @@ from .types import (
     TextChunk,
     Thought,
     ThoughtChunk,
-    TimeFilter,  # pyright: ignore[reportDeprecated]
     Tool,
     ToolCall,
     ToolCallChunk,
@@ -166,21 +152,6 @@ from .types import (
 
 # DEPRECATED: use RenderedSample instead
 RenderedStoredInference = RenderedSample
-
-
-# CAREFUL: deprecated
-class DiclOptimizationConfig:
-    def __new__(cls, *args: Any, **kwargs: Any):
-        warnings.warn(
-            "Please use `DICLOptimizationConfig` instead of `DiclOptimizationConfig`. In a future release, `DiclOptimizationConfig` will be removed.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return DICLOptimizationConfig(*args, **kwargs)
-
-
-# CAREFUL: deprecated alias
-DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
 
 
 OptimizationConfig = t.Union[
@@ -201,13 +172,11 @@ __all__ = [
     "AlwaysExtraBodyDelete",
     "AlwaysExtraHeader",
     "AlwaysExtraHeaderDelete",
-    "AndFilter",
     "ApiType",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
     "BestOfNSamplingConfig",
-    "BooleanMetricFilter",
     "ChainOfThoughtConfig",
     "ChatCompletionConfig",
     "ChatCompletionInferenceParams",
@@ -226,11 +195,7 @@ __all__ = [
     "DatapointMetadataUpdate",
     "DeleteDatapointsResponse",
     "DICLConfig",
-    "DiclConfig",  # DEPRECATED
     "DICLOptimizationConfig",
-    "DiclOptimizationConfig",  # DEPRECATED
-    "DynamicEvaluationRunEpisodeResponse",  # DEPRECATED
-    "DynamicEvaluationRunResponse",  # DEPRECATED
     "EvaluatorStatsDict",
     "ExtraBody",
     "ExtraHeader",
@@ -239,7 +204,6 @@ __all__ = [
     "FileUrl",
     "FinishReason",
     "FireworksSFTConfig",
-    "FloatMetricFilter",
     "FunctionConfigChat",
     "FunctionConfigJson",
     "FunctionsConfig",
@@ -280,7 +244,6 @@ __all__ = [
     "ModelProviderExtraBodyDelete",
     "ModelProviderExtraHeader",
     "ModelProviderExtraHeaderDelete",
-    "NotFilter",
     "OpenAIRFTConfig",
     "OpenAISFTConfig",
     "OptimizationConfig",
@@ -288,12 +251,7 @@ __all__ = [
     "OptimizationJobInfo",
     "OptimizationJobStatus",
     "OrderBy",
-    "OrFilter",
     "patch_openai_client",
-    "ProviderExtraBody",  # DEPRECATED
-    "ProviderExtraBodyDelete",  # DEPRECATED
-    "ProviderExtraHeader",  # DEPRECATED
-    "ProviderExtraHeaderDelete",  # DEPRECATED
     "RawResponseEntry",
     "RawText",
     "RawUsageEntry",
@@ -319,7 +277,6 @@ __all__ = [
     "StoredInputMessageContentToolResult",
     "StoredInputMessageContentUnknown",
     "System",
-    "TagFilter",
     "Template",
     "TensorZeroError",
     "TensorZeroGateway",
@@ -328,7 +285,6 @@ __all__ = [
     "TextChunk",
     "Thought",
     "ThoughtChunk",
-    "TimeFilter",
     "TogetherSFTConfig",
     "Tool",
     "ToolCall",
@@ -392,6 +348,11 @@ def close_patched_openai_client_gateway(client: t.Any) -> None:
         )
 
 
+@deprecated(
+    "`patch_openai_client` will be removed in a future release (2026.6+). "
+    "Please deploy a standalone TensorZero Gateway and point to it using `base_url`. "
+    "See https://www.tensorzero.com/docs/deployment/tensorzero-gateway for more information."
+)
 def patch_openai_client(
     client: T,
     *,

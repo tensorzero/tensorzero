@@ -17,7 +17,7 @@ use crate::{
         resolved_input::{FileUrl, LazyFile},
         usage::ApiType,
     },
-    model::{ModelProviderRequestInfo, fully_qualified_name},
+    model::ModelProviderRequestInfo,
 };
 
 pub struct JsonlBatchFileInfo {
@@ -470,8 +470,6 @@ pub fn inject_extra_request_data(
 
     let expected_model_name = model_name;
     let expected_provider_name_plain = &model_provider.provider_name;
-    let expected_provider_name_fully_qualified =
-        fully_qualified_name(model_name, &model_provider.provider_name);
 
     // Finally, write the inference-level extra_body information. This can overwrite values set from the config-level extra_body.
     for extra_body in &config.inference_extra_body.data {
@@ -487,26 +485,6 @@ pub fn inject_extra_request_data(
             }
             DynamicExtraBody::VariantDelete { pointer, .. } => {
                 delete_json_pointer(body, pointer)?;
-            }
-            #[expect(deprecated)]
-            DynamicExtraBody::Provider {
-                model_provider_name,
-                pointer,
-                value,
-            } => {
-                if *model_provider_name == expected_provider_name_fully_qualified {
-                    write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
-                }
-            }
-            #[expect(deprecated)]
-            DynamicExtraBody::ProviderDelete {
-                model_provider_name,
-                pointer,
-                ..
-            } => {
-                if *model_provider_name == expected_provider_name_fully_qualified {
-                    delete_json_pointer(body, pointer)?;
-                }
             }
             DynamicExtraBody::ModelProvider {
                 model_name: filter_model_name,
@@ -621,54 +599,6 @@ pub fn inject_extra_request_data(
                     })
                 })?;
                 headers.remove(name);
-            }
-            #[expect(deprecated)]
-            DynamicExtraHeader::Provider {
-                model_provider_name,
-                name,
-                value,
-            } => {
-                if *model_provider_name == expected_provider_name_fully_qualified {
-                    let name =
-                        http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Invalid header name `{name}`: {}",
-                                    DisplayOrDebugGateway::new(e)
-                                ),
-                            })
-                        })?;
-                    headers.insert(
-                        name,
-                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Invalid header value `{value}`: {}",
-                                    DisplayOrDebugGateway::new(e)
-                                ),
-                            })
-                        })?,
-                    );
-                }
-            }
-            #[expect(deprecated)]
-            DynamicExtraHeader::ProviderDelete {
-                model_provider_name,
-                name,
-                ..
-            } => {
-                if *model_provider_name == expected_provider_name_fully_qualified {
-                    let name =
-                        http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Invalid header name `{name}`: {}",
-                                    DisplayOrDebugGateway::new(e)
-                                ),
-                            })
-                        })?;
-                    headers.remove(name);
-                }
             }
             DynamicExtraHeader::ModelProvider {
                 model_name: filter_model_name,
@@ -1191,9 +1121,9 @@ mod tests {
             &FullExtraBodyConfig {
                 extra_body: Some(ExtraBodyConfig { data: vec![] }),
                 inference_extra_body: FilteredInferenceExtraBody {
-                    #[expect(deprecated)]
-                    data: vec![DynamicExtraBody::Provider {
-                        model_provider_name: "wrong_provider".to_string(),
+                    data: vec![DynamicExtraBody::ModelProvider {
+                        model_name: "wrong_model".to_string(),
+                        provider_name: Some("wrong_provider".to_string()),
                         pointer: "/my_key".to_string(),
                         value: Value::String("My Value".to_string()),
                     }],
@@ -1202,9 +1132,9 @@ mod tests {
             &FullExtraHeadersConfig {
                 variant_extra_headers: Some(ExtraHeadersConfig { data: vec![] }),
                 inference_extra_headers: FilteredInferenceExtraHeaders {
-                    #[expect(deprecated)]
-                    data: vec![DynamicExtraHeader::Provider {
-                        model_provider_name: "wrong_provider".to_string(),
+                    data: vec![DynamicExtraHeader::ModelProvider {
+                        model_name: "wrong_model".to_string(),
+                        provider_name: Some("wrong_provider".to_string()),
                         name: "X-My-Header".to_string(),
                         value: "My Value".to_string(),
                     }],
@@ -1274,12 +1204,10 @@ mod tests {
                     ],
                 }),
                 inference_extra_headers: FilteredInferenceExtraHeaders {
-                    #[expect(deprecated)]
                     data: vec![
-                        DynamicExtraHeader::Provider {
-                            model_provider_name:
-                                "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
-                                    .to_string(),
+                        DynamicExtraHeader::ModelProvider {
+                            model_name: "dummy_model".to_string(),
+                            provider_name: Some("dummy_provider".to_string()),
                             name: "X-My-Inference".to_string(),
                             value: "My inference header value".to_string(),
                         },
@@ -1359,11 +1287,9 @@ mod tests {
                     ],
                 }),
                 inference_extra_body: FilteredInferenceExtraBody {
-                    #[expect(deprecated)]
-                    data: vec![DynamicExtraBody::Provider {
-                        model_provider_name:
-                            "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
-                                .to_string(),
+                    data: vec![DynamicExtraBody::ModelProvider {
+                        model_name: "dummy_model".to_string(),
+                        provider_name: Some("dummy_provider".to_string()),
                         pointer: "/generationConfig/valueFromInference".to_string(),
                         value: Value::String("inferenceValue".to_string()),
                     }],
@@ -1434,11 +1360,9 @@ mod tests {
                     ],
                 }),
                 inference_extra_body: FilteredInferenceExtraBody {
-                    #[expect(deprecated)]
-                    data: vec![DynamicExtraBody::Provider {
-                        model_provider_name:
-                            "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
-                                .to_string(),
+                    data: vec![DynamicExtraBody::ModelProvider {
+                        model_name: "dummy_model".to_string(),
+                        provider_name: Some("dummy_provider".to_string()),
                         pointer: "/multiOverride".to_string(),
                         value: Value::String("from inference".to_string()),
                     }],

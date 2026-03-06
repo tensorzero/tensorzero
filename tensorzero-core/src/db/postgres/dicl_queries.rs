@@ -119,34 +119,19 @@ impl DICLQueries for PostgresConnectionInfo {
         &self,
         function_name: &str,
         variant_name: &str,
-        namespace: Option<&str>,
     ) -> Result<u64, Error> {
         let pool = self.get_pool_result()?;
 
-        let result = if let Some(ns) = namespace {
-            sqlx::query(
-                r"
-                DELETE FROM tensorzero.dicl_examples
-                WHERE function_name = $1 AND variant_name = $2 AND namespace = $3
-                ",
-            )
-            .bind(function_name)
-            .bind(variant_name)
-            .bind(ns)
-            .execute(pool)
-            .await?
-        } else {
-            sqlx::query(
-                r"
+        let result = sqlx::query(
+            r"
                 DELETE FROM tensorzero.dicl_examples
                 WHERE function_name = $1 AND variant_name = $2
                 ",
-            )
-            .bind(function_name)
-            .bind(variant_name)
-            .execute(pool)
-            .await?
-        };
+        )
+        .bind(function_name)
+        .bind(variant_name)
+        .execute(pool)
+        .await?;
 
         Ok(result.rows_affected())
     }
@@ -168,7 +153,6 @@ async fn insert_dicl_batch(pool: &PgPool, examples: &[StoredDICLExample]) -> Res
     let ids: Vec<Uuid> = examples.iter().map(|e| e.id).collect();
     let function_names: Vec<&str> = examples.iter().map(|e| e.function_name.as_str()).collect();
     let variant_names: Vec<&str> = examples.iter().map(|e| e.variant_name.as_str()).collect();
-    let namespaces: Vec<&str> = examples.iter().map(|e| e.namespace.as_str()).collect();
     let inputs: Vec<&str> = examples.iter().map(|e| e.input.as_str()).collect();
     let outputs: Vec<&str> = examples.iter().map(|e| e.output.as_str()).collect();
     let embeddings: Vec<String> = examples
@@ -180,27 +164,27 @@ async fn insert_dicl_batch(pool: &PgPool, examples: &[StoredDICLExample]) -> Res
 
     // Use UNNEST for efficient batch insert
     // The embedding strings are cast to vector type in SQL
+    // namespace column is deprecated; always insert empty string
     let result = sqlx::query(
         r"
         INSERT INTO tensorzero.dicl_examples (
             id, function_name, variant_name, namespace, input, output, embedding, created_at
         )
-        SELECT * FROM UNNEST(
+        SELECT id, function_name, variant_name, '', input, output, embedding, created_at
+        FROM UNNEST(
             $1::uuid[],
             $2::text[],
             $3::text[],
             $4::text[],
             $5::text[],
-            $6::text[],
-            $7::vector[],
-            $8::timestamptz[]
-        )
+            $6::vector[],
+            $7::timestamptz[]
+        ) AS t(id, function_name, variant_name, input, output, embedding, created_at)
         ",
     )
     .bind(&ids)
     .bind(&function_names)
     .bind(&variant_names)
-    .bind(&namespaces)
     .bind(&inputs)
     .bind(&outputs)
     .bind(&embeddings)

@@ -393,7 +393,6 @@ async fn embed_insert_example(
         id: Uuid::now_v7(),
         function_name: function_name.to_string(),
         variant_name: variant_name.to_string(),
-        namespace: String::new(),
         input: input_string,
         output,
         embedding,
@@ -411,7 +410,7 @@ pub async fn test_dicl_inference_request_simple() {
     let function_name = "basic_test";
     // Delete any existing examples for this function and variant
     database
-        .delete_dicl_examples(function_name, variant_name, None)
+        .delete_dicl_examples(function_name, variant_name)
         .await
         .unwrap();
     // Insert examples into the database
@@ -946,7 +945,7 @@ async fn test_dicl_json_request() {
     let function_name = "json_success";
     // Delete any existing examples for this function and variant
     database
-        .delete_dicl_examples(function_name, variant_name, None)
+        .delete_dicl_examples(function_name, variant_name)
         .await
         .unwrap();
     // Insert examples into the database
@@ -1285,7 +1284,7 @@ max_tokens = 100
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
     // Delete any existing examples for this function and variant
     database
-        .delete_dicl_examples(function_name, variant_name, None)
+        .delete_dicl_examples(function_name, variant_name)
         .await
         .unwrap();
     // Insert geography examples (countries and capitals)
@@ -1434,7 +1433,7 @@ max_tokens = 100
     let gateway = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
     // Delete any existing examples for this function and variant
     database
-        .delete_dicl_examples(function_name, variant_name, None)
+        .delete_dicl_examples(function_name, variant_name)
         .await
         .unwrap();
     let mut tasks = Vec::new();

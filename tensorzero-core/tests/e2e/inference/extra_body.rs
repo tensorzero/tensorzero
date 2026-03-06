@@ -127,55 +127,6 @@ async fn test_extra_body_variant_function() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_extra_body_provider_fully_qualified_config_function() {
-    let client = create_test_gateway(STANDARD_CONFIG).await;
-
-    let result = client
-        .inference(ClientInferenceParams {
-            function_name: Some("function_echo_injected_data_explicit".to_string()),
-            input: create_test_input(),
-            extra_body: serde_json::from_value(json!([{
-                "model_provider_name": "tensorzero::model_name::my_echo_injected_data::provider_name::dummy",
-                "pointer": "/provider_test",
-                "value": "provider_works"
-            }]))
-            .unwrap(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-
-    let injected = parse_injected_body(result);
-    assert_eq!(injected["injected_body"]["provider_test"], "provider_works");
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_extra_body_provider_fully_qualified_shorthand_function() {
-    let client = create_test_gateway(STANDARD_CONFIG).await;
-
-    let result = client
-        .inference(ClientInferenceParams {
-            function_name: Some("function_echo_injected_data_shorthand".to_string()),
-            input: create_test_input(),
-            extra_body: serde_json::from_value(json!([{
-                "model_provider_name": "tensorzero::model_name::dummy::echo_injected_data::provider_name::dummy",
-                "pointer": "/shorthand_provider_test",
-                "value": "shorthand_provider_works"
-            }]))
-            .unwrap(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-
-    let injected = parse_injected_body(result);
-    assert_eq!(
-        injected["injected_body"]["shorthand_provider_test"],
-        "shorthand_provider_works"
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn test_extra_body_model_provider_no_shorthand_function() {
     let client = create_test_gateway(STANDARD_CONFIG).await;
 
@@ -248,55 +199,6 @@ async fn test_extra_body_always_model() {
 
     let injected = parse_injected_body(result);
     assert_eq!(injected["injected_body"]["test_field"], "always_works");
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_extra_body_provider_fully_qualified_config_model() {
-    let client = create_test_gateway(STANDARD_CONFIG).await;
-
-    let result = client
-        .inference(ClientInferenceParams {
-            model_name: Some("my_echo_injected_data".to_string()),
-            input: create_test_input(),
-            extra_body: serde_json::from_value(json!([{
-                "model_provider_name": "tensorzero::model_name::my_echo_injected_data::provider_name::dummy",
-                "pointer": "/provider_test",
-                "value": "provider_works"
-            }]))
-            .unwrap(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-
-    let injected = parse_injected_body(result);
-    assert_eq!(injected["injected_body"]["provider_test"], "provider_works");
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_extra_body_provider_fully_qualified_shorthand_model() {
-    let client = create_test_gateway(STANDARD_CONFIG).await;
-
-    let result = client
-        .inference(ClientInferenceParams {
-            model_name: Some("dummy::echo_injected_data".to_string()),
-            input: create_test_input(),
-            extra_body: serde_json::from_value(json!([{
-                "model_provider_name": "tensorzero::model_name::dummy::echo_injected_data::provider_name::dummy",
-                "pointer": "/shorthand_provider_test",
-                "value": "shorthand_provider_works"
-            }]))
-            .unwrap(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-
-    let injected = parse_injected_body(result);
-    assert_eq!(
-        injected["injected_body"]["shorthand_provider_test"],
-        "shorthand_provider_works"
-    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

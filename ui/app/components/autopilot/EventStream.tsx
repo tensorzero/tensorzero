@@ -229,9 +229,11 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       };
     case "tool_result":
       if (payload.outcome.type === "success") {
-        return {
-          description: JSON.stringify(payload.outcome.result, null, 2),
-        };
+        const description =
+          "result_value" in payload.outcome
+            ? JSON.stringify(payload.outcome.result_value, null, 2)
+            : payload.outcome.result;
+        return { description };
       }
       if (payload.outcome.type === "failure") {
         return {

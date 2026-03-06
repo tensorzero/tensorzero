@@ -1,6 +1,6 @@
 from openai import OpenAI
 
-with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
+with OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used") as client:
     response = client.chat.completions.create(
         model="tensorzero::model_name::openai::gpt-4o-mini",
         messages=[
