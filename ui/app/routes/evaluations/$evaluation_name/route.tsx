@@ -528,11 +528,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader
-        banner={
-          snapshotHash ? (
-            <SnapshotBanner />
-          ) : undefined
-        }
+        banner={snapshotHash ? <SnapshotBanner /> : undefined}
         eyebrow={
           <Breadcrumbs
             segments={[{ label: "Evaluations", href: "/evaluations" }]}

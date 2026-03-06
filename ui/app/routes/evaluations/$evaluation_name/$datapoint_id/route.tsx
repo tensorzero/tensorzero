@@ -457,11 +457,7 @@ export default function EvaluationDatapointPage({
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
         <PageHeader
-          banner={
-            snapshotHash ? (
-              <SnapshotBanner />
-            ) : undefined
-          }
+          banner={snapshotHash ? <SnapshotBanner /> : undefined}
           eyebrow={
             <Breadcrumbs
               segments={[
