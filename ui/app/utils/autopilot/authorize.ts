@@ -8,6 +8,8 @@ export async function submitToolCallAuthorization(
   sessionId: string,
   toolCallEventId: string,
   status: AuthorizationStatus,
+  toolCallName: string,
+  toolCallArguments: unknown,
   signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetch(
@@ -18,6 +20,8 @@ export async function submitToolCallAuthorization(
       body: JSON.stringify({
         tool_call_event_id: toolCallEventId,
         status,
+        tool_call_name: toolCallName,
+        tool_call_arguments: toolCallArguments,
       }),
       signal,
     },

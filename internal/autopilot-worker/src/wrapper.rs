@@ -167,6 +167,11 @@ async fn publish_result(
                 payload: EventPayload::ToolResult(EventPayloadToolResult {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
+                    // Populated by the server from the ToolCall event
+                    tool_call_name: params.tool_name,
+                    tool_call_arguments: serde_json::Value::Null,
+                    tool_call_authorization_source: None,
+                    tool_call_authorization_status: None,
                 }),
                 previous_user_message_event_id: None,
             },
@@ -669,6 +674,7 @@ mod tests {
                         EventPayload::ToolResult(EventPayloadToolResult {
                             tool_call_event_id: tceid,
                             outcome: ToolOutcome::Success(_),
+                            ..
                         }) if *tceid == expected_tool_call_event_id
                     )
             })
@@ -713,6 +719,7 @@ mod tests {
                                 error: NonControlToolError::Internal { message },
                             },
                         },
+                        ..
                     }) if *tceid == expected_tool_call_event_id && message == "Tool execution failed"
                 )
             })

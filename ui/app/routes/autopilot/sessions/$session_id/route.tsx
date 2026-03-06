@@ -574,13 +574,20 @@ function AutopilotSessionEventsPageContent({
   });
 
   const handleApprove = useCallback(
-    async (eventId: string) => {
+    async (
+      eventId: string,
+      toolCallName: string,
+      toolCallArguments: unknown,
+    ) => {
       if (manualAuthorization.isProcessed(eventId)) return;
       userActionRef.current = true;
       setAuthLoadingStates((prev) => new Map(prev).set(eventId, "approving"));
 
       try {
-        await manualAuthorization.approve(eventId);
+        await manualAuthorization.approve(eventId, {
+          name: toolCallName,
+          arguments: toolCallArguments,
+        });
       } catch {
         toast.error({
           title: "Approval failed",
@@ -598,13 +605,20 @@ function AutopilotSessionEventsPageContent({
   );
 
   const handleReject = useCallback(
-    async (eventId: string) => {
+    async (
+      eventId: string,
+      toolCallName: string,
+      toolCallArguments: unknown,
+    ) => {
       if (manualAuthorization.isProcessed(eventId)) return;
       userActionRef.current = true;
       setAuthLoadingStates((prev) => new Map(prev).set(eventId, "rejecting"));
 
       try {
-        await manualAuthorization.reject(eventId);
+        await manualAuthorization.reject(eventId, {
+          name: toolCallName,
+          arguments: toolCallArguments,
+        });
       } catch {
         toast.error({
           title: "Rejection failed",
@@ -991,8 +1005,26 @@ function AutopilotSessionEventsPageContent({
                     loadingAction={authLoadingStates.get(
                       oldestPendingToolCall.id,
                     )}
-                    onApprove={() => handleApprove(oldestPendingToolCall.id)}
-                    onReject={() => handleReject(oldestPendingToolCall.id)}
+                    onApprove={() => {
+                      const p = oldestPendingToolCall.payload;
+                      if (p.type === "tool_call") {
+                        handleApprove(
+                          oldestPendingToolCall.id,
+                          p.name,
+                          p.arguments,
+                        );
+                      }
+                    }}
+                    onReject={() => {
+                      const p = oldestPendingToolCall.payload;
+                      if (p.type === "tool_call") {
+                        handleReject(
+                          oldestPendingToolCall.id,
+                          p.name,
+                          p.arguments,
+                        );
+                      }
+                    }}
                     onApproveAll={handleApproveAll}
                     additionalCount={pendingToolCalls.length - 1}
                     isInCooldown={isInCooldown}

@@ -84,6 +84,8 @@ const toolingEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "approved" },
         tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
+        tool_call_name: "fetch_context",
+        tool_call_arguments: { query: "session data" },
       },
     },
     1,
@@ -96,6 +98,8 @@ const toolingEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
+        tool_call_name: "fetch_context",
+        tool_call_arguments: { query: "session data" },
         outcome: {
           type: "success",
           result: "Found relevant context.",
@@ -167,6 +171,8 @@ const mixedEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "approved" },
         tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero Autopilot" },
       },
     },
     3,
@@ -179,6 +185,8 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero Autopilot" },
         outcome: {
           type: "success",
           result: "Found audit notes on recent Autopilot sessions.",
@@ -198,6 +206,8 @@ const mixedEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "rejected", reason: "Blocked by policy" },
         tool_call_event_id: "rejected-tool-call-event-id",
+        tool_call_name: "delete_records",
+        tool_call_arguments: { table: "sessions" },
       },
     },
     5,
@@ -210,6 +220,8 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "rejected-tool-call-event-id",
+        tool_call_name: "delete_records",
+        tool_call_arguments: { table: "sessions" },
         outcome: {
           type: "failure",
           error: {
@@ -230,6 +242,8 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "missing-tool-call-event-id",
+        tool_call_name: "unknown_tool",
+        tool_call_arguments: {},
         outcome: {
           type: "missing",
         },
@@ -246,6 +260,8 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "other-tool-call-event-id",
+        tool_call_name: "other_tool",
+        tool_call_arguments: {},
         outcome: {
           type: "unknown",
         },
@@ -447,6 +463,8 @@ const longFormEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "8c9d0e1f-2a3b-4c4d-9e5f-1234567890e1",
+        tool_call_name: "analyze_data",
+        tool_call_arguments: { dataset: "large_dataset" },
         outcome: {
           type: "success",
           result: longToolResult,
@@ -588,6 +606,14 @@ const visualizationEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "approved" },
         tool_call_event_id: "v2-tool-call",
+        tool_call_name: "topk_evaluation",
+        tool_call_arguments: {
+          evaluation_name: "test_topk_evaluation",
+          dataset_name: "topk_test_dataset",
+          variant_names: ["echo", "empty", "empty2", "test", "test2"],
+          k_min: 1,
+          max_datapoints: 100,
+        },
       },
     },
     2,
@@ -600,6 +626,14 @@ const visualizationEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "v2-tool-call",
+        tool_call_name: "topk_evaluation",
+        tool_call_arguments: {
+          evaluation_name: "test_topk_evaluation",
+          dataset_name: "topk_test_dataset",
+          variant_names: ["echo", "empty", "empty2", "test", "test2"],
+          k_min: 1,
+          max_datapoints: 100,
+        },
         outcome: {
           type: "success",
           result: JSON.stringify(
@@ -834,6 +868,8 @@ const whitelistedToolingEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "wt-tool-call",
+        tool_call_name: "read_config",
+        tool_call_arguments: { section: "deployment" },
         outcome: {
           type: "success",
           result: "Current deployment: region=us-east-1, replicas=3",
