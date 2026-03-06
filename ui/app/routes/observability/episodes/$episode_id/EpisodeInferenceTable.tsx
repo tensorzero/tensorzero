@@ -76,7 +76,10 @@ function TableRows({
             <TableItemFunction
               functionName={inference.function_name}
               functionType={inference.type}
-              link={toFunctionUrl(inference.function_name)}
+              link={toFunctionUrl(
+                inference.function_name,
+                inference.snapshot_hash,
+              )}
             />
           </TableCell>
           <TableCell>

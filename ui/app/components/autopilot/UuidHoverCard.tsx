@@ -15,6 +15,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 import { toFunctionUrl, toResolvedObjectUrl, toVariantUrl } from "~/utils/urls";
+import { useSnapshotHash } from "~/context/snapshot";
 import { useEntitySheet } from "~/context/entity-sheet";
 
 interface UuidHoverCardProps {
@@ -253,6 +254,7 @@ export function FunctionItem({
   functionType,
 }: FunctionItemProps) {
   const iconConfig = getFunctionTypeIcon(functionType);
+  const snapshotHash = useSnapshotHash();
   return (
     <div className="flex flex-col gap-1">
       <span className="text-muted-foreground text-xs">Function</span>
@@ -266,7 +268,7 @@ export function FunctionItem({
           {iconConfig.icon}
         </span>
         <Link
-          to={toFunctionUrl(functionName)}
+          to={toFunctionUrl(functionName, snapshotHash)}
           className="text-foreground hover:text-foreground/80 truncate transition-colors hover:underline"
           title={functionName}
         >
@@ -289,12 +291,13 @@ export function VariantItem({
   variantName,
   variantType,
 }: VariantItemProps) {
+  const snapshotHash = useSnapshotHash();
   return (
     <div className="flex flex-col gap-1">
       <span className="text-muted-foreground text-xs">Variant</span>
       <span className="inline-flex min-w-0 items-center font-mono text-xs">
         <Link
-          to={toVariantUrl(functionName, variantName)}
+          to={toVariantUrl(functionName, variantName, snapshotHash)}
           className="text-foreground hover:text-foreground/80 truncate transition-colors hover:underline"
           title={variantName}
         >

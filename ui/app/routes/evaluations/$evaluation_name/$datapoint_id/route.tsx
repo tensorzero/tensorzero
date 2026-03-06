@@ -163,6 +163,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
   let evaluation_config = config.evaluations[evaluation_name];
   let effectiveConfig = config;
+  let snapshotHash: string | null = null;
 
   if (!evaluation_config) {
     // Evaluation not in current config — try to find it from a historical snapshot
@@ -173,7 +174,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
 
     if (matchingRun?.snapshot_hash) {
-      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
+      snapshotHash = matchingRun.snapshot_hash;
+      effectiveConfig = await getConfigForSnapshot(snapshotHash);
       evaluation_config = effectiveConfig.evaluations[evaluation_name];
     }
 
@@ -236,6 +238,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     evaluationConfig: evaluation_config,
     functionType,
+    snapshotHash,
     metricsConfig,
     runInfoData,
     evaluationResultsData,
@@ -328,12 +331,14 @@ function BasicInfoWithData({
   evaluationConfig: evaluation_config,
   functionType,
   datapoint_id,
+  snapshotHash,
 }: {
   data: EvaluationResultsData;
   evaluation_name: string;
   evaluationConfig: InferenceEvaluationConfig;
   functionType: "chat" | "json";
   datapoint_id: string;
+  snapshotHash?: string | null;
 }) {
   const { consolidatedEvaluationResults, datapoint_staled_at } = data;
   const fetcher = useFetcher();
@@ -360,6 +365,7 @@ function BasicInfoWithData({
       datapoint_name={consolidatedEvaluationResults[0].name}
       datapoint_staled_at={datapoint_staled_at}
       onRenameDatapoint={handleRenameDatapoint}
+      snapshotHash={snapshotHash}
     />
   );
 }
@@ -446,6 +452,7 @@ export default function EvaluationDatapointPage({
   const {
     evaluationConfig,
     functionType,
+    snapshotHash,
     metricsConfig,
     runInfoData,
     evaluationResultsData,
@@ -499,6 +506,7 @@ export default function EvaluationDatapointPage({
                   evaluationConfig={evaluationConfig}
                   functionType={functionType}
                   datapoint_id={params.datapoint_id}
+                  snapshotHash={snapshotHash}
                 />
               )}
             </Await>

@@ -63,7 +63,10 @@ function EvaluationRunRow({
         <TableItemFunction
           functionName={evaluationRun.function_name}
           functionType={functionType ?? ""}
-          link={toFunctionUrl(evaluationRun.function_name)}
+          link={toFunctionUrl(
+            evaluationRun.function_name,
+            evaluationRun.snapshot_hash,
+          )}
         />
       </TableCell>
       <TableCell>

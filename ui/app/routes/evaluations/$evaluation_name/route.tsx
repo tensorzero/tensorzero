@@ -154,6 +154,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
   let evaluationConfig = config.evaluations[params.evaluation_name];
   let effectiveConfig = config;
+  let snapshotHash: string | null = null;
 
   if (!evaluationConfig) {
     // Evaluation not in current config — try to find it from a historical snapshot
@@ -164,7 +165,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
 
     if (matchingRun?.snapshot_hash) {
-      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
+      snapshotHash = matchingRun.snapshot_hash;
+      effectiveConfig = await getConfigForSnapshot(snapshotHash);
       evaluationConfig = effectiveConfig.evaluations[params.evaluation_name];
     }
 
@@ -257,6 +259,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     evaluation_name: params.evaluation_name,
     evaluationConfig,
+    snapshotHash,
     function_type,
     metricsConfig,
     evaluationData: fetchEvaluationData(
@@ -479,6 +482,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const {
     evaluation_name,
     evaluationConfig: evaluation_config,
+    snapshotHash,
     function_type,
     metricsConfig,
     evaluationData,
@@ -560,6 +564,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
         <BasicInfo
           evaluation_config={evaluation_config}
           functionType={function_type}
+          snapshotHash={snapshotHash}
         />
         <ActionBar>
           <DatasetSelect
