@@ -139,6 +139,9 @@ export default [
     ),
   ]),
 
+  // Evaluation Runs (by run IDs, without requiring an evaluation name)
+  route("evaluation-runs", "routes/evaluation-runs/route.tsx"),
+
   // Workflow Evaluations (formerly Dynamic Evaluations)
   route("workflow-evaluations", "routes/workflow-evaluations/layout.tsx", [
     index("routes/workflow-evaluations/route.tsx"),

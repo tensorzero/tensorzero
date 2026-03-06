@@ -21,14 +21,12 @@ export async function loadFileDataForEvaluationResult(
 /**
  * Gets paginated evaluation results using the TensorZero gateway API.
  *
- * @param evaluation_name The name of the evaluation.
  * @param evaluation_run_ids Array of evaluation run IDs to query.
  * @param limit Maximum number of datapoints to return.
  * @param offset Offset for pagination.
  * @returns An array of parsed evaluation results.
  */
 export async function getEvaluationResults(
-  evaluation_name: string,
   evaluation_run_ids: string[],
   limit: number = 100,
   offset: number = 0,
@@ -36,7 +34,6 @@ export async function getEvaluationResults(
   const tensorZeroClient = getTensorZeroClient();
 
   const response = await tensorZeroClient.getEvaluationResults(
-    evaluation_name,
     evaluation_run_ids,
     { limit, offset },
   );
@@ -64,9 +61,9 @@ export async function getEvaluationsForDatapoint(
 
   const tensorZeroClient = getTensorZeroClient();
   const response = await tensorZeroClient.getEvaluationResults(
-    evaluation_name,
     evaluation_run_ids,
     {
+      evaluationName: evaluation_name,
       datapointId: datapoint_id,
       // Limit = u32::MAX to get all results (equivalent to before);
       // We should actually make this smaller but we will revisit these queries
@@ -150,7 +147,6 @@ export async function pollForEvaluations(
  * @returns An array of parsed evaluation results.
  */
 export async function pollForEvaluationResults(
-  evaluation_name: string,
   evaluation_run_ids: string[],
   new_feedback_id: string,
   limit: number = 100,
@@ -162,12 +158,7 @@ export async function pollForEvaluationResults(
   let found = false;
 
   for (let i = 0; i < max_retries; i++) {
-    results = await getEvaluationResults(
-      evaluation_name,
-      evaluation_run_ids,
-      limit,
-      offset,
-    );
+    results = await getEvaluationResults(evaluation_run_ids, limit, offset);
 
     if (results.some((result) => result.feedback_id === new_feedback_id)) {
       found = true;
