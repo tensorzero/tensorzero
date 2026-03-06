@@ -47,7 +47,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub datapoint: &'a Datapoint,
     pub clients: &'a Clients,
     pub llm_judge_config: &'a LLMJudgeConfig,
-    pub evaluation_name: &'a str,
+    pub evaluation_name: Option<&'a str>,
     pub evaluator_name: &'a str,
     pub evaluation_run_id: Uuid,
     pub input: &'a Input,
@@ -105,16 +105,16 @@ pub async fn run_llm_judge_evaluator(
         };
 
     debug!("Making LLM judge inference request");
-    let internal_tags = HashMap::from([
-        (
-            "tensorzero::evaluation_run_id".to_string(),
-            evaluation_run_id.to_string(),
-        ),
-        (
+    let mut internal_tags = HashMap::from([(
+        "tensorzero::evaluation_run_id".to_string(),
+        evaluation_run_id.to_string(),
+    )]);
+    if let Some(eval_name) = evaluation_name {
+        internal_tags.insert(
             "tensorzero::evaluation_name".to_string(),
-            evaluation_name.to_string(),
-        ),
-    ]);
+            eval_name.to_string(),
+        );
+    }
     let tags = merge_tags(external_tags, internal_tags)?;
 
     let params = ClientInferenceParams {

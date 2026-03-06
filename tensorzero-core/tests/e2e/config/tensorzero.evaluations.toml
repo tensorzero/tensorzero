@@ -424,3 +424,7 @@ model = "openai::gpt-4.1-mini"
 system_instructions = "../../../fixtures/config/evaluations/test_gepa_pinocchio/answer_aligns_with_persona/system_instructions.txt"
 json_mode = "strict"
 temperature = 0.0
+
+# Top-level evaluators (referenced by name in the new API path)
+[evaluators.exact_match]
+type = "exact_match"

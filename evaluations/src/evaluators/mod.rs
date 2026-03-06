@@ -31,7 +31,7 @@ pub struct EvaluateInferenceParams {
     pub datapoint: Arc<Datapoint>,
     pub input: Arc<Input>,
     pub evaluation_config: Arc<EvaluationConfig>,
-    pub evaluation_name: Arc<String>,
+    pub evaluation_name: Option<Arc<String>>,
     pub clients: Arc<Clients>,
     pub evaluation_run_id: Uuid,
     pub inference_cache: CacheEnabledMode,
@@ -54,7 +54,7 @@ pub struct EvaluateInferenceParams {
 /// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
 /// - Ok(None): The evaluator was run successfully but the result was None (e.g., if the evaluator requires a reference output but none is present).
 /// - Err(e): The evaluator failed to run due to some error (e.g., the LLM Judge failed to infer).
-#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluation_name = ?params.evaluation_name))]
 pub(crate) async fn evaluate_inference(
     params: EvaluateInferenceParams,
     cancellation_tokens: &CancellationTokens,
@@ -111,7 +111,7 @@ pub(crate) async fn evaluate_inference(
                     inference_response: &inference_response,
                     clients: &clients,
                     datapoint: &datapoint,
-                    evaluation_name: &evaluation_name,
+                    evaluation_name: evaluation_name.as_ref().map(|s| s.as_str()),
                     evaluation_run_id,
                     input: &input,
                     inference_cache,
@@ -146,14 +146,16 @@ pub(crate) async fn evaluate_inference(
                                     datapoint.id().to_string(),
                                 ),
                                 (
-                                    "tensorzero::evaluation_name".to_string(),
-                                    evaluation_name.to_string(),
-                                ),
-                                (
                                     "tensorzero::evaluator_name".to_string(),
                                     evaluator_name.to_string(),
                                 ),
                             ]);
+                            if let Some(eval_name) = &evaluation_name {
+                                tags.insert(
+                                    "tensorzero::evaluation_name".to_string(),
+                                    eval_name.to_string(),
+                                );
+                            }
                             if let Some(evaluator_inference_id) = result.evaluator_inference_id() {
                                 tags.insert(
                                     "tensorzero::evaluator_inference_id".to_string(),
@@ -167,7 +169,7 @@ pub(crate) async fn evaluate_inference(
                                     .inference_executor
                                     .feedback(FeedbackParams {
                                         metric_name: get_evaluator_metric_name(
-                                            &evaluation_name,
+                                            evaluation_name.as_ref().map(|s| s.as_str()),
                                             &evaluator_name,
                                         ),
                                         value: value.clone(),
@@ -213,7 +215,7 @@ struct RunEvaluatorParams<'a> {
     inference_response: &'a InferenceResponse,
     clients: &'a Clients,
     datapoint: &'a Datapoint,
-    evaluation_name: &'a str,
+    evaluation_name: Option<&'a str>,
     evaluation_run_id: Uuid,
     input: &'a Input,
     inference_cache: CacheEnabledMode,
