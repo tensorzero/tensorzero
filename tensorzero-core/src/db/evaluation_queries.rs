@@ -68,6 +68,7 @@ impl std::fmt::Display for InferenceEvaluationRunSource {
 #[derive(Debug, Clone, PartialEq)]
 pub struct InferenceEvaluationRunInsert {
     pub run_id: Uuid,
+    /// A human-readable evaluation name.
     pub evaluation_name: String,
     pub function_name: String,
     pub function_type: FunctionConfigType,
@@ -85,6 +86,16 @@ pub struct EvaluationRunInfoByIdRow {
     pub evaluation_run_id: Uuid,
     pub variant_name: String,
     pub created_at: DateTime<Utc>,
+}
+
+/// Metadata from an inference evaluation run, used to resolve function_name and metrics
+/// from the database instead of requiring the evaluation config.
+#[derive(Debug, Clone)]
+pub struct InferenceEvaluationRunMetadata {
+    pub evaluation_name: String,
+    pub function_name: String,
+    pub function_type: FunctionConfigType,
+    pub metrics: Vec<InferenceEvaluationRunMetricMetadata>,
 }
 
 /// Database struct for deserializing evaluation statistics from ClickHouse.
@@ -337,6 +348,13 @@ impl RawEvaluationResultRow {
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait EvaluationQueries {
+    /// Fetches metadata (function_name, function_type, metrics) for one or more inference evaluation runs.
+    /// Returns a Vec of (run_id, metadata) pairs for each found run.
+    async fn get_inference_evaluation_run_metadata(
+        &self,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, InferenceEvaluationRunMetadata)>, Error>;
+
     /// Inserts or updates run-level metadata for an inference evaluation run.
     async fn insert_inference_evaluation_run(
         &self,

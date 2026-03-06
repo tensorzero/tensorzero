@@ -96,6 +96,70 @@ async fn test_insert_inference_evaluation_run(conn: impl EvaluationQueries + Tes
 make_db_test!(test_insert_inference_evaluation_run);
 
 // ============================================================================
+// get_inference_evaluation_run_metadata tests
+// ============================================================================
+
+/// Test that `get_inference_evaluation_run_metadata` returns the correct metadata
+/// after inserting a run.
+async fn test_get_inference_evaluation_run_metadata(
+    conn: impl EvaluationQueries + TestDatabaseHelpers,
+) {
+    let run = make_test_inference_evaluation_run(Uuid::now_v7());
+
+    conn.insert_inference_evaluation_run(&run)
+        .await
+        .expect("insert should succeed");
+    conn.sleep_for_writes_to_be_visible().await;
+
+    let results = conn
+        .get_inference_evaluation_run_metadata(&[run.run_id])
+        .await
+        .expect("get_inference_evaluation_run_metadata should succeed");
+    assert_eq!(results.len(), 1, "should return one result");
+    let (returned_run_id, metadata) = &results[0];
+    assert_eq!(*returned_run_id, run.run_id, "run_id should match");
+
+    assert_eq!(
+        metadata.evaluation_name, run.evaluation_name,
+        "evaluation_name should match"
+    );
+    assert_eq!(
+        metadata.function_name, run.function_name,
+        "function_name should match"
+    );
+    assert_eq!(
+        metadata.function_type,
+        FunctionConfigType::Chat,
+        "function_type should match"
+    );
+    assert_eq!(metadata.metrics.len(), 2, "should have two metric entries");
+
+    // Verify full metric details (order may differ, so sort by name)
+    let mut actual_metrics = metadata.metrics.clone();
+    actual_metrics.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut expected_metrics = run.metrics.clone();
+    expected_metrics.sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(actual_metrics, expected_metrics, "metrics should match");
+}
+make_db_test!(test_get_inference_evaluation_run_metadata);
+
+/// Test that `get_inference_evaluation_run_metadata` returns empty for a nonexistent run.
+async fn test_get_inference_evaluation_run_metadata_not_found(
+    conn: impl EvaluationQueries + TestDatabaseHelpers,
+) {
+    let results = conn
+        .get_inference_evaluation_run_metadata(&[Uuid::now_v7()])
+        .await
+        .expect("query should succeed even for nonexistent run");
+
+    assert!(
+        results.is_empty(),
+        "should return empty for nonexistent run"
+    );
+}
+make_db_test!(test_get_inference_evaluation_run_metadata_not_found);
+
+// ============================================================================
 // get_evaluation_run_infos tests
 // ============================================================================
 

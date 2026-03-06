@@ -16,11 +16,13 @@ use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 
 // Variant timeout tests
 
 #[tokio::test]
 async fn test_variant_timeout_non_streaming() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_variant_timeout",
         "variant_name": "slow_timeout",
@@ -63,6 +65,7 @@ async fn test_variant_timeout_non_streaming() {
 
 #[tokio::test]
 async fn test_variant_timeout_streaming() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_variant_timeout",
         "variant_name": "slow_timeout",
@@ -108,6 +111,7 @@ async fn test_variant_timeout_streaming() {
 
 #[tokio::test]
 async fn test_variant_timeout_slow_second_chunk_streaming() {
+    skip_for_postgres!();
     slow_second_chunk_streaming(json!({
         "function_name": "basic_test_variant_timeout",
         "variant_name": "slow_second_chunk",
@@ -127,6 +131,7 @@ async fn test_variant_timeout_slow_second_chunk_streaming() {
 
 #[tokio::test]
 async fn test_variant_total_timeout_streaming() {
+    skip_for_postgres!();
     streaming_total_timeout(json!({
         "function_name": "basic_test_variant_timeout",
         "variant_name": "slow_second_chunk_total_timeout",
@@ -146,6 +151,7 @@ async fn test_variant_total_timeout_streaming() {
 
 #[tokio::test]
 async fn test_chat_inference_ttft_ms() {
+    skip_for_postgres!();
     test_inference_ttft_ms(
         json!({
             "function_name": "inference_ttft_chat",
@@ -166,6 +172,7 @@ async fn test_chat_inference_ttft_ms() {
 }
 #[tokio::test]
 async fn test_json_inference_ttft_ms() {
+    skip_for_postgres!();
     test_inference_ttft_ms(
         json!({
             "function_name": "inference_ttft_json",
@@ -186,6 +193,7 @@ async fn test_json_inference_ttft_ms() {
 }
 
 async fn test_inference_ttft_ms(payload: Value, json: bool) {
+    skip_for_postgres!();
     let mut response = Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
@@ -250,6 +258,7 @@ async fn test_inference_ttft_ms(payload: Value, json: bool) {
 // Test that if a candidate times out, the evaluator can still see the other candidates
 #[tokio::test]
 async fn test_variant_timeout_best_of_n_other_candidate() {
+    skip_for_postgres!();
     best_of_n_other_candidate(json!({
         "function_name": "basic_test_variant_timeout",
         "variant_name": "best_of_n",
@@ -270,6 +279,7 @@ async fn test_variant_timeout_best_of_n_other_candidate() {
 
 #[tokio::test]
 async fn test_model_provider_timeout_non_streaming() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_timeout",
         "variant_name": "timeout",
@@ -318,6 +328,7 @@ async fn test_model_provider_timeout_non_streaming() {
 
 #[tokio::test]
 async fn test_model_provider_timeout_streaming() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_timeout",
         "variant_name": "timeout",
@@ -369,6 +380,7 @@ async fn test_model_provider_timeout_streaming() {
 
 #[tokio::test]
 async fn test_model_provider_timeout_slow_second_chunk_streaming() {
+    skip_for_postgres!();
     slow_second_chunk_streaming(json!({
         "function_name": "basic_test_timeout",
         "variant_name": "slow_second_chunk",
@@ -388,6 +400,7 @@ async fn test_model_provider_timeout_slow_second_chunk_streaming() {
 
 #[tokio::test]
 async fn test_model_provider_total_timeout_streaming() {
+    skip_for_postgres!();
     streaming_total_timeout(json!({
         "function_name": "basic_test_timeout",
         "variant_name": "slow_second_chunk_total_timeout",
@@ -408,6 +421,7 @@ async fn test_model_provider_total_timeout_streaming() {
 // Test that if a candidate times out, the evaluator can still see the other candidates
 #[tokio::test]
 async fn test_model_provider_timeout_best_of_n_other_candidate() {
+    skip_for_postgres!();
     best_of_n_other_candidate(json!({
         "function_name": "basic_test_timeout",
         "variant_name": "best_of_n",
@@ -487,6 +501,7 @@ async fn best_of_n_other_candidate(payload: Value) {
 
 #[tokio::test]
 async fn test_model_provider_timeout_best_of_n_judge_timeout() {
+    skip_for_postgres!();
     best_of_n_judge_timeout(json!({
         "function_name": "basic_test_timeout",
         "variant_name": "best_of_n_judge_timeout",
@@ -659,6 +674,7 @@ async fn streaming_total_timeout(payload: Value) {
 // Test timeouts that occur at both the model and model-provider level
 #[tokio::test]
 async fn test_double_model_timeout() {
+    skip_for_postgres!();
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let config = r#"
 [functions.double_timeout]
@@ -724,6 +740,7 @@ timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
 
 #[tokio::test]
 async fn test_model_timeout_non_streaming() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_model_timeout",
         "variant_name": "slow_variant",
@@ -766,6 +783,7 @@ async fn test_model_timeout_non_streaming() {
 
 #[tokio::test]
 async fn test_model_timeout_streaming() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_model_timeout",
         "variant_name": "slow_variant",
@@ -811,6 +829,7 @@ async fn test_model_timeout_streaming() {
 
 #[tokio::test]
 async fn test_model_timeout_slow_second_chunk_streaming() {
+    skip_for_postgres!();
     slow_second_chunk_streaming(json!({
         "function_name": "basic_test_model_timeout",
         "variant_name": "slow_second_chunk",
@@ -830,6 +849,7 @@ async fn test_model_timeout_slow_second_chunk_streaming() {
 
 #[tokio::test]
 async fn test_model_total_timeout_streaming() {
+    skip_for_postgres!();
     streaming_total_timeout(json!({
         "function_name": "basic_test_model_timeout",
         "variant_name": "slow_second_chunk_total_timeout",

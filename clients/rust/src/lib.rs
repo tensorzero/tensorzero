@@ -1,7 +1,9 @@
 #![recursion_limit = "256"]
 
 use std::{collections::HashMap, sync::Arc};
+use tensorzero_core::config::UninitializedConfig;
 use tensorzero_core::config::snapshot::ConfigSnapshot;
+use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::endpoints::stored_inferences::render_samples;
@@ -1273,7 +1275,6 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
-                    use tensorzero_core::db::ConfigQueries;
                     let snapshot_hash = match hash {
                         Some(h) => h.parse().map_err(|_| {
                             err_to_http(Error::new(ErrorDetails::ConfigSnapshotNotFound {
@@ -1289,13 +1290,20 @@ impl ClientExt for Client {
                         .get_config_snapshot(snapshot_hash)
                         .await
                         .map_err(err_to_http)?;
-                    Ok(GetConfigResponse {
-                        hash: snapshot.hash.to_string(),
-                        config: snapshot.config.try_into().map_err(|e: &'static str| {
+                    let uninitialized: UninitializedConfig =
+                        snapshot.config.try_into().map_err(|e: &'static str| {
                             err_to_http(Error::new(ErrorDetails::Config {
                                 message: e.to_string(),
                             }))
-                        })?,
+                        })?;
+                    let config = serde_json::to_value(&uninitialized).map_err(|e| {
+                        err_to_http(Error::new(ErrorDetails::Config {
+                            message: format!("Failed to serialize config: {e}"),
+                        }))
+                    })?;
+                    Ok(GetConfigResponse {
+                        hash: snapshot.hash.to_string(),
+                        config,
                         extra_templates: snapshot.extra_templates,
                         tags: snapshot.tags,
                     })

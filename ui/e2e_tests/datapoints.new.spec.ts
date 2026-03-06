@@ -174,28 +174,24 @@ test.describe("New Datapoint Page", () => {
     await userEditor.waitFor({ state: "visible" });
     await userEditor.fill(userMessage);
 
-    // Find Output section (same pattern as editing-output.spec.ts)
-    const outputSection = page
-      .locator("section")
-      .filter({ has: page.getByRole("heading", { name: "Output" }) });
+    const jsonOutput = page.getByTestId("json-output-element");
 
     // Verify Schema tab is present (JSON functions have output schema)
-    await expect(
-      outputSection.getByRole("tab", { name: "Schema" }),
-    ).toBeVisible();
+    await expect(jsonOutput.getByRole("tab", { name: "Schema" })).toBeVisible();
 
     // Edit the raw output - use .last() to get the editor in the output section
     // Note: Raw Output tab is already selected by default in edit mode
-    const outputEditor = outputSection
+    const outputEditor = jsonOutput
       .locator("div[contenteditable='true']")
       .last();
     await outputEditor.waitFor({ state: "visible" });
     await outputEditor.click();
     await outputEditor.fill(outputJson);
 
-    // Verify we can see the schema tab and it has content (use exact match to avoid "additionalProperties")
-    await outputSection.getByRole("tab", { name: "Schema" }).click();
-    await expect(page.getByText('"properties"', { exact: true })).toBeVisible();
+    await jsonOutput.getByRole("tab", { name: "Schema" }).click();
+    await expect(page.getByTestId("json-output-schema-editor")).toContainText(
+      '"properties"',
+    );
 
     // Create datapoint
     await page.getByRole("button", { name: "Create Datapoint" }).click();
@@ -221,7 +217,9 @@ test.describe("New Datapoint Page", () => {
 
     // Click Schema tab and verify schema content
     await page.getByRole("tab", { name: "Schema" }).click();
-    await expect(page.getByText('"properties"', { exact: true })).toBeVisible();
+    await expect(page.getByTestId("json-output-schema-editor")).toContainText(
+      '"properties"',
+    );
 
     // Verify no errors
     await expect(page.getByText("error", { exact: false })).not.toBeVisible();

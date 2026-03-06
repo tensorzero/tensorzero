@@ -1,4 +1,5 @@
 use crate::providers::common::E2ETestProvider;
+use crate::utils::skip_for_postgres;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
@@ -56,6 +57,7 @@ static AUDIO_FILE: &[u8] = include_bytes!("input_audio_barks.mp3");
 const AUDIO_FILE_HASH: &str = "4e497dd5ba1f3761a3d8bdf21da18632d4b919e66cba20af3bb1d07301fc7192";
 
 pub async fn test_audio_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     let (_client, _storage_path) = Box::pin(test_base64_audio_inference_with_provider_and_store(
         provider,

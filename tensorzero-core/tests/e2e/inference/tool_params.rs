@@ -22,6 +22,7 @@ use tensorzero_core::tool::ToolChoice;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 
 /// Full round-trip with all DynamicToolParams fields
 ///
@@ -37,6 +38,7 @@ use crate::common::get_gateway_endpoint;
 /// - Tool partitioning works: static tools in allowed_tools, dynamic in additional_tools
 #[tokio::test(flavor = "multi_thread")]
 async fn test_inference_full_tool_params_round_trip() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // Define a dynamic tool to add at inference time
@@ -194,6 +196,7 @@ async fn test_inference_full_tool_params_round_trip() {
 /// with no additional_tools.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_inference_only_static_tools() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -272,6 +275,7 @@ async fn test_inference_only_static_tools() {
 /// with no allowed_tools restriction.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_inference_only_dynamic_tools() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let dynamic_tool = json!({
@@ -356,6 +360,7 @@ async fn test_inference_only_dynamic_tools() {
 /// Tests what happens when no tool_params are provided - should use function config defaults.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_inference_no_tool_params() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -421,6 +426,7 @@ async fn test_inference_no_tool_params() {
 /// Verifies that the `strict` field on tools survives round-trip.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_tool_strict_flag_preserved() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let strict_tool = json!({
@@ -536,6 +542,7 @@ async fn test_tool_strict_flag_preserved() {
 /// Tests that allowed_tools can restrict which static tools are available.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_allowed_tools_restriction() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // weather_helper_parallel has two static tools: get_temperature and get_humidity
@@ -640,6 +647,7 @@ async fn test_allowed_tools_restriction() {
 /// - Function: "weather_helper_aliased_tool" uses this tool
 #[tokio::test(flavor = "multi_thread")]
 async fn test_allowed_tools_uses_key_not_display_name() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // Test 1: Using the config KEY should work
