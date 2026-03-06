@@ -1,9 +1,9 @@
-#![expect(clippy::print_stdout)]
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::clickhouse::get_clean_clickhouse;
 use crate::utils::skip_for_postgres;
+use googletest::prelude::*;
 use serde_json::json;
 use tensorzero::ClientBuilder;
 use tensorzero::FeedbackParams;
@@ -16,8 +16,7 @@ use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::delegating_connection::PrimaryDatastore;
+use tensorzero_core::db::delegating_connection::{DelegatingDatabaseConnection, PrimaryDatastore};
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
@@ -26,19 +25,13 @@ use tensorzero_core::inference::types::{Arguments, System, Template, Text};
 use tensorzero_core::utils::gateway::GatewayHandle;
 use tokio::time::Duration;
 
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_deployment_id() {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
-    let deployment_id = get_deployment_id(
-        &clickhouse,
-        &PostgresConnectionInfo::Disabled,
-        PrimaryDatastore::ClickHouse,
-    )
-    .await
-    .unwrap();
-    println!("deployment_id: {deployment_id}");
-    assert!(!deployment_id.is_empty());
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let primary_datastore = PrimaryDatastore::from_test_env();
+    let deployment_id = get_deployment_id(&db.clickhouse, &db.postgres, primary_datastore).await;
+    expect_that!(deployment_id, ok(not(eq(""))));
 }
 
 async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero::Client {
@@ -76,8 +69,14 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     ClientBuilder::build_from_state(handle).unwrap()
 }
 
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_howdy_report() {
+    // This won't work for Postgres because of 2 reasons:
+    // 1. we can't easily set up an isolated Postgres database for a clean start, because of pgcron
+    // requirements;
+    // 2. queries from Postgres use the refreshed rollup tables, which are not live updated after
+    // each request.
     skip_for_postgres!();
     let (clickhouse, _guard) = get_clean_clickhouse(true).await;
     let client = get_embedded_client(clickhouse.clone()).await;
