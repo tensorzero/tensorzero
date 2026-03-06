@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
@@ -12,6 +13,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 /// Test that OpenAI Responses API accepts and uses a custom tool with text format
 #[tokio::test(flavor = "multi_thread")]
 async fn test_responses_api_custom_tool_text_format() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -135,6 +137,7 @@ async fn test_responses_api_custom_tool_text_format() {
 /// Test that OpenAI accepts and uses a custom tool with text format
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_custom_tool_text_format() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -275,6 +278,7 @@ async fn test_openai_custom_tool_text_format() {
 /// Test that OpenAI accepts and uses a custom tool with Lark grammar format
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_custom_tool_grammar_lark() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -449,6 +453,7 @@ NUMBER: /\d+(\.\d+)?/
 /// Test that OpenAI accepts and uses a custom tool with Regex grammar format
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_custom_tool_grammar_regex() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -602,6 +607,7 @@ async fn test_openai_custom_tool_grammar_regex() {
 /// Test that standard function tools and custom tools can be used together
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_mixed_function_and_custom_tools() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -762,6 +768,7 @@ async fn test_openai_mixed_function_and_custom_tools() {
 /// Test that OpenAI Responses API accepts and uses a custom tool with Lark grammar format
 #[tokio::test(flavor = "multi_thread")]
 async fn test_responses_api_custom_tool_grammar_lark() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -919,6 +926,7 @@ NUMBER: /\d+(\.\d+)?/
 /// Test that OpenAI Responses API accepts and uses a custom tool with Regex grammar format
 #[tokio::test(flavor = "multi_thread")]
 async fn test_responses_api_custom_tool_grammar_regex() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -1055,6 +1063,7 @@ async fn test_responses_api_custom_tool_grammar_regex() {
 /// Test that standard function tools and custom tools can be used together with Responses API
 #[tokio::test(flavor = "multi_thread")]
 async fn test_responses_api_mixed_function_and_custom_tools() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 

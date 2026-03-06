@@ -3,6 +3,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::utils::skip_for_postgres;
 use serde_json::json;
 use tensorzero::{
     ClientExt, ClientInferenceParams, FeedbackParams, InferenceOutput, Input, InputMessage,
@@ -21,6 +22,7 @@ use uuid::{Timestamp, Uuid};
 
 #[tokio::test]
 async fn test_workflow_evaluation() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_http_gateway().await;
     let params = WorkflowEvaluationRunParams {
         internal: false,
@@ -257,6 +259,7 @@ async fn test_workflow_evaluation() {
 
 #[tokio::test]
 async fn test_workflow_evaluation_nonexistent_function() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_http_gateway().await;
     let params = WorkflowEvaluationRunParams {
         variants: HashMap::from([("nonexistent_function".to_string(), "test2".to_string())]),
@@ -278,6 +281,7 @@ async fn test_workflow_evaluation_nonexistent_function() {
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]
 async fn test_workflow_evaluation_other_function() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let params = WorkflowEvaluationRunParams {
         variants: HashMap::from([("dynamic_json".to_string(), "gcp-vertex-haiku".to_string())]),
@@ -351,6 +355,7 @@ async fn test_workflow_evaluation_other_function() {
 /// This should error
 #[tokio::test(flavor = "multi_thread")]
 async fn test_workflow_evaluation_variant_error() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let params = WorkflowEvaluationRunParams {
         variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
@@ -407,6 +412,7 @@ async fn test_workflow_evaluation_variant_error() {
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]
 async fn test_workflow_evaluation_override_variant_tags() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let params = WorkflowEvaluationRunParams {
         internal: false,
@@ -481,6 +487,7 @@ async fn test_workflow_evaluation_override_variant_tags() {
 
 #[tokio::test]
 async fn test_bad_workflow_evaluation_run() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_http_gateway().await;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -522,6 +529,7 @@ async fn test_bad_workflow_evaluation_run() {
 
 #[tokio::test]
 async fn test_workflow_evaluation_tag_validation() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_http_gateway().await;
     let params = WorkflowEvaluationRunParams {
         internal: false,

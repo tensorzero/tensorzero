@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
+use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
     select_model_inference_clickhouse,
@@ -20,6 +21,7 @@ use tensorzero_core::endpoints::openai_compatible::chat_completions::chat_comple
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_route_new_format() {
+    skip_for_postgres!();
     Box::pin(test_openai_compatible_route_with_function_name_as_model(
         "tensorzero::function_name::basic_test_no_system_schema",
     ))
@@ -27,6 +29,7 @@ async fn test_openai_compatible_route_new_format() {
 }
 
 async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let state = client.get_app_state_data().unwrap().clone();
     let episode_id = Uuid::now_v7();
@@ -170,6 +173,7 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
 
 #[tokio::test]
 async fn test_openai_compatible_matches_response_fields() {
+    skip_for_postgres!();
     let client = Client::new();
 
     let tensorzero_payload = json!({
@@ -232,6 +236,7 @@ async fn test_openai_compatible_matches_response_fields() {
 
 #[tokio::test]
 async fn test_openai_compatible_dryrun() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -298,11 +303,13 @@ async fn test_openai_compatible_dryrun() {
 
 #[tokio::test]
 async fn test_openai_compatible_route_model_name_shorthand() {
+    skip_for_postgres!();
     test_openai_compatible_route_with_default_function("tensorzero::model_name::dummy::good", "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.").await;
 }
 
 #[tokio::test]
 async fn test_openai_compatible_route_model_name_toml() {
+    skip_for_postgres!();
     test_openai_compatible_route_with_default_function(
         "tensorzero::model_name::json",
         "{\"answer\":\"Hello\"}",
@@ -314,6 +321,7 @@ async fn test_openai_compatible_route_with_default_function(
     prefixed_model_name: &str,
     expected_content: &str,
 ) {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -439,6 +447,7 @@ async fn test_openai_compatible_route_with_default_function(
 
 #[tokio::test]
 async fn test_openai_compatible_route_bad_model_name() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -488,6 +497,7 @@ async fn test_openai_compatible_route_bad_model_name() {
 
 #[tokio::test]
 async fn test_openai_compatible_route_with_json_mode_on() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -625,6 +635,7 @@ async fn test_openai_compatible_route_with_json_mode_on() {
 
 #[tokio::test]
 async fn test_openai_compatible_route_with_json_schema() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -765,6 +776,7 @@ async fn test_openai_compatible_route_with_json_schema() {
 
 #[tokio::test]
 async fn test_openai_compatible_streaming_tool_call() {
+    skip_for_postgres!();
     use futures::StreamExt;
     use reqwest_sse_stream::{Event, RequestBuilderExt};
 
@@ -883,6 +895,7 @@ async fn test_openai_compatible_streaming_tool_call() {
 
 #[tokio::test]
 async fn test_openai_compatible_warn_unknown_fields() {
+    skip_for_postgres!();
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
@@ -908,6 +921,7 @@ async fn test_openai_compatible_warn_unknown_fields() {
 
 #[tokio::test]
 async fn test_openai_compatible_deny_unknown_fields() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
     let err = chat_completions_handler(
@@ -934,6 +948,7 @@ async fn test_openai_compatible_deny_unknown_fields() {
 
 #[tokio::test]
 async fn test_openai_compatible_streaming() {
+    skip_for_postgres!();
     use futures::StreamExt;
     use reqwest_sse_stream::{Event, RequestBuilderExt};
 
@@ -1019,6 +1034,7 @@ async fn test_openai_compatible_streaming() {
 // Test using 'stop' parameter in the openai-compatible endpoint
 #[tokio::test]
 async fn test_openai_compatible_stop_sequence() {
+    skip_for_postgres!();
     let client = Client::new();
 
     let payload = json!({
@@ -1061,6 +1077,7 @@ async fn test_openai_compatible_stop_sequence() {
 
 #[tokio::test]
 async fn test_openai_compatible_file_with_custom_filename() {
+    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let state = client.get_app_state_data().unwrap().clone();
     let episode_id = Uuid::now_v7();
@@ -1142,6 +1159,7 @@ async fn test_openai_compatible_file_with_custom_filename() {
 
 #[tokio::test]
 async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
+    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 

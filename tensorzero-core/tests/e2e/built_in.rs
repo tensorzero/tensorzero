@@ -14,6 +14,7 @@
 //! - Experimentation/sampling - requires multiple variants
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -24,6 +25,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn test_built_in_hello_chat_with_system_variables() {
+    skip_for_postgres!();
     // Test calling the built-in tensorzero::hello_chat function with system template variables
     // using a dynamic variant config
     let mut payload = json!({
@@ -98,6 +100,7 @@ async fn test_built_in_hello_chat_with_system_variables() {
 
 #[tokio::test]
 async fn test_built_in_hello_json() {
+    skip_for_postgres!();
     // Test calling the built-in tensorzero::hello_json function
     let mut payload = json!({
         "function_name": "tensorzero::hello_json",
@@ -163,6 +166,7 @@ async fn test_built_in_hello_json() {
 
 #[tokio::test]
 async fn test_built_in_error_no_variant() {
+    skip_for_postgres!();
     // Test that built-in functions fail gracefully without dynamic variant config
     let payload = json!({
         "function_name": "tensorzero::hello_chat",

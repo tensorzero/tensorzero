@@ -3,6 +3,7 @@
 /// These tests exercise the DICL inference pipeline: embedding the input,
 /// retrieving similar examples from the database, and generating a response.
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use chrono::Utc;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
@@ -54,6 +55,7 @@ pub async fn test_dicl_inference_request_no_examples_empty_dicl_shorthand() {
 }
 #[tokio::test]
 async fn test_dicl_reject_unknown_content_block() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let payload = json!({
         "function_name": "basic_test",
@@ -95,6 +97,7 @@ async fn test_dicl_reject_unknown_content_block() {
 }
 #[tokio::test]
 async fn test_dicl_reject_image_content_block() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let payload = json!({
         "function_name": "basic_test",
@@ -135,6 +138,7 @@ async fn test_dicl_reject_image_content_block() {
     println!("API response: {response_json:#?}");
 }
 pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let payload = json!({
         "function_name": "basic_test",
@@ -404,6 +408,7 @@ async fn embed_insert_example(
 /// Trying to get the LLM to learn that Pinocchio is a liar from examples
 #[tokio::test]
 pub async fn test_dicl_inference_request_simple() {
+    skip_for_postgres!();
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl";
@@ -939,6 +944,7 @@ pub async fn test_dicl_inference_request_simple() {
 }
 #[tokio::test]
 async fn test_dicl_json_request() {
+    skip_for_postgres!();
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl";
@@ -1414,6 +1420,7 @@ max_tokens = 100
 /// Test that max_distance keeps relevant examples when cosine distance is below threshold
 #[tokio::test]
 pub async fn test_dicl_max_distance_keeps_relevant_examples() {
+    skip_for_postgres!();
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl_max_distance_moderate";

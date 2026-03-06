@@ -19,9 +19,12 @@ use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHe
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage, Text};
 use uuid::Uuid;
 
+use crate::utils::skip_for_postgres;
+
 pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -289,6 +292,7 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
 pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     use reqwest_sse_stream::{Event, RequestBuilderExt};
     use serde_json::Value;
 
@@ -608,6 +612,7 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
 pub async fn test_reasoning_inference_request_json_mode_nonstreaming_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Direct Anthropic uses output_format for json_mode=strict
     // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
 
@@ -842,6 +847,7 @@ pub async fn test_reasoning_inference_request_json_mode_nonstreaming_with_provid
 pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;

@@ -23,6 +23,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::providers::common::FERRIS_PNG;
+use crate::utils::skip_for_postgres;
 
 /// Spawn a temporary HTTP server that serves the test image
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
@@ -142,6 +143,7 @@ const IMAGE_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlE
 
 #[tokio::test]
 async fn test_image_url_with_fetch_true() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // The '_shutdown_sender' will wake up the receiver on drop
@@ -220,6 +222,7 @@ async fn test_image_url_with_fetch_true() {
 
 #[tokio::test]
 async fn test_image_url_with_fetch_false() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // The '_shutdown_sender' will wake up the receiver on drop
@@ -278,6 +281,7 @@ async fn test_image_url_with_fetch_false() {
 
 #[tokio::test]
 async fn test_base64_image_with_fetch_true() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let client =
@@ -358,6 +362,7 @@ async fn test_base64_image_with_fetch_true() {
 
 #[tokio::test]
 async fn test_base64_image_with_fetch_false() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let client =
@@ -439,6 +444,7 @@ async fn test_base64_image_with_fetch_false() {
 #[tokio::test]
 #[ignore = "See https://github.com/tensorzero/tensorzero/issues/5092"]
 async fn test_wikipedia_image_url_with_fetch_true() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let wikipedia_url = Url::parse("https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/640px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg").unwrap();
@@ -518,6 +524,7 @@ async fn test_wikipedia_image_url_with_fetch_true() {
 #[tokio::test]
 #[ignore = "See https://github.com/tensorzero/tensorzero/issues/5092"]
 async fn test_wikipedia_image_url_with_fetch_false() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let wikipedia_url = Url::parse("https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/640px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg").unwrap();
@@ -596,6 +603,7 @@ async fn test_wikipedia_image_url_with_fetch_false() {
 
 #[tokio::test]
 async fn test_image_url_403_error() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // The '_shutdown_sender' will wake up the receiver on drop

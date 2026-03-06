@@ -46,13 +46,18 @@ services:
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_MINIO_URL: http://minio:9000/
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
+      TENSORZERO_VALKEY_URL: redis://valkey:6379
       TGI_API_KEY: ${TGI_API_KEY:-}
       TMPDIR: /tmp
       TOGETHER_API_KEY: ${TOGETHER_API_KEY:-}
       VLLM_API_KEY: ${VLLM_API_KEY:-}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
-    command: [--config-file, tensorzero-core/tests/e2e/config/tensorzero.*.toml]
+    command:
+      [
+        --config-file,
+        "tensorzero-core/tests/e2e/config/${GATEWAY_CONFIG_GLOB:-tensorzero.*.toml}",
+      ]
     volumes:
       # Mount the e2e directory so the config path exists inside the container
       - ./:/app/tensorzero-core/tests/e2e:ro
@@ -76,6 +81,8 @@ services:
       provider-proxy:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      valkey:
         condition: service_healthy
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
