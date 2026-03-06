@@ -3,12 +3,11 @@ import { data, useLocation } from "react-router";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
 import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
-import { SnapshotHashProvider } from "~/context/snapshot";
+import { useSnapshotHash } from "~/context/snapshot";
 import {
   getConfigFromRequest,
   getFunctionConfig,
 } from "~/utils/config/index.server";
-import { useSnapshotHash } from "~/context/snapshot";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
 import {
@@ -71,7 +70,7 @@ function FunctionDetailPageHeader({
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
-  const { config, snapshotHash } = await getConfigFromRequest(request);
+  const { config } = await getConfigFromRequest(request);
   const url = new URL(request.url);
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
@@ -99,7 +98,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     function_name,
     function_config,
-    snapshotHash,
     variantsData: fetchVariantsSectionData({ function_name, function_config }),
     experimentationData:
       function_name !== DEFAULT_FUNCTION
@@ -135,7 +133,6 @@ export default function FunctionDetailPage({
   const {
     function_name,
     function_config,
-    snapshotHash,
     variantsData,
     experimentationData,
     throughputData,
@@ -146,51 +143,46 @@ export default function FunctionDetailPage({
   const location = useLocation();
 
   return (
-    <SnapshotHashProvider value={snapshotHash}>
-      <PageLayout>
-        <FunctionDetailPageHeader
+    <PageLayout>
+      <FunctionDetailPageHeader
+        functionName={function_name}
+        functionConfig={function_config}
+      />
+
+      <SectionsGroup>
+        <VariantsSection
+          variantsData={variantsData}
           functionName={function_name}
-          functionConfig={function_config}
+          locationKey={location.key}
         />
 
-        <SectionsGroup>
-          <VariantsSection
-            variantsData={variantsData}
+        {experimentationData && (
+          <ExperimentationSection
+            experimentationData={experimentationData}
+            functionConfig={function_config}
             functionName={function_name}
             locationKey={location.key}
           />
+        )}
 
-          {experimentationData && (
-            <ExperimentationSection
-              experimentationData={experimentationData}
-              functionConfig={function_config}
-              functionName={function_name}
-              locationKey={location.key}
-            />
-          )}
+        <ThroughputSection
+          throughputData={throughputData}
+          locationKey={location.key}
+        />
 
-          <ThroughputSection
-            throughputData={throughputData}
-            locationKey={location.key}
-          />
+        <MetricsSection metricsData={metricsData} locationKey={location.key} />
 
-          <MetricsSection
-            metricsData={metricsData}
-            locationKey={location.key}
-          />
+        <SectionLayout>
+          <SectionHeader heading="Schemas" />
+          <FunctionSchema functionConfig={function_config} />
+        </SectionLayout>
 
-          <SectionLayout>
-            <SectionHeader heading="Schemas" />
-            <FunctionSchema functionConfig={function_config} />
-          </SectionLayout>
-
-          <InferencesSection
-            inferencesData={inferencesData}
-            countPromise={inferenceCountPromise}
-            locationKey={location.key}
-          />
-        </SectionsGroup>
-      </PageLayout>
-    </SnapshotHashProvider>
+        <InferencesSection
+          inferencesData={inferencesData}
+          countPromise={inferenceCountPromise}
+          locationKey={location.key}
+        />
+      </SectionsGroup>
+    </PageLayout>
   );
 }

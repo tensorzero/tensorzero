@@ -1,33 +1,16 @@
-import { createContext, useContext } from "react";
+import { useSearchParams } from "react-router";
 
 /**
- * Provides a config snapshot hash to descendant components.
+ * Reads `?snapshot_hash` from the current URL.
  *
- * Pages that view historical data (inferences, evaluations) set this so
- * outbound links to config-defined entities (functions, variants) include
- * `?snapshot_hash=X`. The target page then loads the historical config
- * instead of the current one.
+ * Config-only pages (functions, variants) receive the hash via URL from
+ * whatever page linked to them. Components use this hook to propagate
+ * the hash to outbound links and to show the SnapshotBanner.
  *
- * DB entities (inferences, episodes) carry their own snapshot_hash, so
- * links to those pages do NOT need this — their loaders read the hash
- * from the entity itself.
+ * DB entities (inferences, episodes) carry their own snapshot_hash on
+ * the object — those pages read it directly instead of using this hook.
  */
-const SnapshotHashContext = createContext<string | null>(null);
-
-export function SnapshotHashProvider({
-  children,
-  value,
-}: {
-  children: React.ReactNode;
-  value: string | null;
-}) {
-  return (
-    <SnapshotHashContext.Provider value={value}>
-      {children}
-    </SnapshotHashContext.Provider>
-  );
-}
-
 export function useSnapshotHash(): string | null {
-  return useContext(SnapshotHashContext);
+  const [searchParams] = useSearchParams();
+  return searchParams.get("snapshot_hash");
 }

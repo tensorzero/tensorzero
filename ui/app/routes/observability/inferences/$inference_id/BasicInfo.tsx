@@ -19,7 +19,6 @@ import {
   Cached,
   Cost,
 } from "~/components/icons/Icons";
-import { useSnapshotHash } from "~/context/snapshot";
 import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
 import { formatCost } from "~/utils/cost";
 import { formatDateWithSeconds } from "~/utils/date";
@@ -72,7 +71,7 @@ export function BasicInfo({
   variantType,
   modelInferences = [],
 }: BasicInfoProps) {
-  const snapshotHash = useSnapshotHash();
+  const snapshotHash = inference.snapshot_hash ?? null;
   const inferenceUsage = getTotalInferenceUsage(modelInferences);
 
   const functionIconConfig = getFunctionTypeIcon(inference.type);

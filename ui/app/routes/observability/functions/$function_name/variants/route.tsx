@@ -12,7 +12,7 @@ import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import { AlertCircle } from "lucide-react";
 import { Suspense, useMemo } from "react";
 import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
-import { SnapshotHashProvider, useSnapshotHash } from "~/context/snapshot";
+import { useSnapshotHash } from "~/context/snapshot";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
 import PageButtons from "~/components/utils/PageButtons";
@@ -131,7 +131,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     return redirect("/observability/functions");
   }
 
-  const { config, snapshotHash } = await getConfigFromRequest(request);
+  const { config } = await getConfigFromRequest(request);
   const url = new URL(request.url);
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
@@ -153,7 +153,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     function_name,
     function_config,
     variant_name,
-    snapshotHash,
     // Metrics section - split into selector data and chart data
     metricsWithFeedbackData:
       getTensorZeroClient().getFunctionMetricsWithFeedback(
@@ -463,7 +462,6 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     function_name,
     function_config,
     variant_name,
-    snapshotHash,
     metricsWithFeedbackData,
     variantPerformanceData,
     inferencesTableData,
@@ -510,40 +508,38 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const function_type = function_config.type;
 
   return (
-    <SnapshotHashProvider value={snapshotHash}>
-      <PageLayout>
-        <VariantDetailPageHeader
-          functionName={function_name}
-          variantName={variant_name}
+    <PageLayout>
+      <VariantDetailPageHeader
+        functionName={function_name}
+        variantName={variant_name}
+      />
+
+      <SectionsGroup>
+        <SectionLayout>
+          <BasicInfo
+            variantConfig={variant_info.inner}
+            function_name={function_name}
+            function_type={function_type}
+          />
+        </SectionLayout>
+
+        <MetricsSection
+          metricsWithFeedbackData={metricsWithFeedbackData}
+          variantPerformanceData={variantPerformanceData}
+          locationKey={location.key}
         />
 
-        <SectionsGroup>
-          <SectionLayout>
-            <BasicInfo
-              variantConfig={variant_info.inner}
-              function_name={function_name}
-              function_type={function_type}
-            />
-          </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Templates" />
+          <VariantTemplate variantConfig={variant_info.inner} />
+        </SectionLayout>
 
-          <MetricsSection
-            metricsWithFeedbackData={metricsWithFeedbackData}
-            variantPerformanceData={variantPerformanceData}
-            locationKey={location.key}
-          />
-
-          <SectionLayout>
-            <SectionHeader heading="Templates" />
-            <VariantTemplate variantConfig={variant_info.inner} />
-          </SectionLayout>
-
-          <InferencesSection
-            inferencesTableData={inferencesTableData}
-            inferenceCountData={inferenceCountData}
-            locationKey={location.key}
-          />
-        </SectionsGroup>
-      </PageLayout>
-    </SnapshotHashProvider>
+        <InferencesSection
+          inferencesTableData={inferencesTableData}
+          inferenceCountData={inferenceCountData}
+          locationKey={location.key}
+        />
+      </SectionsGroup>
+    </PageLayout>
   );
 }
