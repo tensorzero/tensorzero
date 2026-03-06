@@ -40,12 +40,12 @@ pub(super) fn run_regex_evaluator(
         return Ok(Some(Value::Bool(result)));
     };
 
-    let must_match_ok = match config.compiled_must_match() {
+    let must_match_ok = match config.compiled_must_match()? {
         Some(re) => re.is_match(&text),
         None => true,
     };
 
-    let must_not_match_ok = match config.compiled_must_not_match() {
+    let must_not_match_ok = match config.compiled_must_not_match()? {
         Some(re) => !re.is_match(&text),
         None => true,
     };

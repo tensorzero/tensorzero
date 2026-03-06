@@ -188,7 +188,9 @@ impl std::fmt::Display for ToolUseConfig {
 /// At least one of `must_match` or `must_not_match` must be specified.
 /// If both are specified, the result is the logical AND: `must_match` matches AND `must_not_match` does not match.
 ///
-/// Use [`RegexConfig::new`] to construct with precompiled regex patterns for best performance.
+/// Regex patterns are compiled lazily on first access via [`RegexConfig::compiled_must_match`]
+/// and [`RegexConfig::compiled_must_not_match`], so this struct works correctly both after
+/// construction with [`RegexConfig::new`] and after deserialization.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -200,46 +202,56 @@ pub struct RegexConfig {
     /// Regex pattern that the inference output must *not* match for the evaluation to pass.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub must_not_match: Option<String>,
-    /// Precompiled regex for `must_match`. Populated by [`RegexConfig::new`].
+    /// Lazily compiled regex for `must_match`. Populated on first access.
     #[serde(skip)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
-    compiled_must_match: Option<regex::Regex>,
-    /// Precompiled regex for `must_not_match`. Populated by [`RegexConfig::new`].
+    compiled_must_match: once_cell::sync::OnceCell<Option<regex::Regex>>,
+    /// Lazily compiled regex for `must_not_match`. Populated on first access.
     #[serde(skip)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
-    compiled_must_not_match: Option<regex::Regex>,
+    compiled_must_not_match: once_cell::sync::OnceCell<Option<regex::Regex>>,
 }
 
 impl RegexConfig {
-    /// Creates a new `RegexConfig` with precompiled regex patterns.
+    /// Creates a new `RegexConfig`, eagerly validating that the patterns are valid regexes.
     pub fn new(
         must_match: Option<String>,
         must_not_match: Option<String>,
     ) -> Result<Self, regex::Error> {
-        let compiled_must_match = must_match
-            .as_ref()
-            .map(|p| regex::Regex::new(p))
-            .transpose()?;
-        let compiled_must_not_match = must_not_match
-            .as_ref()
-            .map(|p| regex::Regex::new(p))
-            .transpose()?;
-        Ok(Self {
+        let cfg = Self {
             must_match,
             must_not_match,
-            compiled_must_match,
-            compiled_must_not_match,
-        })
+            compiled_must_match: once_cell::sync::OnceCell::new(),
+            compiled_must_not_match: once_cell::sync::OnceCell::new(),
+        };
+        // Eagerly validate by triggering lazy compilation
+        cfg.compiled_must_match()?;
+        cfg.compiled_must_not_match()?;
+        Ok(cfg)
     }
 
-    /// Returns the precompiled `must_match` regex, if available.
-    pub fn compiled_must_match(&self) -> Option<&regex::Regex> {
-        self.compiled_must_match.as_ref()
+    /// Returns the compiled `must_match` regex, compiling lazily on first access.
+    pub fn compiled_must_match(&self) -> Result<Option<&regex::Regex>, regex::Error> {
+        self.compiled_must_match
+            .get_or_try_init(|| {
+                self.must_match
+                    .as_ref()
+                    .map(|p| regex::Regex::new(p))
+                    .transpose()
+            })
+            .map(|opt| opt.as_ref())
     }
 
-    /// Returns the precompiled `must_not_match` regex, if available.
-    pub fn compiled_must_not_match(&self) -> Option<&regex::Regex> {
-        self.compiled_must_not_match.as_ref()
+    /// Returns the compiled `must_not_match` regex, compiling lazily on first access.
+    pub fn compiled_must_not_match(&self) -> Result<Option<&regex::Regex>, regex::Error> {
+        self.compiled_must_not_match
+            .get_or_try_init(|| {
+                self.must_not_match
+                    .as_ref()
+                    .map(|p| regex::Regex::new(p))
+                    .transpose()
+            })
+            .map(|opt| opt.as_ref())
     }
 }
 
@@ -734,38 +746,25 @@ impl UninitializedEvaluatorConfig {
                     }
                     .into());
                 }
-                if let Some(pattern) = &config.must_match {
-                    regex::Regex::new(pattern).map_err(|e| {
-                        Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
-                                 invalid regex in `must_match`: {e}"
-                            ),
-                        })
-                    })?;
-                }
-                if let Some(pattern) = &config.must_not_match {
-                    regex::Regex::new(pattern).map_err(|e| {
-                        Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
-                                 invalid regex in `must_not_match`: {e}"
-                            ),
-                        })
-                    })?;
-                }
-                // Precompile regexes for runtime use (patterns already validated above)
-                let compiled_config =
-                    RegexConfig::new(config.must_match, config.must_not_match).map_err(|e| {
-                        Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
-                                 failed to compile regex: {e}"
-                            ),
-                        })
-                    })?;
+                // Eagerly validate regex patterns (triggers lazy compilation via OnceLock)
+                config.compiled_must_match().map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                             invalid regex in `must_match`: {e}"
+                        ),
+                    })
+                })?;
+                config.compiled_must_not_match().map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                             invalid regex in `must_not_match`: {e}"
+                        ),
+                    })
+                })?;
                 Ok((
-                    EvaluatorConfig::Regex(compiled_config),
+                    EvaluatorConfig::Regex(config),
                     None,
                     MetricConfig {
                         r#type: MetricConfigType::Boolean,
@@ -2409,6 +2408,40 @@ mod tests {
             err.contains("invalid regex in `must_not_match`"),
             "error message should mention must_not_match, got: {err}"
         );
+    }
+
+    #[test]
+    fn test_regex_config_serde_round_trip() {
+        // Construct via new(), serialize to JSON, deserialize back, and verify
+        // that the deserialized config still works (lazy compilation via OnceLock).
+        let original = RegexConfig::new(
+            Some("(?i)hello".to_string()),
+            Some("(?i)badword".to_string()),
+        )
+        .unwrap();
+
+        // Verify original works
+        assert!(original.compiled_must_match().unwrap().is_some());
+        assert!(original.compiled_must_not_match().unwrap().is_some());
+
+        // Round-trip through serde
+        let json = serde_json::to_value(&original).unwrap();
+        let deserialized: RegexConfig = serde_json::from_value(json).unwrap();
+
+        // Verify deserialized config compiles regexes lazily and works correctly
+        let must_match_re = deserialized
+            .compiled_must_match()
+            .expect("should compile lazily")
+            .expect("should have must_match regex");
+        assert!(must_match_re.is_match("Hello World"));
+        assert!(!must_match_re.is_match("Goodbye"));
+
+        let must_not_match_re = deserialized
+            .compiled_must_not_match()
+            .expect("should compile lazily")
+            .expect("should have must_not_match regex");
+        assert!(must_not_match_re.is_match("contains badword"));
+        assert!(!must_not_match_re.is_match("clean text"));
     }
 
     // Helper functions for tests
