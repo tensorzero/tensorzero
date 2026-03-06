@@ -639,8 +639,32 @@ pub struct EventPayloadUserQuestion {
     pub header: String,
     /// The complete question to ask the user. Should be clear, specific, and end with a question mark.
     pub question: String,
+    /// Optional rich content displayed above the question to provide context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub context: Option<Vec<ContentBlock>>,
     #[serde(flatten)]
     pub inner: EventPayloadUserQuestionInner,
+}
+
+/// A block of rich content displayed alongside a question.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
+pub enum ContentBlock {
+    /// Rendered as formatted markdown.
+    Markdown { text: String },
+    /// Rendered as a labeled, formatted JSON viewer.
+    Json {
+        data: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
+        label: Option<String>,
+    },
 }
 
 /// The format of a user question.
