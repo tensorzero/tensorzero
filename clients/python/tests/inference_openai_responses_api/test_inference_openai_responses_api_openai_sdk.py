@@ -287,6 +287,7 @@ async def test_openai_responses_tool_call_streaming(async_openai_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(120)
 async def test_openai_responses_web_search_dynamic_provider_tools(async_openai_client):
     """Test OpenAI Responses API with dynamically configured provider tools (web search)"""
     response = await async_openai_client.chat.completions.create(
