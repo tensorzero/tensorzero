@@ -1,4 +1,4 @@
-import { createContext, use } from "react";
+import { createContext, useContext } from "react";
 
 /**
  * Provides a config snapshot hash to descendant components.
@@ -21,9 +21,13 @@ export function SnapshotHashProvider({
   children: React.ReactNode;
   value: string | null;
 }) {
-  return <SnapshotHashContext value={value}>{children}</SnapshotHashContext>;
+  return (
+    <SnapshotHashContext.Provider value={value}>
+      {children}
+    </SnapshotHashContext.Provider>
+  );
 }
 
 export function useSnapshotHash(): string | null {
-  return use(SnapshotHashContext);
+  return useContext(SnapshotHashContext);
 }
