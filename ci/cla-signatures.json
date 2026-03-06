@@ -935,6 +935,14 @@
       "created_at": "2026-03-03T09:34:18Z",
       "repoId": 829640443,
       "pullRequestNo": 6652
+    },
+    {
+      "name": "koriyoshi2041",
+      "id": 182183463,
+      "comment_id": 4012287244,
+      "created_at": "2026-03-06T15:06:36Z",
+      "repoId": 829640443,
+      "pullRequestNo": 6767
     }
   ]
 }
