@@ -1,3 +1,4 @@
+use googletest::prelude::*;
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::{
@@ -6,14 +7,7 @@ use std::{
 };
 use tensorzero_core::{
     config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
-    db::{
-        clickhouse::test_helpers::{
-            select_feedback_clickhouse, select_feedback_tags_clickhouse,
-            select_feedback_tags_clickhouse_with_feedback_id,
-        },
-        postgres::PostgresConnectionInfo,
-        valkey::ValkeyConnectionInfo,
-    },
+    db::{postgres::PostgresConnectionInfo, valkey::ValkeyConnectionInfo},
     endpoints::feedback::{Params, feedback},
     http::TensorzeroHttpClient,
     inference::types::{
@@ -25,12 +19,14 @@ use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::delegating_connection::{DelegatingDatabaseConnection, PrimaryDatastore};
+use tensorzero_core::db::feedback::{FeedbackQueries, FeedbackRow};
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 
+#[gtest]
 #[tokio::test]
 async fn test_comment_feedback_normal_function() {
-    skip_for_postgres!();
     test_comment_feedback_with_payload(serde_json::json!({
         "function_name": "json_success",
         "input": {
@@ -41,9 +37,9 @@ async fn test_comment_feedback_normal_function() {
     })).await;
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_comment_feedback_default_function() {
-    skip_for_postgres!();
     test_comment_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
@@ -55,7 +51,6 @@ async fn test_comment_feedback_default_function() {
 }
 
 async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value) {
-    skip_for_postgres!();
     let client = Client::new();
     // // Running without valid episode_id. Should fail.
     let episode_id = Uuid::now_v7();
@@ -111,41 +106,51 @@ async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse CommentFeedback
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
+    // Check CommentFeedback
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(episode_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_episode_id = result.get("target_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id_uuid = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id_uuid, episode_id);
-    let retrieved_target_type = result.get("target_type").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_target_type, "episode");
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_value, "good job!");
-    // Assert CommentFeedback has snapshot_hash
+    let comment = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Comment(c) if c.id == feedback_id => Some(c),
+            _ => None,
+        })
+        .expect("Should find comment feedback");
+    assert_eq!(comment.target_id, episode_id);
+    assert_eq!(comment.value, "good job!");
     assert!(
-        !result["snapshot_hash"].is_null(),
-        "CommentFeedback should have snapshot_hash"
+        matches!(
+            comment.target_type,
+            tensorzero_core::db::feedback::CommentTargetType::Episode
+        ),
+        "Expected episode target type"
     );
 
-    // Check ClickHouse FeedbackTag
-    let result = select_feedback_tags_clickhouse(&clickhouse, "comment", "key", &tag_value)
-        .await
-        .unwrap();
-    let id = result.get("feedback_id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    // Assert FeedbackTag has snapshot_hash
-    assert!(
-        !result["snapshot_hash"].is_null(),
-        "FeedbackTag should have snapshot_hash"
-    );
+    // Check FeedbackTag
+    assert_eq!(comment.tags.get("key"), Some(&tag_value));
+
+    // snapshot_hash checks are ClickHouse-specific
+    if PrimaryDatastore::from_test_env() != PrimaryDatastore::Postgres {
+        let clickhouse = get_clickhouse().await;
+        let query = format!(
+            "SELECT snapshot_hash FROM CommentFeedback WHERE id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !result["snapshot_hash"].is_null(),
+            "CommentFeedback should have snapshot_hash"
+        );
+    }
 
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -210,47 +215,65 @@ async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
+    // Check CommentFeedback
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("target_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_target_type = result.get("target_type").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_target_type, "inference");
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_value, "bad job!");
-    // Assert CommentFeedback has snapshot_hash
+    let comment = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Comment(c) if c.id == feedback_id => Some(c),
+            _ => None,
+        })
+        .expect("Should find comment feedback");
+    assert_eq!(comment.target_id, inference_id);
+    assert_eq!(comment.value, "bad job!");
     assert!(
-        !result["snapshot_hash"].is_null(),
-        "CommentFeedback should have snapshot_hash"
+        matches!(
+            comment.target_type,
+            tensorzero_core::db::feedback::CommentTargetType::Inference
+        ),
+        "Expected inference target type"
     );
 
-    // Assert CommentFeedbackByTargetId materialized view has snapshot_hash
-    let query = format!(
-        "SELECT snapshot_hash FROM CommentFeedbackByTargetId WHERE target_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
-    assert!(
-        !view_result["snapshot_hash"].is_null(),
-        "CommentFeedbackByTargetId should have snapshot_hash"
-    );
+    // snapshot_hash checks are ClickHouse-specific
+    if PrimaryDatastore::from_test_env() != PrimaryDatastore::Postgres {
+        let clickhouse = get_clickhouse().await;
+        let query = format!(
+            "SELECT snapshot_hash FROM CommentFeedback WHERE id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !result["snapshot_hash"].is_null(),
+            "CommentFeedback should have snapshot_hash"
+        );
+
+        let query = format!(
+            "SELECT snapshot_hash FROM CommentFeedbackByTargetId WHERE target_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !view_result["snapshot_hash"].is_null(),
+            "CommentFeedbackByTargetId should have snapshot_hash"
+        );
+    }
 }
 
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_comment_feedback_validation_disabled() {
-    skip_for_postgres!();
     let mut config = Config::new_empty()
         .await
         .unwrap()
@@ -292,12 +315,12 @@ async fn test_comment_feedback_validation_disabled() {
         .unwrap();
     let result: Value = serde_json::from_str(&response.response).unwrap();
     let clickhouse_feedback_id = Uuid::parse_str(result["id"].as_str().unwrap()).unwrap();
-    assert_eq!(val.feedback_id, clickhouse_feedback_id);
+    expect_that!(val.feedback_id, eq(clickhouse_feedback_id));
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_demonstration_feedback_normal_function() {
-    skip_for_postgres!();
     test_demonstration_feedback_with_payload(serde_json::json!({
         "function_name": "basic_test",
         "input": {
@@ -309,9 +332,9 @@ async fn test_demonstration_feedback_normal_function() {
     .await;
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_demonstration_feedback_default_function() {
-    skip_for_postgres!();
     test_demonstration_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
@@ -323,7 +346,6 @@ async fn test_demonstration_feedback_default_function() {
 }
 
 async fn test_demonstration_feedback_with_payload(inference_payload: serde_json::Value) {
-    skip_for_postgres!();
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let tag_value = Uuid::now_v7().to_string();
@@ -380,57 +402,61 @@ async fn test_demonstration_feedback_with_payload(inference_payload: serde_json:
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse DemonstrationFeedback
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+    // Check DemonstrationFeedback
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
+    let demo = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Demonstration(d) if d.id == feedback_id => Some(d),
+            _ => None,
+        })
+        .expect("Should find demonstration feedback");
+    assert_eq!(demo.inference_id, inference_id);
     let expected_value = serde_json::to_string(&json!(vec![ContentBlockChatOutput::Text(Text {
         text: "do this!".to_string()
     })]))
     .unwrap();
-    assert_eq!(retrieved_value, expected_value);
-    // Assert DemonstrationFeedback has snapshot_hash
-    assert!(
-        !result["snapshot_hash"].is_null(),
-        "DemonstrationFeedback should have snapshot_hash"
-    );
+    assert_eq!(demo.value, expected_value);
 
-    // Assert DemonstrationFeedbackByInferenceId materialized view has snapshot_hash
-    let query = format!(
-        "SELECT snapshot_hash FROM DemonstrationFeedbackByInferenceId WHERE inference_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
-    assert!(
-        !view_result["snapshot_hash"].is_null(),
-        "DemonstrationFeedbackByInferenceId should have snapshot_hash"
-    );
+    // Check FeedbackTag
+    assert_eq!(demo.tags.get("key"), Some(&tag_value));
 
-    // Check ClickHouse FeedbackTag
-    let result = select_feedback_tags_clickhouse(&clickhouse, "demonstration", "key", &tag_value)
-        .await
-        .unwrap();
-    let id = result.get("feedback_id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    // Assert FeedbackTag has snapshot_hash
-    assert!(
-        !result["snapshot_hash"].is_null(),
-        "FeedbackTag should have snapshot_hash"
-    );
+    // snapshot_hash checks are ClickHouse-specific
+    if PrimaryDatastore::from_test_env() != PrimaryDatastore::Postgres {
+        let clickhouse = get_clickhouse().await;
+        let query = format!(
+            "SELECT snapshot_hash FROM DemonstrationFeedback WHERE id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !result["snapshot_hash"].is_null(),
+            "DemonstrationFeedback should have snapshot_hash"
+        );
+
+        let query = format!(
+            "SELECT snapshot_hash FROM DemonstrationFeedbackByInferenceId WHERE inference_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !view_result["snapshot_hash"].is_null(),
+            "DemonstrationFeedbackByInferenceId should have snapshot_hash"
+        );
+    }
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
@@ -490,9 +516,9 @@ async fn test_demonstration_feedback_with_payload(inference_payload: serde_json:
     );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_demonstration_feedback_json() {
-    skip_for_postgres!();
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -511,7 +537,7 @@ async fn test_demonstration_feedback_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     // Run inference (standard, no dryrun) to get an inference_id
     let inference_payload = serde_json::json!({
         "function_name": "json_success",
@@ -529,7 +555,7 @@ async fn test_demonstration_feedback_json() {
         .await
         .unwrap();
 
-    assert!(response.status().is_success());
+    assert_that!(response.status().is_success(), eq(true));
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -551,31 +577,34 @@ async fn test_demonstration_feedback_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
-    assert!(feedback_id.is_string());
+    assert_that!(feedback_id.is_string(), eq(true));
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+    // Check DemonstrationFeedback
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
+    let demo = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Demonstration(d) if d.id == feedback_id => Some(d),
+            _ => None,
+        })
+        .expect("Should find demonstration feedback");
+    expect_that!(demo.inference_id, eq(inference_id));
+    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(&demo.value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo"})),
         raw: Some("{\"answer\":\"Tokyo\"}".to_string()),
     };
-    assert_eq!(retrieved_value, expected_value);
+    expect_that!(&retrieved_value, eq(&expected_value));
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
@@ -594,12 +623,12 @@ async fn test_demonstration_feedback_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         message,
-        "Correct ID was not provided for feedback level \"inference\"."
+        eq("Correct ID was not provided for feedback level \"inference\".")
     );
 
     // Try a tool call demonstration
@@ -620,15 +649,18 @@ async fn test_demonstration_feedback_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert!(error_message.starts_with("Demonstration does not fit function output schema:"));
+    expect_that!(
+        error_message,
+        starts_with("Demonstration does not fit function output schema:")
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_demonstration_feedback_llm_judge() {
-    skip_for_postgres!();
     let client = Client::new();
     // Run inference (standard, no dryrun) to get an inference_id
     let old_output_schema = json!({
@@ -664,7 +696,7 @@ async fn test_demonstration_feedback_llm_judge() {
         .send()
         .await
         .unwrap();
-    assert!(response.status().is_success());
+    assert_that!(response.status().is_success(), eq(true));
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -686,36 +718,39 @@ async fn test_demonstration_feedback_llm_judge() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
-    assert!(feedback_id.is_string());
+    assert_that!(feedback_id.is_string(), eq(true));
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+    // Check DemonstrationFeedback
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
+    let demo = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Demonstration(d) if d.id == feedback_id => Some(d),
+            _ => None,
+        })
+        .expect("Should find demonstration feedback");
+    expect_that!(demo.inference_id, eq(inference_id));
+    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(&demo.value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"score": 0.5})),
         raw: Some("{\"score\":0.5}".to_string()),
     };
-    assert_eq!(retrieved_value, expected_value);
+    expect_that!(&retrieved_value, eq(&expected_value));
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_demonstration_feedback_dynamic_json() {
-    skip_for_postgres!();
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -734,7 +769,7 @@ async fn test_demonstration_feedback_dynamic_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     // Run inference (standard, no dryrun) to get an inference_id
     let new_output_schema = json!({
         "type": "object",
@@ -766,7 +801,7 @@ async fn test_demonstration_feedback_dynamic_json() {
         .await
         .unwrap();
 
-    assert!(response.status().is_success());
+    assert_that!(response.status().is_success(), eq(true));
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -788,31 +823,34 @@ async fn test_demonstration_feedback_dynamic_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
-    assert!(feedback_id.is_string());
+    assert_that!(feedback_id.is_string(), eq(true));
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+    // Check DemonstrationFeedback
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
+    let demo = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Demonstration(d) if d.id == feedback_id => Some(d),
+            _ => None,
+        })
+        .expect("Should find demonstration feedback");
+    expect_that!(demo.inference_id, eq(inference_id));
+    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(&demo.value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo", "comment": "This is a comment"})),
         raw: Some("{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string()),
     };
-    assert_eq!(retrieved_value, expected_value);
+    expect_that!(&retrieved_value, eq(&expected_value));
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
@@ -831,12 +869,12 @@ async fn test_demonstration_feedback_dynamic_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         message,
-        "Correct ID was not provided for feedback level \"inference\"."
+        eq("Correct ID was not provided for feedback level \"inference\".")
     );
 
     // Try a tool call demonstration
@@ -857,10 +895,13 @@ async fn test_demonstration_feedback_dynamic_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert!(error_message.starts_with("Demonstration does not fit function output schema:"));
+    expect_that!(
+        error_message,
+        starts_with("Demonstration does not fit function output schema:")
+    );
 
     // Try a demonstration with a value that doesn't match the output schema
     let payload = Params {
@@ -878,15 +919,18 @@ async fn test_demonstration_feedback_dynamic_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert!(error_message.starts_with("Demonstration does not fit function output schema:"));
+    expect_that!(
+        error_message,
+        starts_with("Demonstration does not fit function output schema:")
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_demonstration_feedback_tool() {
-    skip_for_postgres!();
     // Running without valid inference_id. Should fail.
     let client = Client::new();
     let inference_id = Uuid::now_v7();
@@ -905,7 +949,7 @@ async fn test_demonstration_feedback_tool() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     // Run inference (standard, no dryrun) to get an inference_id
     let inference_payload = serde_json::json!({
         "function_name": "weather_helper",
@@ -923,7 +967,7 @@ async fn test_demonstration_feedback_tool() {
         .await
         .unwrap();
 
-    assert!(response.status().is_success());
+    assert_that!(response.status().is_success(), eq(true));
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -945,28 +989,31 @@ async fn test_demonstration_feedback_tool() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
-    assert!(feedback_id.is_string());
+    assert_that!(feedback_id.is_string(), eq(true));
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+    // Check DemonstrationFeedback
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
+    let demo = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Demonstration(d) if d.id == feedback_id => Some(d),
+            _ => None,
+        })
+        .expect("Should find demonstration feedback");
+    expect_that!(demo.inference_id, eq(inference_id));
     let expected_value =
         serde_json::to_string(&json!([{"type": "text", "text": "sunny" }])).unwrap();
-    assert_eq!(retrieved_value, expected_value);
+    expect_that!(&demo.value, eq(&expected_value));
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
@@ -985,12 +1032,12 @@ async fn test_demonstration_feedback_tool() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         message,
-        "Correct ID was not provided for feedback level \"inference\"."
+        eq("Correct ID was not provided for feedback level \"inference\".")
     );
 
     // Try a tool call demonstration
@@ -1011,10 +1058,13 @@ async fn test_demonstration_feedback_tool() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(error_message, "Demonstration contains invalid tool name");
+    expect_that!(
+        error_message,
+        eq("Demonstration contains invalid tool name")
+    );
 
     // Try a tool call demonstration with correct name incorrect args
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_temperature", "arguments": "tool_input"});
@@ -1033,12 +1083,12 @@ async fn test_demonstration_feedback_tool() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         error_message,
-        "Demonstration contains invalid tool call arguments"
+        eq("Demonstration contains invalid tool call arguments")
     );
 
     // Try a tool call demonstration with correct name and args
@@ -1060,30 +1110,32 @@ async fn test_demonstration_feedback_tool() {
         .unwrap();
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
-    assert!(feedback_id.is_string());
+    assert_that!(feedback_id.is_string(), eq(true));
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+    // Check DemonstrationFeedback (tool call)
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
+    let demo = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Demonstration(d) if d.id == feedback_id => Some(d),
+            _ => None,
+        })
+        .expect("Should find demonstration feedback");
+    expect_that!(demo.inference_id, eq(inference_id));
+    let retrieved_value = serde_json::from_str::<Value>(&demo.value).unwrap();
     let expected_value = json!([{"type": "tool_call", "id": "tool_call_id", "raw_name": "get_temperature", "raw_arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}}]);
-    assert_eq!(retrieved_value, expected_value);
+    expect_that!(&retrieved_value, eq(&expected_value));
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_demonstration_feedback_dynamic_tool() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an inference_id
@@ -1118,7 +1170,7 @@ async fn test_demonstration_feedback_dynamic_tool() {
         .await
         .unwrap();
 
-    assert!(response.status().is_success());
+    assert_that!(response.status().is_success(), eq(true));
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -1140,28 +1192,31 @@ async fn test_demonstration_feedback_dynamic_tool() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
-    assert!(feedback_id.is_string());
+    assert_that!(feedback_id.is_string(), eq(true));
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+    // Check DemonstrationFeedback
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
+    let demo = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Demonstration(d) if d.id == feedback_id => Some(d),
+            _ => None,
+        })
+        .expect("Should find demonstration feedback");
+    expect_that!(demo.inference_id, eq(inference_id));
     let expected_value =
         serde_json::to_string(&json!([{"type": "text", "text": "sunny" }])).unwrap();
-    assert_eq!(retrieved_value, expected_value);
+    expect_that!(&demo.value, eq(&expected_value));
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
@@ -1180,12 +1235,12 @@ async fn test_demonstration_feedback_dynamic_tool() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         message,
-        "Correct ID was not provided for feedback level \"inference\"."
+        eq("Correct ID was not provided for feedback level \"inference\".")
     );
 
     // Try a tool call demonstration
@@ -1206,10 +1261,13 @@ async fn test_demonstration_feedback_dynamic_tool() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(error_message, "Demonstration contains invalid tool name");
+    expect_that!(
+        error_message,
+        eq("Demonstration contains invalid tool name")
+    );
 
     // Try a tool call demonstration with the dynamic tool name and incorrect args
     let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_humidity", "arguments": "tool_input"});
@@ -1228,12 +1286,12 @@ async fn test_demonstration_feedback_dynamic_tool() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         error_message,
-        "Demonstration contains invalid tool call arguments"
+        eq("Demonstration contains invalid tool call arguments")
     );
 
     // Try a tool call demonstration with the dynamic tool name and correct args
@@ -1255,30 +1313,32 @@ async fn test_demonstration_feedback_dynamic_tool() {
         .unwrap();
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
-    assert!(feedback_id.is_string());
+    assert_that!(feedback_id.is_string(), eq(true));
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+    // Check DemonstrationFeedback (dynamic tool call)
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
+    let demo = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Demonstration(d) if d.id == feedback_id => Some(d),
+            _ => None,
+        })
+        .expect("Should find demonstration feedback");
+    expect_that!(demo.inference_id, eq(inference_id));
+    let retrieved_value = serde_json::from_str::<Value>(&demo.value).unwrap();
     let expected_value = json!([{"type": "tool_call", "id": "tool_call_id", "raw_name": "get_humidity", "raw_arguments": "{\"location\":\"Tokyo\"}", "name": "get_humidity", "arguments": {"location": "Tokyo"}}]);
-    assert_eq!(retrieved_value, expected_value);
+    expect_that!(&retrieved_value, eq(&expected_value));
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_float_feedback_normal_function() {
-    skip_for_postgres!();
     test_float_feedback_with_payload(serde_json::json!({
         "function_name": "json_success",
         "input": {
@@ -1289,9 +1349,9 @@ async fn test_float_feedback_normal_function() {
     })).await;
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_float_feedback_default_function() {
-    skip_for_postgres!();
     test_float_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
@@ -1303,7 +1363,6 @@ async fn test_float_feedback_default_function() {
 }
 
 async fn test_float_feedback_with_payload(inference_payload: serde_json::Value) {
-    skip_for_postgres!();
     let client = Client::new();
     let tag_value = Uuid::now_v7().to_string();
     // Running without valid episode_id. Should fail.
@@ -1357,55 +1416,58 @@ async fn test_float_feedback_with_payload(inference_payload: serde_json::Value) 
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse FloatMetricFeedback
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
+    // Check FloatMetricFeedback
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(episode_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_episode_id = result.get("target_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id_uuid = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id_uuid, episode_id);
-    let retrieved_value = result.get("value").unwrap().as_f64().unwrap();
-    assert_eq!(retrieved_value, 32.8);
-    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
-    assert_eq!(metric_name, "user_rating");
-    // Assert FloatMetricFeedback has snapshot_hash
-    assert!(
-        !result["snapshot_hash"].is_null(),
-        "FloatMetricFeedback should have snapshot_hash"
-    );
+    let float_fb = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Float(fl) if fl.id == feedback_id => Some(fl),
+            _ => None,
+        })
+        .expect("Should find float feedback");
+    assert_eq!(float_fb.target_id, episode_id);
+    assert_eq!(float_fb.value, 32.8);
+    assert_eq!(float_fb.metric_name, "user_rating");
 
-    // Assert FloatMetricFeedbackByTargetId materialized view has snapshot_hash
-    let query = format!(
-        "SELECT snapshot_hash FROM FloatMetricFeedbackByTargetId WHERE target_id = '{episode_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
-    assert!(
-        !view_result["snapshot_hash"].is_null(),
-        "FloatMetricFeedbackByTargetId should have snapshot_hash"
-    );
+    // Check FeedbackTag
+    assert_eq!(float_fb.tags.get("key"), Some(&tag_value));
 
-    // Check ClickHouse FeedbackTag
-    let result = select_feedback_tags_clickhouse(&clickhouse, "user_rating", "key", &tag_value)
-        .await
-        .unwrap();
-    let id = result.get("feedback_id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    // Assert FeedbackTag has snapshot_hash
-    assert!(
-        !result["snapshot_hash"].is_null(),
-        "FeedbackTag should have snapshot_hash"
-    );
+    // snapshot_hash checks are ClickHouse-specific
+    if PrimaryDatastore::from_test_env() != PrimaryDatastore::Postgres {
+        let clickhouse = get_clickhouse().await;
+        let query = format!(
+            "SELECT snapshot_hash FROM FloatMetricFeedback WHERE id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !result["snapshot_hash"].is_null(),
+            "FloatMetricFeedback should have snapshot_hash"
+        );
+
+        let query = format!(
+            "SELECT snapshot_hash FROM FloatMetricFeedbackByTargetId WHERE target_id = '{episode_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !view_result["snapshot_hash"].is_null(),
+            "FloatMetricFeedbackByTargetId should have snapshot_hash"
+        );
+    }
 
     // Test boolean feedback on episode (should fail)
     let payload = Params {
@@ -1523,46 +1585,59 @@ async fn test_float_feedback_with_payload(inference_payload: serde_json::Value) 
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
+    // Check FloatMetricFeedback (inference-level)
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("target_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_f64().unwrap();
-    assert_eq!(retrieved_value, 0.5);
-    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
-    assert_eq!(metric_name, "brevity_score");
-    // Assert FloatMetricFeedback has snapshot_hash
-    assert!(
-        !result["snapshot_hash"].is_null(),
-        "FloatMetricFeedback should have snapshot_hash"
-    );
+    let float_fb = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Float(fl) if fl.id == feedback_id => Some(fl),
+            _ => None,
+        })
+        .expect("Should find float feedback");
+    assert_eq!(float_fb.target_id, inference_id);
+    assert_eq!(float_fb.value, 0.5);
+    assert_eq!(float_fb.metric_name, "brevity_score");
 
-    // Assert FloatMetricFeedbackByVariant materialized view has snapshot_hash
-    let query = format!(
-        "SELECT snapshot_hash FROM FloatMetricFeedbackByVariant WHERE target_id_uint = toUInt128(toUUID('{inference_id}')) AND id_uint = toUInt128(toUUID('{feedback_id}')) FORMAT JSONEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
-    assert!(
-        !view_result["snapshot_hash"].is_null(),
-        "FloatMetricFeedbackByVariant should have snapshot_hash"
-    );
+    // snapshot_hash checks are ClickHouse-specific
+    if PrimaryDatastore::from_test_env() != PrimaryDatastore::Postgres {
+        let clickhouse = get_clickhouse().await;
+        let query = format!(
+            "SELECT snapshot_hash FROM FloatMetricFeedback WHERE id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !result["snapshot_hash"].is_null(),
+            "FloatMetricFeedback should have snapshot_hash"
+        );
+
+        let query = format!(
+            "SELECT snapshot_hash FROM FloatMetricFeedbackByVariant WHERE target_id_uint = toUInt128(toUUID('{inference_id}')) AND id_uint = toUInt128(toUUID('{feedback_id}')) FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !view_result["snapshot_hash"].is_null(),
+            "FloatMetricFeedbackByVariant should have snapshot_hash"
+        );
+    }
 }
 
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_float_feedback_validation_disabled() {
-    skip_for_postgres!();
     let mut config = Config::new_empty()
         .await
         .unwrap()
@@ -1613,12 +1688,12 @@ async fn test_float_feedback_validation_disabled() {
         .unwrap();
     let result: Value = serde_json::from_str(&response.response).unwrap();
     let clickhouse_feedback_id = Uuid::parse_str(result["id"].as_str().unwrap()).unwrap();
-    assert_eq!(val.feedback_id, clickhouse_feedback_id);
+    expect_that!(val.feedback_id, eq(clickhouse_feedback_id));
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_boolean_feedback_normal_function() {
-    skip_for_postgres!();
     test_boolean_feedback_with_payload(serde_json::json!({
         "function_name": "json_success",
         "input": {
@@ -1629,9 +1704,9 @@ async fn test_boolean_feedback_normal_function() {
     })).await;
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_boolean_feedback_default_function() {
-    skip_for_postgres!();
     test_boolean_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
@@ -1643,7 +1718,6 @@ async fn test_boolean_feedback_default_function() {
 }
 
 async fn test_boolean_feedback_with_payload(inference_payload: serde_json::Value) {
-    skip_for_postgres!();
     let client = Client::new();
     let inference_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
@@ -1705,67 +1779,59 @@ async fn test_boolean_feedback_with_payload(inference_payload: serde_json::Value
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse BooleanMetricFeedback
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
+    // Check BooleanMetricFeedback
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("target_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_bool().unwrap();
-    assert!(retrieved_value);
-    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
-    assert_eq!(metric_name, "task_success");
-    // Assert BooleanMetricFeedback has snapshot_hash
-    assert!(
-        !result["snapshot_hash"].is_null(),
-        "BooleanMetricFeedback should have snapshot_hash"
-    );
+    let bool_fb = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Boolean(b) if b.id == feedback_id => Some(b),
+            _ => None,
+        })
+        .expect("Should find boolean feedback");
+    assert_eq!(bool_fb.target_id, inference_id);
+    assert!(bool_fb.value);
+    assert_eq!(bool_fb.metric_name, "task_success");
 
-    // Assert BooleanMetricFeedbackByVariant materialized view has snapshot_hash
-    let query = format!(
-        "SELECT snapshot_hash FROM BooleanMetricFeedbackByVariant WHERE target_id_uint = toUInt128(toUUID('{inference_id}')) AND id_uint = toUInt128(toUUID('{feedback_id}')) FORMAT JSONEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
-    assert!(
-        !view_result["snapshot_hash"].is_null(),
-        "BooleanMetricFeedbackByVariant should have snapshot_hash"
-    );
+    // Check FeedbackTags
+    assert_eq!(bool_fb.tags.get("key"), Some(&tag_value));
+    assert_eq!(bool_fb.tags.get("key2"), Some(&tag_value2));
 
-    // Check ClickHouse FeedbackTag
-    let result = select_feedback_tags_clickhouse(&clickhouse, "task_success", "key", &tag_value)
-        .await
-        .unwrap();
-    let id = result.get("feedback_id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    // Assert FeedbackTag has snapshot_hash
-    assert!(
-        !result["snapshot_hash"].is_null(),
-        "FeedbackTag should have snapshot_hash"
-    );
+    // snapshot_hash checks are ClickHouse-specific
+    if PrimaryDatastore::from_test_env() != PrimaryDatastore::Postgres {
+        let clickhouse = get_clickhouse().await;
+        let query = format!(
+            "SELECT snapshot_hash FROM BooleanMetricFeedback WHERE id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !result["snapshot_hash"].is_null(),
+            "BooleanMetricFeedback should have snapshot_hash"
+        );
 
-    let result = select_feedback_tags_clickhouse(&clickhouse, "task_success", "key2", &tag_value2)
-        .await
-        .unwrap();
-    let id = result.get("feedback_id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    // Assert FeedbackTag has snapshot_hash
-    assert!(
-        !result["snapshot_hash"].is_null(),
-        "FeedbackTag should have snapshot_hash"
-    );
+        let query = format!(
+            "SELECT snapshot_hash FROM BooleanMetricFeedbackByVariant WHERE target_id_uint = toUInt128(toUUID('{inference_id}')) AND id_uint = toUInt128(toUUID('{feedback_id}')) FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !view_result["snapshot_hash"].is_null(),
+            "BooleanMetricFeedbackByVariant should have snapshot_hash"
+        );
+    }
 
     // Try episode-level feedback (should fail)
     let episode_id = Uuid::now_v7();
@@ -1876,41 +1942,46 @@ async fn test_boolean_feedback_with_payload(inference_payload: serde_json::Value
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
+    // Check BooleanMetricFeedback (episode-level)
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(episode_id, None, None, Some(100))
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_episode_id = result.get("target_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id_uuid = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id_uuid, episode_id);
-    let retrieved_value = result.get("value").unwrap().as_bool().unwrap();
-    assert!(retrieved_value);
-    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
-    assert_eq!(metric_name, "goal_achieved");
+    let bool_fb = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Boolean(b) if b.id == feedback_id => Some(b),
+            _ => None,
+        })
+        .expect("Should find boolean feedback");
+    assert_eq!(bool_fb.target_id, episode_id);
+    assert!(bool_fb.value);
+    assert_eq!(bool_fb.metric_name, "goal_achieved");
 
-    // Assert BooleanMetricFeedbackByTargetId materialized view has snapshot_hash
-    let query = format!(
-        "SELECT snapshot_hash FROM BooleanMetricFeedbackByTargetId WHERE target_id = '{episode_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
-    assert!(
-        !view_result["snapshot_hash"].is_null(),
-        "BooleanMetricFeedbackByTargetId should have snapshot_hash"
-    );
+    // snapshot_hash checks are ClickHouse-specific
+    if PrimaryDatastore::from_test_env() != PrimaryDatastore::Postgres {
+        let clickhouse = get_clickhouse().await;
+        let query = format!(
+            "SELECT snapshot_hash FROM BooleanMetricFeedbackByTargetId WHERE target_id = '{episode_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !view_result["snapshot_hash"].is_null(),
+            "BooleanMetricFeedbackByTargetId should have snapshot_hash"
+        );
+    }
 }
 
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_boolean_feedback_validation_disabled() {
-    skip_for_postgres!();
     let mut config = Config::new_empty()
         .await
         .unwrap()
@@ -1961,12 +2032,12 @@ async fn test_boolean_feedback_validation_disabled() {
         .unwrap();
     let result: Value = serde_json::from_str(&response.response).unwrap();
     let clickhouse_feedback_id = Uuid::parse_str(result["id"].as_str().unwrap()).unwrap();
-    assert_eq!(val.feedback_id, clickhouse_feedback_id);
+    expect_that!(val.feedback_id, eq(clickhouse_feedback_id));
 }
 
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fast_inference_then_feedback() {
-    skip_for_postgres!();
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     use serde_json::json;
     use std::collections::HashMap;
@@ -2035,12 +2106,12 @@ async fn test_fast_inference_then_feedback() {
 
     // Wait for all tasks to finish.
     futures::future::join_all(tasks).await;
-    assert!(!logs_contain("does not exist"));
+    expect_that!(logs_contain("does not exist"), eq(false));
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_feedback_internal_tag_auto_injection() {
-    skip_for_postgres!();
     let client = Client::new();
 
     // First, run an inference to get a valid inference_id
@@ -2059,7 +2130,7 @@ async fn test_feedback_internal_tag_auto_injection() {
         .await
         .unwrap();
 
-    assert!(response.status().is_success());
+    assert_that!(response.status().is_success(), eq(true));
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -2085,39 +2156,37 @@ async fn test_feedback_internal_tag_auto_injection() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap().as_str().unwrap();
     let feedback_id = Uuid::parse_str(feedback_id).unwrap();
 
-    sleep(Duration::from_millis(1000)).await;
+    // Check feedback tags
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    println!("Feedback sent with ID: {feedback_id}");
-
-    // Check ClickHouse to verify both tags are present
-    let clickhouse = get_clickhouse().await;
+    let feedbacks = conn
+        .query_feedback_by_target_id(inference_id, None, None, Some(100))
+        .await
+        .unwrap();
+    let bool_fb = feedbacks
+        .iter()
+        .find_map(|f| match f {
+            FeedbackRow::Boolean(b) if b.id == feedback_id => Some(b),
+            _ => None,
+        })
+        .expect("Should find boolean feedback");
 
     // Verify custom tag is present
-    let _ = select_feedback_tags_clickhouse_with_feedback_id(
-        &clickhouse,
-        &feedback_id.to_string(),
-        "task_success",
-        "custom_tag",
-        "custom_value",
-    )
-    .await
-    .expect("Failed to call select_feedback_tags_clickhouse_with_feedback_id for task_success");
+    expect_that!(
+        bool_fb.tags.get("custom_tag"),
+        some(eq(&"custom_value".to_string()))
+    );
 
     // Verify auto-injected tensorzero::internal tag is present
-    let _ = select_feedback_tags_clickhouse_with_feedback_id(
-        &clickhouse,
-        &feedback_id.to_string(),
-        "task_success",
-        "tensorzero::internal",
-        "true",
-    )
-    .await
-    .expect(
-        "Failed to call select_feedback_tags_clickhouse_with_feedback_id for tensorzero::internal",
+    expect_that!(
+        bool_fb.tags.get("tensorzero::internal"),
+        some(eq(&"true".to_string()))
     );
 }
