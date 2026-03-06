@@ -973,10 +973,10 @@ impl<'a> AnthropicRequestBody<'a> {
         };
         // We use the content block form rather than string so people can use
         // extra_body for cache control.
-        let system = match request.system.as_deref() {
-            Some(text) => Some(vec![AnthropicSystemBlock::Text { text }]),
-            None => None,
-        };
+        let system = request
+            .system
+            .as_deref()
+            .map(|text| vec![AnthropicSystemBlock::Text { text }]);
         let messages: Vec<AnthropicMessage> =
             try_join_all(request.messages.iter().map(|m| {
                 AnthropicMessage::from_request_message(m, messages_config, PROVIDER_TYPE)
