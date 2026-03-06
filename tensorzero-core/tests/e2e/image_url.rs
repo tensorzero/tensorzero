@@ -5,25 +5,25 @@ use axum::body::Body;
 use axum::extract::Request;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
+use googletest::prelude::*;
 use std::future::IntoFuture;
 use std::net::SocketAddr;
-use std::time::Duration;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent, Role,
 };
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse,
-};
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::{Base64File, File, UrlFile};
+use tensorzero_core::test_helpers::get_e2e_config;
 use url::Url;
 use uuid::Uuid;
 
 use crate::providers::common::FERRIS_PNG;
-use crate::utils::skip_for_postgres;
 
 /// Spawn a temporary HTTP server that serves the test image
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
@@ -141,9 +141,9 @@ model = "anthropic::claude-sonnet-4-5"
 /// Base64 encoded 1x1 red pixel PNG (same as Python test)
 const IMAGE_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
+#[gtest]
 #[tokio::test]
 async fn test_image_url_with_fetch_true() {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // The '_shutdown_sender' will wake up the receiver on drop
@@ -196,33 +196,49 @@ async fn test_image_url_with_fetch_true() {
         panic!("Expected chat response");
     };
 
-    assert!(
-        !chat_response.content.is_empty(),
+    expect_that!(
+        chat_response.content.is_empty(),
+        eq(false),
         "Response content should not be empty"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.input_tokens.unwrap() > 0,
+        eq(true),
         "Input tokens should be > 0"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.output_tokens.unwrap() > 0,
+        eq(true),
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // Verify database write
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences.len(),
+        eq(1),
+        "Inference should be in the database"
+    );
 
-    // Verify ClickHouse data
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
-
-    println!("✓ Test passed: Image URL with fetch_and_encode_input_files_before_inference = true");
+    println!("Test passed: Image URL with fetch_and_encode_input_files_before_inference = true");
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_image_url_with_fetch_false() {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // The '_shutdown_sender' will wake up the receiver on drop
@@ -268,20 +284,17 @@ async fn test_image_url_with_fetch_false() {
     let err_msg = format!("{err:?}");
 
     // The error should indicate that Anthropic couldn't download the image from localhost
-    assert!(
-        err_msg.contains("Unable to download the file"),
-        "Expected error about downloading localhost URL, got: {err_msg}"
-    );
+    expect_that!(err_msg, contains_substring("Unable to download the file"));
 
     println!(
-        "✓ Test passed: Image URL with fetch_and_encode_input_files_before_inference = false \
+        "Test passed: Image URL with fetch_and_encode_input_files_before_inference = false \
          (correctly fails when Anthropic cannot access localhost)"
     );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_base64_image_with_fetch_true() {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let client =
@@ -334,35 +347,49 @@ async fn test_base64_image_with_fetch_true() {
         panic!("Expected chat response");
     };
 
-    assert!(
-        !chat_response.content.is_empty(),
+    expect_that!(
+        chat_response.content.is_empty(),
+        eq(false),
         "Response content should not be empty"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.input_tokens.unwrap() > 0,
+        eq(true),
         "Input tokens should be > 0"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.output_tokens.unwrap() > 0,
+        eq(true),
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Verify ClickHouse data
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
-
-    println!(
-        "✓ Test passed: Base64 image with fetch_and_encode_input_files_before_inference = true"
+    // Verify database write
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences.len(),
+        eq(1),
+        "Inference should be in the database"
     );
+
+    println!("Test passed: Base64 image with fetch_and_encode_input_files_before_inference = true");
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_base64_image_with_fetch_false() {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let client =
@@ -415,36 +442,52 @@ async fn test_base64_image_with_fetch_false() {
         panic!("Expected chat response");
     };
 
-    assert!(
-        !chat_response.content.is_empty(),
+    expect_that!(
+        chat_response.content.is_empty(),
+        eq(false),
         "Response content should not be empty"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.input_tokens.unwrap() > 0,
+        eq(true),
         "Input tokens should be > 0"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.output_tokens.unwrap() > 0,
+        eq(true),
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Verify ClickHouse data
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
+    // Verify database write
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences.len(),
+        eq(1),
+        "Inference should be in the database"
+    );
 
     println!(
-        "✓ Test passed: Base64 image with fetch_and_encode_input_files_before_inference = false"
+        "Test passed: Base64 image with fetch_and_encode_input_files_before_inference = false"
     );
 }
 
+#[gtest]
 #[tokio::test]
 #[ignore = "See https://github.com/tensorzero/tensorzero/issues/5092"]
 async fn test_wikipedia_image_url_with_fetch_true() {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let wikipedia_url = Url::parse("https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/640px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg").unwrap();
@@ -495,36 +538,52 @@ async fn test_wikipedia_image_url_with_fetch_true() {
         panic!("Expected chat response");
     };
 
-    assert!(
-        !chat_response.content.is_empty(),
+    expect_that!(
+        chat_response.content.is_empty(),
+        eq(false),
         "Response content should not be empty"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.input_tokens.unwrap() > 0,
+        eq(true),
         "Input tokens should be > 0"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.output_tokens.unwrap() > 0,
+        eq(true),
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Verify ClickHouse data
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
+    // Verify database write
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences.len(),
+        eq(1),
+        "Inference should be in the database"
+    );
 
     println!(
-        "✓ Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = true"
+        "Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = true"
     );
 }
 
+#[gtest]
 #[tokio::test]
 #[ignore = "See https://github.com/tensorzero/tensorzero/issues/5092"]
 async fn test_wikipedia_image_url_with_fetch_false() {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let wikipedia_url = Url::parse("https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/640px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg").unwrap();
@@ -575,35 +634,51 @@ async fn test_wikipedia_image_url_with_fetch_false() {
         panic!("Expected chat response");
     };
 
-    assert!(
-        !chat_response.content.is_empty(),
+    expect_that!(
+        chat_response.content.is_empty(),
+        eq(false),
         "Response content should not be empty"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.input_tokens.unwrap() > 0,
+        eq(true),
         "Input tokens should be > 0"
     );
-    assert!(
+    expect_that!(
         chat_response.usage.output_tokens.unwrap() > 0,
+        eq(true),
         "Output tokens should be > 0"
     );
 
-    // Sleep to allow ClickHouse write
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Verify ClickHouse data
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_some(), "Inference should be in ClickHouse");
+    // Verify database write
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences.len(),
+        eq(1),
+        "Inference should be in the database"
+    );
 
     println!(
-        "✓ Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = false"
+        "Test passed: Wikipedia image URL with fetch_and_encode_input_files_before_inference = false"
     );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_image_url_403_error() {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     // The '_shutdown_sender' will wake up the receiver on drop
@@ -644,8 +719,9 @@ async fn test_image_url_403_error() {
         .await;
 
     // The inference should fail with an error about 403 Forbidden
-    assert!(
+    assert_that!(
         result.is_err(),
+        eq(true),
         "Expected error when server returns 403 Forbidden"
     );
 
@@ -653,12 +729,10 @@ async fn test_image_url_403_error() {
     let err_msg = format!("{err:?}");
 
     // The error should contain the server's error message
-    assert!(
-        err_msg.contains("Access denied: You do not have permission to view this image"),
-        "Expected error to contain server's error message, got: {err_msg}"
+    expect_that!(
+        err_msg,
+        contains_substring("Access denied: You do not have permission to view this image")
     );
 
-    println!(
-        "✓ Test passed: Image URL 403 error handling (error message includes server response)"
-    );
+    println!("Test passed: Image URL 403 error handling (error message includes server response)");
 }
