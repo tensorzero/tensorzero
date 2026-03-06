@@ -1,15 +1,16 @@
 #![expect(clippy::print_stdout)]
 use crate::common::get_gateway_endpoint;
-use crate::utils::skip_for_postgres;
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::clickhouse::test_helpers::select_chat_inference_clickhouse;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::test_helpers::get_e2e_config;
 use uuid::Uuid;
 
+#[gtest]
 #[tokio::test]
 async fn test_dynamic_chat_variant() {
-    skip_for_postgres!();
     let mut payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -35,7 +36,7 @@ async fn test_dynamic_chat_variant() {
         .await
         .unwrap();
     // This should 400 since `dryrun` is not set
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
 
     payload["dryrun"] = json!(true);
     let response = Client::new()
@@ -46,31 +47,48 @@ async fn test_dynamic_chat_variant() {
         .unwrap();
 
     // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
+    expect_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     println!("{response_json:#}");
 
     let content = response_json["content"].as_array().unwrap();
     let text_block = content.first().unwrap();
     let text = text_block["text"].as_str().unwrap();
-    assert!(text.contains("You are a cranky assistant named AskJeeves"));
+    expect_that!(
+        text,
+        contains_substring("You are a cranky assistant named AskJeeves")
+    );
 
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
+    // No inference should be written when dryrun is true
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences.is_empty(),
+        eq(true),
+        "No inference should be written when dryrun is true"
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_dynamic_mixture_of_n() {
-    skip_for_postgres!();
     let mut payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -96,7 +114,7 @@ async fn test_dynamic_mixture_of_n() {
         .await
         .unwrap();
     // This should 400 since `dryrun` is not set
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
 
     payload["dryrun"] = json!(true);
     let response = Client::new()
@@ -107,34 +125,51 @@ async fn test_dynamic_mixture_of_n() {
         .unwrap();
 
     // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
+    expect_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     println!("{response_json:#}");
 
     let content = response_json["content"].as_array().unwrap();
     let text_block = content.first().unwrap();
     let text = text_block["text"].as_str().unwrap();
-    assert!(text.contains("be mean Alfred"));
-    assert!(text.contains("You have been provided with a set of responses"));
-    assert!(text.contains("synthesize these responses into"));
-    assert!(text.contains("gleefully chanted"));
+    expect_that!(text, contains_substring("be mean Alfred"));
+    expect_that!(
+        text,
+        contains_substring("You have been provided with a set of responses")
+    );
+    expect_that!(text, contains_substring("synthesize these responses into"));
+    expect_that!(text, contains_substring("gleefully chanted"));
 
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
+    // No inference should be written when dryrun is true
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences.is_empty(),
+        eq(true),
+        "No inference should be written when dryrun is true"
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_dynamic_best_of_n() {
-    skip_for_postgres!();
     let mut payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -159,7 +194,7 @@ async fn test_dynamic_best_of_n() {
         .await
         .unwrap();
     // This should 400 since `dryrun` is not set
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
 
     payload["dryrun"] = json!(true);
     let response = Client::new()
@@ -170,7 +205,7 @@ async fn test_dynamic_best_of_n() {
         .unwrap();
 
     // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
+    expect_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     println!("{response_json:#}");
 
@@ -178,17 +213,31 @@ async fn test_dynamic_best_of_n() {
     let text_block = content.first().unwrap();
     let text = text_block["text"].as_str().unwrap();
     // The best of n thing will always pick a candidate
-    assert!(text.contains("gleefully chanted"));
+    expect_that!(text, contains_substring("gleefully chanted"));
 
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
+    // No inference should be written when dryrun is true
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences.is_empty(),
+        eq(true),
+        "No inference should be written when dryrun is true"
+    );
 }
