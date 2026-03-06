@@ -95,31 +95,31 @@ pub enum VariantConfig {
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "ChatCompletionConfig")]
+#[pyclass(skip_from_py_object, name = "ChatCompletionConfig")]
 pub struct ChatCompletionConfigPyClass {
     pub inner: Arc<VariantInfo>,
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "BestOfNSamplingConfig")]
+#[pyclass(skip_from_py_object, name = "BestOfNSamplingConfig")]
 pub struct BestOfNSamplingConfigPyClass {
     pub inner: Arc<VariantInfo>,
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "DICLConfig")]
+#[pyclass(skip_from_py_object, name = "DICLConfig")]
 pub struct DiclConfigPyClass {
     pub inner: Arc<VariantInfo>,
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "MixtureOfNConfig")]
+#[pyclass(skip_from_py_object, name = "MixtureOfNConfig")]
 pub struct MixtureOfNConfigPyClass {
     pub inner: Arc<VariantInfo>,
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "ChainOfThoughtConfig")]
+#[pyclass(skip_from_py_object, name = "ChainOfThoughtConfig")]
 pub struct ChainOfThoughtConfigPyClass {
     pub inner: Arc<VariantInfo>,
 }

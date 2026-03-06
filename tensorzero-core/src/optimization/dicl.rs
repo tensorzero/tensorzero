@@ -47,7 +47,10 @@ pub struct DiclOptimizationConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "DICLOptimizationConfig"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "DICLOptimizationConfig")
+)]
 pub struct UninitializedDiclOptimizationConfig {
     pub embedding_model: String,
     pub variant_name: String,
@@ -134,10 +137,10 @@ impl UninitializedDiclOptimizationConfig {
         })
     }
 
-    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[expect(unused_variables, clippy::too_many_arguments, clippy::unused_self)]
     #[pyo3(signature = (*, embedding_model, variant_name, function_name, dimensions=None, batch_size=None, max_concurrency=None, k=None, model=None, append_to_existing_variants=None))]
     fn __init__(
-        this: Py<Self>,
+        &self,
         embedding_model: String,
         variant_name: String,
         function_name: String,
@@ -147,8 +150,7 @@ impl UninitializedDiclOptimizationConfig {
         k: Option<u32>,
         model: Option<String>,
         append_to_existing_variants: Option<bool>,
-    ) -> Py<Self> {
-        this
+    ) {
     }
 }
 
@@ -184,7 +186,7 @@ impl UninitializedDiclOptimizationConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct DiclOptimizationJobHandle {
     pub embedding_model: String,
     pub k: u32,

@@ -247,8 +247,9 @@ mod pyo3_impls {
     use super::*;
     use pyo3::prelude::*;
 
-    impl<'py> FromPyObject<'py> for ClientSecretString {
-        fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+    impl FromPyObject<'_, '_> for ClientSecretString {
+        type Error = PyErr;
+        fn extract(ob: Borrowed<'_, '_, PyAny>) -> PyResult<Self> {
             let secret: String = ob.extract()?;
             Ok(ClientSecretString(SecretString::new(secret.into())))
         }

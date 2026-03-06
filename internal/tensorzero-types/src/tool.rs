@@ -32,7 +32,7 @@ where
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object, get_all, str))]
 #[export_schema]
 pub struct ToolCall {
     pub id: String,
@@ -64,7 +64,7 @@ impl ToolCall {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object, str))]
 #[export_schema]
 pub struct InferenceResponseToolCall {
     /// A Tool Call ID to match up with tool call responses. See #4058.
@@ -158,7 +158,7 @@ impl From<ToolCallWrapper> for ToolCall {
 }
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object, get_all, str))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]

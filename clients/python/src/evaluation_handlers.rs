@@ -49,7 +49,7 @@ fn compute_evaluation_stats(
 }
 
 /// Job handler for streaming evaluation results (synchronous)
-#[pyclass(frozen, str)]
+#[pyclass(skip_from_py_object, frozen, str)]
 pub struct EvaluationJobHandler {
     pub(crate) receiver: Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>,
     pub(crate) run_info: RunInfo,
@@ -136,7 +136,7 @@ impl std::fmt::Display for EvaluationJobHandler {
 }
 
 /// Job handler for streaming evaluation results (asynchronous)
-#[pyclass(frozen, str)]
+#[pyclass(skip_from_py_object, frozen, str)]
 pub struct AsyncEvaluationJobHandler {
     pub(crate) receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>>,
     pub(crate) run_info: RunInfo,

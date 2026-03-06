@@ -64,7 +64,7 @@ pub enum OptimizerConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum OptimizationJobHandle {
@@ -161,7 +161,10 @@ pub enum OptimizationJobInfo {
 /// PyO3 has special handling for complex enums that makes it difficult to #[pyclass] them directly if
 /// they contain elements that don't implement IntoPyObject.
 /// We work around this by implementing a custom pyclass that wraps the OptimizationJobInfo enum.
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "OptimizationJobInfo"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(skip_from_py_object, str, name = "OptimizationJobInfo")
+)]
 pub struct OptimizationJobInfoPyClass(OptimizationJobInfo);
 
 #[cfg(feature = "pyo3")]
@@ -179,7 +182,7 @@ impl std::fmt::Display for OptimizationJobInfoPyClass {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass(str, eq))]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object, str, eq))]
 pub enum OptimizationJobStatus {
     Pending,
     Completed,

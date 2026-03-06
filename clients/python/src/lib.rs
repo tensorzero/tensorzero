@@ -139,7 +139,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 struct LocalHttpGateway {
     #[pyo3(get)]
     base_url: String,
@@ -199,7 +199,7 @@ fn _start_http_gateway(
 }
 
 // TODO - this should extend the python `ABC` class once pyo3 supports it: https://github.com/PyO3/pyo3/issues/991
-#[pyclass(subclass, frozen)]
+#[pyclass(skip_from_py_object, subclass, frozen)]
 struct BaseTensorZeroGateway {
     // Note - `Client` is cloneable, so we don't wrap in `DropInTokio`
     // Instead, the stored `GatewayHandle` has customizable drop behavior,
@@ -207,7 +207,7 @@ struct BaseTensorZeroGateway {
     client: Client,
 }
 
-#[pyclass(frozen)]
+#[pyclass(skip_from_py_object, frozen)]
 struct AsyncStreamWrapper {
     stream: Arc<Mutex<InferenceStream>>,
     // A handle to the original `AsyncTensorZeroGateway` object.
@@ -264,7 +264,7 @@ impl Drop for AsyncStreamWrapper {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(skip_from_py_object, frozen)]
 struct StreamWrapper {
     stream: Arc<Mutex<InferenceStream>>,
     // A handle to the original `TensorZeroGateway` object.
@@ -380,7 +380,7 @@ impl BaseTensorZeroGateway {
     }
 }
 
-#[pyclass(extends=BaseTensorZeroGateway)]
+#[pyclass(skip_from_py_object, extends=BaseTensorZeroGateway)]
 /// A synchronous client for a TensorZero gateway.
 ///
 /// To connect to a running HTTP gateway, call `TensorZeroGateway.build_http(base_url = "http://gateway_url")`
@@ -1262,7 +1262,7 @@ impl TensorZeroGateway {
         let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
             // Extract the "precision" field from adaptive_stopping dict
             if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
-                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
+                let precision_dict_bound = precision_bound.cast::<PyDict>().map_err(|_| {
                     PyErr::new::<pyo3::exceptions::PyTypeError, _>(
                         "adaptive_stopping['precision'] must be a dictionary",
                     )
@@ -1566,7 +1566,7 @@ impl TensorZeroGateway {
     }
 }
 
-#[pyclass(extends=BaseTensorZeroGateway)]
+#[pyclass(skip_from_py_object, extends=BaseTensorZeroGateway)]
 /// An async client for a TensorZero gateway.
 ///
 /// To connect to a running HTTP gateway, call `AsyncTensorZeroGateway.build_http(gateway_url="http://gateway_url")`
@@ -2293,7 +2293,7 @@ impl AsyncTensorZeroGateway {
         let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
             // Extract the "precision" field from adaptive_stopping dict
             if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
-                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
+                let precision_dict_bound = precision_bound.cast::<PyDict>().map_err(|_| {
                     PyErr::new::<pyo3::exceptions::PyTypeError, _>(
                         "adaptive_stopping['precision'] must be a dictionary",
                     )

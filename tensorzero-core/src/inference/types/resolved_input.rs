@@ -130,7 +130,7 @@ pub enum LazyResolvedInputMessageContent {
 // for the Pyo3 'str' impl?
 #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
 #[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ResolvedInput {
@@ -298,7 +298,7 @@ impl ResolvedInput {
 // for the Pyo3 'str' impl?
 #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
 #[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ResolvedInputMessage {
@@ -463,7 +463,7 @@ impl RateLimitedInputContent for LazyFile {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct ResolvedRequestMessage {
     pub role: Role,
     pub content: Vec<ResolvedContentBlock>,

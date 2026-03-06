@@ -104,7 +104,7 @@ pub struct GEPAConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "GEPAConfig"))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str, name = "GEPAConfig"))]
 pub struct UninitializedGEPAConfig {
     pub function_name: String,
     pub evaluation_name: String,
@@ -209,28 +209,10 @@ impl UninitializedGEPAConfig {
         }
     }
 
-    /// Initialize the GEPAConfig.
-    ///
-    /// Required parameters: `function_name`, `evaluation_name`, `analysis_model`, `mutation_model`.
-    ///
-    /// :param function_name: Name of the function being optimized.
-    /// :param evaluation_name: Name of the evaluation used to score candidate variants.
-    /// :param analysis_model: Model for analyzing inference results (e.g., "anthropic::claude-sonnet-4-5").
-    /// :param mutation_model: Model for generating prompt mutations (e.g., "anthropic::claude-sonnet-4-5").
-    /// :param initial_variants: Optional list of variant names to initialize GEPA with. If None, uses all variants defined for the function.
-    /// :param variant_prefix: Prefix for the name of the new optimized variants.
-    /// :param batch_size: Number of training samples to analyze per iteration. Default: 5.
-    /// :param max_iterations: Maximum number of training iterations. Default: 1.
-    /// :param max_concurrency: Maximum number of concurrent inference calls. Default: 10.
-    /// :param seed: Optional random seed for reproducibility.
-    /// :param timeout: Client timeout in seconds for TensorZero gateway operations. Default: 300.
-    /// :param include_inference_for_mutation: Whether to include inference input and output in Analysis for mutation. Inclusion can be helpful for adding few-shot examples. Use with caution for multi-turn conversations, long outputs, or large batch sizes. Default: True.
-    /// :param retries: Retry configuration for inference calls during GEPA optimization.
-    /// :param max_tokens: Optional maximum tokens for analysis and mutation model calls. (required for Anthropic models)
-    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[expect(unused_variables, clippy::too_many_arguments, clippy::unused_self)]
     #[pyo3(signature = (*, function_name, evaluation_name, analysis_model, mutation_model, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, seed=None, timeout=None, include_inference_for_mutation=None, retries=None, max_tokens=None))]
     fn __init__(
-        this: Py<Self>,
+        &self,
         function_name: String,
         evaluation_name: String,
         analysis_model: String,
@@ -245,8 +227,7 @@ impl UninitializedGEPAConfig {
         include_inference_for_mutation: Option<bool>,
         retries: Option<RetryConfig>,
         max_tokens: Option<u32>,
-    ) -> Py<Self> {
-        this
+    ) {
     }
 
     fn __repr__(&self) -> String {
@@ -283,7 +264,7 @@ impl UninitializedGEPAConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct GEPAJobHandle {
     /// Result of the GEPA optimization - either a map of variant names to their
     /// configurations (the Pareto frontier) or an error message

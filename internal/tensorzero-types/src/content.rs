@@ -57,7 +57,7 @@ pub enum System {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object, get_all, str))]
 #[serde(deny_unknown_fields)]
 #[export_schema]
 pub struct Text {
@@ -83,7 +83,7 @@ impl Text {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object, get_all, str))]
 #[serde(deny_unknown_fields)]
 #[export_schema]
 pub struct RawText {
@@ -109,7 +109,7 @@ impl RawText {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object))]
 #[export_schema]
 pub struct Unknown {
     /// The underlying content block to be passed to the model provider.
@@ -231,7 +231,7 @@ impl Unknown {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object, get_all))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[export_schema]
@@ -246,7 +246,7 @@ pub enum ThoughtSummaryBlock {
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 // Note: We don't use `get_all` because `extra_data` is `Value` which doesn't implement `IntoPyObject`.
 // The fields are exposed via a manual `#[pymethods]` impl below.
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object))]
 #[export_schema]
 pub struct Thought {
     pub text: Option<String>,

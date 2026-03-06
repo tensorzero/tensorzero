@@ -1687,7 +1687,7 @@ pub enum ConfigInput {
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "Config")]
+#[pyclass(skip_from_py_object, name = "Config")]
 pub struct ConfigPyClass {
     inner: Arc<Config>,
 }
@@ -1711,7 +1711,7 @@ impl ConfigPyClass {
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(mapping, name = "FunctionsConfig")]
+#[pyclass(skip_from_py_object, mapping, name = "FunctionsConfig")]
 pub struct FunctionsConfigPyClass {
     inner: HashMap<String, Arc<FunctionConfig>>,
 }

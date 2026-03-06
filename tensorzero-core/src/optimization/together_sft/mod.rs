@@ -35,7 +35,7 @@ fn default_weight_decay() -> f64 {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[serde(rename_all = "lowercase")]
 pub enum TogetherBatchSizeDescription {
     Max,
@@ -44,7 +44,7 @@ pub enum TogetherBatchSizeDescription {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[serde(untagged)]
 pub enum TogetherBatchSize {
     Number(u32),
@@ -95,7 +95,7 @@ pub struct TogetherSFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 pub struct TogetherSFTJobHandle {
     pub job_id: String,
     /// A url to a human-readable page for the job.
@@ -115,7 +115,10 @@ impl std::fmt::Display for TogetherSFTJobHandle {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "TogetherSFTConfig"))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(from_py_object, str, name = "TogetherSFTConfig")
+)]
 pub struct UninitializedTogetherSFTConfig {
     pub model: String,
     // Hyperparameters
@@ -281,10 +284,10 @@ impl UninitializedTogetherSFTConfig {
         })
     }
 
-    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[expect(unused_variables, clippy::too_many_arguments, clippy::unused_self)]
     #[pyo3(signature = (*, model, n_epochs=None, n_checkpoints=None, n_evals=None, batch_size=None, learning_rate=None, warmup_ratio=None, max_grad_norm=None, weight_decay=None, suffix=None, lr_scheduler=None, wandb_name=None, training_method=None, training_type=None, from_checkpoint=None, from_hf_model=None, hf_model_revision=None, hf_output_repo_name=None))]
     fn __init__(
-        this: Py<Self>,
+        &self,
         model: String,
         n_epochs: Option<u32>,
         n_checkpoints: Option<u32>,
@@ -303,8 +306,7 @@ impl UninitializedTogetherSFTConfig {
         from_hf_model: Option<String>,
         hf_model_revision: Option<String>,
         hf_output_repo_name: Option<String>,
-    ) -> Py<Self> {
-        this
+    ) {
     }
 }
 
@@ -343,7 +345,7 @@ impl UninitializedTogetherSFTConfig {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[serde(tag = "lr_scheduler_type")]
 #[serde(rename_all = "snake_case")]
 pub enum TogetherLRScheduler {
@@ -368,7 +370,7 @@ impl Default for TogetherLRScheduler {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[serde(tag = "type")]
 pub enum TogetherTrainingType {
     Full {},
@@ -398,7 +400,7 @@ impl Default for TogetherTrainingType {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[serde(tag = "method")]
 #[serde(rename_all = "snake_case")]
 pub enum TogetherTrainingMethod {

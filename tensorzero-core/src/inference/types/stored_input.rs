@@ -37,7 +37,7 @@ use pyo3::prelude::*;
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct StoredInput {
@@ -100,7 +100,7 @@ impl StoredInput {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
@@ -339,7 +339,7 @@ impl StoredInputMessageContent {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct StoredFile(pub ObjectStoragePointer);

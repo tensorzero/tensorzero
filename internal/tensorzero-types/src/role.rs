@@ -18,7 +18,7 @@ pub const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(skip_from_py_object))]
 #[export_schema]
 pub enum Role {
     User,

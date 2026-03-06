@@ -84,7 +84,7 @@ use super::wire::ToolChoice;
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields, export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object, str))]
 #[export_schema]
 pub struct DynamicToolParams {
     /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
