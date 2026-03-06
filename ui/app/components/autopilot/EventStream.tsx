@@ -42,6 +42,7 @@ import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import EventVisualization, {
   detectEventVisualization,
+  type EventVisualizationData,
 } from "./EventVisualization";
 
 /**
@@ -552,6 +553,79 @@ function UserQuestionsAnswersContent({
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
+interface EventItemContentProps {
+  event: GatewayEvent;
+  description?: string;
+  visualizationData: EventVisualizationData | null;
+  questionsMap?: Map<string, EventPayloadUserQuestion[]>;
+}
+
+function EventItemContent({
+  event,
+  description,
+  visualizationData,
+  questionsMap,
+}: EventItemContentProps) {
+  if (visualizationData) {
+    return <EventVisualization data={visualizationData} />;
+  }
+
+  if (event.payload.type === "user_questions") {
+    return <UserQuestionsContent questions={event.payload.questions} />;
+  }
+
+  if (event.payload.type === "user_questions_answers") {
+    return (
+      <UserQuestionsAnswersContent
+        responses={event.payload.responses}
+        questions={
+          questionsMap?.get(event.payload.user_questions_event_id) ?? []
+        }
+      />
+    );
+  }
+
+  if (!description) return null;
+
+  switch (event.payload.type) {
+    case "message":
+      return (
+        <Markdown remarkPlugins={uuidRemarkPlugins} components={uuidComponents}>
+          {description}
+        </Markdown>
+      );
+
+    case "tool_call":
+      return <ReadOnlyCodeBlock code={description} language="json" />;
+
+    case "tool_result":
+    case "error":
+      return (
+        <p
+          className="text-fg-secondary overflow-y-auto text-sm whitespace-pre-wrap font-mono"
+          style={{ maxHeight: TOOL_CONTENT_MAX_HEIGHT }}
+        >
+          {description}
+        </p>
+      );
+
+    case "status_update":
+    case "tool_call_authorization":
+    case "visualization":
+    case "unknown":
+      return (
+        <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+          {description}
+        </p>
+      );
+
+    default: {
+      const _exhaustiveCheck: never = event.payload;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
 type EventItemProps = {
   event: GatewayEvent;
   questionsMap?: Map<string, EventPayloadUserQuestion[]>;
@@ -640,51 +714,12 @@ function EventItem({
         </div>
       </div>
       {shouldShowDetails && (
-        <>
-          {summary.description && !visualizationData && (
-            <>
-              {event.payload.type === "message" ? (
-                <Markdown
-                  remarkPlugins={uuidRemarkPlugins}
-                  components={uuidComponents}
-                >
-                  {summary.description}
-                </Markdown>
-              ) : event.payload.type === "tool_call" ? (
-                <ReadOnlyCodeBlock code={summary.description} language="json" />
-              ) : (
-                <p
-                  className={cn(
-                    "text-fg-secondary text-sm whitespace-pre-wrap",
-                    (event.payload.type === "tool_result" ||
-                      event.payload.type === "error") &&
-                      "overflow-y-auto font-mono",
-                  )}
-                  style={
-                    event.payload.type === "tool_result" ||
-                    event.payload.type === "error"
-                      ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
-                      : undefined
-                  }
-                >
-                  {summary.description}
-                </p>
-              )}
-            </>
-          )}
-          {visualizationData && <EventVisualization data={visualizationData} />}
-          {event.payload.type === "user_questions" && (
-            <UserQuestionsContent questions={event.payload.questions} />
-          )}
-          {event.payload.type === "user_questions_answers" && (
-            <UserQuestionsAnswersContent
-              responses={event.payload.responses}
-              questions={
-                questionsMap?.get(event.payload.user_questions_event_id) ?? []
-              }
-            />
-          )}
-        </>
+        <EventItemContent
+          event={event}
+          description={summary.description}
+          visualizationData={visualizationData}
+          questionsMap={questionsMap}
+        />
       )}
     </div>
   );
