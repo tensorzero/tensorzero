@@ -97,6 +97,9 @@ pub use tensorzero_core::inference::types::{
     Base64File, ContentBlockChunk, File, ObjectStoragePointer, Role, System, Unknown, UnknownChunk,
     UrlFile, Usage,
 };
+pub use tensorzero_core::optimization::gepa::{
+    GepaEvaluatorStats, GepaGetResponse, GepaLaunchRequest, GepaLaunchResponse, GepaProgress,
+};
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredChatInferenceDatabase, StoredInference,
@@ -429,6 +432,13 @@ pub trait ClientExt {
     // ================================================================
     // Optimization operations
     // ================================================================
+    async fn gepa_launch(
+        &self,
+        request: GepaLaunchRequest,
+    ) -> Result<GepaLaunchResponse, TensorZeroError>;
+
+    async fn gepa_get(&self, task_id: &str) -> Result<GepaGetResponse, TensorZeroError>;
+
     async fn experimental_render_samples<T: StoredSample + Send>(
         &self,
         stored_samples: Vec<T>,
@@ -1074,6 +1084,64 @@ impl ClientExt for Client {
                 })
                 .await
             }
+        }
+    }
+
+    async fn gepa_launch(
+        &self,
+        request: GepaLaunchRequest,
+    ) -> Result<GepaLaunchResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("v1/optimization/gepa").map_err(|e| {
+                    TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /v1/optimization/gepa endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    }
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Embedded".to_string(),
+                    message: "GEPA requires HTTP gateway with Postgres for durable execution"
+                        .to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
+    async fn gepa_get(&self, task_id: &str) -> Result<GepaGetResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client
+                    .base_url
+                    .join(&format!("v1/optimization/gepa/{task_id}"))
+                    .map_err(|e| TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /v1/optimization/gepa/{task_id} endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    })?;
+                let builder = client.http_client.get(url);
+                Ok(client.send_and_parse_http_response(builder).await?.0)
+            }
+            ClientMode::EmbeddedGateway { .. } => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Embedded".to_string(),
+                    message: "GEPA requires HTTP gateway with Postgres for durable execution"
+                        .to_string(),
+                })
+                .into(),
+            }),
         }
     }
 

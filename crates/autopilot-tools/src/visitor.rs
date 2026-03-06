@@ -58,7 +58,7 @@ pub trait ToolVisitor {
     /// They are not visible to the autopilot server.
     async fn visit_standalone_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
     where
-        T: TaskTool<ExtraState = ()>;
+        T: TaskTool<SideInfo = (), ExtraState = ()>;
 }
 
 /// A visitor that collects tool names from `for_each_tool`.
@@ -122,7 +122,7 @@ impl ToolVisitor for ToolNameCollector {
 
     async fn visit_standalone_task_tool<T>(&self, _tool: T) -> Result<(), Self::Error>
     where
-        T: TaskTool<ExtraState = ()>,
+        T: TaskTool<SideInfo = (), ExtraState = ()>,
     {
         // Standalone tools are not visible to the autopilot server
         Ok(())
