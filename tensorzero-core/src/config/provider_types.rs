@@ -137,7 +137,10 @@ pub struct FireworksProviderTypeConfig {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, rename = "FireworksSFTProviderConfig")
+)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub struct FireworksSFTConfig {
@@ -474,7 +477,10 @@ pub struct TogetherProviderTypeConfig {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, optional_fields, rename = "TogetherSFTProviderConfig")
+)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub struct TogetherSFTConfig {
