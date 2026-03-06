@@ -12,7 +12,7 @@ import type { InferenceEvaluationConfig } from "~/types/tensorzero";
 interface BasicInfoProps {
   evaluation_config: InferenceEvaluationConfig;
   functionType: "chat" | "json";
-  snapshotHash?: string | null;
+  snapshotHash?: string;
 }
 
 export default function BasicInfo({

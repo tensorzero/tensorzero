@@ -10,7 +10,7 @@ import { useSearchParams } from "react-router";
  * DB entities (inferences, episodes) carry their own snapshot_hash on
  * the object — those pages read it directly instead of using this hook.
  */
-export function useSnapshotHash(): string | null {
+export function useSnapshotHash(): string | undefined {
   const [searchParams] = useSearchParams();
-  return searchParams.get("snapshot_hash");
+  return searchParams.get("snapshot_hash") ?? undefined;
 }

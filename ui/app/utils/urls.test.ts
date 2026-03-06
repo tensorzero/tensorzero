@@ -35,10 +35,7 @@ describe("URL helper functions", () => {
       );
     });
 
-    it("should not append snapshot_hash when null or undefined", () => {
-      expect(toFunctionUrl("my_function", null)).toBe(
-        "/observability/functions/my_function",
-      );
+    it("should not append snapshot_hash when undefined", () => {
       expect(toFunctionUrl("my_function", undefined)).toBe(
         "/observability/functions/my_function",
       );

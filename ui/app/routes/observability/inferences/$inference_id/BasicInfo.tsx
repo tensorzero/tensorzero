@@ -71,7 +71,7 @@ export function BasicInfo({
   variantType,
   modelInferences = [],
 }: BasicInfoProps) {
-  const snapshotHash = inference.snapshot_hash ?? null;
+  const snapshotHash = inference.snapshot_hash;
   const inferenceUsage = getTotalInferenceUsage(modelInferences);
 
   const functionIconConfig = getFunctionTypeIcon(inference.type);

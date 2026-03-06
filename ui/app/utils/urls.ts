@@ -11,7 +11,7 @@ import type { ResolvedObject } from "~/types/tensorzero";
 
 export function toFunctionUrl(
   functionName: string,
-  snapshotHash?: string | null,
+  snapshotHash?: string,
 ): string {
   const base = `/observability/functions/${encodeURIComponent(functionName)}`;
   return appendSnapshotHash(base, snapshotHash);
@@ -20,7 +20,7 @@ export function toFunctionUrl(
 export function toVariantUrl(
   functionName: string,
   variantName: string,
-  snapshotHash?: string | null,
+  snapshotHash?: string,
 ): string {
   const base = `/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variantName)}`;
   return appendSnapshotHash(base, snapshotHash);
@@ -141,7 +141,7 @@ export function toResolvedObjectUrl(
 // Helpers
 // ============================================================================
 
-function appendSnapshotHash(url: string, snapshotHash?: string | null): string {
+function appendSnapshotHash(url: string, snapshotHash?: string): string {
   if (!snapshotHash) return url;
   const separator = url.includes("?") ? "&" : "?";
   return `${url}${separator}snapshot_hash=${encodeURIComponent(snapshotHash)}`;

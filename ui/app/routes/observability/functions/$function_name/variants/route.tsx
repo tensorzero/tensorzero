@@ -12,7 +12,7 @@ import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import { AlertCircle } from "lucide-react";
 import { Suspense, useMemo } from "react";
 import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
-import { useSnapshotHash } from "~/context/snapshot";
+import { useSnapshotHash } from "~/hooks/use-snapshot-hash";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
 import PageButtons from "~/components/utils/PageButtons";

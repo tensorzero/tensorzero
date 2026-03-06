@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { useFunctionConfig } from "~/context/config";
-import { useSnapshotHash } from "~/context/snapshot";
+import { useSnapshotHash } from "~/hooks/use-snapshot-hash";
 import { toVariantUrl } from "~/utils/urls";
 import type { ReactNode } from "react";
 import { useToast } from "~/hooks/use-toast";
@@ -10,7 +10,7 @@ type VariantLinkProps = {
   variantName: string;
   functionName: string;
   children: ReactNode;
-  snapshotHash?: string | null;
+  snapshotHash?: string;
 };
 
 export function VariantLink({

@@ -7,6 +7,7 @@ import type {
   InferenceEvaluationConfig,
   MetricConfig,
 } from "~/types/tensorzero";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import { getFunctionConfig } from "~/utils/config/index.server";
 import { resolveEvaluationConfig } from "~/utils/evaluations.server";
 import {
@@ -527,6 +528,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader
+        banner={snapshotHash ? <SnapshotBanner /> : undefined}
         eyebrow={
           <Breadcrumbs
             segments={[{ label: "Evaluations", href: "/evaluations" }]}

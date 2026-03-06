@@ -1,5 +1,5 @@
 import { History } from "lucide-react";
-import { useSnapshotHash } from "~/context/snapshot";
+import { useSnapshotHash } from "~/hooks/use-snapshot-hash";
 
 export function SnapshotBanner() {
   const snapshotHash = useSnapshotHash();

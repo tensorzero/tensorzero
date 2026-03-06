@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { data } from "react-router";
 import {
   EvaluationErrorSchema,
   type DisplayEvaluationError,
@@ -17,7 +18,7 @@ import { getTensorZeroClient } from "./tensorzero.server";
 interface ResolvedEvaluationConfig {
   evaluationConfig: InferenceEvaluationConfig;
   effectiveConfig: UiConfig;
-  snapshotHash: string | null;
+  snapshotHash: string | undefined;
 }
 
 /**
@@ -30,7 +31,11 @@ export async function resolveEvaluationConfig(
   const config = await getConfig();
   const evaluationConfig = config.evaluations[evaluationName];
   if (evaluationConfig) {
-    return { evaluationConfig, effectiveConfig: config, snapshotHash: null };
+    return {
+      evaluationConfig,
+      effectiveConfig: config,
+      snapshotHash: undefined,
+    };
   }
 
   // Evaluation not in current config — try a historical snapshot
@@ -53,7 +58,7 @@ export async function resolveEvaluationConfig(
     }
   }
 
-  throw new Response(
+  throw data(
     `Evaluation config not found for evaluation \`${evaluationName}\``,
     { status: 404 },
   );

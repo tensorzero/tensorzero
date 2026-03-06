@@ -13,7 +13,7 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import { useSnapshotHash } from "~/context/snapshot";
+import { useSnapshotHash } from "~/hooks/use-snapshot-hash";
 import { toFunctionUrl, toVariantUrl } from "~/utils/urls";
 
 interface BasicInfoProps {

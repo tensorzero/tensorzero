@@ -48,6 +48,7 @@ import {
   ColorAssignerProvider,
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import { resolveEvaluationConfig } from "~/utils/evaluations.server";
 import type {
   EvaluatorConfig,
@@ -318,7 +319,7 @@ function BasicInfoWithData({
   evaluationConfig: InferenceEvaluationConfig;
   functionType: "chat" | "json";
   datapoint_id: string;
-  snapshotHash?: string | null;
+  snapshotHash?: string;
 }) {
   const { consolidatedEvaluationResults, datapoint_staled_at } = data;
   const fetcher = useFetcher();
@@ -456,6 +457,7 @@ export default function EvaluationDatapointPage({
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
         <PageHeader
+          banner={snapshotHash ? <SnapshotBanner /> : undefined}
           eyebrow={
             <Breadcrumbs
               segments={[

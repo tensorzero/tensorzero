@@ -31,7 +31,7 @@ interface BasicInfoProps {
   datapoint_name?: string;
   datapoint_staled_at?: string;
   onRenameDatapoint?: (newName: string) => void | Promise<void>;
-  snapshotHash?: string | null;
+  snapshotHash?: string;
 }
 
 export default function BasicInfo({

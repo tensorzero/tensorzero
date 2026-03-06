@@ -3,7 +3,7 @@ import { data, useLocation } from "react-router";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
 import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
-import { useSnapshotHash } from "~/context/snapshot";
+import { useSnapshotHash } from "~/hooks/use-snapshot-hash";
 import {
   getConfigFromRequest,
   getFunctionConfig,
