@@ -329,7 +329,7 @@ pub async fn create_event_handler(
     let mut extra_headers = reqwest::header::HeaderMap::new();
     for (name, value) in &headers {
         if name.as_str().starts_with("tensorzero-") {
-            extra_headers.insert(name.clone(), value.clone());
+            extra_headers.append(name.clone(), value.clone());
         }
     }
 
