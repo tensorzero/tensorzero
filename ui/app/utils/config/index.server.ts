@@ -183,10 +183,9 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
  * Reads `?snapshot_hash` from the request URL and resolves the appropriate
  * config — either the historical snapshot or the current config.
  *
- * If the snapshot hash matches the current config (i.e. config hasn't changed),
- * throws a redirect to strip the unnecessary `?snapshot_hash` param. This
- * ensures the URL is the single source of truth: if `?snapshot_hash` is
- * present, the config is genuinely historical.
+ * If the snapshot hash exactly matches the current config hash, strips the
+ * param via redirect so the URL stays clean. Otherwise resolves the
+ * historical snapshot config (falling back to current on error).
  */
 export async function getConfigFromRequest(
   request: Request,
@@ -195,15 +194,15 @@ export async function getConfigFromRequest(
   const snapshotHash = url.searchParams.get("snapshot_hash");
   if (!snapshotHash) return getConfig();
 
-  const config = await getConfigForSnapshot(snapshotHash);
   const currentConfig = await getConfig();
 
-  if (config.config_hash === currentConfig.config_hash) {
+  // Fast path: if the URL hash exactly matches current config, strip it.
+  if (currentConfig.config_hash === snapshotHash) {
     url.searchParams.delete("snapshot_hash");
     throw redirect(url.pathname + url.search);
   }
 
-  return config;
+  return getConfigForSnapshot(snapshotHash);
 }
 
 // ============================================================================
