@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::clickhouse::get_clean_clickhouse;
+use crate::utils::skip_for_postgres;
 use serde_json::json;
 use tensorzero::ClientBuilder;
 use tensorzero::FeedbackParams;
@@ -27,6 +28,7 @@ use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_deployment_id() {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let deployment_id = get_deployment_id(
         &clickhouse,
@@ -76,6 +78,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_howdy_report() {
+    skip_for_postgres!();
     let (clickhouse, _guard) = get_clean_clickhouse(true).await;
     let client = get_embedded_client(clickhouse.clone()).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -86,7 +89,9 @@ async fn test_get_howdy_report() {
     )
     .await
     .unwrap();
-    let howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
+    let howdy_report = get_howdy_report(&clickhouse, &deployment_id, PrimaryDatastore::ClickHouse)
+        .await
+        .unwrap();
     assert_eq!(howdy_report.inference_count, "0");
     assert_eq!(howdy_report.feedback_count, "0");
     assert!(howdy_report.input_token_total.is_none());
@@ -94,6 +99,11 @@ async fn test_get_howdy_report() {
     assert_eq!(
         howdy_report.gateway_version,
         tensorzero_core::endpoints::status::TENSORZERO_VERSION
+    );
+    assert_eq!(
+        howdy_report.observability_backend,
+        PrimaryDatastore::ClickHouse,
+        "observability_backend should be ClickHouse"
     );
     // Since we're in an e2e test, this should be true
     assert!(howdy_report.dryrun);
@@ -171,7 +181,10 @@ async fn test_get_howdy_report() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Get the howdy report again
-    let new_howdy_report = get_howdy_report(&clickhouse, &deployment_id).await.unwrap();
+    let new_howdy_report =
+        get_howdy_report(&clickhouse, &deployment_id, PrimaryDatastore::ClickHouse)
+            .await
+            .unwrap();
     assert!(!new_howdy_report.inference_count.is_empty());
     assert!(!new_howdy_report.feedback_count.is_empty());
     // Since we're in an e2e test, this should be true

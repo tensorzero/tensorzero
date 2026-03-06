@@ -683,6 +683,22 @@ Be careful about the different prefixes: `model_name="gpt-4o"` will use the `[mo
 
 </Warning>
 
+#### `namespace`
+
+- **Type:** string
+- **Required:** no
+
+Selects a namespace-specific experimentation config for this request.
+If the function has a matching namespace config, it will be used instead of the base experimentation config.
+If no matching config exists, the base config is used as a fallback.
+
+The namespace is also validated against namespaced models: if the selected variant uses a model scoped to a different namespace, the request will fail.
+
+The value must be a non-empty string.
+It is stored as the `tensorzero::namespace` tag on the inference record.
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
+
 #### `output_schema`
 
 - **Type:** object (valid JSON Schema)
@@ -1276,8 +1292,7 @@ The raw chunk from the current streaming model inference. This is included in co
 
 ##### Configuration
 
-```toml mark="draft_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft_email"
 # ...
 [functions.draft_email]
 type = "chat"
@@ -1399,8 +1414,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml mark="draft_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft_email"
 # ...
 [functions.draft_email]
 type = "chat"
@@ -1573,8 +1587,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml "weather_bot" /"(get_temperature)"/ /(get_temperature)]/
-// tensorzero.toml
+```toml title="tensorzero.toml" "weather_bot" /"(get_temperature)"/ /(get_temperature)]/
 # ...
 
 [functions.weather_bot]
@@ -1732,8 +1745,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml "weather_bot" /"(get_temperature)"/ /(get_temperature)]/
-// tensorzero.toml
+```toml title="tensorzero.toml" "weather_bot" /"(get_temperature)"/ /(get_temperature)]/
 # ...
 
 [functions.weather_bot]
@@ -1938,8 +1950,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml "weather_bot"
-// tensorzero.toml
+```toml title="tensorzero.toml" "weather_bot"
 # ...
 
 [functions.weather_bot]
@@ -2117,8 +2128,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml mark="draft_email" mark="temperature" mark="chat_completion"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft_email" mark="temperature" mark="chat_completion"
 # ...
 [functions.draft_email]
 type = "chat"
@@ -2256,8 +2266,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml mark="extract_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="extract_email"
 # ...
 [functions.extract_email]
 type = "json"

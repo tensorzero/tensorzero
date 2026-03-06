@@ -74,60 +74,6 @@ async fn test_extra_headers_variant_function() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_extra_headers_provider_fully_qualified_config_function() {
-    let client = create_test_gateway(STANDARD_CONFIG).await;
-
-    let result = client
-        .inference(ClientInferenceParams {
-            function_name: Some("function_echo_injected_data_explicit".to_string()),
-            input: create_test_input(),
-            extra_headers: serde_json::from_value(json!([{
-                "model_provider_name": "tensorzero::model_name::my_echo_injected_data::provider_name::dummy",
-                "name": "X-Provider-Header",
-                "value": "provider_works"
-            }]))
-            .unwrap(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-
-    let headers = parse_injected_headers(result);
-    assert!(
-        headers
-            .iter()
-            .any(|(k, v)| k == "x-provider-header" && v == "provider_works")
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_extra_headers_provider_fully_qualified_shorthand_function() {
-    let client = create_test_gateway(STANDARD_CONFIG).await;
-
-    let result = client
-        .inference(ClientInferenceParams {
-            function_name: Some("function_echo_injected_data_shorthand".to_string()),
-            input: create_test_input(),
-            extra_headers: serde_json::from_value(json!([{
-                "model_provider_name": "tensorzero::model_name::dummy::echo_injected_data::provider_name::dummy",
-                "name": "X-Shorthand-Provider-Header",
-                "value": "shorthand_provider_works"
-            }]))
-            .unwrap(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-
-    let headers = parse_injected_headers(result);
-    assert!(
-        headers
-            .iter()
-            .any(|(k, v)| k == "x-shorthand-provider-header" && v == "shorthand_provider_works")
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn test_extra_headers_model_provider_no_shorthand_function() {
     let client = create_test_gateway(STANDARD_CONFIG).await;
 
@@ -208,60 +154,6 @@ async fn test_extra_headers_always_model() {
         headers
             .iter()
             .any(|(k, v)| k == "x-always-header" && v == "always_works")
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_extra_headers_provider_fully_qualified_config_model() {
-    let client = create_test_gateway(STANDARD_CONFIG).await;
-
-    let result = client
-        .inference(ClientInferenceParams {
-            model_name: Some("my_echo_injected_data".to_string()),
-            input: create_test_input(),
-            extra_headers: serde_json::from_value(json!([{
-                "model_provider_name": "tensorzero::model_name::my_echo_injected_data::provider_name::dummy",
-                "name": "X-Provider-Header",
-                "value": "provider_works"
-            }]))
-            .unwrap(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-
-    let headers = parse_injected_headers(result);
-    assert!(
-        headers
-            .iter()
-            .any(|(k, v)| k == "x-provider-header" && v == "provider_works")
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_extra_headers_provider_fully_qualified_shorthand_model() {
-    let client = create_test_gateway(STANDARD_CONFIG).await;
-
-    let result = client
-        .inference(ClientInferenceParams {
-            model_name: Some("dummy::echo_injected_data".to_string()),
-            input: create_test_input(),
-            extra_headers: serde_json::from_value(json!([{
-                "model_provider_name": "tensorzero::model_name::dummy::echo_injected_data::provider_name::dummy",
-                "name": "X-Shorthand-Provider-Header",
-                "value": "shorthand_provider_works"
-            }]))
-            .unwrap(),
-            ..Default::default()
-        })
-        .await
-        .unwrap();
-
-    let headers = parse_injected_headers(result);
-    assert!(
-        headers
-            .iter()
-            .any(|(k, v)| k == "x-shorthand-provider-header" && v == "shorthand_provider_works")
     );
 }
 

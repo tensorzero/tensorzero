@@ -118,7 +118,8 @@
             "group": "Experimentation",
             "pages": [
               "experimentation/run-adaptive-ab-tests",
-              "experimentation/run-static-ab-tests"
+              "experimentation/run-static-ab-tests",
+              "experimentation/scope-experiments-with-namespaces"
             ]
           },
           {

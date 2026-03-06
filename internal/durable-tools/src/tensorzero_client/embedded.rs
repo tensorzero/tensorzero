@@ -160,11 +160,14 @@ impl TensorZeroClient for EmbeddedClient {
             config_snapshot_hash,
         };
 
-        create_event(autopilot_client, session_id, full_request, &[])
-            .await
-            .map_err(|e| {
-                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            })
+        create_event(
+            autopilot_client,
+            session_id,
+            full_request,
+            Default::default(),
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
     async fn list_autopilot_events(
@@ -290,8 +293,7 @@ impl TensorZeroClient for EmbeddedClient {
         let hash = snapshot.hash.to_string();
 
         self.app_state
-            .get_delegating_database()
-            .write_config_snapshot(&snapshot)
+            .validate_and_write_config_snapshot(&snapshot)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })

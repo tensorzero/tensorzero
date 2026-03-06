@@ -1812,7 +1812,9 @@ impl UninitializedConfig {
     /// is handled by `From<Stored*Config>` impls (for stored snapshots) and by
     /// the consumer (for TOML configs).
     pub(crate) fn warn_on_deprecations(&mut self) -> Result<(), Error> {
-        self.resolve_clickhouse_config_deprecation()
+        self.resolve_clickhouse_config_deprecation()?;
+        self.warn_variant_weight_deprecation();
+        Ok(())
     }
 
     #[expect(deprecated)]
@@ -1831,6 +1833,31 @@ impl UninitializedConfig {
             );
         }
         Ok(())
+    }
+
+    fn warn_variant_weight_deprecation(&self) {
+        let functions_with_weight: Vec<&str> = self
+            .functions
+            .iter()
+            .filter(|(_, func)| {
+                let variants = match func {
+                    UninitializedFunctionConfig::Chat(c) => &c.variants,
+                    UninitializedFunctionConfig::Json(c) => &c.variants,
+                };
+                variants.values().any(|v| v.inner.weight().is_some())
+            })
+            .map(|(name, _)| name.as_str())
+            .collect();
+
+        if !functions_with_weight.is_empty() {
+            // TODO (#4626): Finish deprecation
+            deprecation_warning(&format!(
+                "The `weight` field on variants is deprecated and will be removed in a future release (2026.6+). \
+                 Use the `[functions.<name>.experimentation]` section instead. \
+                 Affected functions: {}",
+                functions_with_weight.join(", ")
+            ));
+        }
     }
 
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
@@ -2364,6 +2391,18 @@ pub enum UninitializedVariantConfig {
     ChainOfThought(UninitializedChainOfThoughtConfig),
 }
 
+impl UninitializedVariantConfig {
+    pub fn weight(&self) -> Option<f64> {
+        match self {
+            Self::ChatCompletion(c) => c.weight,
+            Self::BestOfNSampling(c) => c.weight,
+            Self::Dicl(c) => c.weight,
+            Self::MixtureOfN(c) => c.weight,
+            Self::ChainOfThought(c) => c.inner.weight,
+        }
+    }
+}
+
 /// Holds extra information used for enriching error messages
 pub struct ErrorContext {
     pub function_name: String,
@@ -2453,6 +2492,13 @@ impl PathWithContents {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct PostgresConfig {
+    /// DEPRECATED (2026.3+): Postgres connectivity is now determined by the
+    /// `TENSORZERO_POSTGRES_URL` environment variable. This field is accepted
+    /// for backward compatibility but will be removed in a future release.
+    #[deprecated(
+        note = "Postgres connectivity is now determined by the `TENSORZERO_POSTGRES_URL` environment variable. Remove `postgres.enabled` from your config."
+    )]
+    #[serde(default, skip_serializing)]
     pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
@@ -2480,6 +2526,7 @@ fn default_connection_pool_size() -> u32 {
 
 impl Default for PostgresConfig {
     fn default() -> Self {
+        #[expect(deprecated)]
         Self {
             enabled: None,
             connection_pool_size: 20,

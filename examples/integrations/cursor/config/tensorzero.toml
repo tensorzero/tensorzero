@@ -5,23 +5,23 @@
 [functions.cursorzero]
 type = "chat"
 
+[functions.cursorzero.experimentation]
+type = "static"
+candidate_variants = { "gpt-4.1" = 1.0, "claude-4.5" = 1.0, "gemini-2.5-pro" = 1.0, "o4-mini" = 1.0 }
+
 [functions.cursorzero.variants."gpt-4.1"]
-weight = 1
 type = "chat_completion"
 model = "openai::gpt-4.1"
 
 [functions.cursorzero.variants."claude-4.5"]
-weight = 1
 type = "chat_completion"
 model = "anthropic::claude-sonnet-4-5"
 
 [functions.cursorzero.variants."gemini-2.5-pro"]
-weight = 1
 type = "chat_completion"
 model = "google_ai_studio_gemini::gemini-2.5-pro"
 
 [functions.cursorzero.variants."o4-mini"]
-weight = 1
 type = "chat_completion"
 model = "openai::o4-mini-2025-04-16"
 extra_body = [{ pointer = "/temperature", value = 1.0 }]

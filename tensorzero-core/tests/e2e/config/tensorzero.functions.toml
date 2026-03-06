@@ -127,9 +127,12 @@ input_wrappers.user = "../../../fixtures/config/functions/basic_test_template_no
 [functions.basic_test_no_system_schema]
 type = "chat"
 
+[functions.basic_test_no_system_schema.experimentation]
+type = "static"
+candidate_variants = { "test" = 1.0 }
+
 [functions.basic_test_no_system_schema.variants.test]
 type = "chat_completion"
-weight = 1
 model = "test"
 max_tokens = 100
 
@@ -137,9 +140,12 @@ max_tokens = 100
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.model_fallback_test.experimentation]
+type = "static"
+candidate_variants = { "test" = 1.0 }
+
 [functions.model_fallback_test.variants.test]
 type = "chat_completion"
-weight = 1
 model = "test_fallback"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
@@ -149,9 +155,12 @@ type = "json"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 output_schema = "../../../fixtures/config/functions/basic_test/output_schema.json"
 
+[functions.json_fail.experimentation]
+type = "static"
+candidate_variants = { "test" = 1.0 }
+
 [functions.json_fail.variants.test]
 type = "chat_completion"
-weight = 1
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
@@ -162,9 +171,12 @@ type = "json"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 output_schema = "../../../fixtures/config/functions/basic_test/output_schema.json"
 
+[functions.json_success_no_input_schema.experimentation]
+type = "static"
+candidate_variants = { "test" = 1.0 }
+
 [functions.json_success_no_input_schema.variants.test]
 type = "chat_completion"
-weight = 1
 model = "json"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 max_tokens = 100
@@ -190,9 +202,12 @@ type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 user_schema = "../../../fixtures/config/functions/variant_failover/user_schema.json"
 
+[functions.variant_failover.experimentation]
+type = "static"
+candidate_variants = { "good" = 0.5, "error" = 0.5 }
+
 [functions.variant_failover.variants.good]
 type = "chat_completion"
-weight = 0.5
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
@@ -200,7 +215,6 @@ max_tokens = 100
 
 [functions.variant_failover.variants.error]
 type = "chat_completion"
-weight = 0.5
 model = "error"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
@@ -211,9 +225,13 @@ type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 user_schema = "../../../fixtures/config/functions/variant_failover/user_schema.json"
 
+[functions.variant_failover_zero_weight.experimentation]
+type = "static"
+candidate_variants = { "first_error" = 0.5, "second_error" = 0.5 }
+fallback_variants = ["no_weight"]
+
 [functions.variant_failover_zero_weight.variants.first_error]
 type = "chat_completion"
-weight = 0.5
 model = "dummy::error_1"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
@@ -221,7 +239,6 @@ max_tokens = 100
 
 [functions.variant_failover_zero_weight.variants.second_error]
 type = "chat_completion"
-weight = 0.5
 model = "dummy::error_2"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
@@ -236,7 +253,6 @@ max_tokens = 100
 
 [functions.variant_failover_zero_weight.variants.zero_weight]
 type = "chat_completion"
-weight = 0
 model = "dummy::error_zero_weight"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
@@ -245,36 +261,48 @@ max_tokens = 100
 [functions.prometheus_test1]
 type = "chat"
 
+[functions.prometheus_test1.experimentation]
+type = "static"
+candidate_variants = { "variant" = 1.0 }
+
 [functions.prometheus_test1.variants.variant]
 type = "chat_completion"
-weight = 1
 model = "test"
 max_tokens = 100
 
 [functions.prometheus_test2]
 type = "chat"
 
+[functions.prometheus_test2.experimentation]
+type = "static"
+candidate_variants = { "variant" = 1.0 }
+
 [functions.prometheus_test2.variants.variant]
 type = "chat_completion"
-weight = 1
 model = "test"
 max_tokens = 100
 
 [functions.prometheus_test3]
 type = "chat"
 
+[functions.prometheus_test3.experimentation]
+type = "static"
+candidate_variants = { "variant" = 1.0 }
+
 [functions.prometheus_test3.variants.variant]
 type = "chat_completion"
-weight = 1
 model = "test"
 max_tokens = 100
 
 [functions.prometheus_test4]
 type = "chat"
 
+[functions.prometheus_test4.experimentation]
+type = "static"
+candidate_variants = { "variant" = 1.0 }
+
 [functions.prometheus_test4.variants.variant]
 type = "chat_completion"
-weight = 1
 model = "test"
 max_tokens = 100
 
@@ -303,74 +331,67 @@ tools = ["get_temperature", "get_humidity"]
 tool_choice = "auto"
 # We use an inference-time parameter to set `parallel_tool_calls = true` for the test
 
+[functions.weather_helper_parallel.experimentation]
+type = "static"
+candidate_variants = { "openai" = 1.0, "gpt-5-mini" = 1.0, "openai-responses" = 1.0, "openai-o1" = 1.0, "openrouter" = 1.0, "anthropic" = 1.0, "groq" = 1.0, "aws-bedrock" = 1.0, "together-tool" = 1.0, "vllm" = 1.0, "gcp-vertex-haiku" = 1.0 }
+
 [functions.weather_helper_parallel.variants.openai]
 type = "chat_completion"
-weight = 1
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.weather_helper_parallel.variants.gpt-5-mini]
 type = "chat_completion"
-weight = 1
 model = "openai::gpt-5-mini"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 max_tokens = 1000
 
 [functions.weather_helper_parallel.variants.openai-responses]
 type = "chat_completion"
-weight = 1
 model = "responses-gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.weather_helper_parallel.variants.openai-o1]
 type = "chat_completion"
-weight = 1
 model = "o1-2024-12-17"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 max_tokens = 1000
 
 [functions.weather_helper_parallel.variants.openrouter]
 type = "chat_completion"
-weight = 1
 model = "gpt_4_o_mini_openrouter"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 [functions.weather_helper_parallel.variants.anthropic]
 type = "chat_completion"
-weight = 1
 model = "claude-haiku-4-5-anthropic"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 [functions.weather_helper_parallel.variants.groq]
 type = "chat_completion"
-weight = 1
 model = "groq-qwen"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 [functions.weather_helper_parallel.variants.aws-bedrock]
 type = "chat_completion"
-weight = 1
 model = "claude-haiku-4-5-aws-bedrock"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 [functions.weather_helper_parallel.variants.together-tool]
 type = "chat_completion"
-weight = 1
 model = "llama4-maverick-instruct-together"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 [functions.weather_helper_parallel.variants.vllm]
 type = "chat_completion"
-weight = 1
 model = "qwen3-1.7b-vllm"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.weather_helper_parallel.variants.gcp-vertex-haiku]
 type = "chat_completion"
-weight = 1
 model = "claude-haiku-4-5-gcp-vertex"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
@@ -394,33 +415,32 @@ model = "test"
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.best_of_n.experimentation]
+type = "static"
+candidate_variants = { "best_of_n_variant" = 1.0, "flaky_best_of_n_variant" = 1.0 }
+
 [functions.best_of_n.variants.variant0]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.variant1]
 type = "chat_completion"
-weight = 0
 model = "json"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.openai_variant0]
 type = "chat_completion"
-weight = 0
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.openai_variant1]
 type = "chat_completion"
-weight = 0
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.best_of_n_variant]
 type = "experimental_best_of_n_sampling"
-weight = 1
 candidates = ["variant0", "variant1"]
 
 [functions.best_of_n.variants.best_of_n_variant.evaluator]
@@ -429,7 +449,6 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 
 [functions.best_of_n.variants.best_of_n_variant_openai]
 type = "experimental_best_of_n_sampling"
-weight = 0
 candidates = ["openai_variant0", "openai_variant1"]
 
 [functions.best_of_n.variants.best_of_n_variant_openai.evaluator]
@@ -438,7 +457,6 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 
 [functions.best_of_n.variants.best_of_n_variant_extra_body]
 type = "experimental_best_of_n_sampling"
-weight = 0
 candidates = ["variant0", "variant1"]
 
 [functions.best_of_n.variants.best_of_n_variant_extra_body.evaluator]
@@ -448,7 +466,6 @@ extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
 
 [functions.best_of_n.variants.flaky_best_of_n_variant]
 type = "experimental_best_of_n_sampling"
-weight = 1
 candidates = ["variant0", "variant1"]
 
 [functions.best_of_n.variants.flaky_best_of_n_variant.evaluator]
@@ -461,30 +478,30 @@ type = "json"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 output_schema = "../../../fixtures/config/functions/best_of_n_json/output_schema.json"
 
+[functions.best_of_n_json.experimentation]
+type = "static"
+candidate_variants = { "best_of_n_variant" = 1.0, "best_of_n_variant_implicit_tool" = 1.0 }
+
 [functions.best_of_n_json.variants.variant0]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.best_of_n_json.variants.variant1]
 type = "chat_completion"
-weight = 0
 model = "json"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.best_of_n_json.variants.variant2]
 type = "chat_completion"
-weight = 0
 model = "json_goodbye"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.best_of_n_json.variants.best_of_n_variant]
 type = "experimental_best_of_n_sampling"
-weight = 1
 candidates = ["variant0", "variant1", "variant2"]
 
 [functions.best_of_n_json.variants.best_of_n_variant.evaluator]
@@ -494,7 +511,6 @@ json_mode = "strict"
 
 [functions.best_of_n_json.variants.best_of_n_variant_implicit_tool]
 type = "experimental_best_of_n_sampling"
-weight = 1
 candidates = ["variant0", "variant1", "variant2"]
 
 [functions.best_of_n_json.variants.best_of_n_variant_implicit_tool.evaluator]
@@ -507,23 +523,24 @@ type = "json"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 output_schema = "../../../fixtures/config/functions/best_of_n_json/output_schema.json"
 
+[functions.best_of_n_json_repeated.experimentation]
+type = "static"
+candidate_variants = { "best_of_n_variant" = 1.0 }
+
 [functions.best_of_n_json_repeated.variants.variant0]
 type = "chat_completion"
-weight = 0
 model = "dummy::random_answer"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.best_of_n_json_repeated.variants.variant1]
 type = "chat_completion"
-weight = 0
 model = "json"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.best_of_n_json_repeated.variants.best_of_n_variant]
 type = "experimental_best_of_n_sampling"
-weight = 1
 candidates = ["variant0", "variant0", "variant1"]
 
 [functions.best_of_n_json_repeated.variants.best_of_n_variant.evaluator]
@@ -535,15 +552,17 @@ json_mode = "strict"
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.mixture_of_n_single_candidate.experimentation]
+type = "static"
+candidate_variants = { "mixture_of_n_variant" = 1.0 }
+
 [functions.mixture_of_n_single_candidate.variants.variant0]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.mixture_of_n_single_candidate.variants.mixture_of_n_variant]
 type = "experimental_mixture_of_n"
-weight = 1
 candidates = ["variant0"]
 
 [functions.mixture_of_n_single_candidate.variants.mixture_of_n_variant.fuser]
@@ -554,21 +573,22 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.mixture_of_n.experimentation]
+type = "static"
+candidate_variants = { "mixture_of_n_variant" = 1.0, "mixture_of_n_variant_bad_fuser" = 1.0 }
+
 [functions.mixture_of_n.variants.variant0]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.mixture_of_n.variants.variant1]
 type = "chat_completion"
-weight = 0
 model = "alternate"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.mixture_of_n.variants.mixture_of_n_variant]
 type = "experimental_mixture_of_n"
-weight = 1
 candidates = ["variant0", "variant1"]
 
 [functions.mixture_of_n.variants.mixture_of_n_variant.fuser]
@@ -577,7 +597,6 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 
 [functions.mixture_of_n.variants.mixture_of_n_variant_bad_fuser]
 type = "experimental_mixture_of_n"
-weight = 1
 candidates = ["variant0", "variant0"]
 
 [functions.mixture_of_n.variants.mixture_of_n_variant_bad_fuser.fuser]
@@ -588,21 +607,22 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.mixture_of_n_extra_body.experimentation]
+type = "static"
+candidate_variants = { "mixture_of_n_variant" = 1.0 }
+
 [functions.mixture_of_n_extra_body.variants.mixture_of_n_variant]
 type = "experimental_mixture_of_n"
-weight = 1
 candidates = ["variant0", "variant1"]
 
 [functions.mixture_of_n_extra_body.variants.variant0]
 type = "chat_completion"
 model = "o1-2024-12-17"
-weight = 0
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.mixture_of_n_extra_body.variants.variant1]
 type = "chat_completion"
 model = "test"
-weight = 0
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.mixture_of_n_extra_body.variants.mixture_of_n_variant.fuser]
@@ -615,23 +635,24 @@ type = "json"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 output_schema = "../../../fixtures/config/functions/mixture_of_n_json/output_schema.json"
 
+[functions.mixture_of_n_json.experimentation]
+type = "static"
+candidate_variants = { "mixture_of_n_variant" = 1.0 }
+
 [functions.mixture_of_n_json.variants.variant0]
 type = "chat_completion"
-weight = 0
 model = "json_beatles_1"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.mixture_of_n_json.variants.variant1]
 type = "chat_completion"
-weight = 0
 model = "json_beatles_2"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.mixture_of_n_json.variants.mixture_of_n_variant]
 type = "experimental_mixture_of_n"
-weight = 1
 candidates = ["variant0", "variant1"]
 
 [functions.mixture_of_n_json.variants.mixture_of_n_variant.fuser]
@@ -654,23 +675,24 @@ system_template = "../../../fixtures/config/functions/multi_hop_rag_agent/baseli
 type = "json"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.mixture_of_n_json_repeated.experimentation]
+type = "static"
+candidate_variants = { "mixture_of_n_variant" = 1.0 }
+
 [functions.mixture_of_n_json_repeated.variants.variant0]
 type = "chat_completion"
-weight = 0
 model = "dummy::random_answer"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.mixture_of_n_json_repeated.variants.variant1]
 type = "chat_completion"
-weight = 0
 model = "json"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.mixture_of_n_json_repeated.variants.mixture_of_n_variant]
 type = "experimental_mixture_of_n"
-weight = 1
 candidates = ["variant0", "variant0", "variant1"]
 
 [functions.mixture_of_n_json_repeated.variants.mixture_of_n_variant.fuser]
@@ -683,8 +705,11 @@ json_mode = "strict"
 type = "json"
 output_schema = "../../../fixtures/config/functions/generate_secret/output_schema.json"
 
+[functions.generate_secret.experimentation]
+type = "static"
+candidate_variants = { "baseline" = 1.0 }
+
 [functions.generate_secret.variants.baseline]
-weight = 1
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/generate_secret/baseline/system_template.minijinja"
@@ -697,9 +722,12 @@ type = "json"
 output_schema = "../../../fixtures/config/functions/ask_question/output_schema.json"
 system_schema = "../../../fixtures/config/functions/ask_question/system_schema.json"
 
+[functions.ask_question.experimentation]
+type = "static"
+candidate_variants = { "baseline" = 1.0 }
+
 [functions.ask_question.variants.baseline]
 type = "chat_completion"
-weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
@@ -707,7 +735,6 @@ retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.ask_question.variants."gpt-4.1-nano"]
 type = "chat_completion"
-weight = 0
 model = "openai::gpt-4.1-nano-2025-04-14"
 system_template = "../../../fixtures/config/functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
@@ -715,7 +742,6 @@ retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.ask_question.variants."gpt-4.1-mini"]
 type = "chat_completion"
-weight = 0
 model = "openai::gpt-4.1-mini-2025-04-14"
 system_template = "../../../fixtures/config/functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
@@ -725,9 +751,12 @@ retries = { num_retries = 4, max_delay_s = 10 }
 type = "chat"
 system_schema = "../../../fixtures/config/functions/answer_question/system_schema.json"
 
+[functions.answer_question.experimentation]
+type = "static"
+candidate_variants = { "baseline" = 1.0 }
+
 [functions.answer_question.variants.baseline]
 type = "chat_completion"
-weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/answer_question/baseline/system_template.minijinja"
 # for honesty
@@ -902,23 +931,24 @@ max_tokens = 100
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.best_of_n_raw_response_partial_fail.experimentation]
+type = "static"
+candidate_variants = { "best_of_n" = 1.0 }
+
 [functions.best_of_n_raw_response_partial_fail.variants.error_candidate]
 type = "chat_completion"
-weight = 0
 model = "error_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.best_of_n_raw_response_partial_fail.variants.good_candidate]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.best_of_n_raw_response_partial_fail.variants.best_of_n]
 type = "experimental_best_of_n_sampling"
-weight = 1
 candidates = ["error_candidate", "good_candidate"]
 
 [functions.best_of_n_raw_response_partial_fail.variants.best_of_n.evaluator]
@@ -931,23 +961,24 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.best_of_n_raw_response_all_fail.experimentation]
+type = "static"
+candidate_variants = { "best_of_n" = 1.0 }
+
 [functions.best_of_n_raw_response_all_fail.variants.error_candidate_1]
 type = "chat_completion"
-weight = 0
 model = "error_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.best_of_n_raw_response_all_fail.variants.error_candidate_2]
 type = "chat_completion"
-weight = 0
 model = "error_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.best_of_n_raw_response_all_fail.variants.best_of_n]
 type = "experimental_best_of_n_sampling"
-weight = 1
 candidates = ["error_candidate_1", "error_candidate_2"]
 
 [functions.best_of_n_raw_response_all_fail.variants.best_of_n.evaluator]
@@ -960,23 +991,24 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.best_of_n_raw_response_evaluator_fail.experimentation]
+type = "static"
+candidate_variants = { "best_of_n" = 1.0 }
+
 [functions.best_of_n_raw_response_evaluator_fail.variants.good_candidate_1]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.best_of_n_raw_response_evaluator_fail.variants.good_candidate_2]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.best_of_n_raw_response_evaluator_fail.variants.best_of_n]
 type = "experimental_best_of_n_sampling"
-weight = 1
 candidates = ["good_candidate_1", "good_candidate_2"]
 
 [functions.best_of_n_raw_response_evaluator_fail.variants.best_of_n.evaluator]
@@ -990,23 +1022,24 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.mixture_of_n_raw_response_partial_fail.experimentation]
+type = "static"
+candidate_variants = { "mixture_of_n" = 1.0 }
+
 [functions.mixture_of_n_raw_response_partial_fail.variants.error_candidate]
 type = "chat_completion"
-weight = 0
 model = "error_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.mixture_of_n_raw_response_partial_fail.variants.good_candidate]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.mixture_of_n_raw_response_partial_fail.variants.mixture_of_n]
 type = "experimental_mixture_of_n"
-weight = 1
 candidates = ["error_candidate", "good_candidate"]
 
 [functions.mixture_of_n_raw_response_partial_fail.variants.mixture_of_n.fuser]
@@ -1019,23 +1052,24 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.mixture_of_n_raw_response_all_fail.experimentation]
+type = "static"
+candidate_variants = { "mixture_of_n" = 1.0 }
+
 [functions.mixture_of_n_raw_response_all_fail.variants.error_candidate_1]
 type = "chat_completion"
-weight = 0
 model = "error_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.mixture_of_n_raw_response_all_fail.variants.error_candidate_2]
 type = "chat_completion"
-weight = 0
 model = "error_with_raw_response"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.mixture_of_n_raw_response_all_fail.variants.mixture_of_n]
 type = "experimental_mixture_of_n"
-weight = 1
 candidates = ["error_candidate_1", "error_candidate_2"]
 
 [functions.mixture_of_n_raw_response_all_fail.variants.mixture_of_n.fuser]
@@ -1048,23 +1082,24 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
+[functions.mixture_of_n_raw_response_fuser_fail.experimentation]
+type = "static"
+candidate_variants = { "mixture_of_n" = 1.0 }
+
 [functions.mixture_of_n_raw_response_fuser_fail.variants.good_candidate_1]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.mixture_of_n_raw_response_fuser_fail.variants.good_candidate_2]
 type = "chat_completion"
-weight = 0
 model = "test"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.mixture_of_n_raw_response_fuser_fail.variants.mixture_of_n]
 type = "experimental_mixture_of_n"
-weight = 1
 candidates = ["good_candidate_1", "good_candidate_2"]
 
 [functions.mixture_of_n_raw_response_fuser_fail.variants.mixture_of_n.fuser]

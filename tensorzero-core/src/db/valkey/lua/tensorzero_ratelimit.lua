@@ -27,7 +27,7 @@ local OLD_RATE_LIMITING_KEY_PREFIX_FOR_MIGRATION = 'ratelimit:'
 
 -- Get current server time in microseconds
 local function get_server_time_micros()
-    local time = server.call('TIME')
+    local time = redis.call('TIME')
     return tonumber(time[1]) * 1000000 + tonumber(time[2])
 end
 
@@ -103,7 +103,7 @@ local function consume_tickets(keys, args)
         -- HMGET reads multiple fields from the hash in one call, and returns a table with two values:
         -- [balance, last_refilled]
         -- Returns [nil, nil] if the key does not exist.
-        local data = server.call('HMGET', RATE_LIMITING_KEY_PREFIX .. key, 'balance', 'last_refilled')
+        local data = redis.call('HMGET', RATE_LIMITING_KEY_PREFIX .. key, 'balance', 'last_refilled')
         local balance = tonumber(data[1]) or capacity  -- New bucket starts at capacity
         local last_refilled = tonumber(data[2]) or now
 
@@ -132,14 +132,14 @@ local function consume_tickets(keys, args)
             local new_balance = state[i].balance - params[i].requested
 
             -- Store aligned last_refilled, NOT current time
-            server.call('HSET', redis_key,
+            redis.call('HSET', redis_key,
                 'balance', new_balance,
                 'last_refilled', state[i].last_refilled)
 
             -- Set TTL to expire inactive keys
             local ttl = calculate_ttl_seconds(
                 params[i].capacity, params[i].refill_amount, params[i].refill_interval)
-            server.call('EXPIRE', redis_key, ttl)
+            redis.call('EXPIRE', redis_key, ttl)
 
             results[i] = {
                 key = key,
@@ -192,7 +192,7 @@ local function return_tickets(keys, args)
         local refill_amount = tonumber(args[base_idx + 3])
         local refill_interval = tonumber(args[base_idx + 4])
 
-        local data = server.call('HMGET', redis_key, 'balance', 'last_refilled')
+        local data = redis.call('HMGET', redis_key, 'balance', 'last_refilled')
         local balance = tonumber(data[1]) or capacity
         local last_refilled = tonumber(data[2]) or now
 
@@ -203,13 +203,13 @@ local function return_tickets(keys, args)
         new_balance = math.min(new_balance + returned, capacity)
 
         -- Store aligned last_refilled, NOT current time
-        server.call('HSET', redis_key,
+        redis.call('HSET', redis_key,
             'balance', new_balance,
             'last_refilled', new_last_refilled)
 
         -- Set TTL to expire inactive keys
         local ttl = calculate_ttl_seconds(capacity, refill_amount, refill_interval)
-        server.call('EXPIRE', redis_key, ttl)
+        redis.call('EXPIRE', redis_key, ttl)
 
         results[i] = {
             key = key,
@@ -232,7 +232,7 @@ local function get_balance(keys, args)
     local refill_interval = tonumber(args[3])
     local now = get_server_time_micros()
 
-    local data = server.call('HMGET', RATE_LIMITING_KEY_PREFIX .. key, 'balance', 'last_refilled')
+    local data = redis.call('HMGET', RATE_LIMITING_KEY_PREFIX .. key, 'balance', 'last_refilled')
     local balance = tonumber(data[1]) or capacity
     local last_refilled = tonumber(data[2]) or now
 
@@ -254,7 +254,7 @@ local function migrate_old_keys(keys, args)
 
     repeat
         -- SCAN for old keys
-        local result = server.call('SCAN', cursor, 'MATCH', OLD_RATE_LIMITING_KEY_PREFIX_FOR_MIGRATION .. '*', 'COUNT', 100)
+        local result = redis.call('SCAN', cursor, 'MATCH', OLD_RATE_LIMITING_KEY_PREFIX_FOR_MIGRATION .. '*', 'COUNT', 100)
         cursor = result[1]
         local found_keys = result[2]
 
@@ -264,17 +264,17 @@ local function migrate_old_keys(keys, args)
             local new_key = RATE_LIMITING_KEY_PREFIX .. suffix
 
             -- Only migrate if new key doesn't exist
-            local exists = server.call('EXISTS', new_key)
+            local exists = redis.call('EXISTS', new_key)
             if exists == 0 then
                 -- Copy hash data
-                local data = server.call('HGETALL', old_key)
+                local data = redis.call('HGETALL', old_key)
                 if #data > 0 then
-                    server.call('HSET', new_key, unpack(data))
+                    redis.call('HSET', new_key, unpack(data))
 
                     -- Copy TTL if present
-                    local ttl = server.call('TTL', old_key)
+                    local ttl = redis.call('TTL', old_key)
                     if ttl > 0 then
-                        server.call('EXPIRE', new_key, ttl)
+                        redis.call('EXPIRE', new_key, ttl)
                     end
 
                     migrated_count = migrated_count + 1
@@ -287,13 +287,13 @@ local function migrate_old_keys(keys, args)
 end
 
 -- Register all functions with version suffix for safe rolling deploys
-server.register_function('tensorzero_consume_tickets_v2', consume_tickets)
-server.register_function('tensorzero_return_tickets_v2', return_tickets)
-server.register_function{
+redis.register_function('tensorzero_consume_tickets_v2', consume_tickets)
+redis.register_function('tensorzero_return_tickets_v2', return_tickets)
+redis.register_function{
     function_name = 'tensorzero_get_balance_v2',
     callback = get_balance,
     flags = { 'no-writes' }  -- Enables FCALL_RO on read replicas
 }
-server.register_function('tensorzero_migrate_old_keys_v1', migrate_old_keys)
+redis.register_function('tensorzero_migrate_old_keys_v1', migrate_old_keys)
 
 -- Lint.ThenEdit(tensorzero-core/src/db/valkey/rate_limiting.rs)

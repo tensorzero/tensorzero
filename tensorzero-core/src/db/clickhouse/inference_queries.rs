@@ -8,7 +8,7 @@ use crate::config::{
     Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
 };
 use crate::db::TimeWindow;
-use crate::db::clickhouse::episode_queries::parse_count;
+use crate::db::clickhouse::parse_count;
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{
     ClickhouseType, JoinRegistry, OrderByTerm, OrderDirection, QueryParameter,
@@ -276,7 +276,7 @@ impl InferenceQueries for ClickHouseConnectionInfo {
         Ok(Some(output_schema))
     }
 
-    async fn get_inference_output(
+    async fn get_serialized_inference_output_for_feedback(
         &self,
         function_info: &FunctionInfo,
         inference_id: Uuid,
@@ -2117,7 +2117,7 @@ mod tests {
         }
     }
 
-    mod get_inference_output_tests {
+    mod get_serialized_inference_output_for_feedback_tests {
         use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
         use crate::db::clickhouse::query_builder::test_util::assert_query_contains;
         use crate::db::clickhouse::{
@@ -2129,7 +2129,7 @@ mod tests {
         use uuid::Uuid;
 
         #[tokio::test]
-        async fn test_get_inference_output_chat_inference_success() {
+        async fn test_get_serialized_inference_output_for_feedback_chat_inference_success() {
             let inference_id = Uuid::now_v7();
             let episode_id = Uuid::now_v7();
             let function_info = FunctionInfo {
@@ -2175,7 +2175,7 @@ mod tests {
 
             let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
             let result = conn
-                .get_inference_output(&function_info, inference_id)
+                .get_serialized_inference_output_for_feedback(&function_info, inference_id)
                 .await
                 .expect("Should succeed");
 
@@ -2191,7 +2191,7 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn test_get_inference_output_json_inference_success() {
+        async fn test_get_serialized_inference_output_for_feedback_json_inference_success() {
             let inference_id = Uuid::now_v7();
             let episode_id = Uuid::now_v7();
             let function_info = FunctionInfo {
@@ -2232,7 +2232,7 @@ mod tests {
 
             let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
             let result = conn
-                .get_inference_output(&function_info, inference_id)
+                .get_serialized_inference_output_for_feedback(&function_info, inference_id)
                 .await
                 .expect("Should succeed");
 
@@ -2247,7 +2247,7 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn test_get_inference_output_not_found() {
+        async fn test_get_serialized_inference_output_for_feedback_not_found() {
             let inference_id = Uuid::now_v7();
             let episode_id = Uuid::now_v7();
             let function_info = FunctionInfo {
@@ -2270,7 +2270,7 @@ mod tests {
 
             let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
             let result = conn
-                .get_inference_output(&function_info, inference_id)
+                .get_serialized_inference_output_for_feedback(&function_info, inference_id)
                 .await
                 .expect("Should succeed even when not found");
 
@@ -2281,7 +2281,8 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn test_get_inference_output_uses_all_parameters_for_security() {
+        async fn test_get_serialized_inference_output_for_feedback_uses_all_parameters_for_security()
+         {
             let inference_id = Uuid::now_v7();
             let episode_id = Uuid::now_v7();
             let function_info = FunctionInfo {
@@ -2342,14 +2343,15 @@ mod tests {
 
             let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock));
             let result = conn
-                .get_inference_output(&function_info, inference_id)
+                .get_serialized_inference_output_for_feedback(&function_info, inference_id)
                 .await;
 
             assert!(result.is_ok(), "Query should execute successfully");
         }
 
         #[tokio::test]
-        async fn test_get_inference_output_table_selection_by_function_type() {
+        async fn test_get_serialized_inference_output_for_feedback_table_selection_by_function_type()
+         {
             // Test Chat function type uses ChatInference table
             let chat_function_info = FunctionInfo {
                 function_name: "chat_func".to_string(),
@@ -2377,7 +2379,7 @@ mod tests {
 
             let conn = ClickHouseConnectionInfo::new_mock(Arc::new(chat_mock));
             let _ = conn
-                .get_inference_output(&chat_function_info, Uuid::now_v7())
+                .get_serialized_inference_output_for_feedback(&chat_function_info, Uuid::now_v7())
                 .await;
 
             // Test Json function type uses JsonInference table
@@ -2407,7 +2409,7 @@ mod tests {
 
             let conn = ClickHouseConnectionInfo::new_mock(Arc::new(json_mock));
             let _ = conn
-                .get_inference_output(&json_function_info, Uuid::now_v7())
+                .get_serialized_inference_output_for_feedback(&json_function_info, Uuid::now_v7())
                 .await;
         }
     }

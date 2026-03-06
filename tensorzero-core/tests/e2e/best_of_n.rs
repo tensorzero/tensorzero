@@ -9,6 +9,7 @@ use tensorzero_core::{
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
     select_model_inferences_clickhouse,
@@ -16,6 +17,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 
 #[tokio::test]
 async fn test_best_of_n_dummy_candidates_dummy_judge_non_stream() {
+    skip_for_postgres!();
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
     test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, false).await;
@@ -24,6 +26,7 @@ async fn test_best_of_n_dummy_candidates_dummy_judge_non_stream() {
 
 #[tokio::test]
 async fn test_best_of_n_dummy_candidates_dummy_judge_streaming() {
+    skip_for_postgres!();
     // Include randomness in put to make sure that the first request is a cache miss
     let random_input = Uuid::now_v7();
     test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false, true).await;
@@ -35,6 +38,7 @@ async fn test_best_of_n_dummy_candidates_dummy_judge_inner(
     should_be_cached: bool,
     stream: bool,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -192,6 +196,7 @@ async fn test_best_of_n_dummy_candidates_dummy_judge_inner(
 /// but they get stored to the ModelInference table.
 #[tokio::test]
 async fn test_best_of_n_dummy_candidates_real_judge() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -512,6 +517,7 @@ async fn test_best_of_n_dummy_candidates_real_judge() {
 /// but they get stored to the ModelInference table.
 #[tokio::test]
 async fn test_best_of_n_json_real_judge() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -786,6 +792,7 @@ async fn test_best_of_n_json_real_judge() {
 /// This test uses `json_mode="tool"` in the evaluator, so we also check that there was actually a tool call made under the hood.
 #[tokio::test]
 async fn test_best_of_n_json_real_judge_implicit_tool() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1063,6 +1070,7 @@ async fn test_best_of_n_json_real_judge_implicit_tool() {
 
 #[tokio::test]
 async fn test_best_of_n_judge_extra_body() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

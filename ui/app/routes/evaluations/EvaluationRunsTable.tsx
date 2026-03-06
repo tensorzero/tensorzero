@@ -81,7 +81,7 @@ function EvaluationRunRow({
         </VariantLink>
       </TableCell>
       <TableCell>
-        <TableItemTime timestamp={evaluationRun.last_inference_timestamp} />
+        <TableItemTime timestamp={evaluationRun.created_at} />
       </TableCell>
     </TableRow>
   );
@@ -102,7 +102,7 @@ export default function EvaluationRunsTable({
             <TableHead>Dataset</TableHead>
             <TableHead>Function</TableHead>
             <TableHead>Variant</TableHead>
-            <TableHead>Last Updated</TableHead>
+            <TableHead>Created At</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

@@ -11,6 +11,7 @@ export function getAutopilotClient(): AutopilotClient {
   _autopilotClient = new AutopilotClient(
     env.TENSORZERO_GATEWAY_URL,
     env.TENSORZERO_API_KEY,
+    env.TENSORZERO_AUTOPILOT_BETA_TOOLS,
   );
   return _autopilotClient;
 }

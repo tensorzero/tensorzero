@@ -317,6 +317,35 @@ For streaming requests, this requires `stream_options.include_usage` to be `true
 
 See `tensorzero_raw_usage` in the [response](#response) section for more details.
 
+#### `tensorzero::namespace`
+
+- **Type:** string
+- **Required:** no
+
+Selects a namespace-specific experimentation config for this request.
+If the function has a matching namespace config, it will be used instead of the base experimentation config.
+If no matching config exists, the base config is used as a fallback.
+
+The namespace is also validated against namespaced models: if the selected variant uses a model scoped to a different namespace, the request will fail.
+
+The value must be a non-empty string.
+It is stored as the `tensorzero::namespace` tag on the inference record.
+Behaves the same as the [`namespace`](/gateway/api-reference/inference#namespace) parameter in the native API.
+
+Provide this as an extra body parameter:
+
+```python
+response = client.chat.completions.create(
+    model="tensorzero::function_name::draft_email",
+    messages=[...],
+    extra_body={
+        "tensorzero::namespace": "mobile",
+    },
+)
+```
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
+
 #### `tensorzero::params`
 
 - **Type:** object
@@ -1036,8 +1065,7 @@ See [Track usage and cost](/operations/track-usage-and-cost) for more informatio
 
 ##### Configuration
 
-```toml mark="draft_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft_email"
 # ...
 [functions.draft_email]
 type = "chat"
@@ -1188,8 +1216,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml "weather_bot"
-// tensorzero.toml
+```toml title="tensorzero.toml" "weather_bot"
 # ...
 
 [functions.weather_bot]
@@ -1393,8 +1420,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml mark="extract_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="extract_email"
 # ...
 [functions.extract_email]
 type = "json"

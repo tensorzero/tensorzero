@@ -82,6 +82,8 @@ pub enum RateLimitingBackend {
 #[derive(Debug, Clone)]
 pub struct RateLimitingConfig {
     pub(crate) rules: Vec<RateLimitingConfigRule>,
+    /// Whether rate limiting is enabled. Defaults to `true`.
+    /// When `true` and rules are defined, a rate limiting backend must be available.
     pub(crate) enabled: bool,
     pub(crate) backend: RateLimitingBackend,
     /// Default cost in nano-dollars used for cost estimation when actual cost is unknown.
@@ -113,6 +115,14 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
                 }));
             }
         }
+
+        if !config.enabled && !config.rules.is_empty() {
+            tracing::warn!(
+                "`rate_limiting.enabled` is `false` but rate limiting rules are defined. \
+                 Rules will not be enforced."
+            );
+        }
+
         Ok(Self {
             rules: config.rules,
             enabled: config.enabled,
@@ -152,7 +162,7 @@ impl Default for UninitializedRateLimitingConfig {
     fn default() -> Self {
         Self {
             rules: Vec::new(),
-            enabled: true,
+            enabled: default_enabled(),
             backend: RateLimitingBackend::default(),
             default_nano_cost: default_nano_cost(),
         }
@@ -163,13 +173,12 @@ impl Default for RateLimitingConfig {
     fn default() -> Self {
         Self {
             rules: Vec::new(),
-            enabled: true,
+            enabled: default_enabled(),
             backend: RateLimitingBackend::default(),
             default_nano_cost: default_nano_cost(),
         }
     }
 }
-
 // Utility struct to pass in at "check time"
 // This should contain the information about the current request
 // needed to determine if a rate limit is exceeded.
@@ -1550,12 +1559,12 @@ mod tests {
 
     #[test]
     fn test_rate_limiting_config_states() {
-        // Test default configuration
+        // Test default configuration (enabled = true, no rules)
         let default_config = RateLimitingConfig::default();
-        assert!(default_config.enabled());
+        assert!(default_config.enabled(), "Default enabled should be true");
         assert!(default_config.rules().is_empty());
 
-        // Test enabled/disabled states
+        // Test explicitly enabled (no rules → nothing to enforce)
         let config_enabled = RateLimitingConfig {
             rules: vec![],
             enabled: true,
@@ -1563,6 +1572,7 @@ mod tests {
         };
         assert!(config_enabled.enabled());
 
+        // Test explicitly disabled
         let config_disabled = RateLimitingConfig {
             rules: vec![],
             enabled: false,
@@ -1578,11 +1588,11 @@ mod tests {
             api_key_public_id: None,
         };
 
-        // Disabled config should return empty limits
+        // Explicitly disabled config should return empty limits
         let active_limits_disabled = config_disabled.get_active_limits(&scope_info);
         assert!(active_limits_disabled.is_empty());
 
-        // Enabled config with no rules should return empty limits
+        // Explicitly enabled config with no rules should return empty limits
         let active_limits_no_rules = config_enabled.get_active_limits(&scope_info);
         assert!(active_limits_no_rules.is_empty());
     }

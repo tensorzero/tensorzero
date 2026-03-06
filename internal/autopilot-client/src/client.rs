@@ -22,11 +22,11 @@ use crate::reject_missing_tool::reject_missing_tool;
 use crate::types::{
     ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
     CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
-    EventPayloadToolCallAuthorization, GatewayEventPayload, GatewayListConfigWritesResponse,
-    GatewayListEventsResponse, GatewayStreamUpdate, ListConfigWritesParams,
-    ListConfigWritesResponse, ListEventsParams, ListEventsResponse, ListSessionsParams,
-    ListSessionsResponse, S3UploadRequest, S3UploadResponse, StreamEventsParams,
-    ToolCallAuthorizationStatus, ToolCallDecisionSource,
+    EventPayloadToolCallAuthorization, GatewayEvent, GatewayEventPayload,
+    GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
+    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
+    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
+    StreamEventsParams, ToolCallAuthorizationStatus, ToolCallDecisionSource,
 };
 
 /// Default base URL for the Autopilot API.
@@ -542,9 +542,12 @@ impl AutopilotClient {
                 continue;
             }
             // Conversion should succeed since we filtered out NotAvailable events
-            let gateway_event = event.try_into().map_err(|e| {
+            let mut gateway_event: GatewayEvent = event.try_into().map_err(|e| {
                 AutopilotError::Internal(format!("Event conversion failed after filtering: {e}"))
             })?;
+            if let GatewayEventPayload::ToolCall(ref mut tc) = gateway_event.payload {
+                tc.requires_approval = !self.tool_whitelist.contains(&tc.name);
+            }
             filtered_events.push(gateway_event);
         }
 
@@ -561,9 +564,12 @@ impl AutopilotClient {
                 continue;
             }
             // Conversion should succeed since we filtered out NotAvailable events
-            let gateway_event = event.try_into().map_err(|e| {
+            let mut gateway_event: GatewayEvent = event.try_into().map_err(|e| {
                 AutopilotError::Internal(format!("Event conversion failed after filtering: {e}"))
             })?;
+            if let GatewayEventPayload::ToolCall(ref mut tc) = gateway_event.payload {
+                tc.requires_approval = !self.tool_whitelist.contains(&tc.name);
+            }
             filtered_pending_tool_calls.push(gateway_event);
         }
 
@@ -650,13 +656,12 @@ impl AutopilotClient {
     ///
     /// Use `Uuid::nil()` as the `session_id` to create a new session.
     ///
-    /// If `beta_tools` is non-empty, they are forwarded as the `tensorzero-beta-tools`
-    /// header (comma-separated) to the remote autopilot server.
+    /// Any headers in `extra_headers` are forwarded as-is to the remote autopilot server.
     pub async fn create_event(
         &self,
         session_id: Uuid,
         request: CreateEventRequest,
-        beta_tools: &[String],
+        extra_headers: HeaderMap,
     ) -> Result<CreateEventResponse, AutopilotError> {
         let tool_call_event_id = match &request.payload {
             EventPayload::ToolCallAuthorization(auth) => match auth.status {
@@ -687,12 +692,7 @@ impl AutopilotClient {
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events"))?;
         let mut headers = self.auth_headers();
-        if !beta_tools.is_empty() {
-            let value = beta_tools.join(",");
-            if let Ok(value) = HeaderValue::from_str(&value) {
-                headers.insert("tensorzero-beta-tools", value);
-            }
-        }
+        headers.extend(extra_headers);
         let response = self
             .http_client
             .post(url)
@@ -839,11 +839,13 @@ impl AutopilotClient {
         let cache = self.tool_call_cache.clone();
         let available_tools = self.available_tools.clone();
         let spawn_client = self.spawn_client.clone();
+        let tool_whitelist = self.tool_whitelist.clone();
 
         let stream = event_source.filter_map(move |result| {
             let cache = cache.clone();
             let available_tools = available_tools.clone();
             let spawn_client = spawn_client.clone();
+            let tool_whitelist = tool_whitelist.clone();
             async move {
                 match result {
                     Ok(reqwest_sse_stream::Event::Open) => None,
@@ -871,8 +873,16 @@ impl AutopilotClient {
                                     }
 
                                     // Convert to gateway type - should succeed since we filtered NotAvailable above
-                                    match update.try_into() {
-                                        Ok(gateway_update) => Some(Ok(gateway_update)),
+                                    match GatewayStreamUpdate::try_from(update) {
+                                        Ok(mut gateway_update) => {
+                                            if let GatewayEventPayload::ToolCall(ref mut tc) =
+                                                gateway_update.event.payload
+                                            {
+                                                tc.requires_approval =
+                                                    !tool_whitelist.contains(&tc.name);
+                                            }
+                                            Some(Ok(gateway_update))
+                                        }
                                         Err(e) => Some(Err(AutopilotError::Internal(format!(
                                             "StreamUpdate conversion failed after filtering: {e}"
                                         )))),
@@ -1095,7 +1105,10 @@ impl AutopilotClient {
             previous_user_message_event_id: None,
             config_snapshot_hash: None,
         };
-        if let Err(e) = self.create_event(session_id, request, &[]).await {
+        if let Err(e) = self
+            .create_event(session_id, request, Default::default())
+            .await
+        {
             tracing::warn!(
                 %session_id,
                 %tool_call_event_id,
@@ -1265,6 +1278,128 @@ mod tests {
                 Err(AutopilotError::MissingConfig("tensorzero_version"))
             ),
             "Building without tensorzero_version should fail with MissingConfig error"
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // requires_approval tests
+    // -------------------------------------------------------------------------
+
+    use crate::types::{
+        AutopilotSideInfo, GatewayEventPayloadToolCall, OptimizationWorkflowSideInfo,
+    };
+
+    /// Helper to build a minimal `AutopilotSideInfo` for tests.
+    fn test_side_info() -> AutopilotSideInfo {
+        AutopilotSideInfo {
+            tool_call_event_id: Uuid::nil(),
+            session_id: Uuid::nil(),
+            config_snapshot_hash: "test".to_string(),
+            optimization: OptimizationWorkflowSideInfo::default(),
+        }
+    }
+
+    #[test]
+    fn test_from_event_payload_tool_call_defaults_requires_approval_to_true() {
+        let tc = EventPayloadToolCall {
+            name: "some_tool".to_string(),
+            arguments: serde_json::json!({}),
+            side_info: test_side_info(),
+        };
+        let gateway_tc: GatewayEventPayloadToolCall = tc.into();
+        assert!(
+            gateway_tc.requires_approval,
+            "From<EventPayloadToolCall> should default requires_approval to true"
+        );
+    }
+
+    #[test]
+    fn test_gateway_event_try_from_tool_call_defaults_requires_approval_to_true() {
+        use chrono::Utc;
+
+        let event = Event {
+            id: Uuid::nil(),
+            payload: EventPayload::ToolCall(EventPayloadToolCall {
+                name: "some_tool".to_string(),
+                arguments: serde_json::json!({}),
+                side_info: test_side_info(),
+            }),
+            session_id: Uuid::nil(),
+            created_at: Utc::now(),
+        };
+        let gateway_event: GatewayEvent = event.try_into().expect("conversion should succeed");
+        match gateway_event.payload {
+            GatewayEventPayload::ToolCall(tc) => {
+                assert!(
+                    tc.requires_approval,
+                    "Event -> GatewayEvent conversion should default requires_approval to true"
+                );
+            }
+            other => panic!("Expected ToolCall payload, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_serde_roundtrip_preserves_requires_approval() {
+        for requires_approval in [true, false] {
+            let tc = GatewayEventPayloadToolCall {
+                name: "test_tool".to_string(),
+                arguments: serde_json::json!({"key": "value"}),
+                side_info: test_side_info(),
+                requires_approval,
+            };
+            let json = serde_json::to_string(&tc).expect("serialization should succeed");
+            let deserialized: GatewayEventPayloadToolCall =
+                serde_json::from_str(&json).expect("deserialization should succeed");
+            assert_eq!(
+                deserialized.requires_approval, requires_approval,
+                "Serde roundtrip should preserve requires_approval={requires_approval}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_requires_approval_present_in_serialized_json() {
+        let tc = GatewayEventPayloadToolCall {
+            name: "test_tool".to_string(),
+            arguments: serde_json::json!({}),
+            side_info: test_side_info(),
+            requires_approval: false,
+        };
+        let json: serde_json::Value =
+            serde_json::to_value(&tc).expect("serialization should succeed");
+        assert_eq!(
+            json["requires_approval"], false,
+            "`requires_approval` should be present in serialized JSON even when false"
+        );
+    }
+
+    #[test]
+    fn test_whitelist_determines_requires_approval() {
+        let mut whitelist = HashSet::new();
+        whitelist.insert("write_config".to_string());
+
+        // Whitelisted tool: requires_approval = !whitelist.contains(name) = false
+        let requires_approval = !whitelist.contains("write_config");
+        assert!(
+            !requires_approval,
+            "Whitelisted tool should not require approval"
+        );
+
+        // Non-whitelisted tool: requires_approval = !whitelist.contains(name) = true
+        let requires_approval = !whitelist.contains("delete_datapoints");
+        assert!(
+            requires_approval,
+            "Non-whitelisted tool should require approval"
+        );
+    }
+
+    #[test]
+    fn test_empty_whitelist_means_all_require_approval() {
+        let whitelist: HashSet<String> = HashSet::new();
+        assert!(
+            !whitelist.contains("any_tool"),
+            "Empty whitelist means all tools require approval"
         );
     }
 }

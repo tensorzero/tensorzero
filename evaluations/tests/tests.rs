@@ -3,8 +3,6 @@
     allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)
 )]
 
-// TODO(#5691): Support running these tests against Postgres.
-
 mod common;
 use clap::Parser;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
@@ -13,12 +11,18 @@ use evaluations::{ClientInferenceExecutor, Clients};
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{Input, InputMessage, InputMessageContent};
-use tensorzero_core::db::clickhouse::TableName;
-use tensorzero_core::db::clickhouse::test_helpers::{
-    select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
+use tensorzero_core::db::datasets::DatasetQueries;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::evaluation_queries::EvaluationQueries;
+use tensorzero_core::db::feedback::{
+    BooleanMetricFeedbackRow, FeedbackQueries, FeedbackRow, FloatMetricFeedbackRow,
 };
+use tensorzero_core::db::inferences::{
+    InferenceOutputSource, InferenceQueries, ListInferencesParams,
+};
+use tensorzero_core::db::model_inferences::ModelInferenceQueries;
 use tensorzero_core::db::stored_datapoint::{
-    StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::datasets::{
@@ -27,10 +31,11 @@ use tensorzero_core::endpoints::datasets::{
 };
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::inference::types::Text;
+use tensorzero_core::stored_inference::StoredInferenceDatabase;
 use tokio::time::sleep;
 use url::Url;
 
-use common::{get_config, get_tensorzero_client, init_tracing_for_tests};
+use common::{get_config, get_e2e_config_path, get_tensorzero_client, init_tracing_for_tests};
 use evaluations::{
     Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
     EvaluationVariant, OutputFormat, run_evaluation, run_evaluation_core_streaming,
@@ -46,14 +51,8 @@ use tensorzero_core::client::{
 use tensorzero_core::config::{
     Config, UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData,
 };
+use tensorzero_core::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage};
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
-use tensorzero_core::{
-    db::clickhouse::test_helpers::{
-        get_clickhouse, select_chat_inference_clickhouse, select_feedback_by_target_id_clickhouse,
-        select_json_inference_clickhouse,
-    },
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
-};
 use tensorzero_core::{
     endpoints::inference::{ChatInferenceResponse, JsonInferenceResponse},
     evaluations::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
@@ -65,59 +64,123 @@ use uuid::Uuid;
 /// that are inserted. This way, we can have multiple tests reading the same fixtures, using the same database,
 /// but run independently.
 async fn write_chat_fixture_to_dataset(
+    db: &DelegatingDatabaseConnection,
     fixture_path: &Path,
     dataset_name_mapping: &HashMap<String, String>,
 ) {
     let fixture = std::fs::read_to_string(fixture_path).unwrap();
     let fixture = fixture.trim();
-    let mut datapoints: Vec<StoredChatInferenceDatapoint> = Vec::new();
-    // Iterate over the lines in the string
+    let mut datapoints: Vec<StoredDatapoint> = Vec::new();
     for line in fixture.lines() {
         let mut datapoint: StoredChatInferenceDatapoint = serde_json::from_str(line).unwrap();
         datapoint.id = Uuid::now_v7();
         if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
             datapoint.dataset_name = dataset_name.to_string();
         }
-        datapoints.push(datapoint);
+        datapoints.push(StoredDatapoint::Chat(datapoint));
     }
-    let clickhouse = get_clickhouse().await;
-    clickhouse
-        .write_batched(&datapoints, TableName::ChatInferenceDatapoint)
-        .await
-        .unwrap();
+    db.insert_datapoints(&datapoints).await.unwrap();
+    db.flush_pending_writes().await;
 }
 
 /// Takes a JSON fixture as a path to a JSONL file and writes the fixture to the dataset.
 async fn write_json_fixture_to_dataset(
+    db: &DelegatingDatabaseConnection,
     fixture_path: &Path,
     dataset_name_mapping: &HashMap<String, String>,
 ) {
     let fixture = std::fs::read_to_string(fixture_path).unwrap();
     let fixture = fixture.trim();
-    let mut datapoints: Vec<StoredJsonInferenceDatapoint> = Vec::new();
-    // Iterate over the lines in the string
+    let mut datapoints: Vec<StoredDatapoint> = Vec::new();
     for line in fixture.lines() {
         let mut datapoint: StoredJsonInferenceDatapoint = serde_json::from_str(line).unwrap();
         datapoint.id = Uuid::now_v7();
         if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
             datapoint.dataset_name = dataset_name.to_string();
         }
-        datapoints.push(datapoint);
+        datapoints.push(StoredDatapoint::Json(datapoint));
     }
-    let clickhouse = get_clickhouse().await;
-    clickhouse
-        .write_batched(&datapoints, TableName::JsonInferenceDatapoint)
+    db.insert_datapoints(&datapoints).await.unwrap();
+    db.flush_pending_writes().await;
+}
+
+/// Queries feedback for a target_id, filters by metric_name if provided,
+/// and returns the first matching boolean feedback row.
+async fn query_boolean_feedback(
+    db: &DelegatingDatabaseConnection,
+    target_id: Uuid,
+    metric_name: Option<&str>,
+) -> Option<BooleanMetricFeedbackRow> {
+    let rows = db
+        .query_feedback_by_target_id(target_id, None, None, None)
         .await
         .unwrap();
+    rows.into_iter().find_map(|row| match row {
+        FeedbackRow::Boolean(b)
+            if metric_name.is_none() || Some(b.metric_name.as_str()) == metric_name =>
+        {
+            Some(b)
+        }
+        _ => None,
+    })
+}
+
+/// Queries feedback for a target_id, filters by metric_name if provided,
+/// and returns the first matching float feedback row.
+async fn query_float_feedback(
+    db: &DelegatingDatabaseConnection,
+    target_id: Uuid,
+    metric_name: Option<&str>,
+) -> Option<FloatMetricFeedbackRow> {
+    let rows = db
+        .query_feedback_by_target_id(target_id, None, None, None)
+        .await
+        .unwrap();
+    rows.into_iter().find_map(|row| match row {
+        FeedbackRow::Float(f)
+            if metric_name.is_none() || Some(f.metric_name.as_str()) == metric_name =>
+        {
+            Some(f)
+        }
+        _ => None,
+    })
+}
+
+/// Queries a single inference by ID using `list_inferences`.
+async fn query_inference(
+    db: &DelegatingDatabaseConnection,
+    config: &Config,
+    inference_id: Uuid,
+) -> Option<StoredInferenceDatabase> {
+    let params = ListInferencesParams {
+        function_name: None,
+        ids: Some(&[inference_id]),
+        variant_name: None,
+        episode_id: None,
+        filters: None,
+        output_source: InferenceOutputSource::Inference,
+        limit: 1,
+        offset: 0,
+        pagination: None,
+        order_by: None,
+        search_query_experimental: None,
+    };
+    let results = db
+        .list_inferences(config, &params)
+        .await
+        .expect("list_inferences should succeed");
+    results.into_iter().next()
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_json() {
     init_tracing_for_tests();
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let config = get_config().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let tensorzero_client = get_tensorzero_client().await;
     write_json_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -125,10 +188,7 @@ async fn run_evaluations_json() {
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = || Args {
         config_file: config_path.clone(),
@@ -150,7 +210,7 @@ async fn run_evaluations_json() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -171,54 +231,54 @@ async fn run_evaluations_json() {
         let error = parsed.evaluator_errors.get("error").unwrap();
         assert!(error.contains("Dummy error in inference"));
         let inference_id = parsed.response.inference_id();
-        let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
+        let StoredInferenceDatabase::Json(db_inference) =
+            query_inference(&db, &config, inference_id)
+                .await
+                .expect("Should find json inference")
+        else {
+            panic!("Expected json inference");
+        };
         let parsed_response = match parsed.response.clone() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: Input =
-            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        let db_input: Input = serde_json::from_str(
+            &serde_json::to_string(&db_inference.input.unwrap())
+                .expect("StoredInput should serialize"),
+        )
+        .expect("StoredInput should deserialize as Input");
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, parsed.datapoint.input());
-        let clickhouse_output: JsonInferenceOutput =
-            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        assert_eq!(&db_input, parsed.datapoint.input());
+        let db_output = db_inference
+            .output
+            .expect("json inference should have output");
         // Check the output to the inference is the same as the output in the response
-        assert_eq!(clickhouse_output, parsed_response.output);
+        assert_eq!(db_output, parsed_response.output);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            db_inference.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            db_inference.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            db_inference.tags["tensorzero::evaluation_name"],
             "entity_extraction"
         );
-        assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            dataset_name
-        );
+        assert_eq!(db_inference.tags["tensorzero::dataset_name"], dataset_name);
         // Check boolean feedback was recorded
-        let feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
 
         assert_eq!(
-            feedback["metric_name"].as_str().unwrap(),
+            feedback.metric_name,
             "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
         );
         assert_eq!(
-            feedback["value"],
+            feedback.value,
             parsed.evaluations["exact_match"]
                 .as_ref()
                 .unwrap()
@@ -226,30 +286,23 @@ async fn run_evaluations_json() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_run_id"],
+            feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::datapoint_id"],
+            feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
 
         // Check float feedback was recorded
-        let feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "FloatMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let feedback = query_float_feedback(&db, inference_id, None).await.unwrap();
 
         assert_eq!(
-            feedback["metric_name"].as_str().unwrap(),
+            feedback.metric_name,
             "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
         );
         assert_eq!(
-            feedback["value"],
+            feedback.value,
             parsed.evaluations["count_sports"]
                 .as_ref()
                 .unwrap()
@@ -257,33 +310,26 @@ async fn run_evaluations_json() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_run_id"],
+            feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         let datapoint_id = parsed.datapoint.id();
         assert_eq!(
-            feedback["tags"]["tensorzero::datapoint_id"],
+            feedback.tags["tensorzero::datapoint_id"],
             datapoint_id.to_string()
         );
+        assert_eq!(feedback.tags["tensorzero::evaluator_name"], "count_sports");
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluator_name"],
-            "count_sports"
-        );
-        assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_name"],
+            feedback.tags["tensorzero::evaluation_name"],
             "entity_extraction"
         );
         assert!(
-            feedback["tags"]
-                .get("tensorzero::derived_from_human_feedback")
-                .is_none()
+            !feedback
+                .tags
+                .contains_key("tensorzero::derived_from_human_feedback")
         );
-        let evaluator_inference_id = Uuid::parse_str(
-            feedback["tags"]["tensorzero::evaluator_inference_id"]
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap();
+        let evaluator_inference_id =
+            Uuid::parse_str(&feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
         evaluator_inference_ids.insert(parsed.datapoint.id(), evaluator_inference_id);
         // The evaluator inference id should not be the same as the inference id
         assert_ne!(evaluator_inference_id, inference_id);
@@ -313,31 +359,33 @@ async fn run_evaluations_json() {
             .feedback(human_feedback_payload)
             .await
             .unwrap();
-        let evaluator_inference =
-            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+        let StoredInferenceDatabase::Json(evaluator_inference) =
+            query_inference(&db, &config, evaluator_inference_id)
                 .await
-                .unwrap();
+                .expect("Should find evaluator json inference")
+        else {
+            panic!("Expected json inference for evaluator");
+        };
         assert_eq!(
-            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            evaluator_inference.tags["tensorzero::evaluation_name"],
             "entity_extraction"
         );
-        total_sports += feedback["value"].as_f64().unwrap() as u32;
+        total_sports += feedback.value as u32;
+        let serialized_output = db
+            .serialize_output_for_feedback(&parsed.response)
+            .expect("serialize_output_for_feedback should succeed");
         parsed_output.push(parsed);
         // Sleep for 5s to make sure the feedback is recorded
         sleep(Duration::from_secs(5)).await;
-
-        let human_feedback = select_inference_evaluation_human_feedback_clickhouse(
-            &clickhouse,
-            metric_name,
-            datapoint_id,
-            serde_json::to_string(&clickhouse_output).unwrap().as_str(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(human_feedback.value, "0");
+        let human_feedback = db
+            .get_inference_evaluation_human_feedback(metric_name, &datapoint_id, &serialized_output)
+            .await
+            .expect("get_inference_evaluation_human_feedback should succeed")
+            .expect("human feedback should exist");
+        assert_eq!(human_feedback.value, json!(0));
         assert_eq!(
             human_feedback.evaluator_inference_id,
-            Some(evaluator_inference_id)
+            evaluator_inference_id
         );
     }
     assert_eq!(parsed_output.len(), 6);
@@ -350,7 +398,7 @@ async fn run_evaluations_json() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -372,21 +420,14 @@ async fn run_evaluations_json() {
             .unwrap()
             .as_f64()
             .unwrap() as u32;
-        // Grab the feedback from ClickHouse for the second run and make sure it has the human feedback tag
-        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "FloatMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        // Grab the feedback for the second run and make sure it has the human feedback tag
+        let db_feedback = query_float_feedback(&db, inference_id, None).await.unwrap();
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::derived_from_human_feedback"],
+            db_feedback.tags["tensorzero::derived_from_human_feedback"],
             "true",
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"],
+            db_feedback.tags["tensorzero::evaluator_inference_id"],
             evaluator_inference_ids[&parsed.datapoint.id()].to_string()
         );
     }
@@ -398,10 +439,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
     init_tracing_for_tests();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
 
     // Test 1: Both dataset_name and datapoint_ids provided should fail
@@ -467,10 +505,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
     init_tracing_for_tests();
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
 
     // Test: Both datapoint_ids and max_datapoints provided should fail
@@ -508,7 +543,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
 async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming() {
     init_tracing_for_tests();
     let config = get_config().await;
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let tensorzero_client = get_tensorzero_client().await;
     let evaluation_run_id = Uuid::now_v7();
 
@@ -535,7 +570,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
     // Test: Both datapoint_ids and max_datapoints provided should fail
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        db: Arc::new(clickhouse),
+        db: Arc::new(db.clone()),
 
         evaluation_config,
         function_configs,
@@ -566,10 +601,11 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
 async fn run_evaluation_with_specific_datapoint_ids() {
     init_tracing_for_tests();
     let dataset_name = format!("haiku-data-subset-{}", Uuid::now_v7());
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Create a dataset with multiple datapoints
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -585,7 +621,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
         offset: Some(0),
         ..Default::default()
     };
-    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+    let dataset = list_datapoints(&db, dataset_name.clone(), request)
         .await
         .unwrap()
         .datapoints;
@@ -598,10 +634,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
         "Should have selected exactly 5 datapoint IDs"
     );
 
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -622,7 +655,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
 
     let output_str = String::from_utf8(output).unwrap();
@@ -670,8 +703,10 @@ async fn run_evaluation_with_specific_datapoint_ids() {
 async fn run_exact_match_evaluation_chat() {
     init_tracing_for_tests();
     let dataset_name = format!("good-haiku-data-{}", Uuid::now_v7());
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let config = get_config().await;
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -687,16 +722,13 @@ async fn run_exact_match_evaluation_chat() {
         offset: Some(0),
         ..Default::default()
     };
-    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+    let dataset = list_datapoints(&db, dataset_name.clone(), request)
         .await
         .unwrap()
         .datapoints;
     let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp| dp.id()).collect();
 
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -717,7 +749,7 @@ async fn run_exact_match_evaluation_chat() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -734,52 +766,55 @@ async fn run_exact_match_evaluation_chat() {
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
-        let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
+        let StoredInferenceDatabase::Chat(db_inference) =
+            query_inference(&db, &config, inference_id)
+                .await
+                .expect("Should find chat inference")
+        else {
+            panic!("Expected chat inference");
+        };
         let parsed_response = match parsed.response.clone() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        let clickhouse_input: Input =
-            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        let db_input: Input = serde_json::from_str(
+            &serde_json::to_string(&db_inference.input.unwrap())
+                .expect("StoredInput should serialize"),
+        )
+        .expect("StoredInput should deserialize as Input");
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, parsed.datapoint.input());
-        let clickhouse_output: Vec<ContentBlockChatOutput> =
-            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        assert_eq!(&db_input, parsed.datapoint.input());
+        let db_output = db_inference
+            .output
+            .expect("chat inference should have output");
         // Check the output to the inference is the same as the output in the response
-        assert_eq!(clickhouse_output, parsed_response.content);
+        assert_eq!(db_output, parsed_response.content);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            db_inference.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            db_inference.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            db_inference.tags["tensorzero::evaluation_name"],
             "haiku_with_outputs"
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::dataset_name"], dataset_name,
+            db_inference.tags["tensorzero::dataset_name"], dataset_name,
             "dataset_name tag should be derived from the datapoints"
         );
-        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let db_feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
         assert_eq!(
-            clickhouse_feedback["metric_name"].as_str().unwrap(),
+            db_feedback.metric_name,
             "tensorzero::evaluation_name::haiku_with_outputs::evaluator_name::exact_match"
         );
         assert_eq!(
-            clickhouse_feedback["value"],
+            db_feedback.value,
             parsed.evaluations["exact_match"]
                 .as_ref()
                 .unwrap()
@@ -787,19 +822,19 @@ async fn run_exact_match_evaluation_chat() {
                 .unwrap()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluation_run_id"],
+            db_feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
+            db_feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
+            db_feedback.tags["tensorzero::evaluation_name"],
             "haiku_with_outputs"
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            db_feedback.tags["tensorzero::evaluator_name"],
             "exact_match"
         );
         parsed_output.push(parsed);
@@ -811,8 +846,10 @@ async fn run_exact_match_evaluation_chat() {
 async fn run_llm_judge_evaluation_chat() {
     init_tracing_for_tests();
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let config = get_config().await;
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -828,16 +865,13 @@ async fn run_llm_judge_evaluation_chat() {
         offset: Some(0),
         ..Default::default()
     };
-    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+    let dataset = list_datapoints(&db, dataset_name.clone(), request)
         .await
         .unwrap()
         .datapoints;
     let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp| dp.id()).collect();
 
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let tensorzero_client = get_tensorzero_client().await;
     let evaluation_run_id = Uuid::now_v7();
     let args = || Args {
@@ -859,7 +893,7 @@ async fn run_llm_judge_evaluation_chat() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -877,98 +911,92 @@ async fn run_llm_judge_evaluation_chat() {
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
-        let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
+        let StoredInferenceDatabase::Chat(db_inference) =
+            query_inference(&db, &config, inference_id)
+                .await
+                .expect("Should find chat inference")
+        else {
+            panic!("Expected chat inference");
+        };
         let parsed_response = match parsed.response.clone() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        let clickhouse_input: Input =
-            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        let db_input: Input = serde_json::from_str(
+            &serde_json::to_string(&db_inference.input.unwrap())
+                .expect("StoredInput should serialize"),
+        )
+        .expect("StoredInput should deserialize as Input");
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, parsed.datapoint.input());
-        let clickhouse_output: Vec<ContentBlockChatOutput> =
-            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        assert_eq!(&db_input, parsed.datapoint.input());
+        let db_output = db_inference
+            .output
+            .expect("chat inference should have output");
         // Check the output to the inference is the same as the output in the response
-        assert_eq!(clickhouse_output, parsed_response.content);
+        assert_eq!(db_output, parsed_response.content);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            db_inference.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            db_inference.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            db_inference.tags["tensorzero::evaluation_name"],
             "haiku_without_outputs"
         );
 
         // There should be no Float feedback for this evaluation
         assert!(
-            select_feedback_by_target_id_clickhouse(
-                &clickhouse,
-                "FloatMetricFeedback",
-                inference_id,
-                None,
-            )
-            .await
-            .is_none()
+            query_float_feedback(&db, inference_id, None)
+                .await
+                .is_none()
         );
         // The exact match evaluation should have value None since there is no output in any of these
         assert!(parsed.evaluations["exact_match"].is_none());
 
         // There should be Boolean feedback for this evaluation
-        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let db_feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
         assert_eq!(
-            clickhouse_feedback["metric_name"].as_str().unwrap(),
+            db_feedback.metric_name,
             "tensorzero::evaluation_name::haiku_without_outputs::evaluator_name::topic_starts_with_f"
         );
         assert_eq!(
-            clickhouse_feedback["value"],
+            db_feedback.value,
             parsed.evaluations["topic_starts_with_f"]
                 .as_ref()
                 .unwrap()
                 .as_bool()
                 .unwrap()
         );
-        total_topic_fs += clickhouse_feedback["value"].as_bool().unwrap() as u32;
+        total_topic_fs += db_feedback.value as u32;
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluation_run_id"],
+            db_feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
+            db_feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
+            db_feedback.tags["tensorzero::evaluation_name"],
             "haiku_without_outputs"
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            db_feedback.tags["tensorzero::evaluator_name"],
             "topic_starts_with_f"
         );
         assert!(
-            clickhouse_feedback["tags"]
-                .get("tensorzero::derived_from_human_feedback")
-                .is_none()
+            !db_feedback
+                .tags
+                .contains_key("tensorzero::derived_from_human_feedback")
         );
-        let evaluator_inference_id = Uuid::parse_str(
-            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap();
+        let evaluator_inference_id =
+            Uuid::parse_str(&db_feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
         // Send human feedback to the evaluator and overwrite the existing feedback
         let human_feedback_payload = FeedbackParams {
             inference_id: Some(inference_id),
@@ -991,12 +1019,15 @@ async fn run_llm_judge_evaluation_chat() {
             .await
             .unwrap();
 
-        let evaluator_inference =
-            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+        let StoredInferenceDatabase::Json(evaluator_inference) =
+            query_inference(&db, &config, evaluator_inference_id)
                 .await
-                .unwrap();
+                .expect("Should find evaluator json inference")
+        else {
+            panic!("Expected json inference for evaluator");
+        };
         assert_eq!(
-            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            evaluator_inference.tags["tensorzero::evaluation_name"],
             "haiku_without_outputs"
         );
         parsed_output.push(parsed);
@@ -1009,7 +1040,7 @@ async fn run_llm_judge_evaluation_chat() {
     Box::pin(run_evaluation(args(), evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1031,17 +1062,12 @@ async fn run_llm_judge_evaluation_chat() {
             .unwrap()
             .as_bool()
             .unwrap() as u32;
-        // Grab the feedback from ClickHouse for the second run and make sure it has the human feedback tag
-        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        // Grab the feedback for the second run and make sure it has the human feedback tag
+        let db_feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::derived_from_human_feedback"],
+            db_feedback.tags["tensorzero::derived_from_human_feedback"],
             "true"
         );
     }
@@ -1055,8 +1081,10 @@ async fn run_llm_judge_evaluation_chat() {
 async fn run_image_evaluation() {
     init_tracing_for_tests();
     let dataset_name = format!("baz-{}", Uuid::now_v7());
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let config = get_config().await;
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -1064,10 +1092,7 @@ async fn run_image_evaluation() {
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -1088,7 +1113,7 @@ async fn run_image_evaluation() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1107,45 +1132,45 @@ async fn run_image_evaluation() {
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
-        let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
+        let StoredInferenceDatabase::Chat(db_inference) =
+            query_inference(&db, &config, inference_id)
+                .await
+                .expect("Should find chat inference")
+        else {
+            panic!("Expected chat inference");
+        };
         let parsed_response = match parsed.response.clone() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
         // Check the input to the inference parses as Input
-        let _clickhouse_input: Input =
-            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
-        // assert_eq!(&clickhouse_input, parsed.datapoint.input());
-        let clickhouse_output: Vec<ContentBlockChatOutput> =
-            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        let _db_input: Input = serde_json::from_str(
+            &serde_json::to_string(&db_inference.input.unwrap())
+                .expect("StoredInput should serialize"),
+        )
+        .expect("StoredInput should deserialize as Input");
+        // assert_eq!(&db_input, parsed.datapoint.input());
+        let db_output = db_inference
+            .output
+            .expect("chat inference should have output");
         // Check the output to the inference is the same as the output in the response
-        assert_eq!(clickhouse_output, parsed_response.content);
+        assert_eq!(db_output, parsed_response.content);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            db_inference.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            db_inference.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
-        assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
-            "images"
-        );
+        assert_eq!(db_inference.tags["tensorzero::evaluation_name"], "images");
 
         // There should be no Float feedback for this evaluation
         assert!(
-            select_feedback_by_target_id_clickhouse(
-                &clickhouse,
-                "FloatMetricFeedback",
-                inference_id,
-                None,
-            )
-            .await
-            .is_none()
+            query_float_feedback(&db, inference_id, None)
+                .await
+                .is_none()
         );
         // The exact match evaluation should fail
         assert!(
@@ -1157,111 +1182,102 @@ async fn run_image_evaluation() {
         );
 
         // There should be Boolean feedback for honest answer
-        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
+        let db_feedback = query_boolean_feedback(
+            &db,
             inference_id,
             Some("tensorzero::evaluation_name::images::evaluator_name::honest_answer"),
         )
         .await
         .unwrap();
         assert_eq!(
-            clickhouse_feedback["metric_name"].as_str().unwrap(),
+            db_feedback.metric_name,
             "tensorzero::evaluation_name::images::evaluator_name::honest_answer"
         );
         assert_eq!(
-            clickhouse_feedback["value"],
+            db_feedback.value,
             parsed.evaluations["honest_answer"]
                 .as_ref()
                 .unwrap()
                 .as_bool()
                 .unwrap()
         );
-        total_honest_answers += clickhouse_feedback["value"].as_bool().unwrap() as u32;
+        total_honest_answers += db_feedback.value as u32;
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluation_run_id"],
+            db_feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
+            db_feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
+        assert_eq!(db_feedback.tags["tensorzero::evaluation_name"], "images");
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
-            "images"
-        );
-        assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            db_feedback.tags["tensorzero::evaluator_name"],
             "honest_answer"
         );
-        let evaluator_inference_id = Uuid::parse_str(
-            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap();
-        let evaluator_inference =
-            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+        let evaluator_inference_id =
+            Uuid::parse_str(&db_feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
+        let StoredInferenceDatabase::Json(evaluator_inference) =
+            query_inference(&db, &config, evaluator_inference_id)
                 .await
-                .unwrap();
+                .expect("Should find evaluator json inference")
+        else {
+            panic!("Expected json inference for evaluator");
+        };
         assert_eq!(
-            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            evaluator_inference.tags["tensorzero::evaluation_name"],
             "images"
         );
 
         // There should be Boolean feedback for matches reference
-        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
+        let db_feedback = query_boolean_feedback(
+            &db,
             inference_id,
             Some("tensorzero::evaluation_name::images::evaluator_name::matches_reference"),
         )
         .await
         .unwrap();
         assert_eq!(
-            clickhouse_feedback["metric_name"].as_str().unwrap(),
+            db_feedback.metric_name,
             "tensorzero::evaluation_name::images::evaluator_name::matches_reference"
         );
         assert_eq!(
-            clickhouse_feedback["value"],
+            db_feedback.value,
             parsed.evaluations["matches_reference"]
                 .as_ref()
                 .unwrap()
                 .as_bool()
                 .unwrap()
         );
-        total_matches_reference += clickhouse_feedback["value"].as_bool().unwrap() as u32;
+        total_matches_reference += db_feedback.value as u32;
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluation_run_id"],
+            db_feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
+            db_feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
+        assert_eq!(db_feedback.tags["tensorzero::evaluation_name"], "images");
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
-            "images"
-        );
-        assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            db_feedback.tags["tensorzero::evaluator_name"],
             "matches_reference"
         );
-        let evaluator_inference_id = Uuid::parse_str(
-            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap();
-        let evaluator_inference =
-            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+        let evaluator_inference_id =
+            Uuid::parse_str(&db_feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
+        let StoredInferenceDatabase::Json(evaluator_inference) =
+            query_inference(&db, &config, evaluator_inference_id)
                 .await
-                .unwrap();
+                .expect("Should find evaluator json inference")
+        else {
+            panic!("Expected json inference for evaluator");
+        };
         assert_eq!(
-            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            evaluator_inference.tags["tensorzero::evaluation_name"],
             "images"
         );
-        let input = evaluator_inference["input"].as_str().unwrap();
+        let input = serde_json::to_string(&evaluator_inference.input.unwrap())
+            .expect("evaluator input should serialize");
         // Check that the input contains the image
         // Since we test image inputs other places, we can assume this worked as intended.
         assert!(input.contains("image/png"));
@@ -1278,8 +1294,10 @@ async fn run_image_evaluation() {
 async fn check_invalid_image_evaluation() {
     init_tracing_for_tests();
     let dataset_name = format!("baz-{}", Uuid::now_v7());
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let config = get_config().await;
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -1287,10 +1305,7 @@ async fn check_invalid_image_evaluation() {
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -1311,7 +1326,7 @@ async fn check_invalid_image_evaluation() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1332,52 +1347,54 @@ async fn check_invalid_image_evaluation() {
             "Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format."
         );
         let inference_id = parsed.response.inference_id();
-        let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
+        let StoredInferenceDatabase::Chat(db_inference) =
+            query_inference(&db, &config, inference_id)
+                .await
+                .expect("Should find chat inference")
+        else {
+            panic!("Expected chat inference");
+        };
         let parsed_response = match parsed.response.clone() {
             InferenceResponse::Chat(chat_response) => chat_response,
             InferenceResponse::Json(..) => panic!("Json response not supported"),
         };
-        // Check the input to the inference parses as StoreInput
-        let _clickhouse_input: Input =
-            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
-        // assert_eq!(&clickhouse_input, parsed.datapoint.input());
-        let clickhouse_output: Vec<ContentBlockChatOutput> =
-            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the input to the inference parses as StoredInput
+        let _db_input: Input = serde_json::from_str(
+            &serde_json::to_string(&db_inference.input.unwrap())
+                .expect("StoredInput should serialize"),
+        )
+        .expect("StoredInput should deserialize as Input");
+        // assert_eq!(&db_input, parsed.datapoint.input());
+        let db_output = db_inference
+            .output
+            .expect("chat inference should have output");
         // Check the output to the inference is the same as the output in the response
-        assert_eq!(clickhouse_output, parsed_response.content);
+        assert_eq!(db_output, parsed_response.content);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            db_inference.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            db_inference.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            db_inference.tags["tensorzero::evaluation_name"],
             "bad_images"
         );
 
         // There should be no Float feedback for this evaluation
         assert!(
-            select_feedback_by_target_id_clickhouse(
-                &clickhouse,
-                "FloatMetricFeedback",
-                inference_id,
-                None,
-            )
-            .await
-            .is_none()
+            query_float_feedback(&db, inference_id, None)
+                .await
+                .is_none()
         );
 
         // There should be no Boolean feedback for honest answer since it should have failed
         assert!(
-            select_feedback_by_target_id_clickhouse(
-                &clickhouse,
-                "BooleanMetricFeedback",
+            query_boolean_feedback(
+                &db,
                 inference_id,
                 Some("tensorzero::evaluation_name::images::evaluator_name::honest_answer"),
             )
@@ -1390,8 +1407,10 @@ async fn check_invalid_image_evaluation() {
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat_pretty() {
     init_tracing_for_tests();
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -1399,10 +1418,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -1437,8 +1453,10 @@ async fn run_llm_judge_evaluation_chat_pretty() {
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_json_pretty() {
     init_tracing_for_tests();
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -1446,10 +1464,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -1668,8 +1683,9 @@ async fn test_run_evaluation_binary() {
 async fn run_evaluations_errors() {
     init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     write_json_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -1677,10 +1693,7 @@ async fn run_evaluations_errors() {
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -1701,7 +1714,7 @@ async fn run_evaluations_errors() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -1728,25 +1741,11 @@ async fn run_evaluations_errors() {
 #[expect(deprecated)]
 async fn test_run_llm_judge_evaluator_chat() {
     init_tracing_for_tests();
-    let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(PathBuf::from(&format!(
-            "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-            std::env::var("CARGO_MANIFEST_DIR").unwrap()
-        ))),
-        clickhouse_url: None,
-        postgres_config: None,
-        valkey_url: None,
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap();
+    let tensorzero_client = get_tensorzero_client().await;
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
         inference_executor,
-        db: Arc::new(get_clickhouse().await),
+        db: Arc::new(DelegatingDatabaseConnection::new_for_e2e_test().await),
     });
     let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
         content: vec![ContentBlockChatOutput::Text(Text {
@@ -1933,7 +1932,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
         inference_executor,
-        db: Arc::new(get_clickhouse().await),
+        db: Arc::new(DelegatingDatabaseConnection::new_for_e2e_test().await),
     });
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
         output: JsonInferenceOutput {
@@ -2118,8 +2117,10 @@ async fn test_run_llm_judge_evaluator_json() {
 async fn run_evaluations_best_of_3() {
     init_tracing_for_tests();
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let config = get_config().await;
     write_json_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -2127,10 +2128,7 @@ async fn run_evaluations_best_of_3() {
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -2151,7 +2149,7 @@ async fn run_evaluations_best_of_3() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -2168,54 +2166,54 @@ async fn run_evaluations_best_of_3() {
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
-        let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
+        let StoredInferenceDatabase::Json(db_inference) =
+            query_inference(&db, &config, inference_id)
+                .await
+                .expect("Should find json inference")
+        else {
+            panic!("Expected json inference");
+        };
         let parsed_response = match parsed.response.clone() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: Input =
-            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        let db_input: Input = serde_json::from_str(
+            &serde_json::to_string(&db_inference.input.unwrap())
+                .expect("StoredInput should serialize"),
+        )
+        .expect("StoredInput should deserialize as Input");
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, parsed.datapoint.input());
-        let clickhouse_output: JsonInferenceOutput =
-            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        assert_eq!(&db_input, parsed.datapoint.input());
+        let db_output = db_inference
+            .output
+            .expect("json inference should have output");
         // Check the output to the inference is the same as the output in the response
-        assert_eq!(clickhouse_output, parsed_response.output);
+        assert_eq!(db_output, parsed_response.output);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            db_inference.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            db_inference.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            db_inference.tags["tensorzero::evaluation_name"],
             "best_of_3"
         );
-        assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            dataset_name
-        );
+        assert_eq!(db_inference.tags["tensorzero::dataset_name"], dataset_name);
         // Check boolean feedback was recorded
-        let feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
 
         assert_eq!(
-            feedback["metric_name"].as_str().unwrap(),
+            feedback.metric_name,
             "tensorzero::evaluation_name::best_of_3::evaluator_name::llm_judge_bool"
         );
         assert_eq!(
-            feedback["value"],
+            feedback.value,
             parsed.evaluations["llm_judge_bool"]
                 .as_ref()
                 .unwrap()
@@ -2223,30 +2221,25 @@ async fn run_evaluations_best_of_3() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_run_id"],
+            feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::datapoint_id"],
+            feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
 
         // Check bool feedback was recorded
-        let feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
 
         assert_eq!(
-            feedback["metric_name"].as_str().unwrap(),
+            feedback.metric_name,
             "tensorzero::evaluation_name::best_of_3::evaluator_name::llm_judge_bool"
         );
         assert_eq!(
-            feedback["value"],
+            feedback.value,
             parsed.evaluations["llm_judge_bool"]
                 .as_ref()
                 .unwrap()
@@ -2254,49 +2247,49 @@ async fn run_evaluations_best_of_3() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_run_id"],
+            feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::datapoint_id"],
+            feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluator_name"],
+            feedback.tags["tensorzero::evaluator_name"],
             "llm_judge_bool"
         );
-        assert_eq!(feedback["tags"]["tensorzero::evaluation_name"], "best_of_3");
-        let evaluator_inference_id = Uuid::parse_str(
-            feedback["tags"]["tensorzero::evaluator_inference_id"]
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap();
-        let evaluator_inference =
-            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+        assert_eq!(feedback.tags["tensorzero::evaluation_name"], "best_of_3");
+        let evaluator_inference_id =
+            Uuid::parse_str(&feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
+        let StoredInferenceDatabase::Json(evaluator_inference) =
+            query_inference(&db, &config, evaluator_inference_id)
                 .await
-                .unwrap();
+                .expect("Should find evaluator json inference")
+        else {
+            panic!("Expected json inference for evaluator");
+        };
         assert_eq!(
-            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            evaluator_inference.tags["tensorzero::evaluation_name"],
             "best_of_3"
         );
         parsed_output.push(parsed);
 
         // Select Model inferences for the evaluator inference id
-        let model_inferences =
-            select_model_inferences_clickhouse(&clickhouse, evaluator_inference_id)
-                .await
-                .unwrap();
+        let model_inferences = db
+            .get_model_inferences_by_inference_id(evaluator_inference_id)
+            .await
+            .unwrap();
         let mut happy_count = 0;
         for model_inference in &model_inferences {
-            if model_inference["system"].as_str().unwrap().trim()
+            if model_inference.system.as_deref().unwrap().trim()
                 == "Return true if you are happy today!"
             {
                 happy_count += 1;
             } else {
                 assert!(
-                    model_inference["system"]
-                        .as_str()
+                    model_inference
+                        .system
+                        .as_deref()
                         .unwrap()
                         .starts_with("You are an assistant tasked with re-ranking")
                 );
@@ -2311,9 +2304,11 @@ async fn run_evaluations_best_of_3() {
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_mixture_of_3() {
     init_tracing_for_tests();
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let config = get_config().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -2321,10 +2316,7 @@ async fn run_evaluations_mixture_of_3() {
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -2345,7 +2337,7 @@ async fn run_evaluations_mixture_of_3() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -2362,54 +2354,54 @@ async fn run_evaluations_mixture_of_3() {
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
-        let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
+        let StoredInferenceDatabase::Json(db_inference) =
+            query_inference(&db, &config, inference_id)
+                .await
+                .expect("Should find json inference")
+        else {
+            panic!("Expected json inference");
+        };
         let parsed_response = match parsed.response.clone() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: Input =
-            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        let db_input: Input = serde_json::from_str(
+            &serde_json::to_string(&db_inference.input.unwrap())
+                .expect("StoredInput should serialize"),
+        )
+        .expect("StoredInput should deserialize as Input");
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, parsed.datapoint.input());
-        let clickhouse_output: JsonInferenceOutput =
-            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        assert_eq!(&db_input, parsed.datapoint.input());
+        let db_output = db_inference
+            .output
+            .expect("json inference should have output");
         // Check the output to the inference is the same as the output in the response
-        assert_eq!(clickhouse_output, parsed_response.output);
+        assert_eq!(db_output, parsed_response.output);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            db_inference.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            db_inference.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            db_inference.tags["tensorzero::evaluation_name"],
             "mixture_of_3"
         );
-        assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            dataset_name
-        );
+        assert_eq!(db_inference.tags["tensorzero::dataset_name"], dataset_name);
         // Check boolean feedback was recorded
-        let feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
 
         assert_eq!(
-            feedback["metric_name"].as_str().unwrap(),
+            feedback.metric_name,
             "tensorzero::evaluation_name::mixture_of_3::evaluator_name::llm_judge_bool"
         );
         assert_eq!(
-            feedback["value"],
+            feedback.value,
             parsed.evaluations["llm_judge_bool"]
                 .as_ref()
                 .unwrap()
@@ -2417,30 +2409,25 @@ async fn run_evaluations_mixture_of_3() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_run_id"],
+            feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::datapoint_id"],
+            feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
 
         // Check bool feedback was recorded
-        let feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
 
         assert_eq!(
-            feedback["metric_name"].as_str().unwrap(),
+            feedback.metric_name,
             "tensorzero::evaluation_name::mixture_of_3::evaluator_name::llm_judge_bool"
         );
         assert_eq!(
-            feedback["value"],
+            feedback.value,
             parsed.evaluations["llm_judge_bool"]
                 .as_ref()
                 .unwrap()
@@ -2448,52 +2435,49 @@ async fn run_evaluations_mixture_of_3() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_run_id"],
+            feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::datapoint_id"],
+            feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluator_name"],
+            feedback.tags["tensorzero::evaluator_name"],
             "llm_judge_bool"
         );
-        assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_name"],
-            "mixture_of_3"
-        );
-        let evaluator_inference_id = Uuid::parse_str(
-            feedback["tags"]["tensorzero::evaluator_inference_id"]
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap();
-        let evaluator_inference =
-            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+        assert_eq!(feedback.tags["tensorzero::evaluation_name"], "mixture_of_3");
+        let evaluator_inference_id =
+            Uuid::parse_str(&feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
+        let StoredInferenceDatabase::Json(evaluator_inference) =
+            query_inference(&db, &config, evaluator_inference_id)
                 .await
-                .unwrap();
+                .expect("Should find evaluator json inference")
+        else {
+            panic!("Expected json inference for evaluator");
+        };
         assert_eq!(
-            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            evaluator_inference.tags["tensorzero::evaluation_name"],
             "mixture_of_3"
         );
         parsed_output.push(parsed);
 
         // Select Model inferences for the evaluator inference id
-        let model_inferences =
-            select_model_inferences_clickhouse(&clickhouse, evaluator_inference_id)
-                .await
-                .unwrap();
+        let model_inferences = db
+            .get_model_inferences_by_inference_id(evaluator_inference_id)
+            .await
+            .unwrap();
         let mut happy_count = 0;
         for model_inference in &model_inferences {
-            if model_inference["system"].as_str().unwrap().trim()
+            if model_inference.system.as_deref().unwrap().trim()
                 == "Return true if you are happy today!"
             {
                 happy_count += 1;
             } else {
                 assert!(
-                    model_inference["system"]
-                        .as_str()
+                    model_inference
+                        .system
+                        .as_deref()
                         .unwrap()
                         .starts_with("You have been provided with a set of responses from various")
                 );
@@ -2508,9 +2492,11 @@ async fn run_evaluations_mixture_of_3() {
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_dicl() {
     init_tracing_for_tests();
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let config = get_config().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     write_json_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -2518,10 +2504,7 @@ async fn run_evaluations_dicl() {
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -2542,7 +2525,7 @@ async fn run_evaluations_dicl() {
     Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
         .await
         .unwrap();
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -2559,54 +2542,51 @@ async fn run_evaluations_dicl() {
         };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
-        let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
+        let StoredInferenceDatabase::Json(db_inference) =
+            query_inference(&db, &config, inference_id)
+                .await
+                .expect("Should find json inference")
+        else {
+            panic!("Expected json inference");
+        };
         let parsed_response = match parsed.response.clone() {
             InferenceResponse::Json(json_response) => json_response,
             InferenceResponse::Chat(..) => panic!("Chat response not supported"),
         };
-        let clickhouse_input: Input =
-            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        let db_input: Input = serde_json::from_str(
+            &serde_json::to_string(&db_inference.input.unwrap())
+                .expect("StoredInput should serialize"),
+        )
+        .expect("StoredInput should deserialize as Input");
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, parsed.datapoint.input());
-        let clickhouse_output: JsonInferenceOutput =
-            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        assert_eq!(&db_input, parsed.datapoint.input());
+        let db_output = db_inference
+            .output
+            .expect("json inference should have output");
         // Check the output to the inference is the same as the output in the response
-        assert_eq!(clickhouse_output, parsed_response.output);
+        assert_eq!(db_output, parsed_response.output);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            db_inference.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            db_inference.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
-        assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
-            "dicl"
-        );
-        assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            dataset_name
-        );
+        assert_eq!(db_inference.tags["tensorzero::evaluation_name"], "dicl");
+        assert_eq!(db_inference.tags["tensorzero::dataset_name"], dataset_name);
         // Check boolean feedback was recorded
-        let feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
 
         assert_eq!(
-            feedback["metric_name"].as_str().unwrap(),
+            feedback.metric_name,
             "tensorzero::evaluation_name::dicl::evaluator_name::llm_judge_bool"
         );
         assert_eq!(
-            feedback["value"],
+            feedback.value,
             parsed.evaluations["llm_judge_bool"]
                 .as_ref()
                 .unwrap()
@@ -2614,30 +2594,25 @@ async fn run_evaluations_dicl() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_run_id"],
+            feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::datapoint_id"],
+            feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
 
         // Check bool feedback was recorded
-        let feedback = select_feedback_by_target_id_clickhouse(
-            &clickhouse,
-            "BooleanMetricFeedback",
-            inference_id,
-            None,
-        )
-        .await
-        .unwrap();
+        let feedback = query_boolean_feedback(&db, inference_id, None)
+            .await
+            .unwrap();
 
         assert_eq!(
-            feedback["metric_name"].as_str().unwrap(),
+            feedback.metric_name,
             "tensorzero::evaluation_name::dicl::evaluator_name::llm_judge_bool"
         );
         assert_eq!(
-            feedback["value"],
+            feedback.value,
             parsed.evaluations["llm_judge_bool"]
                 .as_ref()
                 .unwrap()
@@ -2645,56 +2620,58 @@ async fn run_evaluations_dicl() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluation_run_id"],
+            feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::datapoint_id"],
+            feedback.tags["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::evaluator_name"],
+            feedback.tags["tensorzero::evaluator_name"],
             "llm_judge_bool"
         );
-        assert_eq!(feedback["tags"]["tensorzero::evaluation_name"], "dicl");
-        let evaluator_inference_id = Uuid::parse_str(
-            feedback["tags"]["tensorzero::evaluator_inference_id"]
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap();
-        let evaluator_inference =
-            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+        assert_eq!(feedback.tags["tensorzero::evaluation_name"], "dicl");
+        let evaluator_inference_id =
+            Uuid::parse_str(&feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
+        let StoredInferenceDatabase::Json(evaluator_inference) =
+            query_inference(&db, &config, evaluator_inference_id)
                 .await
-                .unwrap();
+                .expect("Should find evaluator json inference")
+        else {
+            panic!("Expected json inference for evaluator");
+        };
         assert_eq!(
-            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            evaluator_inference.tags["tensorzero::evaluation_name"],
             "dicl"
         );
         parsed_output.push(parsed);
 
         // Select Model inferences for the evaluator inference id
-        let model_inferences =
-            select_model_inferences_clickhouse(&clickhouse, evaluator_inference_id)
-                .await
-                .unwrap();
+        let model_inferences = db
+            .get_model_inferences_by_inference_id(evaluator_inference_id)
+            .await
+            .unwrap();
         for model_inference in &model_inferences {
-            match model_inference["model_name"].as_str().unwrap() {
+            match model_inference.model_name.as_str() {
                 "openai::gpt-4o-mini" => {
-                    let system = model_inference["system"].as_str().unwrap();
+                    let system = model_inference.system.as_deref().unwrap();
                     assert!(system.starts_with("You are tasked with learning by induction"));
                 }
                 "text-embedding-3-small" => {
-                    assert!(model_inference["system"].is_null());
-                    let messages = model_inference["input_messages"].as_str().unwrap();
+                    assert!(model_inference.system.is_none());
+                    let messages = serde_json::to_string(
+                        model_inference
+                            .input_messages
+                            .as_ref()
+                            .expect("embedding model should have input_messages"),
+                    )
+                    .expect("input_messages should serialize");
                     // messages should be a json array of objects
                     assert!(messages.starts_with("[{"));
                 }
                 _ => {
-                    panic!(
-                        "Unknown model name: {}",
-                        model_inference["model_name"].as_str().unwrap()
-                    );
+                    panic!("Unknown model name: {}", model_inference.model_name);
                 }
             }
         }
@@ -2707,8 +2684,9 @@ async fn run_evaluations_dicl() {
 async fn test_query_skips_staled_datapoints() {
     init_tracing_for_tests();
     let dataset_name = format!("exact_matches_empty-{}", Uuid::now_v7());
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     write_json_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -2722,7 +2700,7 @@ async fn test_query_skips_staled_datapoints() {
         limit: Some(u32::MAX), // Get all datapoints
         ..Default::default()
     };
-    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+    let dataset = list_datapoints(&db, dataset_name.clone(), request)
         .await
         .unwrap()
         .datapoints;
@@ -2738,8 +2716,9 @@ async fn test_query_skips_staled_datapoints() {
 async fn test_evaluation_with_dynamic_variant() {
     init_tracing_for_tests();
     let dataset_name = format!("good-haiku-data-dynamic-{}", Uuid::now_v7());
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -2748,10 +2727,7 @@ async fn test_evaluation_with_dynamic_variant() {
     )
     .await;
 
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
 
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path.clone()),
@@ -2820,7 +2796,7 @@ async fn test_evaluation_with_dynamic_variant() {
 
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        db: Arc::new(clickhouse),
+        db: Arc::new(db.clone()),
 
         evaluation_config,
         function_configs,
@@ -2848,12 +2824,13 @@ async fn test_evaluation_with_dynamic_variant() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_max_datapoints_parameter() {
     init_tracing_for_tests();
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("extract_entities_max_datapoints-{}", Uuid::now_v7());
     let tensorzero_client = get_tensorzero_client().await;
 
     // Write 10 datapoints to the dataset
     write_json_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -2887,7 +2864,7 @@ async fn test_max_datapoints_parameter() {
     // Test with max_datapoints = 3 (should only process 3 datapoints)
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        db: Arc::new(clickhouse.clone()),
+        db: Arc::new(db.clone()),
 
         evaluation_config,
         function_configs,
@@ -2932,12 +2909,13 @@ async fn test_max_datapoints_parameter() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_precision_targets_parameter() {
     init_tracing_for_tests();
-    let clickhouse = get_clickhouse().await;
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("good-haiku-data-precision-{}", Uuid::now_v7());
     let tensorzero_client = get_tensorzero_client().await;
 
     // Use existing chat fixture that has both outputs (for exact_match) and inputs (for LLM judge)
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -2988,7 +2966,7 @@ async fn test_precision_targets_parameter() {
 
     let core_args = EvaluationCoreArgs {
         inference_executor,
-        db: Arc::new(clickhouse.clone()),
+        db: Arc::new(db.clone()),
         evaluation_config,
         function_configs,
         dataset_name: Some(dataset_name.clone()),
@@ -3077,37 +3055,34 @@ async fn test_precision_targets_parameter() {
             .await
             .expect("Batch writer should complete before tag assertions");
     }
-    clickhouse.flush_pending_writes().await;
+    db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
 
     let inference_id =
         tagged_inference_id.expect("Should capture an inference id to validate tags");
-    let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let StoredInferenceDatabase::Chat(db_inference) = query_inference(&db, &config, inference_id)
         .await
-        .expect("Should load evaluation inference from ClickHouse");
+        .expect("Should load evaluation inference from database")
+    else {
+        panic!("Expected chat inference");
+    };
     assert_eq!(
-        clickhouse_inference["tags"]["tensorzero::evaluation_run_id"]
-            .as_str()
-            .unwrap(),
+        db_inference.tags["tensorzero::evaluation_run_id"],
         evaluation_run_id.to_string(),
         "Evaluation inferences should include `tensorzero::evaluation_run_id` tags"
     );
     assert_eq!(
-        clickhouse_inference["tags"]["tensorzero::evaluation_name"]
-            .as_str()
-            .unwrap(),
+        db_inference.tags["tensorzero::evaluation_name"],
         evaluation_name_tag.as_str(),
         "Evaluation inferences should include `tensorzero::evaluation_name` tags"
     );
     assert_eq!(
-        clickhouse_inference["tags"]["tensorzero::autopilot::session_id"]
-            .as_str()
-            .unwrap(),
+        db_inference.tags["tensorzero::autopilot::session_id"],
         external_session_id.as_str(),
         "Evaluation inferences should include external tags"
     );
     assert_eq!(
-        clickhouse_inference["tags"]["custom_tag"].as_str().unwrap(),
+        db_inference.tags["custom_tag"],
         external_tag_value.as_str(),
         "Evaluation inferences should include custom external tags"
     );
@@ -3116,58 +3091,45 @@ async fn test_precision_targets_parameter() {
         "tensorzero::evaluation_name::{}::evaluator_name::topic_starts_with_f",
         evaluation_name_tag.as_str()
     );
-    let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
-        &clickhouse,
-        "BooleanMetricFeedback",
-        inference_id,
-        Some(metric_name.as_str()),
-    )
-    .await
-    .expect("Should load evaluator feedback from ClickHouse");
+    let db_feedback = query_boolean_feedback(&db, inference_id, Some(metric_name.as_str()))
+        .await
+        .expect("Should load evaluator feedback from database");
     assert_eq!(
-        clickhouse_feedback["tags"]["tensorzero::autopilot::session_id"]
-            .as_str()
-            .unwrap(),
+        db_feedback.tags["tensorzero::autopilot::session_id"],
         external_session_id.as_str(),
         "Evaluator feedback should include external tags"
     );
     assert_eq!(
-        clickhouse_feedback["tags"]["custom_tag"].as_str().unwrap(),
+        db_feedback.tags["custom_tag"],
         external_tag_value.as_str(),
         "Evaluator feedback should include custom external tags"
     );
-    let evaluator_inference_id = Uuid::parse_str(
-        clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
-            .as_str()
-            .unwrap(),
-    )
-    .unwrap();
-    let evaluator_inference = select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
-        .await
-        .expect("Should load judge inference from ClickHouse");
+    let evaluator_inference_id =
+        Uuid::parse_str(&db_feedback.tags["tensorzero::evaluator_inference_id"]).unwrap();
+    let StoredInferenceDatabase::Json(evaluator_inference) =
+        query_inference(&db, &config, evaluator_inference_id)
+            .await
+            .expect("Should load judge inference from database")
+    else {
+        panic!("Expected json inference for evaluator");
+    };
     assert_eq!(
-        evaluator_inference["tags"]["tensorzero::evaluation_run_id"]
-            .as_str()
-            .unwrap(),
+        evaluator_inference.tags["tensorzero::evaluation_run_id"],
         evaluation_run_id.to_string(),
         "Judge inferences should include `tensorzero::evaluation_run_id` tags"
     );
     assert_eq!(
-        evaluator_inference["tags"]["tensorzero::evaluation_name"]
-            .as_str()
-            .unwrap(),
+        evaluator_inference.tags["tensorzero::evaluation_name"],
         evaluation_name_tag.as_str(),
         "Judge inferences should include `tensorzero::evaluation_name` tags"
     );
     assert_eq!(
-        evaluator_inference["tags"]["tensorzero::autopilot::session_id"]
-            .as_str()
-            .unwrap(),
+        evaluator_inference.tags["tensorzero::autopilot::session_id"],
         external_session_id.as_str(),
         "Judge inferences should include external tags"
     );
     assert_eq!(
-        evaluator_inference["tags"]["custom_tag"].as_str().unwrap(),
+        evaluator_inference.tags["custom_tag"],
         external_tag_value.as_str(),
         "Judge inferences should include custom external tags"
     );
@@ -3177,8 +3139,10 @@ async fn test_precision_targets_parameter() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_cli_args_max_datapoints() {
     init_tracing_for_tests();
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("good-haiku-data-cli-max-{}", Uuid::now_v7());
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -3187,10 +3151,7 @@ async fn test_cli_args_max_datapoints() {
     )
     .await;
 
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
 
     // Test CLI Args with max_datapoints limit
@@ -3237,8 +3198,10 @@ async fn test_cli_args_max_datapoints() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_cli_args_precision_targets() {
     init_tracing_for_tests();
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("good-haiku-data-cli-precision-{}", Uuid::now_v7());
     write_chat_fixture_to_dataset(
+        &db,
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -3247,10 +3210,7 @@ async fn test_cli_args_precision_targets() {
     )
     .await;
 
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
+    let config_path = get_e2e_config_path();
     let evaluation_run_id = Uuid::now_v7();
 
     // Test CLI Args with precision_targets for adaptive stopping

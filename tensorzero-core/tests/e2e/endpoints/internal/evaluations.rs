@@ -6,8 +6,9 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Map, Value, json};
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::evaluation_queries::EvaluationResultRow;
+use tensorzero_core::db::inferences::{FunctionInfo, InferenceQueries};
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
     CreateDatapointsResponse,
@@ -20,10 +21,42 @@ use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Role, System, Text,
 };
 use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_types::FunctionType;
 use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+
+/// Test the count evaluation runs endpoint.
+/// This tests GET /internal/evaluations/runs/count
+#[tokio::test]
+async fn test_count_evaluation_runs() {
+    let client = Client::new();
+
+    let response = client
+        .get(get_gateway_endpoint("/internal/evaluations/runs/count"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body: Value = response.json().await.unwrap();
+
+    // Verify the response structure
+    assert!(
+        body.get("count").is_some(),
+        "Response should have `count` field"
+    );
+
+    let count = body.get("count").unwrap().as_u64().unwrap();
+
+    // The e2e test database should have some evaluation runs
+    assert!(
+        count > 0,
+        "Expected at least one evaluation run in the test database"
+    );
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_evaluation_run_infos_endpoint() {
@@ -60,7 +93,7 @@ async fn test_get_evaluation_run_infos_endpoint() {
         Uuid::parse_str(evaluation_run_id1).unwrap()
     );
     assert_eq!(first.variant_name, "gpt4o_mini_initial_prompt");
-    assert!(!first.most_recent_inference_date.is_empty());
+    assert!(!first.created_at.is_empty());
 
     let second = &response.run_infos[1];
     assert_eq!(
@@ -190,7 +223,7 @@ async fn test_get_evaluation_run_infos_for_datapoint_json_function() {
         Uuid::parse_str("0196368e-53a8-7e82-a88d-db7086926d81").unwrap()
     );
     assert_eq!(run_info.variant_name, "gpt4o_initial_prompt");
-    assert!(!run_info.most_recent_inference_date.is_empty());
+    assert!(!run_info.created_at.is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -609,7 +642,10 @@ async fn test_get_evaluation_results_pagination() {
 async fn test_get_evaluation_results_evaluation_not_found() {
     let http_client = Client::new();
 
-    let evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
+    // Use a run ID that does NOT exist in InferenceEvaluationRuns so that
+    // resolve_evaluation_metadata falls back to the config path (where the
+    // nonexistent evaluation name triggers an error).
+    let evaluation_run_id = "00000000-0000-0000-0000-000000000000";
 
     let url = get_gateway_endpoint("/internal/evaluations/results").to_string()
         + &format!(
@@ -749,7 +785,6 @@ async fn create_test_chat_datapoint(client: &Client, dataset_name: &str) -> Uuid
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_success() {
     let http_client = Client::new();
-    let _clickhouse = get_clickhouse().await;
 
     // Create a unique dataset with test datapoints
     let dataset_name = format!("test-eval-dataset-{}", Uuid::now_v7());
@@ -977,7 +1012,6 @@ async fn test_run_evaluation_streaming_nonexistent_dataset() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
     let http_client = Client::new();
-    let _clickhouse = get_clickhouse().await;
 
     // Create a unique dataset with test datapoints
     let dataset_name = format!("test-eval-ids-dataset-{}", Uuid::now_v7());
@@ -1058,7 +1092,6 @@ async fn test_run_evaluation_streaming_with_specific_datapoint_ids() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_evaluation_streaming_datapoint_ids_mixed_datasets() {
     let http_client = Client::new();
-    let _clickhouse = get_clickhouse().await;
 
     // Create datapoints in two different datasets
     let dataset_a = format!("test-eval-mixed-a-{}", Uuid::now_v7());
@@ -1233,8 +1266,30 @@ async fn test_get_human_feedback_returns_feedback_when_exists() {
     let response_json: Value = response.json().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    let serialized_inference_output =
-        serde_json::to_string(response_json.get("output").unwrap()).unwrap();
+
+    // Postgres JSONB does not preserve key order, so `get_serialized_inference_output_for_feedback`
+    // sorts keys before serializing. We must use the same serialization here for the lookup to match.
+    // TODO(#6664): make this lookup order-independent.
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let variant_name = response_json
+        .get("variant_name")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_string();
+    let episode_id =
+        Uuid::parse_str(response_json.get("episode_id").unwrap().as_str().unwrap()).unwrap();
+    let function_info = FunctionInfo {
+        function_name: "json_success".to_string(),
+        function_type: FunctionType::Json,
+        variant_name,
+        episode_id,
+    };
+    let serialized_inference_output = database
+        .get_serialized_inference_output_for_feedback(&function_info, inference_id)
+        .await
+        .expect("should get inference output")
+        .expect("inference output should exist");
 
     // Create datapoint_id and evaluator_inference_id
     let datapoint_id = Uuid::now_v7();
@@ -1366,8 +1421,30 @@ async fn test_get_human_feedback_with_boolean_value() {
     let response_json: Value = response.json().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    let serialized_inference_output =
-        serde_json::to_string(response_json.get("output").unwrap()).unwrap();
+
+    // Postgres JSONB does not preserve key order, so `get_serialized_inference_output_for_feedback`
+    // sorts keys before serializing. We must use the same serialization here for the lookup to match.
+    // TODO(#6664): make this lookup order-independent.
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let variant_name = response_json
+        .get("variant_name")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_string();
+    let episode_id =
+        Uuid::parse_str(response_json.get("episode_id").unwrap().as_str().unwrap()).unwrap();
+    let function_info = FunctionInfo {
+        function_name: "json_success".to_string(),
+        function_type: FunctionType::Json,
+        variant_name,
+        episode_id,
+    };
+    let serialized_inference_output = database
+        .get_serialized_inference_output_for_feedback(&function_info, inference_id)
+        .await
+        .expect("should get inference output")
+        .expect("inference output should exist");
 
     // Create datapoint_id and evaluator_inference_id
     let datapoint_id = Uuid::now_v7();
@@ -1454,8 +1531,30 @@ async fn test_get_human_feedback_output_mismatch() {
     let response_json: Value = response.json().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    let serialized_inference_output =
-        serde_json::to_string(response_json.get("output").unwrap()).unwrap();
+
+    // Postgres JSONB does not preserve key order, so `get_serialized_inference_output_for_feedback`
+    // sorts keys before serializing. We must use the same serialization here for the lookup to match.
+    // TODO(#6664): make this lookup order-independent.
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let variant_name = response_json
+        .get("variant_name")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_string();
+    let episode_id =
+        Uuid::parse_str(response_json.get("episode_id").unwrap().as_str().unwrap()).unwrap();
+    let function_info = FunctionInfo {
+        function_name: "json_success".to_string(),
+        function_type: FunctionType::Json,
+        variant_name,
+        episode_id,
+    };
+    let serialized_inference_output = database
+        .get_serialized_inference_output_for_feedback(&function_info, inference_id)
+        .await
+        .expect("should get inference output")
+        .expect("inference output should exist");
 
     // Create datapoint_id and evaluator_inference_id
     let datapoint_id = Uuid::now_v7();

@@ -20,6 +20,7 @@ use durable_tools::{EmbeddedClient, WorkerOptions};
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
+use tensorzero_core::db::delegating_connection::PrimaryDatastore;
 use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
@@ -391,9 +392,15 @@ async fn run() -> Result<(), ExitCode> {
     // Print the configuration being used
     print_configuration_info(glob.as_ref());
 
-    // Print whether observability is enabled
+    // Print observability backend and ClickHouse status
+    let observability_backend = match gateway_handle.app_state.primary_datastore {
+        PrimaryDatastore::ClickHouse => "ClickHouse",
+        PrimaryDatastore::Postgres => "Postgres",
+        PrimaryDatastore::Disabled => "disabled",
+    };
+    tracing::info!("├ Observability Backend: {observability_backend}");
     tracing::info!(
-        "├ Observability (ClickHouse): {}",
+        "├ ClickHouse: {}",
         gateway_handle.app_state.clickhouse_connection_info
     );
     if config.gateway.observability.batch_writes.enabled {

@@ -90,33 +90,6 @@ pub mod dynamic {
     #[export_schema]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraHeader {
-        #[schemars(title = "ProviderExtraHeader")]
-        #[deprecated(note = "Migrate to `ModelProvider` and remove in 2026.2+. (#4640)")]
-        /// DEPRECATED: Use `ModelProvider` instead.
-        Provider {
-            /// A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-            model_provider_name: String,
-            /// The name of the HTTP header (e.g. `anthropic-beta`)
-            name: String,
-            /// The value of the HTTP header (e.g. `feature1,feature2,feature3`)
-            value: String,
-        },
-        #[schemars(title = "ProviderExtraHeaderDelete")]
-        #[deprecated(note = "Migrate to `ModelProviderDelete` and remove in 2026.2+. (#4640)")]
-        /// DEPRECATED: Use `ModelProviderDelete` instead.
-        ProviderDelete {
-            /// A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
-            model_provider_name: String,
-            /// The name of the HTTP header (e.g. `anthropic-beta`)
-            name: String,
-            #[serde(
-                serialize_with = "super::super::serialize_delete_field",
-                deserialize_with = "super::super::deserialize_delete_field"
-            )]
-            #[schemars(schema_with = "super::super::schema_for_delete_field")]
-            /// Set to true to remove the header from the model provider request
-            delete: (),
-        },
         #[schemars(title = "VariantExtraHeader")]
         Variant {
             /// A variant name in your configuration (e.g. `my_variant`)
@@ -191,8 +164,6 @@ pub mod dynamic {
     impl ExtraHeader {
         pub fn should_apply_variant(&self, variant_name: &str) -> bool {
             match self {
-                #[expect(deprecated)]
-                ExtraHeader::Provider { .. } | ExtraHeader::ProviderDelete { .. } => true,
                 ExtraHeader::Variant {
                     variant_name: v, ..
                 }
@@ -248,20 +219,6 @@ mod tests {
         assert!(all_variant.should_apply_variant("variant1"));
         assert!(all_variant.should_apply_variant("variant2"));
         assert!(all_variant.should_apply_variant("any_variant"));
-    }
-
-    #[test]
-    fn test_should_apply_variant_provider() {
-        #[expect(deprecated)]
-        let provider_variant = DynamicExtraHeader::Provider {
-            model_provider_name: "openai".to_string(),
-            name: "Authorization".to_string(),
-            value: "Bearer token".to_string(),
-        };
-
-        // Provider should apply to any variant
-        assert!(provider_variant.should_apply_variant("variant1"));
-        assert!(provider_variant.should_apply_variant("variant2"));
     }
 
     #[test]
@@ -325,9 +282,9 @@ mod tests {
     fn test_filter_mixed_variants() {
         let unfiltered = UnfilteredInferenceExtraHeaders {
             extra_headers: vec![
-                #[expect(deprecated)]
-                DynamicExtraHeader::Provider {
-                    model_provider_name: "openai".to_string(),
+                DynamicExtraHeader::ModelProvider {
+                    model_name: "gpt-4o".to_string(),
+                    provider_name: Some("openai".to_string()),
                     name: "X-Provider".to_string(),
                     value: "provider".to_string(),
                 },
@@ -349,18 +306,15 @@ mod tests {
         };
 
         let filtered = unfiltered.filter("variant1");
-        // Should include: Provider, Variant(variant1), Always
+        // Should include: ModelProvider, Variant(variant1), Always
         assert_eq!(filtered.data.len(), 3);
 
-        #[expect(deprecated)]
-        {
-            assert!(
-                filtered
-                    .data
-                    .iter()
-                    .any(|item| matches!(item, DynamicExtraHeader::Provider { .. }))
-            );
-        }
+        assert!(
+            filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraHeader::ModelProvider { .. }))
+        );
         assert!(
             filtered
                 .data

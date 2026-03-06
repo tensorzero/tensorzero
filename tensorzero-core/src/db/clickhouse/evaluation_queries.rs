@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use serde::Deserialize;
 
-use super::ClickHouseConnectionInfo;
-use super::episode_queries::{parse_count, parse_json_rows};
-use super::escape_string_for_clickhouse_literal;
+use super::{
+    ClickHouseConnectionInfo, escape_string_for_clickhouse_literal, parse_count, parse_json_rows,
+};
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::db::evaluation_queries::EvaluationResultRow;
 use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
@@ -16,7 +16,10 @@ use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::db::evaluation_queries::EvaluationStatisticsRow;
 use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
 use crate::db::evaluation_queries::InferenceEvaluationRunInsert;
+use crate::db::evaluation_queries::InferenceEvaluationRunMetadata;
+use crate::db::evaluation_queries::InferenceEvaluationRunMetricMetadata;
 use crate::db::evaluation_queries::RawEvaluationResultRow;
+use crate::endpoints::inference::InferenceResponse;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
 use crate::statistics_util::{wald_confint, wilson_confint};
@@ -125,6 +128,84 @@ fn get_evaluation_result_datapoint_id_subquery(
 
 #[async_trait]
 impl EvaluationQueries for ClickHouseConnectionInfo {
+    async fn get_inference_evaluation_run_metadata(
+        &self,
+        evaluation_run_ids: &[uuid::Uuid],
+    ) -> Result<Vec<(uuid::Uuid, InferenceEvaluationRunMetadata)>, Error> {
+        if evaluation_run_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let run_ids_strs: Vec<String> = evaluation_run_ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect();
+        let run_ids_formatted = format!("[{}]", run_ids_strs.join(","));
+
+        let query = r"
+            SELECT
+                toString(uint_to_uuid(run_id_uint)) AS run_id,
+                argMax(evaluation_name, updated_at) AS evaluation_name,
+                argMax(function_name, updated_at) AS function_name,
+                argMax(function_type, updated_at) AS function_type,
+                argMax(metrics, updated_at) AS metrics
+            FROM InferenceEvaluationRuns
+            WHERE run_id_uint IN (
+                SELECT arrayJoin(arrayMap(x -> toUInt128(toUUID(x)), {run_ids:Array(String)}))
+            )
+            GROUP BY run_id_uint
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let mut params = HashMap::new();
+        params.insert("run_ids", run_ids_formatted.as_str());
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        if response.response.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct RawRow {
+            run_id: String,
+            evaluation_name: String,
+            function_name: String,
+            function_type: FunctionConfigType,
+            metrics: String,
+        }
+
+        let rows: Vec<RawRow> = parse_json_rows(&response.response)?;
+        let mut results = Vec::with_capacity(rows.len());
+
+        for row in rows {
+            let run_id: uuid::Uuid = row.run_id.parse().map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to parse run_id UUID: {e}"),
+                })
+            })?;
+            let metrics: Vec<InferenceEvaluationRunMetricMetadata> =
+                serde_json::from_str(&row.metrics).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to deserialize metrics: {e}"),
+                    })
+                })?;
+
+            results.push((
+                run_id,
+                InferenceEvaluationRunMetadata {
+                    evaluation_name: row.evaluation_name,
+                    function_name: row.function_name,
+                    function_type: row.function_type,
+                    metrics,
+                },
+            ));
+        }
+
+        Ok(results)
+    }
+
     async fn insert_inference_evaluation_run(
         &self,
         run: &InferenceEvaluationRunInsert,
@@ -211,7 +292,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     ''
                 ) AS variant_name,
                 argMax(dataset_name, updated_at) AS dataset_name,
-                formatDateTime(min(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp,
+                formatDateTime(argMin(created_at, updated_at), '%Y-%m-%dT%H:%i:%SZ') AS created_at,
                 argMax(snapshot_hash, updated_at) AS snapshot_hash
             FROM InferenceEvaluationRuns
             GROUP BY run_id_uint
@@ -346,7 +427,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                     argMax(variant_names, updated_at)[1],
                     ''
                 ) as variant_name,
-                formatDateTime(min(created_at), '%Y-%m-%dT%H:%i:%SZ') as most_recent_inference_date
+                formatDateTime(argMin(created_at, updated_at), '%Y-%m-%dT%H:%i:%SZ') as created_at
             FROM InferenceEvaluationRuns
             WHERE run_id_uint IN (
                 SELECT arrayJoin(arrayMap(x -> toUInt128(toUUID(x)), {evaluation_run_ids:Array(String)}))
@@ -391,7 +472,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 formatDateTime(
                     max(UUIDv7ToDateTime(id)),
                     '%Y-%m-%dT%H:%i:%SZ'
-                ) as most_recent_inference_date
+                ) as created_at
             FROM {inference_table_name}
             WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
             AND function_name = {{function_name:String}}
@@ -639,6 +720,21 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             .collect()
     }
 
+    fn serialize_output_for_feedback(
+        &self,
+        inference_response: &InferenceResponse,
+    ) -> Result<String, Error> {
+        match inference_response {
+            InferenceResponse::Chat(c) => serde_json::to_string(&c.content),
+            InferenceResponse::Json(j) => serde_json::to_string(&j.output),
+        }
+        .map_err(|e| {
+            Error::new(ErrorDetails::Inference {
+                message: format!("Failed to serialize inference response: {e:?}"),
+            })
+        })
+    }
+
     async fn get_inference_evaluation_human_feedback(
         &self,
         metric_name: &str,
@@ -751,7 +847,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"test_eval","function_name":"test_func","variant_name":"test_variant","dataset_name":"test_dataset","last_inference_timestamp":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"test_eval","function_name":"test_func","variant_name":"test_variant","dataset_name":"test_dataset","created_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -807,9 +903,9 @@ mod tests {
             .expect_run_query_synchronous()
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"eval1","function_name":"func1","variant_name":"variant1","dataset_name":"dataset1","last_inference_timestamp":"2025-05-20T16:52:58Z"}
-{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluation_name":"eval2","function_name":"func2","variant_name":"variant2","dataset_name":"dataset2","last_inference_timestamp":"2025-05-20T17:52:58Z"}
-{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","evaluation_name":"eval3","function_name":"func3","variant_name":"variant3","dataset_name":"dataset3","last_inference_timestamp":"2025-05-20T18:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"eval1","function_name":"func1","variant_name":"variant1","dataset_name":"dataset1","created_at":"2025-05-20T16:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluation_name":"eval2","function_name":"func2","variant_name":"variant2","dataset_name":"dataset2","created_at":"2025-05-20T17:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","evaluation_name":"eval3","function_name":"func3","variant_name":"variant3","dataset_name":"dataset3","created_at":"2025-05-20T18:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 3,
                         written_rows: 0,
@@ -991,13 +1087,13 @@ mod tests {
                 assert_query_contains(
                     query,
                     "positionCaseInsensitive(
-                        if(
-                            length(argMax(variant_names, updated_at)) > 0,
-                            argMax(variant_names, updated_at)[1],
-                            ''
-                        ),
-                        {query:String}
-                    ) > 0",
+                    if(
+                        length(argMax(variant_names, updated_at)) > 0,
+                        argMax(variant_names, updated_at)[1],
+                        ''
+                    ),
+                    {query:String}
+                ) > 0",
                 );
                 assert_query_contains(
                     query,
@@ -1087,7 +1183,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"test_variant","created_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -1127,8 +1223,8 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","most_recent_inference_date":"2025-05-20T16:52:58Z"}
-{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","most_recent_inference_date":"2025-05-20T17:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","created_at":"2025-05-20T16:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","created_at":"2025-05-20T17:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 2,
                         written_rows: 0,
@@ -1202,7 +1298,7 @@ mod tests {
                         formatDateTime(
                             max(UUIDv7ToDateTime(id)),
                             '%Y-%m-%dT%H:%i:%SZ'
-                        ) as most_recent_inference_date
+                        ) as created_at
                     FROM ChatInference
                     WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
                     AND function_name = {function_name:String}
@@ -1219,7 +1315,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","created_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -1266,7 +1362,7 @@ mod tests {
                         formatDateTime(
                             max(UUIDv7ToDateTime(id)),
                             '%Y-%m-%dT%H:%i:%SZ'
-                        ) as most_recent_inference_date
+                        ) as created_at
                     FROM JsonInference
                     WHERE id IN (SELECT inference_id FROM datapoint_inference_ids)
                     AND function_name = {function_name:String}
@@ -1283,7 +1379,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","most_recent_inference_date":"2025-05-20T16:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"test_variant","created_at":"2025-05-20T16:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -1317,8 +1413,8 @@ mod tests {
             .expect_run_query_synchronous()
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","most_recent_inference_date":"2025-05-20T16:52:58Z"}
-{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","most_recent_inference_date":"2025-05-20T17:52:58Z"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1","created_at":"2025-05-20T16:52:58Z"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2","created_at":"2025-05-20T17:52:58Z"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 2,
                         written_rows: 0,

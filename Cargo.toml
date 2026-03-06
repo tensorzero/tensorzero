@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "tensorzero-core",
+    "googletest-matchers",
     "tensorzero-core/tests/mock-provider-api",
     "tensorzero-core/tests/load/rate-limit-load-test",
     "tensorzero-core/tests/load/postgres-inference-load-test",
@@ -31,7 +32,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2026.2.2"
+version = "2026.3.1"
 rust-version = "1.93.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -48,7 +49,7 @@ serde_path_to_error = "0.1.17"
 uuid = { version = "1.21.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
-toml = { version = "1.0.2", features = ["preserve_order"] }
+toml = { version = "1.0.3", features = ["preserve_order"] }
 async-stream = "0.3.5"
 async-trait = "0.1.89"
 http = "1.4.0"
@@ -89,7 +90,7 @@ ts-rs = { version = "12.0.1", features = [
     "chrono-impl",
     "no-serde-warnings",
 ] }
-pin-project = "1.1.10"
+pin-project = "1.1.11"
 chrono = { version = "0.4.43", features = ["serde"] }
 git2 = { version = "0.20.4", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [
@@ -116,7 +117,7 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 serde_arrow = { version = "0.14", features = ["arrow-58"] }
 blake3 = "1.8.3"
-moka = { version = "0.12.13", features = ["sync"] }
+moka = { version = "0.12.14", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", rev = "43d73ea835f1e528462105250ce01822af09d7fc" }
 durable-tools-spawn = { path = "internal/durable-tools-spawn" }
 tensorzero = { path = "clients/rust" }
@@ -128,13 +129,13 @@ redis = { version = "1.0.4", features = [
     "tls-rustls",
     "tokio-rustls-comp",
 ] }
-redis-test = { version = "1.0.1", features = ["aio"] }
+redis-test = { version = "1.0.2", features = ["aio"] }
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 globset = "0.4.18"
 json-pointer = "0.3.4"
 rust_decimal = { version = "1.37", features = ["serde-float", "serde-with-float"] }
 walkdir = "2.5.0"
-tempfile = "3.25.0"
+tempfile = "3.26.0"
 toml_edit = "0.25"
 
 [workspace.lints.rust]

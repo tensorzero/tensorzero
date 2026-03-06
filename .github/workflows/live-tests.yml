@@ -49,7 +49,7 @@ env:
 jobs:
   live-tests:
     if: github.repository == 'tensorzero/tensorzero'
-    name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
+    name: "live-tests (batch_writes: ${{ matrix.batch_writes }}, database: ${{ matrix.database }})"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,6 +58,7 @@ jobs:
     strategy:
       matrix:
         batch_writes: [true, false]
+        database: [clickhouse, postgres]
       # Don't fail-fast for manual/cron runs, so that we get the full picture of what broke
       fail-fast: ${{ github.event_name == 'merge_group' }}
 
@@ -103,12 +104,21 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
+      - name: Set Postgres as primary datastore
+        if: matrix.database == 'postgres'
+        run: |
+          echo "TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres" >> $GITHUB_ENV
+          echo "GATEWAY_CONFIG_GLOB={tensorzero,postgres}.*.toml" >> $GITHUB_ENV
+
       - name: Pull images referenced by the compose file
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
 
       - name: Run live tests container via Docker Compose
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm -e TENSORZERO_CI=1 -e TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1 live-tests
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
+            -e TENSORZERO_CI=1 \
+            -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
+            live-tests
 
       - name: Print live tests logs
         if: always()
@@ -138,3 +148,80 @@ jobs:
         if: github.event_name == 'merge_group' || github.event_name == 'schedule'
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
+
+  # Run evaluation tests against both ClickHouse and Postgres backends.
+  # Evaluation tests use an embedded gateway and connect directly to the database,
+  # so they don't need the external gateway service — just the database infrastructure
+  # and provider-proxy for LLM judge calls.
+  evaluation-tests:
+    if: github.repository == 'tensorzero/tensorzero'
+    name: "evaluation-tests (database: ${{ matrix.database }})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        database: [clickhouse, postgres]
+      fail-fast: ${{ github.event_name == 'merge_group' }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Cleanup disk space
+        run: bash ci/free-disk-space.sh
+
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+      - name: Pull container images
+        run: |
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
+          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
+          docker pull tensorzero/live-tests:sha-${{ github.sha }}
+          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+
+      - name: Restore provider-proxy cache
+        if: github.event_name != 'schedule'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ./ci/provider-proxy-cache/
+          key: provider-proxy-cache-${{ github.run_id }}
+          restore-keys: provider-proxy-cache-
+
+      - name: Download provider-proxy cache
+        if: github.event_name != 'schedule'
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/download-provider-proxy-cache.sh
+
+      - name: Write GCP JWT key to file
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
+      - name: Pull images referenced by the compose file
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
+
+      - name: Set Postgres as primary datastore
+        if: matrix.database == 'postgres'
+        run: |
+          echo "TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres" >> $GITHUB_ENV
+
+      - name: Run evaluation tests
+        run: |
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
+            -e TENSORZERO_CI=1 \
+            -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
+            live-tests \
+            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app --config-file /app/.config/nextest.toml --profile evaluations -j 4"
+
+      - name: Print evaluation tests logs
+        if: always()
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t

@@ -20,8 +20,6 @@ import uuid_utils
 from tensorzero import (
     ChatInferenceOutput,
     ContentBlock,
-    DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
-    DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
     ExtraHeader,
     FeedbackResponse,
@@ -38,7 +36,6 @@ from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
     EvaluatorStatsDict,
     JsonInferenceOutput,
-    OrderBy,
 )
 
 # Generated types
@@ -51,7 +48,6 @@ from .generated_types import (
     DeleteDatapointsResponse,
     GetDatapointsResponse,
     GetInferencesResponse,
-    InferenceFilter,
     ListDatapointsRequest,
     ListInferencesRequest,
     StoredInference,
@@ -596,43 +592,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: {"feedback_id": str}
         """
 
-    def dynamic_evaluation_run(
-        self,
-        *,
-        variants: Dict[str, str],
-        tags: Optional[Dict[str, str]] = None,
-        project_name: Optional[str] = None,
-        display_name: Optional[str] = None,
-    ) -> DynamicEvaluationRunResponse:
-        """
-        DEPRECATED: Use `workflow_evaluation_run` instead.
-        Make a POST request to the /dynamic_evaluation_run endpoint.
-
-        :param variants: A dictionary of variant names to variant values.
-        :param tags: A dictionary of tags to add to the dynamic evaluation run.
-        :param project_name: The name of the project to use for the dynamic evaluation run.
-        :param display_name: The display name of the dynamic evaluation run.
-        :return: A `DynamicEvaluationRunResponse` instance ({"run_id": str}).
-        """
-
-    def dynamic_evaluation_run_episode(
-        self,
-        *,
-        run_id: str | UUID | uuid_utils.UUID,
-        task_name: Optional[str] = None,
-        tags: Optional[Dict[str, str]] = None,
-    ) -> DynamicEvaluationRunEpisodeResponse:
-        """
-        DEPRECATED: Use `workflow_evaluation_run_episode` instead.
-
-        Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
-
-        :param run_id: The run ID to use for the dynamic evaluation run.
-        :param task_name: The name of the task to use for the dynamic evaluation run.
-        :param tags: A dictionary of tags to add to the dynamic evaluation run.
-        :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
-        """
-
     def workflow_evaluation_run(
         self,
         *,
@@ -809,30 +768,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetInferencesResponse` object.
         """
 
-    def experimental_list_inferences(
-        self,
-        *,
-        function_name: str,
-        variant_name: Optional[str] = None,
-        filters: Optional[InferenceFilter] = None,
-        output_source: str = "inference",
-        order_by: Optional[List[OrderBy]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[StoredInference]:
-        """
-        Query the Clickhouse database for inferences.
-        This function is only available in EmbeddedGateway mode.
-
-        :param function_name: The name of the function to query.
-        :param variant_name: The name of the variant to query. Optional
-        :param filters: A filter tree to apply to the query. Optional
-        :param output_source: The source of the output to query. "inference" or "demonstration"
-        :param limit: The maximum number of inferences to return. Optional
-        :param offset: The offset to start from. Optional
-        :return: A list of `StoredInference` instances.
-        """
-
     def experimental_render_samples(
         self,
         *,
@@ -873,6 +808,41 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param val_samples: A list of RenderedSample objects that will be used for validation.
         :param optimization_config: The optimization config.
         :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    def experimental_launch_optimization_workflow(
+        self,
+        *,
+        function_name: str,
+        template_variant_name: str,
+        optimizer_config: Dict[str, Any],
+        output_source: Optional[str] = None,
+        dataset_name: Optional[str] = None,
+        query_variant_name: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        order_by: Optional[List[Dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        val_fraction: Optional[float] = None,
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization workflow.
+
+        Provide either `output_source` (for inferences) or `dataset_name` (for datasets), not both.
+
+        :param function_name: The name of the function to optimize.
+        :param template_variant_name: The name of the template variant to use.
+        :param optimizer_config: The optimizer configuration dictionary.
+        :param output_source: The source of inference output ("none", "inference", or "demonstration").
+        :param dataset_name: Name of the dataset to use as training data.
+        :param query_variant_name: Optional variant name to filter inferences by.
+        :param filters: Optional filters to apply when querying inferences.
+        :param order_by: Optional ordering for the inferences.
+        :param limit: Maximum number of inferences to use.
+        :param offset: Offset for pagination.
+        :param val_fraction: Optional fraction of data to use for validation.
+        :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
         """
         ...
 
@@ -1081,44 +1051,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: {"feedback_id": str}
         """
 
-    async def dynamic_evaluation_run(  # type: ignore[override]
-        self,
-        *,
-        variants: Dict[str, str],
-        tags: Optional[Dict[str, str]] = None,
-        project_name: Optional[str] = None,
-        display_name: Optional[str] = None,
-    ) -> DynamicEvaluationRunResponse:
-        """
-        DEPRECATED: Use `workflow_evaluation_run` instead.
-
-        Make a POST request to the /dynamic_evaluation_run endpoint.
-
-        :param variants: A dictionary of variant names to variant values.
-        :param tags: A dictionary of tags to add to the dynamic evaluation run.
-        :param project_name: The name of the project to use for the dynamic evaluation run.
-        :param display_name: The display name of the dynamic evaluation run.
-        :return: A `DynamicEvaluationRunResponse` instance ({"run_id": str}).
-        """
-
-    async def dynamic_evaluation_run_episode(  # type: ignore[override]
-        self,
-        *,
-        run_id: str | UUID | uuid_utils.UUID,
-        task_name: Optional[str] = None,
-        tags: Optional[Dict[str, str]] = None,
-    ) -> DynamicEvaluationRunEpisodeResponse:
-        """
-        DEPRECATED: Use `workflow_evaluation_run_episode` instead.
-
-        Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
-
-        :param run_id: The run ID to use for the dynamic evaluation run.
-        :param task_name: The name of the task to use for the dynamic evaluation run.
-        :param tags: A dictionary of tags to add to the dynamic evaluation run.
-        :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
-        """
-
     async def workflow_evaluation_run(  # type: ignore[override]
         self,
         *,
@@ -1295,30 +1227,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetInferencesResponse` object.
         """
 
-    async def experimental_list_inferences(
-        self,
-        *,
-        function_name: str,
-        variant_name: Optional[str] = None,
-        filters: Optional[InferenceFilter] = None,
-        output_source: str = "inference",
-        order_by: Optional[List[OrderBy]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[StoredInference]:
-        """
-        Query the Clickhouse database for inferences.
-        This function is only available in EmbeddedGateway mode.
-
-        :param function_name: The name of the function to query.
-        :param variant_name: The name of the variant to query. Optional
-        :param filters: A filter tree to apply to the query. Optional
-        :param output_source: The source of the output to query. "inference" or "demonstration"
-        :param limit: The maximum number of inferences to return. Optional
-        :param offset: The offset to start from. Optional
-        :return: A list of `StoredInference` instances.
-        """
-
     async def experimental_render_samples(
         self,
         *,
@@ -1358,6 +1266,41 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param val_samples: A list of RenderedSample objects that will be used for validation.
         :param optimization_config: The optimization config.
         :return: A `OptimizerJobHandle` object that can be used to poll the optimization job.
+        """
+        ...
+
+    async def experimental_launch_optimization_workflow(
+        self,
+        *,
+        function_name: str,
+        template_variant_name: str,
+        optimizer_config: Dict[str, Any],
+        output_source: Optional[str] = None,
+        dataset_name: Optional[str] = None,
+        query_variant_name: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        order_by: Optional[List[Dict[str, Any]]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        val_fraction: Optional[float] = None,
+    ) -> OptimizationJobHandle:
+        """
+        Launch an optimization workflow.
+
+        Provide either `output_source` (for inferences) or `dataset_name` (for datasets), not both.
+
+        :param function_name: The name of the function to optimize.
+        :param template_variant_name: The name of the template variant to use.
+        :param optimizer_config: The optimizer configuration dictionary.
+        :param output_source: The source of inference output ("none", "inference", or "demonstration").
+        :param dataset_name: Name of the dataset to use as training data.
+        :param query_variant_name: Optional variant name to filter inferences by.
+        :param filters: Optional filters to apply when querying inferences.
+        :param order_by: Optional ordering for the inferences.
+        :param limit: Maximum number of inferences to use.
+        :param offset: Offset for pagination.
+        :param val_fraction: Optional fraction of data to use for validation.
+        :return: An `OptimizationJobHandle` that can be used to poll the optimization job.
         """
         ...
 

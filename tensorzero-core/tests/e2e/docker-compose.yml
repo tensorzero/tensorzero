@@ -8,8 +8,8 @@ services:
       context: ../../../
       dockerfile: tensorzero-core/tests/mock-provider-api/Dockerfile
     environment:
-      RUST_LOG: debug
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+      RUST_LOG: debug
     volumes:
       # Mount GCP JWT key file for GCS access (needed for batch inference)
       # Can be overridden with GCP_CREDENTIALS_PATH env var
@@ -26,14 +26,14 @@ services:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PASSWORD=chpassword
-      - CLICKHOUSE_USER=chuser
-      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
-      - TENSORZERO_SKIP_LARGE_FIXTURES
-      - R2_ACCESS_KEY_ID
-      - R2_SECRET_ACCESS_KEY
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS: ${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}
+      TENSORZERO_SKIP_LARGE_FIXTURES: ${TENSORZERO_SKIP_LARGE_FIXTURES:-}
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -63,10 +63,10 @@ services:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
-      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
-      - R2_ACCESS_KEY_ID
-      - R2_SECRET_ACCESS_KEY
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS: ${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
     depends_on:
       postgres:
         condition: service_healthy

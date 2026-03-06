@@ -61,9 +61,7 @@ pub fn setup_howdy(
         return;
     }
 
-    // TODO(#5691): Support reading deployment ID when ClickHouse is disabled.
-    let clickhouse_disabled = clickhouse.client_type() == ClickHouseClientType::Disabled;
-    if clickhouse_disabled {
+    if primary_datastore == PrimaryDatastore::Disabled {
         return;
     }
     spawn_ignoring_shutdown(howdy_loop(clickhouse, postgres, primary_datastore, token));
@@ -97,7 +95,14 @@ pub async fn howdy_loop(
             _ = interval.tick() => {}
         }
         spawn_ignoring_shutdown(async move {
-            if let Err(e) = send_howdy(&copied_db, &copied_client, &copied_deployment_id).await {
+            if let Err(e) = send_howdy(
+                &copied_db,
+                &copied_client,
+                &copied_deployment_id,
+                primary_datastore,
+            )
+            .await
+            {
                 debug!("{e}");
             }
         });
@@ -109,9 +114,10 @@ async fn send_howdy(
     db: &DelegatingDatabaseConnection,
     client: &Client,
     deployment_id: &str,
+    primary_datastore: PrimaryDatastore,
 ) -> Result<(), String> {
     let howdy_url = HOWDY_URL.clone();
-    let howdy_report = get_howdy_report(db, deployment_id).await?;
+    let howdy_report = get_howdy_report(db, deployment_id, primary_datastore).await?;
     if let Err(e) = client.post(&howdy_url).json(&howdy_report).send().await {
         return Err(format!("Failed to send howdy: {e}"));
     }
@@ -172,6 +178,7 @@ pub async fn get_deployment_id(
 pub async fn get_howdy_report<'a>(
     db: &(dyn HowdyQueries + Sync),
     deployment_id: &'a str,
+    primary_datastore: PrimaryDatastore,
 ) -> Result<HowdyReportBody<'a>, String> {
     let dryrun = cfg!(any(test, feature = "e2e_tests"));
     let (inference_counts, feedback_counts, token_totals) = try_join!(
@@ -206,6 +213,7 @@ pub async fn get_howdy_report<'a>(
         demonstration_feedback_count: Some(
             feedback_counts.demonstration_feedback_count.to_string(),
         ),
+        observability_backend: primary_datastore,
         dryrun,
     })
 }
@@ -225,6 +233,7 @@ pub struct HowdyReportBody<'a> {
     pub boolean_metric_feedback_count: Option<String>,
     pub comment_feedback_count: Option<String>,
     pub demonstration_feedback_count: Option<String>,
+    pub observability_backend: PrimaryDatastore,
     #[serde(default)]
     pub dryrun: bool,
 }

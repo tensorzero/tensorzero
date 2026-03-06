@@ -28,7 +28,7 @@ use crate::db::datasets::{
 use crate::db::evaluation_queries::{
     EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
     EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
-    InferenceEvaluationRunInsert,
+    InferenceEvaluationRunInsert, InferenceEvaluationRunMetadata,
 };
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CumulativeFeedbackTimeSeriesPoint,
@@ -58,6 +58,7 @@ use crate::db::{
     EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries, HowdyTokenUsage,
     ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
 };
+use crate::endpoints::inference::InferenceResponse;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigType};
@@ -257,6 +258,7 @@ impl ConfigQueries for DelegatingDatabaseConnection {
     }
 
     async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+        #[expect(clippy::disallowed_methods)]
         self.get_database().write_config_snapshot(snapshot).await
     }
 }
@@ -474,13 +476,13 @@ impl InferenceQueries for DelegatingDatabaseConnection {
             .await
     }
 
-    async fn get_inference_output(
+    async fn get_serialized_inference_output_for_feedback(
         &self,
         function_info: &FunctionInfo,
         inference_id: Uuid,
     ) -> Result<Option<String>, Error> {
         self.get_database()
-            .get_inference_output(function_info, inference_id)
+            .get_serialized_inference_output_for_feedback(function_info, inference_id)
             .await
     }
 
@@ -869,6 +871,15 @@ impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
 
 #[async_trait]
 impl EvaluationQueries for DelegatingDatabaseConnection {
+    async fn get_inference_evaluation_run_metadata(
+        &self,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, InferenceEvaluationRunMetadata)>, Error> {
+        self.get_database()
+            .get_inference_evaluation_run_metadata(evaluation_run_ids)
+            .await
+    }
+
     async fn insert_inference_evaluation_run(
         &self,
         run: &InferenceEvaluationRunInsert,
@@ -976,6 +987,14 @@ impl EvaluationQueries for DelegatingDatabaseConnection {
             .await
     }
 
+    fn serialize_output_for_feedback(
+        &self,
+        inference_response: &InferenceResponse,
+    ) -> Result<String, Error> {
+        self.get_database()
+            .serialize_output_for_feedback(inference_response)
+    }
+
     async fn get_inference_evaluation_human_feedback(
         &self,
         metric_name: &str,
@@ -1052,10 +1071,9 @@ impl DICLQueries for DelegatingDatabaseConnection {
         &self,
         function_name: &str,
         variant_name: &str,
-        namespace: Option<&str>,
     ) -> Result<u64, Error> {
         self.get_database()
-            .delete_dicl_examples(function_name, variant_name, namespace)
+            .delete_dicl_examples(function_name, variant_name)
             .await
     }
 }

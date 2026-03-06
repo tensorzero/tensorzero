@@ -19,6 +19,8 @@ use tensorzero_core::inference::types::{
 use tensorzero_core::tool::{ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider};
 use uuid::Uuid;
 
+use crate::utils::skip_for_postgres;
+
 // =============================================================================
 // Static Provider Tools Tests (configured in model config)
 // =============================================================================
@@ -202,6 +204,7 @@ api_type = "responses"
 /// Test OpenAI provider tools with web_search (streaming)
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_openai_provider_tools_web_search_streaming() {
+    skip_for_postgres!();
     let config = r#"
 gateway.debug = true
 

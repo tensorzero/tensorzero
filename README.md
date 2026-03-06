@@ -98,7 +98,7 @@ You can use TensorZero with any OpenAI SDK (Python, Node, Go, etc.) or OpenAI-co
 from openai import OpenAI
 
 # Point the client to the TensorZero Gateway
-client = OpenAI(base_url="http://localhost:3000/openai/v1")
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 response = client.chat.completions.create(
     # Call any model provider (or TensorZero function)
@@ -124,34 +124,6 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 - [x] Replay historical inferences with new prompts, models, inference strategies, etc.
 - [x] **[Export OpenTelemetry traces (OTLP)](https://www.tensorzero.com/docs/operations/export-opentelemetry-traces)** and **[export Prometheus metrics](https://www.tensorzero.com/docs/observability/export-prometheus-metrics)** to your favorite application observability tools
 - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
-
-<table>
-<tr></tr> <!-- flip highlight order -->
-<tr>
-<td width="50%" align="center" valign="middle"><b>Observability » UI</b></td>
-<td width="50%" align="center" valign="middle"><b>Observability » Programmatic</b></td>
-</tr>
-<tr>
-<td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/a23e4c95-18fa-482c-8423-6078fb4cf285"></video></td>
-<td width="50%" align="left" valign="middle">
-
-```python
-t0.experimental_list_inferences(
-  function_name="sales_agent",
-  filters=BooleanMetricFilter(
-      metric_name="converted_sale",
-      value=True,
-  ),
-  # + compound filters
-  # + search
-  # + pagination
-  # ... and more ...
-)
-```
-
-</td>
-</tr>
-</table>
 
 ### 📈 LLM Optimization
 

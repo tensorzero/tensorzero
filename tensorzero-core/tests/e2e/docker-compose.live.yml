@@ -17,44 +17,47 @@ services:
         CARGO_BUILD_FLAGS: --features e2e_tests
         PROFILE: dev
     environment:
-      # Test environment variables
-      TENSORZERO_GATEWAY_URL: http://gateway:3000
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
-      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
-      TENSORZERO_MINIO_URL: http://minio:9000/
-      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
-      TMPDIR: /tmp
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
-      # API Keys
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AZURE_API_KEY: ${AZURE_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-}
-      GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
-      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
       GCP_STORAGE_ACCESS_KEY_ID: ${GCP_STORAGE_ACCESS_KEY_ID:-}
       GCP_STORAGE_SECRET_ACCESS_KEY: ${GCP_STORAGE_SECRET_ACCESS_KEY:-}
+      GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
       GOOGLE_AI_STUDIO_API_KEY: ${GOOGLE_AI_STUDIO_API_KEY:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       HYPERBOLIC_API_KEY: ${HYPERBOLIC_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
       MODAL_KEY: ${MODAL_KEY:-}
       MODAL_SECRET: ${MODAL_SECRET:-}
-      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
       SGLANG_API_KEY: ${SGLANG_API_KEY:-}
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
+      TENSORZERO_MINIO_URL: http://minio:9000/
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
+      TENSORZERO_VALKEY_URL: redis://valkey:6379
       TGI_API_KEY: ${TGI_API_KEY:-}
+      TMPDIR: /tmp
       TOGETHER_API_KEY: ${TOGETHER_API_KEY:-}
       VLLM_API_KEY: ${VLLM_API_KEY:-}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
-    command: [--config-file, tensorzero-core/tests/e2e/config/tensorzero.*.toml]
+    command:
+      [
+        --config-file,
+        "tensorzero-core/tests/e2e/config/${GATEWAY_CONFIG_GLOB:-tensorzero.*.toml}",
+      ]
     volumes:
       # Mount the e2e directory so the config path exists inside the container
       - ./:/app/tensorzero-core/tests/e2e:ro
@@ -78,6 +81,8 @@ services:
       provider-proxy:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      valkey:
         condition: service_healthy
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
@@ -103,13 +108,13 @@ services:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PASSWORD=chpassword
-      - CLICKHOUSE_USER=chuser
-      - R2_ACCESS_KEY_ID
-      - R2_SECRET_ACCESS_KEY
-      - TENSORZERO_SKIP_LARGE_FIXTURES=1
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      TENSORZERO_SKIP_LARGE_FIXTURES: 1
     depends_on:
       gateway:
         condition: service_healthy
@@ -133,9 +138,9 @@ services:
       - ../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
-      - R2_ACCESS_KEY_ID
-      - R2_SECRET_ACCESS_KEY
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
     depends_on:
       postgres:
         condition: service_healthy
@@ -160,51 +165,48 @@ services:
       context: ../../..
       dockerfile: tensorzero-core/tests/e2e/Dockerfile.live
     environment:
-      # Test environment variables
-      TENSORZERO_GATEWAY_URL: http://gateway:3000
-      TENSORZERO_GATEWAY_HOST: gateway
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
-      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
-      TENSORZERO_VALKEY_URL: redis://valkey:6379
-      TENSORZERO_MINIO_URL: http://minio:9000
-      TENSORZERO_TEMPO_URL: http://tempo:3200
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
-      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
-      TMPDIR: /tmp
-      # API Keys
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AZURE_API_KEY: ${AZURE_API_KEY:-}
+      CARGO_NEXTEST_FLAKY_TESTS: ${CARGO_NEXTEST_FLAKY_TESTS:-}
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-}
+      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-}
       FORCE_COLOR: ${FORCE_COLOR:-1}
-      GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
-      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
       GCP_STORAGE_ACCESS_KEY_ID: ${GCP_STORAGE_ACCESS_KEY_ID:-}
       GCP_STORAGE_SECRET_ACCESS_KEY: ${GCP_STORAGE_SECRET_ACCESS_KEY:-}
+      GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
       GOOGLE_AI_STUDIO_API_KEY: ${GOOGLE_AI_STUDIO_API_KEY:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       HYPERBOLIC_API_KEY: ${HYPERBOLIC_API_KEY:-}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
       MODAL_KEY: ${MODAL_KEY:-}
       MODAL_SECRET: ${MODAL_SECRET:-}
-      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
       SGLANG_API_KEY: ${SGLANG_API_KEY:-}
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
+      TENSORZERO_E2E_PROXY: http://provider-proxy:3003
+      TENSORZERO_GATEWAY_HOST: gateway
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
+      TENSORZERO_MINIO_URL: http://minio:9000
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
+      TENSORZERO_TEMPO_URL: http://tempo:3200
+      TENSORZERO_VALKEY_URL: redis://valkey:6379
       TGI_API_KEY: ${TGI_API_KEY:-}
+      TMPDIR: /tmp
       TOGETHER_API_KEY: ${TOGETHER_API_KEY:-}
       VLLM_API_KEY: ${VLLM_API_KEY:-}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
-      # Flaky tests to skip (nextest filter expression, e.g. "test(hyperbolic)|test(tgi)")
-      CARGO_NEXTEST_FLAKY_TESTS: ${CARGO_NEXTEST_FLAKY_TESTS:-}
     volumes:
       - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
       - ./config:/app/tensorzero-core/tests/e2e/config:ro
