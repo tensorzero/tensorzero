@@ -111,6 +111,7 @@ function TableRows({ data }: { data: InferencesData }) {
             <VariantLink
               variantName={inference.variant_name}
               functionName={inference.function_name}
+              snapshotHash={inference.snapshot_hash}
             >
               <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                 {inference.variant_name}

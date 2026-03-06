@@ -48,7 +48,7 @@ import {
   ColorAssignerProvider,
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
-import { getConfig, getConfigForSnapshot } from "~/utils/config/index.server";
+import { resolveEvaluationConfig } from "~/utils/evaluations.server";
 import type {
   EvaluatorConfig,
   InferenceEvaluationConfig,
@@ -160,32 +160,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const datapoint_id = params.datapoint_id;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
-  const config = await getConfig();
-  let evaluation_config = config.evaluations[evaluation_name];
-  let effectiveConfig = config;
-  let snapshotHash: string | null = null;
+  const {
+    evaluationConfig: evaluation_config,
+    effectiveConfig,
+    snapshotHash,
+  } = await resolveEvaluationConfig(evaluation_name);
 
-  if (!evaluation_config) {
-    // Evaluation not in current config — try to find it from a historical snapshot
-    const client = getTensorZeroClient();
-    const runs = await client.listEvaluationRuns(100, 0);
-    const matchingRun = runs.runs.find(
-      (r) => r.evaluation_name === evaluation_name,
-    );
-
-    if (matchingRun?.snapshot_hash) {
-      snapshotHash = matchingRun.snapshot_hash;
-      effectiveConfig = await getConfigForSnapshot(snapshotHash);
-      evaluation_config = effectiveConfig.evaluations[evaluation_name];
-    }
-
-    if (!evaluation_config) {
-      throw data(
-        `Evaluation config not found for evaluation ${evaluation_name}`,
-        { status: 404 },
-      );
-    }
-  }
   const function_name = evaluation_config.function_name;
 
   // Resolve function type from effective config

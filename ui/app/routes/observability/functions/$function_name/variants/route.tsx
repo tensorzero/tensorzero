@@ -131,7 +131,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     return redirect("/observability/functions");
   }
 
-  const { config } = await getConfigFromRequest(request);
+  const config = await getConfigFromRequest(request);
   const url = new URL(request.url);
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");

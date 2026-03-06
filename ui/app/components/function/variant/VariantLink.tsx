@@ -10,15 +10,18 @@ type VariantLinkProps = {
   variantName: string;
   functionName: string;
   children: ReactNode;
+  snapshotHash?: string | null;
 };
 
 export function VariantLink({
   variantName,
   functionName,
   children,
+  snapshotHash: snapshotHashProp,
 }: VariantLinkProps) {
   const { toast } = useToast();
-  const snapshotHash = useSnapshotHash();
+  const snapshotHashFromUrl = useSnapshotHash();
+  const snapshotHash = snapshotHashProp ?? snapshotHashFromUrl;
   const functionConfig = useFunctionConfig(functionName);
   const variantConfig = functionConfig?.variants[variantName];
   // When viewing a historical snapshot, the variant may not exist in current

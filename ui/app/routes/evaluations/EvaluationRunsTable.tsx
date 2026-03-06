@@ -73,6 +73,7 @@ function EvaluationRunRow({
         <VariantLink
           variantName={evaluationRun.variant_name}
           functionName={evaluationRun.function_name}
+          snapshotHash={evaluationRun.snapshot_hash}
         >
           <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
             {evaluationRun.variant_name}

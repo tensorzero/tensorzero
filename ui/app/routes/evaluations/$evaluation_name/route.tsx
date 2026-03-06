@@ -7,11 +7,8 @@ import type {
   InferenceEvaluationConfig,
   MetricConfig,
 } from "~/types/tensorzero";
-import {
-  getConfig,
-  getFunctionConfig,
-  getConfigForSnapshot,
-} from "~/utils/config/index.server";
+import { getFunctionConfig } from "~/utils/config/index.server";
+import { resolveEvaluationConfig } from "~/utils/evaluations.server";
 import {
   getEvaluationResults,
   pollForEvaluationResults,
@@ -151,32 +148,8 @@ async function fetchEvaluationData(
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const config = await getConfig();
-  let evaluationConfig = config.evaluations[params.evaluation_name];
-  let effectiveConfig = config;
-  let snapshotHash: string | null = null;
-
-  if (!evaluationConfig) {
-    // Evaluation not in current config — try to find it from a historical snapshot
-    const client = getTensorZeroClient();
-    const runs = await client.listEvaluationRuns(100, 0);
-    const matchingRun = runs.runs.find(
-      (r) => r.evaluation_name === params.evaluation_name,
-    );
-
-    if (matchingRun?.snapshot_hash) {
-      snapshotHash = matchingRun.snapshot_hash;
-      effectiveConfig = await getConfigForSnapshot(snapshotHash);
-      evaluationConfig = effectiveConfig.evaluations[params.evaluation_name];
-    }
-
-    if (!evaluationConfig) {
-      throw data(
-        `Evaluation config not found for evaluation ${params.evaluation_name}`,
-        { status: 404 },
-      );
-    }
-  }
+  const { evaluationConfig, effectiveConfig, snapshotHash } =
+    await resolveEvaluationConfig(params.evaluation_name);
 
   const function_name = evaluationConfig.function_name;
   const functionConfig = await getFunctionConfig(

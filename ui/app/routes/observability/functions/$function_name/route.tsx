@@ -70,7 +70,7 @@ function FunctionDetailPageHeader({
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
-  const { config } = await getConfigFromRequest(request);
+  const config = await getConfigFromRequest(request);
   const url = new URL(request.url);
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");

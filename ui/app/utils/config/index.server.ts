@@ -184,12 +184,9 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
  */
 export async function getConfigFromRequest(
   request: Request,
-): Promise<{ config: UiConfig }> {
+): Promise<UiConfig> {
   const snapshotHash = new URL(request.url).searchParams.get("snapshot_hash");
-  const config = snapshotHash
-    ? await getConfigForSnapshot(snapshotHash)
-    : await getConfig();
-  return { config };
+  return snapshotHash ? getConfigForSnapshot(snapshotHash) : getConfig();
 }
 
 // ============================================================================

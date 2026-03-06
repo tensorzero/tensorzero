@@ -8,9 +8,56 @@ import type {
   EvaluationRunEvent,
   FunctionConfig,
   EvaluationFunctionConfig,
+  InferenceEvaluationConfig,
+  UiConfig,
 } from "~/types/tensorzero";
-import { getConfig } from "./config/index.server";
+import { getConfig, getConfigForSnapshot } from "./config/index.server";
 import { getTensorZeroClient } from "./tensorzero.server";
+
+interface ResolvedEvaluationConfig {
+  evaluationConfig: InferenceEvaluationConfig;
+  effectiveConfig: UiConfig;
+  snapshotHash: string | null;
+}
+
+/**
+ * Resolves an evaluation config by name. If not found in the current config,
+ * looks up a matching evaluation run and loads the historical snapshot config.
+ */
+export async function resolveEvaluationConfig(
+  evaluationName: string,
+): Promise<ResolvedEvaluationConfig> {
+  const config = await getConfig();
+  const evaluationConfig = config.evaluations[evaluationName];
+  if (evaluationConfig) {
+    return { evaluationConfig, effectiveConfig: config, snapshotHash: null };
+  }
+
+  // Evaluation not in current config — try a historical snapshot
+  const client = getTensorZeroClient();
+  const runs = await client.listEvaluationRuns(100, 0);
+  const matchingRun = runs.runs.find(
+    (r) => r.evaluation_name === evaluationName,
+  );
+
+  if (matchingRun?.snapshot_hash) {
+    const snapshotHash = matchingRun.snapshot_hash;
+    const effectiveConfig = await getConfigForSnapshot(snapshotHash);
+    const snapshotEvalConfig = effectiveConfig.evaluations[evaluationName];
+    if (snapshotEvalConfig) {
+      return {
+        evaluationConfig: snapshotEvalConfig,
+        effectiveConfig,
+        snapshotHash,
+      };
+    }
+  }
+
+  throw new Response(
+    `Evaluation config not found for evaluation \`${evaluationName}\``,
+    { status: 404 },
+  );
+}
 
 /**
  * Converts a FunctionConfig to the minimal EvaluationFunctionConfig format
