@@ -2,7 +2,6 @@
 
 export type BatchWritesConfig = {
   enabled: boolean;
-  __force_allow_embedded_batch_writes: boolean;
   flush_interval_ms: bigint;
   max_rows: number;
   /**
