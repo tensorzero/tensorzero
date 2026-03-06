@@ -18,7 +18,7 @@ use durable_tools::{
     ToolResult,
 };
 use rand::seq::{IndexedRandom, SliceRandom};
-use rand::{SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
 use serde_json::from_value;
 use tensorzero_core::cache::CacheEnabledMode;
@@ -125,11 +125,15 @@ impl TaskTool for GepaTool {
             .into());
         }
 
+        // Derive deterministic seeds from the checkpointed rng_seed.
+        // This ensures identical RNG state on task resumption.
+        let mut master_rng = StdRng::seed_from_u64(setup.rng_seed);
+
         // Build initial Pareto frontier
         let mut pareto_frontier = ParetoFrontier::new(
             setup.val_datapoint_ids.clone(),
             evaluator_configs,
-            setup.gepa_config.seed.map(|s| s as u64),
+            Some(master_rng.random::<u64>()),
         );
 
         let initial_candidates: HashMap<VariantName, Candidate> = init_scores
@@ -156,11 +160,8 @@ impl TaskTool for GepaTool {
 
         let max_iterations = setup.gepa_config.max_iterations as usize;
 
-        // Initialize RNG for minibatch sampling from training data
-        let mut sampling_rng = match setup.gepa_config.seed {
-            Some(seed) => StdRng::seed_from_u64(seed as u64),
-            None => StdRng::from_rng(&mut rand::rng()),
-        };
+        // Initialize RNG for minibatch sampling (derived from checkpointed seed)
+        let mut sampling_rng = StdRng::from_rng(&mut master_rng);
 
         // ── Main iteration loop ─────────────────────────────────────
         for iteration in 0..max_iterations {
@@ -501,6 +502,13 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
             (dataset_name.clone(), train_ids, dataset_name, val_ids)
         };
 
+    // Generate a deterministic seed for all post-setup RNG usage.
+    // This is checkpointed in SetupResult, ensuring identical RNG state on resume.
+    let rng_seed: u64 = match gepa_config.seed {
+        Some(seed) => seed as u64,
+        None => rand::rng().random::<u64>(),
+    };
+
     let resolved_config = ResolvedGEPAConfig {
         function_name: gepa_config.function_name,
         evaluation_name: gepa_config.evaluation_name,
@@ -526,6 +534,7 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
         evaluator_configs,
         run_id,
         gepa_config: resolved_config,
+        rng_seed,
     })
 }
 
