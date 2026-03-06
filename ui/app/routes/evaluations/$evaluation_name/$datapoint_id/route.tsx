@@ -48,6 +48,7 @@ import {
   ColorAssignerProvider,
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import { resolveEvaluationConfig } from "~/utils/evaluations.server";
 import type {
   EvaluatorConfig,
@@ -456,6 +457,11 @@ export default function EvaluationDatapointPage({
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
         <PageHeader
+          banner={
+            snapshotHash ? (
+              <SnapshotBanner />
+            ) : undefined
+          }
           eyebrow={
             <Breadcrumbs
               segments={[
