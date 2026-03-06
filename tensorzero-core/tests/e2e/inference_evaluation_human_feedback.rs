@@ -8,6 +8,7 @@ use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 // NOTE: for now inference evaluation human feedback is not supported on episodes
@@ -15,6 +16,7 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 #[tokio::test]
 async fn test_float_human_feedback() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an episode_id.
@@ -130,6 +132,7 @@ async fn test_float_human_feedback() {
 
 #[tokio::test]
 async fn test_boolean_human_feedback() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an inference_id.

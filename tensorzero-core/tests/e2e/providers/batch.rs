@@ -42,6 +42,7 @@ use crate::providers::common::{
     check_tool_use_tool_choice_required_inference_response,
     check_tool_use_tool_choice_specific_inference_response,
 };
+use crate::utils::skip_for_postgres;
 use crate::{
     common::get_gateway_endpoint,
     providers::common::{check_inference_params_response, check_simple_image_inference_response},
@@ -646,6 +647,7 @@ async fn insert_fake_pending_batch_inference_data(
 pub async fn test_start_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -827,6 +829,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
 pub async fn test_poll_existing_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -910,6 +913,7 @@ pub async fn test_poll_existing_simple_image_batch_inference_request_with_provid
 pub async fn test_poll_completed_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -935,6 +939,7 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -994,6 +999,7 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
 pub async fn test_start_inference_params_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1182,6 +1188,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
 pub async fn test_poll_existing_inference_params_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -1263,6 +1270,7 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
 pub async fn test_poll_completed_inference_params_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -1290,6 +1298,7 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -1346,6 +1355,7 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
 /// Tests that the tool use works as expected in a batch inference request.
 /// Each element is a different test case from the e2e test suite for the synchronous API.
 pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let mut episode_ids = Vec::new();
     for _ in 0..5 {
         episode_ids.push(Uuid::now_v7());
@@ -1870,6 +1880,7 @@ async fn get_tags_for_batch_inferences(
 pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -1989,6 +2000,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
 pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -2013,6 +2025,7 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider_
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let batch_id = ids.batch_id;
     let inference_tags = get_tags_for_batch_inferences(&clickhouse, batch_id)
@@ -2113,6 +2126,7 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider_
 }
 
 pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2290,6 +2304,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
 pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -2382,6 +2397,7 @@ pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provi
 pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -2407,6 +2423,7 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -2476,6 +2493,7 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
 pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!(
@@ -2739,6 +2757,7 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
 }
 
 pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2948,6 +2967,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
 pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -3022,6 +3042,7 @@ pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider
 pub async fn test_poll_existing_multi_turn_parallel_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper_parallel";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -3106,6 +3127,7 @@ pub async fn test_poll_existing_multi_turn_parallel_batch_inference_request_with
 pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper_parallel";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -3133,6 +3155,7 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -3210,6 +3233,7 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
 pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -3235,6 +3259,7 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -3294,6 +3319,7 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
 pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3496,6 +3522,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
 pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -3578,6 +3605,7 @@ pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_pr
 pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -3605,6 +3633,7 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -3664,6 +3693,7 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
 pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3858,6 +3888,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
 pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper_parallel";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -3953,6 +3984,7 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
 pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper_parallel";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -3980,6 +4012,7 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -4049,6 +4082,7 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
 }
 
 pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
@@ -4216,6 +4250,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
 pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
@@ -4301,6 +4336,7 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
 pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
@@ -4331,6 +4367,7 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -4387,6 +4424,7 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
 pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
@@ -4565,6 +4603,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
 pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
@@ -4664,6 +4703,7 @@ pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_p
 pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
@@ -4696,6 +4736,7 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
+    skip_for_postgres!();
     let clickhouse = get_clickhouse().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {

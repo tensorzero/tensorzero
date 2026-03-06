@@ -12,6 +12,7 @@ use tensorzero_core::{
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
     select_model_inferences_clickhouse,
@@ -20,6 +21,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 /// This test calls a function which calls a model where the provider is flaky but with retries.
 #[tokio::test]
 async fn test_inference_flaky() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -163,6 +165,7 @@ async fn test_inference_flaky() {
 /// This test checks that streaming inference works as expected with a flaky provider and retries.
 #[tokio::test]
 async fn test_streaming_flaky() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -357,6 +360,7 @@ async fn test_streaming_flaky() {
 /// but they get stored to the ModelInference table.
 #[tokio::test]
 async fn test_best_of_n_dummy_candidates_flaky_judge() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

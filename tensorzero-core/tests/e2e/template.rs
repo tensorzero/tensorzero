@@ -12,9 +12,11 @@ use tensorzero_core::{
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 
 #[tokio::test]
 async fn test_template_no_schema() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "variant_name": "test",
@@ -124,6 +126,7 @@ async fn test_template_no_schema() {
 
 #[tokio::test]
 async fn test_mixture_of_n_template_no_schema() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "variant_name": "mixture_of_n",
@@ -206,6 +209,7 @@ async fn test_mixture_of_n_template_no_schema() {
 
 #[tokio::test]
 async fn test_best_of_n_template_no_schema() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "variant_name": "best_of_n",
@@ -349,6 +353,7 @@ async fn test_best_of_n_template_no_schema() {
 
 #[tokio::test]
 async fn test_invalid_system_input_template_no_schema() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "input":{
@@ -392,6 +397,7 @@ async fn test_invalid_system_input_template_no_schema() {
 
 #[tokio::test]
 async fn test_invalid_json_user_input_template_no_schema() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "null_json",
         "input":{
@@ -427,6 +433,7 @@ async fn test_invalid_json_user_input_template_no_schema() {
 
 #[tokio::test]
 async fn test_invalid_user_input_template_no_schema() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "input":{
@@ -462,6 +469,7 @@ async fn test_invalid_user_input_template_no_schema() {
 
 #[tokio::test]
 async fn test_invalid_assistant_input_template_no_schema() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "basic_test_template_no_schema",
         "variant_name": "test",
@@ -497,6 +505,7 @@ async fn test_invalid_assistant_input_template_no_schema() {
 
 #[tokio::test]
 async fn test_invalid_json_assistant_input_template_no_schema() {
+    skip_for_postgres!();
     let payload = json!({
         "function_name": "null_json",
         "input":{
@@ -531,6 +540,7 @@ async fn test_invalid_json_assistant_input_template_no_schema() {
 
 #[tokio::test]
 async fn test_named_system_template_no_schema() {
+    skip_for_postgres!();
     let config_dir = tempfile::tempdir().unwrap();
     let config_path = config_dir.path().join("tensorzero.toml");
     let config = r#"
@@ -591,6 +601,7 @@ async fn test_named_system_template_no_schema() {
 
 #[tokio::test]
 async fn test_named_system_template_with_schema() {
+    skip_for_postgres!();
     let config_dir = tempfile::tempdir().unwrap();
     let config_path = config_dir.path().join("tensorzero.toml");
     let config = r#"
