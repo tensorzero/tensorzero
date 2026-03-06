@@ -1,6 +1,6 @@
 #![expect(clippy::expect_used, clippy::unwrap_used, clippy::missing_panics_doc)]
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use crate::{Client, ClientBuilder, ClientBuilderMode, PostgresConfig};
 use tempfile::NamedTempFile;
@@ -24,53 +24,26 @@ pub async fn make_http_gateway() -> Client {
 }
 
 pub async fn make_embedded_gateway() -> Client {
-    let postgres_config = if PrimaryDatastore::from_test_env() == PrimaryDatastore::Postgres {
-        let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-            .expect("TENSORZERO_POSTGRES_URL must be set when primary datastore is Postgres");
-        Some(PostgresConfig::Url(postgres_url))
-    } else {
-        None
-    };
-
     let config_path = get_e2e_config_path();
-    ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(config_path),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_config,
-        valkey_url: None,
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap()
+    make_embedded_gateway_with_config_path(Some(config_path.as_path())).await
 }
 
 pub async fn make_embedded_gateway_no_config() -> Client {
-    let postgres_config = if PrimaryDatastore::from_test_env() == PrimaryDatastore::Postgres {
-        let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-            .expect("TENSORZERO_POSTGRES_URL must be set when primary datastore is Postgres");
-        Some(PostgresConfig::Url(postgres_url))
-    } else {
-        None
-    };
-
-    ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-        config_file: None,
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        postgres_config,
-        valkey_url: None,
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap()
+    make_embedded_gateway_with_config_path(None).await
 }
 
 pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
+    let tmp_config = NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+    make_embedded_gateway_with_config_path(Some(tmp_config.path())).await
+}
+
+pub async fn make_embedded_gateway_with_config_path(config_path: Option<&Path>) -> Client {
+    let clickhouse_url = if PrimaryDatastore::from_test_env() == PrimaryDatastore::ClickHouse {
+        Some(CLICKHOUSE_URL.clone())
+    } else {
+        None
+    };
     let postgres_config = if PrimaryDatastore::from_test_env() == PrimaryDatastore::Postgres {
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
             .expect("TENSORZERO_POSTGRES_URL must be set when primary datastore is Postgres");
@@ -79,11 +52,9 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
         None
     };
 
-    let tmp_config = NamedTempFile::new().unwrap();
-    std::fs::write(tmp_config.path(), config).unwrap();
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        config_file: config_path.map(|path| path.to_owned()),
+        clickhouse_url,
         postgres_config,
         valkey_url: None,
         timeout: None,
@@ -96,6 +67,11 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
 }
 
 pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Client {
+    let clickhouse_url = if PrimaryDatastore::from_test_env() == PrimaryDatastore::ClickHouse {
+        Some(CLICKHOUSE_URL.clone())
+    } else {
+        None
+    };
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
 
@@ -103,7 +79,7 @@ pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Cli
     std::fs::write(tmp_config.path(), config).unwrap();
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        clickhouse_url,
         postgres_config: Some(PostgresConfig::Url(postgres_url)),
         valkey_url: None,
         timeout: None,

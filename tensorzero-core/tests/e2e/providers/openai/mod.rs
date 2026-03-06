@@ -1520,6 +1520,7 @@ fn cosine_similarity(a: &Embedding, b: &Embedding) -> f32 {
 
 #[tokio::test]
 pub async fn test_image_inference_with_provider_cloudflare_r2() {
+    skip_for_postgres!();
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use object_store::{ObjectStore, aws::AmazonS3Builder};
     use rand::distr::Alphanumeric;
@@ -1715,6 +1716,7 @@ async fn test_content_block_text_field() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_image_inference_with_provider_gcp_storage() {
+    skip_for_postgres!();
     use crate::providers::common::IMAGE_FUNCTION_CONFIG;
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use object_store::{ObjectStore, aws::AmazonS3Builder};
@@ -1792,6 +1794,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 
 #[tokio::test]
 pub async fn test_image_inference_with_provider_docker_minio() {
+    skip_for_postgres!();
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use object_store::{ObjectStore, aws::AmazonS3Builder};
     use rand::distr::Alphanumeric;

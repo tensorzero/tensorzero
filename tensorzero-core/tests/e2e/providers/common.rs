@@ -1396,6 +1396,7 @@ model = "test-model"
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
     Box::pin(test_url_image_inference_with_provider_and_store(
@@ -1479,6 +1480,7 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_dat
 /// so there's no need to re-test them with PDF inputs.
 /// All of our PDF-capable providers are tested against the filesystem object store.
 pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary pdf dir: {}", temp_dir.path().to_string_lossy());
     let (client, storage_path) = Box::pin(test_base64_pdf_inference_with_provider_and_store(
@@ -1519,6 +1521,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
 }
 
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
     let (client, storage_path) = Box::pin(test_base64_image_inference_with_provider_and_store(
@@ -1582,6 +1585,7 @@ fn create_s3_object_store(
 }
 
 pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let test_bucket = "tensorzero-e2e-test-images";
     let test_bucket_region = "us-east-1";
     let client = create_s3_object_store(
