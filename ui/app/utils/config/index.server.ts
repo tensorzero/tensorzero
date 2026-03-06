@@ -8,6 +8,7 @@
  * browser clients.
  */
 
+import { redirect } from "react-router";
 import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { DEFAULT_FUNCTION } from "../constants";
@@ -181,12 +182,28 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
 /**
  * Reads `?snapshot_hash` from the request URL and resolves the appropriate
  * config — either the historical snapshot or the current config.
+ *
+ * If the snapshot hash matches the current config (i.e. config hasn't changed),
+ * throws a redirect to strip the unnecessary `?snapshot_hash` param. This
+ * ensures the URL is the single source of truth: if `?snapshot_hash` is
+ * present, the config is genuinely historical.
  */
 export async function getConfigFromRequest(
   request: Request,
 ): Promise<UiConfig> {
-  const snapshotHash = new URL(request.url).searchParams.get("snapshot_hash");
-  return snapshotHash ? getConfigForSnapshot(snapshotHash) : getConfig();
+  const url = new URL(request.url);
+  const snapshotHash = url.searchParams.get("snapshot_hash");
+  if (!snapshotHash) return getConfig();
+
+  const config = await getConfigForSnapshot(snapshotHash);
+  const currentConfig = await getConfig();
+
+  if (config.config_hash === currentConfig.config_hash) {
+    url.searchParams.delete("snapshot_hash");
+    throw redirect(url.pathname + url.search);
+  }
+
+  return config;
 }
 
 // ============================================================================
