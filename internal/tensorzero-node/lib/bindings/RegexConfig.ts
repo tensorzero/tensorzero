@@ -5,6 +5,10 @@
  *
  * At least one of `must_match` or `must_not_match` must be specified.
  * If both are specified, the result is the logical AND: `must_match` matches AND `must_not_match` does not match.
+ *
+ * Regex patterns are compiled lazily on first access via [`RegexConfig::compiled_must_match`]
+ * and [`RegexConfig::compiled_must_not_match`], so this struct works correctly both after
+ * construction with [`RegexConfig::new`] and after deserialization.
  */
 export type RegexConfig = {
   /**

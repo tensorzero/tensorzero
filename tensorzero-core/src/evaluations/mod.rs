@@ -187,6 +187,10 @@ impl std::fmt::Display for ToolUseConfig {
 ///
 /// At least one of `must_match` or `must_not_match` must be specified.
 /// If both are specified, the result is the logical AND: `must_match` matches AND `must_not_match` does not match.
+///
+/// Regex patterns are compiled lazily on first access via [`RegexConfig::compiled_must_match`]
+/// and [`RegexConfig::compiled_must_not_match`], so this struct works correctly both after
+/// construction with [`RegexConfig::new`] and after deserialization.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -198,6 +202,57 @@ pub struct RegexConfig {
     /// Regex pattern that the inference output must *not* match for the evaluation to pass.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub must_not_match: Option<String>,
+    /// Lazily compiled regex for `must_match`. Populated on first access.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    compiled_must_match: once_cell::sync::OnceCell<Option<regex::Regex>>,
+    /// Lazily compiled regex for `must_not_match`. Populated on first access.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    compiled_must_not_match: once_cell::sync::OnceCell<Option<regex::Regex>>,
+}
+
+impl RegexConfig {
+    /// Creates a new `RegexConfig`, eagerly validating that the patterns are valid regexes.
+    pub fn new(
+        must_match: Option<String>,
+        must_not_match: Option<String>,
+    ) -> Result<Self, regex::Error> {
+        let cfg = Self {
+            must_match,
+            must_not_match,
+            compiled_must_match: once_cell::sync::OnceCell::new(),
+            compiled_must_not_match: once_cell::sync::OnceCell::new(),
+        };
+        // Eagerly validate by triggering lazy compilation
+        cfg.compiled_must_match()?;
+        cfg.compiled_must_not_match()?;
+        Ok(cfg)
+    }
+
+    /// Returns the compiled `must_match` regex, compiling lazily on first access.
+    pub fn compiled_must_match(&self) -> Result<Option<&regex::Regex>, regex::Error> {
+        self.compiled_must_match
+            .get_or_try_init(|| {
+                self.must_match
+                    .as_ref()
+                    .map(|p| regex::Regex::new(p))
+                    .transpose()
+            })
+            .map(|opt| opt.as_ref())
+    }
+
+    /// Returns the compiled `must_not_match` regex, compiling lazily on first access.
+    pub fn compiled_must_not_match(&self) -> Result<Option<&regex::Regex>, regex::Error> {
+        self.compiled_must_not_match
+            .get_or_try_init(|| {
+                self.must_not_match
+                    .as_ref()
+                    .map(|p| regex::Regex::new(p))
+                    .transpose()
+            })
+            .map(|opt| opt.as_ref())
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -691,26 +746,23 @@ impl UninitializedEvaluatorConfig {
                     }
                     .into());
                 }
-                if let Some(pattern) = &config.must_match {
-                    regex::Regex::new(pattern).map_err(|e| {
-                        Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
-                                 invalid regex in `must_match`: {e}"
-                            ),
-                        })
-                    })?;
-                }
-                if let Some(pattern) = &config.must_not_match {
-                    regex::Regex::new(pattern).map_err(|e| {
-                        Error::new(ErrorDetails::Config {
-                            message: format!(
-                                "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
-                                 invalid regex in `must_not_match`: {e}"
-                            ),
-                        })
-                    })?;
-                }
+                // Eagerly validate regex patterns (triggers lazy compilation via OnceLock)
+                config.compiled_must_match().map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                             invalid regex in `must_match`: {e}"
+                        ),
+                    })
+                })?;
+                config.compiled_must_not_match().map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                             invalid regex in `must_not_match`: {e}"
+                        ),
+                    })
+                })?;
                 Ok((
                     EvaluatorConfig::Regex(config),
                     None,
@@ -2262,10 +2314,9 @@ mod tests {
 
     #[test]
     fn test_regex_evaluator_load_must_match_only() {
-        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
-            must_match: Some("(?i)please".to_string()),
-            must_not_match: None,
-        });
+        let config = UninitializedEvaluatorConfig::Regex(
+            RegexConfig::new(Some("(?i)please".to_string()), None).unwrap(),
+        );
         let result = config.load("test_eval", "test_evaluator");
         assert!(result.is_ok(), "must_match only should load successfully");
         let (eval_config, func_config, metric_config) = result.expect("should succeed");
@@ -2280,10 +2331,9 @@ mod tests {
 
     #[test]
     fn test_regex_evaluator_load_must_not_match_only() {
-        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
-            must_match: None,
-            must_not_match: Some("(?i)badword".to_string()),
-        });
+        let config = UninitializedEvaluatorConfig::Regex(
+            RegexConfig::new(None, Some("(?i)badword".to_string())).unwrap(),
+        );
         let result = config.load("test_eval", "test_evaluator");
         assert!(
             result.is_ok(),
@@ -2293,10 +2343,13 @@ mod tests {
 
     #[test]
     fn test_regex_evaluator_load_both_specified() {
-        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
-            must_match: Some("(?i)please".to_string()),
-            must_not_match: Some("(?i)badword".to_string()),
-        });
+        let config = UninitializedEvaluatorConfig::Regex(
+            RegexConfig::new(
+                Some("(?i)please".to_string()),
+                Some("(?i)badword".to_string()),
+            )
+            .unwrap(),
+        );
         let result = config.load("test_eval", "test_evaluator");
         assert!(
             result.is_ok(),
@@ -2306,10 +2359,7 @@ mod tests {
 
     #[test]
     fn test_regex_evaluator_load_neither_specified() {
-        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
-            must_match: None,
-            must_not_match: None,
-        });
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig::new(None, None).unwrap());
         let result = config.load("test_eval", "test_evaluator");
         assert!(
             result.is_err(),
@@ -2324,10 +2374,11 @@ mod tests {
 
     #[test]
     fn test_regex_evaluator_load_invalid_must_match() {
-        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
-            must_match: Some("[invalid".to_string()),
-            must_not_match: None,
-        });
+        // Construct via serde to bypass RegexConfig::new() validation,
+        // simulating what happens when config is deserialized from TOML.
+        let regex_config: RegexConfig =
+            serde_json::from_value(serde_json::json!({"must_match": "[invalid"})).unwrap();
+        let config = UninitializedEvaluatorConfig::Regex(regex_config);
         let result = config.load("test_eval", "test_evaluator");
         assert!(
             result.is_err(),
@@ -2342,10 +2393,11 @@ mod tests {
 
     #[test]
     fn test_regex_evaluator_load_invalid_must_not_match() {
-        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
-            must_match: None,
-            must_not_match: Some("[invalid".to_string()),
-        });
+        // Construct via serde to bypass RegexConfig::new() validation,
+        // simulating what happens when config is deserialized from TOML.
+        let regex_config: RegexConfig =
+            serde_json::from_value(serde_json::json!({"must_not_match": "[invalid"})).unwrap();
+        let config = UninitializedEvaluatorConfig::Regex(regex_config);
         let result = config.load("test_eval", "test_evaluator");
         assert!(
             result.is_err(),
@@ -2356,6 +2408,40 @@ mod tests {
             err.contains("invalid regex in `must_not_match`"),
             "error message should mention must_not_match, got: {err}"
         );
+    }
+
+    #[test]
+    fn test_regex_config_serde_round_trip() {
+        // Construct via new(), serialize to JSON, deserialize back, and verify
+        // that the deserialized config still works (lazy compilation via OnceLock).
+        let original = RegexConfig::new(
+            Some("(?i)hello".to_string()),
+            Some("(?i)badword".to_string()),
+        )
+        .unwrap();
+
+        // Verify original works
+        assert!(original.compiled_must_match().unwrap().is_some());
+        assert!(original.compiled_must_not_match().unwrap().is_some());
+
+        // Round-trip through serde
+        let json = serde_json::to_value(&original).unwrap();
+        let deserialized: RegexConfig = serde_json::from_value(json).unwrap();
+
+        // Verify deserialized config compiles regexes lazily and works correctly
+        let must_match_re = deserialized
+            .compiled_must_match()
+            .expect("should compile lazily")
+            .expect("should have must_match regex");
+        assert!(must_match_re.is_match("Hello World"));
+        assert!(!must_match_re.is_match("Goodbye"));
+
+        let must_not_match_re = deserialized
+            .compiled_must_not_match()
+            .expect("should compile lazily")
+            .expect("should have must_not_match regex");
+        assert!(must_not_match_re.is_match("contains badword"));
+        assert!(!must_not_match_re.is_match("clean text"));
     }
 
     // Helper functions for tests
