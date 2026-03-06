@@ -382,24 +382,13 @@ pub async fn gepa_launch_handler(
         })
     })?;
 
-    // Create a standalone side_info for non-autopilot spawning
-    let side_info = serde_json::json!({
-        "tool_call_event_id": uuid::Uuid::now_v7(),
-        "session_id": uuid::Uuid::now_v7(),
-        "config_snapshot_hash": app_state.config.hash.to_string(),
-        "optimization": {
-            "poll_interval_secs": 60,
-            "max_wait_secs": 86400
-        }
-    });
-
     let episode_id = uuid::Uuid::now_v7();
 
     let spawn_result = spawn_client
         .spawn_tool_by_name(
-            "gepa",
+            "standalone_gepa",
             llm_params,
-            side_info,
+            serde_json::json!(null),
             episode_id,
             durable_tools_spawn::SpawnOptions::default(),
         )

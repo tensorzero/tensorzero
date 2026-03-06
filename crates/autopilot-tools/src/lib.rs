@@ -228,8 +228,12 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
     // Dataset upload tool
     visitor.visit_task_tool(tools::UploadDatasetTool).await?;
 
-    // GEPA optimization tool
+    // GEPA optimization tool (autopilot-visible)
     visitor.visit_task_tool(tools::GepaTool).await?;
+    // GEPA standalone tool (for HTTP endpoint — no autopilot side info)
+    visitor
+        .visit_standalone_task_tool(tools::StandaloneGepaTool)
+        .await?;
 
     // Episode query tools
     visitor

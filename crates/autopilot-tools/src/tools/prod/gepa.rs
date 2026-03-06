@@ -42,9 +42,16 @@ use tensorzero_optimizers::gepa::pareto::{Candidate, ParetoFrontier, is_improvem
 
 use crate::error::AutopilotToolError;
 
-// ── Tool struct ─────────────────────────────────────────────────────────
+// ── Shared metadata helpers ─────────────────────────────────────────────
 
-/// Durable GEPA optimization tool.
+const GEPA_DESCRIPTION: &str = "Run GEPA (Genetic Evolution with Pareto Analysis) prompt optimization. \
+     Iteratively improves prompt templates using multi-objective Pareto optimization.";
+
+const GEPA_TIMEOUT: Duration = Duration::from_secs(86400); // 24 hours
+
+// ── Autopilot-visible tool (visit_task_tool) ────────────────────────────
+
+/// GEPA tool registered via `visit_task_tool` — visible to the autopilot LLM.
 pub struct GepaTool;
 
 impl ToolMetadata for GepaTool {
@@ -77,14 +84,11 @@ impl ToolMetadata for GepaTool {
     }
 
     fn description(&self) -> Cow<'static, str> {
-        Cow::Borrowed(
-            "Run GEPA (Genetic Evolution with Pareto Analysis) prompt optimization. \
-             Iteratively improves prompt templates using multi-objective Pareto optimization.",
-        )
+        Cow::Borrowed(GEPA_DESCRIPTION)
     }
 
     fn timeout(&self) -> Duration {
-        Duration::from_secs(86400) // 24 hours
+        GEPA_TIMEOUT
     }
 
     fn strict(&self) -> bool {
@@ -102,233 +106,302 @@ impl TaskTool for GepaTool {
         _side_info: AutopilotSideInfo,
         ctx: &mut ToolContext,
     ) -> ToolResult<GepaToolOutput> {
-        // ── Step "setup": validate config, resolve datasets ─────────
-        let setup: SetupResult = ctx.step("setup", llm_params.clone(), setup_step).await?;
+        execute_gepa(llm_params, ctx).await
+    }
+}
 
-        let evaluator_configs = &setup.evaluator_configs;
+// ── Standalone tool (visit_standalone_task_tool) ────────────────────────
 
-        // ── Step "init_eval": evaluate all initial variants ─────────
-        let init_eval_params = InitEvalStepParams {
-            evaluation_name: setup.gepa_config.evaluation_name.clone(),
-            datapoint_ids: setup.val_datapoint_ids.clone(),
-            variants: setup.original_variants.clone(),
-            max_concurrency: setup.gepa_config.max_concurrency,
-        };
-        let init_scores: HashMap<VariantName, VariantScores> = ctx
-            .step("init_eval", init_eval_params, init_eval_step)
-            .await?;
+/// GEPA tool registered via `visit_standalone_task_tool` — for the HTTP endpoint.
+/// Not visible to the autopilot server; no result publishing.
+pub struct StandaloneGepaTool;
 
-        if init_scores.is_empty() {
-            return Err(AutopilotToolError::validation(
-                "No validation scores collected for initial variants",
-            )
-            .into());
-        }
+impl ToolMetadata for StandaloneGepaTool {
+    type SideInfo = ();
+    type Output = GepaToolOutput;
+    type LlmParams = GepaToolParams;
 
-        // Derive deterministic seeds from the checkpointed rng_seed.
-        // This ensures identical RNG state on task resumption.
-        let mut master_rng = StdRng::seed_from_u64(setup.rng_seed);
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::GEPA_TOOL_PARAMS
+    }
 
-        // Build initial Pareto frontier
-        let mut pareto_frontier = ParetoFrontier::new(
-            setup.val_datapoint_ids.clone(),
-            evaluator_configs,
-            Some(master_rng.random::<u64>()),
-        );
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "GepaToolParams".to_string()
+    }
 
-        let initial_candidates: HashMap<VariantName, Candidate> = init_scores
-            .into_iter()
-            .filter_map(|(name, scores)| {
-                setup.original_variants.get(&name).map(|config| {
-                    (
-                        name,
-                        Candidate {
-                            variant: config.clone(),
-                            scores,
-                        },
-                    )
-                })
-            })
-            .collect();
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::GEPA_TOOL_OUTPUT
+    }
 
-        pareto_frontier
-            .update(initial_candidates)
-            .map_err(|e| AutopilotToolError::validation(e.to_string()))?;
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "GepaToolOutput".to_string()
+    }
 
-        let original_variant_names: std::collections::HashSet<String> =
-            setup.original_variants.keys().cloned().collect();
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("standalone_gepa")
+    }
 
-        let max_iterations = setup.gepa_config.max_iterations as usize;
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed(GEPA_DESCRIPTION)
+    }
 
-        // Initialize RNG for minibatch sampling (derived from checkpointed seed)
-        let mut sampling_rng = StdRng::from_rng(&mut master_rng);
+    fn timeout(&self) -> Duration {
+        GEPA_TIMEOUT
+    }
 
-        // ── Main iteration loop ─────────────────────────────────────
-        for iteration in 0..max_iterations {
-            ctx.heartbeat(Some(Duration::from_secs(600))).await?;
+    fn strict(&self) -> bool {
+        false
+    }
+}
 
-            // Sample parent from Pareto frontier
-            let parent = match pareto_frontier.sample_by_frequency() {
-                Ok(variant) => variant,
-                Err(err) => {
-                    tracing::warn!(
-                        "Skipping iteration {iteration} because no candidates were available: {err}"
-                    );
-                    continue;
-                }
-            };
+#[async_trait]
+impl TaskTool for StandaloneGepaTool {
+    type ExtraState = ();
 
-            tracing::info!(
-                "GEPA iteration {iteration}: selected parent variant '{}'",
-                parent.name
-            );
+    async fn execute(
+        &self,
+        llm_params: GepaToolParams,
+        _side_info: (),
+        ctx: &mut ToolContext,
+    ) -> ToolResult<GepaToolOutput> {
+        execute_gepa(llm_params, ctx).await
+    }
+}
 
-            // Sample minibatch datapoint IDs from training dataset
-            let batch_size = setup
-                .gepa_config
-                .batch_size
-                .min(setup.train_datapoint_ids.len());
-            let sampled_ids: Vec<Uuid> = setup
-                .train_datapoint_ids
-                .sample(&mut sampling_rng, batch_size)
-                .copied()
-                .collect();
+// ── Shared execution logic ──────────────────────────────────────────────
 
-            // ── Step: evaluate parent on minibatch ──────────────────
-            let parent_eval: Option<EvalResult> = ctx
-                .step(
-                    &format!("iter_{iteration}_eval_parent"),
-                    EvalStepParams {
-                        evaluation_name: setup.gepa_config.evaluation_name.clone(),
-                        dataset_name: None,
-                        datapoint_ids: Some(sampled_ids.clone()),
-                        variant_name: parent.name.clone(),
-                        variant_config: parent.config.clone(),
-                        max_concurrency: setup.gepa_config.max_concurrency,
-                    },
-                    eval_variant_step,
-                )
-                .await?;
+async fn execute_gepa(
+    llm_params: GepaToolParams,
+    ctx: &mut ToolContext,
+) -> ToolResult<GepaToolOutput> {
+    // ── Step "setup": validate config, resolve datasets ─────────
+    let setup: SetupResult = ctx.step("setup", llm_params.clone(), setup_step).await?;
 
-            let Some(parent_eval) = parent_eval else {
-                tracing::warn!(
-                    "GEPA iteration {iteration}: parent evaluation returned no results, skipping"
-                );
-                continue;
-            };
+    let evaluator_configs = &setup.evaluator_configs;
 
-            // ── Step: mutate parent to create child ─────────────────
-            let mutation: Option<MutationResult> = ctx
-                .step(
-                    &format!("iter_{iteration}_mutate"),
-                    MutateStepParams {
-                        function_context: setup.function_context.clone(),
-                        gepa_config: setup.gepa_config.clone(),
-                        parent_name: parent.name.clone(),
-                        parent_config: parent.config.clone(),
-                        iteration: iteration as u32,
-                    },
-                    mutate_step,
-                )
-                .await?;
+    // ── Step "init_eval": evaluate all initial variants ─────────
+    let init_eval_params = InitEvalStepParams {
+        evaluation_name: setup.gepa_config.evaluation_name.clone(),
+        datapoint_ids: setup.val_datapoint_ids.clone(),
+        variants: setup.original_variants.clone(),
+        max_concurrency: setup.gepa_config.max_concurrency,
+    };
+    let init_scores: HashMap<VariantName, VariantScores> = ctx
+        .step("init_eval", init_eval_params, init_eval_step)
+        .await?;
 
-            let Some(mutation) = mutation else {
-                tracing::warn!("GEPA iteration {iteration}: mutation failed, skipping");
-                continue;
-            };
+    if init_scores.is_empty() {
+        return Err(AutopilotToolError::validation(
+            "No validation scores collected for initial variants",
+        )
+        .into());
+    }
 
-            // ── Step: evaluate child on minibatch ────────────────────
-            let child_eval: Option<EvalResult> = ctx
-                .step(
-                    &format!("iter_{iteration}_eval_child"),
-                    EvalStepParams {
-                        evaluation_name: setup.gepa_config.evaluation_name.clone(),
-                        dataset_name: None,
-                        datapoint_ids: Some(sampled_ids),
-                        variant_name: mutation.child_name.clone(),
-                        variant_config: mutation.child_config.clone(),
-                        max_concurrency: setup.gepa_config.max_concurrency,
-                    },
-                    eval_variant_step,
-                )
-                .await?;
+    // Derive deterministic seeds from the checkpointed rng_seed.
+    // This ensures identical RNG state on task resumption.
+    let mut master_rng = StdRng::seed_from_u64(setup.rng_seed);
 
-            let Some(child_eval) = child_eval else {
-                tracing::warn!(
-                    "GEPA iteration {iteration}: child evaluation returned no results, skipping"
-                );
-                continue;
-            };
+    // Build initial Pareto frontier
+    let mut pareto_frontier = ParetoFrontier::new(
+        setup.val_datapoint_ids.clone(),
+        evaluator_configs,
+        Some(master_rng.random::<u64>()),
+    );
 
-            // Check if child improves on parent (minibatch comparison)
-            let child_improves =
-                is_improvement(&parent_eval.stats, &child_eval.stats, evaluator_configs);
-
-            if !child_improves {
-                tracing::info!(
-                    "GEPA iteration {iteration}: child did not improve on parent, skipping"
-                );
-                continue;
-            }
-
-            // ── Step: evaluate child on validation set ───────────────
-            let child_val_eval: Option<EvalResult> = ctx
-                .step(
-                    &format!("iter_{iteration}_eval_child_val"),
-                    EvalStepParams {
-                        evaluation_name: setup.gepa_config.evaluation_name.clone(),
-                        dataset_name: None,
-                        datapoint_ids: Some(setup.val_datapoint_ids.clone()),
-                        variant_name: mutation.child_name.clone(),
-                        variant_config: mutation.child_config.clone(),
-                        max_concurrency: setup.gepa_config.max_concurrency,
-                    },
-                    eval_variant_step,
-                )
-                .await?;
-
-            if let Some(val_eval) = child_val_eval {
-                let mut candidate = HashMap::new();
-                candidate.insert(
-                    mutation.child_name.clone(),
+    let initial_candidates: HashMap<VariantName, Candidate> = init_scores
+        .into_iter()
+        .filter_map(|(name, scores)| {
+            setup.original_variants.get(&name).map(|config| {
+                (
+                    name,
                     Candidate {
-                        variant: mutation.child_config.clone(),
-                        scores: val_eval.scores,
+                        variant: config.clone(),
+                        scores,
                     },
-                );
-                match pareto_frontier.update(candidate) {
-                    Ok(()) => {
-                        tracing::info!(
-                            "GEPA iteration {iteration}: Pareto frontier updated; pool size: {}",
-                            pareto_frontier.variant_configs().len()
-                        );
-                    }
-                    Err(err) => {
-                        tracing::warn!(
-                            "GEPA iteration {iteration}: failed to update Pareto frontier: {err}"
-                        );
-                    }
-                }
-            }
-        }
+                )
+            })
+        })
+        .collect();
 
-        // Filter out original variants
-        let mut new_variants = pareto_frontier.variant_configs().clone();
-        new_variants.retain(|name, _| !original_variant_names.contains(name));
+    pareto_frontier
+        .update(initial_candidates)
+        .map_err(|e| AutopilotToolError::validation(e.to_string()))?;
+
+    let original_variant_names: std::collections::HashSet<String> =
+        setup.original_variants.keys().cloned().collect();
+
+    let max_iterations = setup.gepa_config.max_iterations as usize;
+
+    // Initialize RNG for minibatch sampling (derived from checkpointed seed)
+    let mut sampling_rng = StdRng::from_rng(&mut master_rng);
+
+    // ── Main iteration loop ─────────────────────────────────────
+    for iteration in 0..max_iterations {
+        ctx.heartbeat(Some(Duration::from_secs(600))).await?;
+
+        // Sample parent from Pareto frontier
+        let parent = match pareto_frontier.sample_by_frequency() {
+            Ok(variant) => variant,
+            Err(err) => {
+                tracing::warn!(
+                    "Skipping iteration {iteration} because no candidates were available: {err}"
+                );
+                continue;
+            }
+        };
 
         tracing::info!(
-            "GEPA optimization complete: created {} new variant(s)",
-            new_variants.len()
+            "GEPA iteration {iteration}: selected parent variant '{}'",
+            parent.name
         );
 
-        // Build statistics from the Pareto frontier
-        let statistics = build_statistics(&pareto_frontier, evaluator_configs);
+        // Sample minibatch datapoint IDs from training dataset
+        let batch_size = setup
+            .gepa_config
+            .batch_size
+            .min(setup.train_datapoint_ids.len());
+        let sampled_ids: Vec<Uuid> = setup
+            .train_datapoint_ids
+            .sample(&mut sampling_rng, batch_size)
+            .copied()
+            .collect();
 
-        Ok(GepaToolOutput {
-            variants: new_variants,
-            statistics,
-        })
+        // ── Step: evaluate parent on minibatch ──────────────────
+        let parent_eval: Option<EvalResult> = ctx
+            .step(
+                &format!("iter_{iteration}_eval_parent"),
+                EvalStepParams {
+                    evaluation_name: setup.gepa_config.evaluation_name.clone(),
+                    dataset_name: None,
+                    datapoint_ids: Some(sampled_ids.clone()),
+                    variant_name: parent.name.clone(),
+                    variant_config: parent.config.clone(),
+                    max_concurrency: setup.gepa_config.max_concurrency,
+                },
+                eval_variant_step,
+            )
+            .await?;
+
+        let Some(parent_eval) = parent_eval else {
+            tracing::warn!(
+                "GEPA iteration {iteration}: parent evaluation returned no results, skipping"
+            );
+            continue;
+        };
+
+        // ── Step: mutate parent to create child ─────────────────
+        let mutation: Option<MutationResult> = ctx
+            .step(
+                &format!("iter_{iteration}_mutate"),
+                MutateStepParams {
+                    function_context: setup.function_context.clone(),
+                    gepa_config: setup.gepa_config.clone(),
+                    parent_name: parent.name.clone(),
+                    parent_config: parent.config.clone(),
+                    iteration: iteration as u32,
+                },
+                mutate_step,
+            )
+            .await?;
+
+        let Some(mutation) = mutation else {
+            tracing::warn!("GEPA iteration {iteration}: mutation failed, skipping");
+            continue;
+        };
+
+        // ── Step: evaluate child on minibatch ────────────────────
+        let child_eval: Option<EvalResult> = ctx
+            .step(
+                &format!("iter_{iteration}_eval_child"),
+                EvalStepParams {
+                    evaluation_name: setup.gepa_config.evaluation_name.clone(),
+                    dataset_name: None,
+                    datapoint_ids: Some(sampled_ids),
+                    variant_name: mutation.child_name.clone(),
+                    variant_config: mutation.child_config.clone(),
+                    max_concurrency: setup.gepa_config.max_concurrency,
+                },
+                eval_variant_step,
+            )
+            .await?;
+
+        let Some(child_eval) = child_eval else {
+            tracing::warn!(
+                "GEPA iteration {iteration}: child evaluation returned no results, skipping"
+            );
+            continue;
+        };
+
+        // Check if child improves on parent (minibatch comparison)
+        let child_improves =
+            is_improvement(&parent_eval.stats, &child_eval.stats, evaluator_configs);
+
+        if !child_improves {
+            tracing::info!("GEPA iteration {iteration}: child did not improve on parent, skipping");
+            continue;
+        }
+
+        // ── Step: evaluate child on validation set ───────────────
+        let child_val_eval: Option<EvalResult> = ctx
+            .step(
+                &format!("iter_{iteration}_eval_child_val"),
+                EvalStepParams {
+                    evaluation_name: setup.gepa_config.evaluation_name.clone(),
+                    dataset_name: None,
+                    datapoint_ids: Some(setup.val_datapoint_ids.clone()),
+                    variant_name: mutation.child_name.clone(),
+                    variant_config: mutation.child_config.clone(),
+                    max_concurrency: setup.gepa_config.max_concurrency,
+                },
+                eval_variant_step,
+            )
+            .await?;
+
+        if let Some(val_eval) = child_val_eval {
+            let mut candidate = HashMap::new();
+            candidate.insert(
+                mutation.child_name.clone(),
+                Candidate {
+                    variant: mutation.child_config.clone(),
+                    scores: val_eval.scores,
+                },
+            );
+            match pareto_frontier.update(candidate) {
+                Ok(()) => {
+                    tracing::info!(
+                        "GEPA iteration {iteration}: Pareto frontier updated; pool size: {}",
+                        pareto_frontier.variant_configs().len()
+                    );
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "GEPA iteration {iteration}: failed to update Pareto frontier: {err}"
+                    );
+                }
+            }
+        }
     }
+
+    // Filter out original variants
+    let mut new_variants = pareto_frontier.variant_configs().clone();
+    new_variants.retain(|name, _| !original_variant_names.contains(name));
+
+    tracing::info!(
+        "GEPA optimization complete: created {} new variant(s)",
+        new_variants.len()
+    );
+
+    // Build statistics from the Pareto frontier
+    let statistics = build_statistics(&pareto_frontier, evaluator_configs);
+
+    Ok(GepaToolOutput {
+        variants: new_variants,
+        statistics,
+    })
 }
 
 // ── Step functions ──────────────────────────────────────────────────────
