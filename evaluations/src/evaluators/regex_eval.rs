@@ -1,5 +1,4 @@
 use anyhow::Result;
-use regex::Regex;
 use serde_json::Value;
 use tensorzero_core::client::InferenceResponse;
 use tensorzero_core::evaluations::RegexConfig;
@@ -33,7 +32,6 @@ pub(super) fn run_regex_evaluator(
     inference_response: &InferenceResponse,
     config: &RegexConfig,
 ) -> Result<Option<Value>> {
-    // TODO(#6584): Precompile regexes instead of rebuilding on every inference for performance.
     let Some(text) = extract_text(inference_response) else {
         debug!("No text content found in inference response");
 
@@ -42,19 +40,13 @@ pub(super) fn run_regex_evaluator(
         return Ok(Some(Value::Bool(result)));
     };
 
-    let must_match_ok = match &config.must_match {
-        Some(pattern) => {
-            let re = Regex::new(pattern)?;
-            re.is_match(&text)
-        }
+    let must_match_ok = match config.compiled_must_match() {
+        Some(re) => re.is_match(&text),
         None => true,
     };
 
-    let must_not_match_ok = match &config.must_not_match {
-        Some(pattern) => {
-            let re = Regex::new(pattern)?;
-            !re.is_match(&text)
-        }
+    let must_not_match_ok = match config.compiled_must_not_match() {
+        Some(re) => !re.is_match(&text),
         None => true,
     };
 
@@ -155,10 +147,7 @@ mod tests {
     #[test]
     fn test_must_match_matches() {
         let response = make_chat_response("Could you please help me?");
-        let config = RegexConfig {
-            must_match: Some("(?i)please".to_string()),
-            must_not_match: None,
-        };
+        let config = RegexConfig::new(Some("(?i)please".to_string()), None).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -170,10 +159,7 @@ mod tests {
     #[test]
     fn test_must_match_does_not_match() {
         let response = make_chat_response("Help me now!");
-        let config = RegexConfig {
-            must_match: Some("(?i)please".to_string()),
-            must_not_match: None,
-        };
+        let config = RegexConfig::new(Some("(?i)please".to_string()), None).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -187,10 +173,7 @@ mod tests {
     #[test]
     fn test_must_not_match_no_match() {
         let response = make_chat_response("This is a polite response.");
-        let config = RegexConfig {
-            must_match: None,
-            must_not_match: Some("(?i)badword".to_string()),
-        };
+        let config = RegexConfig::new(None, Some("(?i)badword".to_string())).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -202,10 +185,7 @@ mod tests {
     #[test]
     fn test_must_not_match_matches() {
         let response = make_chat_response("This contains badword in it.");
-        let config = RegexConfig {
-            must_match: None,
-            must_not_match: Some("(?i)badword".to_string()),
-        };
+        let config = RegexConfig::new(None, Some("(?i)badword".to_string())).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -219,10 +199,11 @@ mod tests {
     #[test]
     fn test_both_conditions_met() {
         let response = make_chat_response("Could you please help me?");
-        let config = RegexConfig {
-            must_match: Some("(?i)please".to_string()),
-            must_not_match: Some("(?i)badword".to_string()),
-        };
+        let config = RegexConfig::new(
+            Some("(?i)please".to_string()),
+            Some("(?i)badword".to_string()),
+        )
+        .unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -234,10 +215,11 @@ mod tests {
     #[test]
     fn test_only_must_match_met() {
         let response = make_chat_response("Please don't say badword.");
-        let config = RegexConfig {
-            must_match: Some("(?i)please".to_string()),
-            must_not_match: Some("(?i)badword".to_string()),
-        };
+        let config = RegexConfig::new(
+            Some("(?i)please".to_string()),
+            Some("(?i)badword".to_string()),
+        )
+        .unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -249,10 +231,11 @@ mod tests {
     #[test]
     fn test_only_must_not_match_met() {
         let response = make_chat_response("Here's your answer.");
-        let config = RegexConfig {
-            must_match: Some("(?i)please".to_string()),
-            must_not_match: Some("(?i)badword".to_string()),
-        };
+        let config = RegexConfig::new(
+            Some("(?i)please".to_string()),
+            Some("(?i)badword".to_string()),
+        )
+        .unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -264,10 +247,11 @@ mod tests {
     #[test]
     fn test_neither_condition_met() {
         let response = make_chat_response("badword without politeness.");
-        let config = RegexConfig {
-            must_match: Some("(?i)please".to_string()),
-            must_not_match: Some("(?i)badword".to_string()),
-        };
+        let config = RegexConfig::new(
+            Some("(?i)please".to_string()),
+            Some("(?i)badword".to_string()),
+        )
+        .unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -281,10 +265,7 @@ mod tests {
     #[test]
     fn test_case_insensitive_match() {
         let response = make_chat_response("PLEASE help me");
-        let config = RegexConfig {
-            must_match: Some("(?i)please".to_string()),
-            must_not_match: None,
-        };
+        let config = RegexConfig::new(Some("(?i)please".to_string()), None).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -299,10 +280,7 @@ mod tests {
     fn test_chat_mixed_content_blocks() {
         let response =
             make_mixed_chat_response(&["Let me search for ", "please wait."], &["search_tool"]);
-        let config = RegexConfig {
-            must_match: Some("please".to_string()),
-            must_not_match: None,
-        };
+        let config = RegexConfig::new(Some("please".to_string()), None).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -316,10 +294,7 @@ mod tests {
     #[test]
     fn test_json_response_raw() {
         let response = make_json_response(Some(r#"{"message": "please help"}"#));
-        let config = RegexConfig {
-            must_match: Some("please".to_string()),
-            must_not_match: None,
-        };
+        let config = RegexConfig::new(Some("please".to_string()), None).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -331,10 +306,7 @@ mod tests {
     #[test]
     fn test_json_response_none_raw() {
         let response = make_json_response(None);
-        let config = RegexConfig {
-            must_match: Some("please".to_string()),
-            must_not_match: None,
-        };
+        let config = RegexConfig::new(Some("please".to_string()), None).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -348,10 +320,7 @@ mod tests {
     #[test]
     fn test_no_text_no_must_match_succeeds() {
         let response = make_json_response(None);
-        let config = RegexConfig {
-            must_match: None,
-            must_not_match: None,
-        };
+        let config = RegexConfig::new(None, None).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -363,10 +332,7 @@ mod tests {
     #[test]
     fn test_no_text_no_must_match_with_must_not_match_succeeds() {
         let response = make_json_response(None);
-        let config = RegexConfig {
-            must_match: None,
-            must_not_match: Some("(?i)badword".to_string()),
-        };
+        let config = RegexConfig::new(None, Some("(?i)badword".to_string())).unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
@@ -378,10 +344,11 @@ mod tests {
     #[test]
     fn test_no_text_with_must_match_fails() {
         let response = make_json_response(None);
-        let config = RegexConfig {
-            must_match: Some("required_pattern".to_string()),
-            must_not_match: Some("(?i)badword".to_string()),
-        };
+        let config = RegexConfig::new(
+            Some("required_pattern".to_string()),
+            Some("(?i)badword".to_string()),
+        )
+        .unwrap();
         let result = run_regex_evaluator(&response, &config).expect("evaluator should succeed");
         assert_eq!(
             result,
