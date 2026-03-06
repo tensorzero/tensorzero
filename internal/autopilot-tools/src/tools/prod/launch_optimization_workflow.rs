@@ -117,7 +117,7 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
-            "description": "Launch an optimization workflow using stored inferences or a dataset.",
+            "description": "Launch an optimization workflow using stored inferences or a dataset. You must provide either `output_source` or `dataset_name` (but not both).",
             "properties": {
                 "function_name": {
                     "type": "string",
@@ -434,10 +434,6 @@ impl ToolMetadata for LaunchOptimizationWorkflowTool {
                 }
             },
             "required": ["function_name", "template_variant_name", "optimizer_config"],
-            "oneOf": [
-                { "required": ["output_source"] },
-                { "required": ["dataset_name"] }
-            ],
             "additionalProperties": false
         });
 
