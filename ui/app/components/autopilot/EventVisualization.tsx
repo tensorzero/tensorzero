@@ -8,6 +8,7 @@ import type {
 import TopKEvaluationViz from "./TopKEvaluationViz";
 import FeedbackByVariantChart, {
   type ParsedFeedbackByVariant,
+  parseFeedbackByVariant,
   parseFeedbackChartData,
 } from "./FeedbackByVariantChart";
 
@@ -42,7 +43,11 @@ export function detectEventVisualization(
     event.payload.type === "tool_result" &&
     event.payload.outcome.type === "success"
   ) {
-    const feedbackData = parseFeedbackChartData(event.payload.outcome.result);
+    const outcome = event.payload.outcome;
+    const feedbackData =
+      "result_value" in outcome
+        ? parseFeedbackByVariant(outcome.result_value)
+        : parseFeedbackChartData(outcome.result);
     if (feedbackData) {
       return { type: "feedback_by_variant", data: feedbackData };
     }
