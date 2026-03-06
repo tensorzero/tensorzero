@@ -874,7 +874,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset or specific datapoints.
-        This function is only available in EmbeddedGateway mode.
 
         :param evaluation_name: The name of the evaluation to run
         :param dataset_name: The name of the dataset to use for evaluation (mutually exclusive with datapoint_ids)
@@ -1332,7 +1331,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset or specific datapoints.
-        This function is only available in EmbeddedGateway mode.
 
         :param evaluation_name: The name of the evaluation to run
         :param dataset_name: The name of the dataset to use for evaluation (mutually exclusive with datapoint_ids)

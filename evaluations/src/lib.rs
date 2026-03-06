@@ -56,6 +56,7 @@ use uuid::Uuid;
 pub mod cli;
 pub mod evaluators;
 pub mod helpers;
+pub mod sse_events;
 pub mod stats;
 pub mod stopping;
 pub mod types;
