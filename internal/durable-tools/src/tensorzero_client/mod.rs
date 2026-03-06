@@ -4,6 +4,7 @@
 //! operations, allowing tools to call these without directly depending on the
 //! concrete client type.
 
+mod checkpointed;
 mod client_ext;
 mod embedded;
 
@@ -38,6 +39,7 @@ use url::Url;
 use uuid::Uuid;
 
 // Re-export client implementations
+pub use checkpointed::CheckpointedTensorzeroClient;
 pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
@@ -85,6 +87,15 @@ pub enum TensorZeroClientError {
     /// Evaluation error.
     #[error("Evaluation error: {0}")]
     Evaluation(String),
+
+    /// Durable control flow signal (suspend, cancelled, lease expired).
+    ///
+    /// This variant is used by `CheckpointedTensorzeroClient` to propagate
+    /// durable control flow through the `TensorZeroClient` trait boundary.
+    /// Callers running inside a durable task should convert this back to
+    /// `ToolError::Control` to allow the durable runtime to handle it.
+    #[error("Durable control flow: {0:?}")]
+    ControlFlow(durable::ControlFlow),
 }
 
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
