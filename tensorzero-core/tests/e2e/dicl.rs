@@ -1271,6 +1271,7 @@ async fn test_dicl_json_request() {
 /// Test that max_distance filters out all irrelevant examples, falling back to vanilla chat completion
 #[tokio::test]
 pub async fn test_dicl_max_distance_filters_all_examples() {
+    skip_for_postgres!();
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl_max_distance_strict";
