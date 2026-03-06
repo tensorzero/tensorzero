@@ -42,6 +42,7 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
+    CreateEventPayload, CreateEventPayloadToolCallAuthorization, CreateEventPayloadToolResult,
     CreateEventResponse, EventPayload, EventPayloadToolResult, GatewayListEventsResponse,
     ListEventsParams, ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
     ToolOutcome,

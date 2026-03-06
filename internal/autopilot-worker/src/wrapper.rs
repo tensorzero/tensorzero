@@ -5,9 +5,9 @@ use std::borrow::Cow;
 use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, EventPayloadToolResult, SimpleTool, SimpleToolContext,
-    TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolFailure, ToolMetadata, ToolOutcome,
-    ToolResult as DurableToolResult, ToolResultExt,
+    CreateEventGatewayRequest, CreateEventPayload, CreateEventPayloadToolResult, SimpleTool,
+    SimpleToolContext, TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolFailure,
+    ToolMetadata, ToolOutcome, ToolResult as DurableToolResult, ToolResultExt,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,6 @@ use autopilot_client::AutopilotSideInfo;
 struct PublishResultParams {
     session_id: Uuid,
     tool_call_event_id: Uuid,
-    tool_name: String,
     outcome: ToolOutcome,
 }
 
@@ -120,7 +119,6 @@ where
             .propagate_control()?;
 
         // Prepare the outcome for the autopilot API
-        let tool_name = self.inner.name().to_string();
         let outcome = match result {
             Ok(output) => {
                 let result_value = serde_json::to_value(&output)?;
@@ -135,7 +133,6 @@ where
         let publish_params = PublishResultParams {
             session_id,
             tool_call_event_id,
-            tool_name,
             outcome,
         };
 
@@ -164,7 +161,7 @@ async fn publish_result(
         .create_autopilot_event(
             params.session_id,
             CreateEventGatewayRequest {
-                payload: EventPayload::ToolResult(EventPayloadToolResult {
+                payload: CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
                 }),
@@ -297,7 +294,6 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
         let publish_params = PublishResultParams {
             session_id,
             tool_call_event_id,
-            tool_name,
             outcome,
         };
 
@@ -652,7 +648,6 @@ mod tests {
     async fn test_publish_result_success_outcome() {
         let session_id = Uuid::now_v7();
         let tool_call_event_id = Uuid::now_v7();
-        let tool_name = "test_tool".to_string();
 
         let mut mock_client = MockTensorZeroClient::new();
 
@@ -666,7 +661,7 @@ mod tests {
                 *sid == expected_session_id
                     && matches!(
                         &request.payload,
-                        EventPayload::ToolResult(EventPayloadToolResult {
+                        CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                             tool_call_event_id: tceid,
                             outcome: ToolOutcome::Success(_),
                         }) if *tceid == expected_tool_call_event_id
@@ -682,7 +677,6 @@ mod tests {
         let params = PublishResultParams {
             session_id,
             tool_call_event_id,
-            tool_name,
             outcome: ToolOutcome::Success(AutopilotToolResult::typed(
                 serde_json::json!({"result": "success"}),
             )),
@@ -706,7 +700,7 @@ mod tests {
             .withf(move |_sid, request| {
                 matches!(
                     &request.payload,
-                    EventPayload::ToolResult(EventPayloadToolResult {
+                    CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                         tool_call_event_id: tceid,
                         outcome: ToolOutcome::Failure {
                             error: ToolFailure::Tool {
@@ -726,7 +720,6 @@ mod tests {
         let params = PublishResultParams {
             session_id,
             tool_call_event_id,
-            tool_name: "failing_tool".to_string(),
             outcome: ToolOutcome::Failure {
                 error: ToolFailure::Tool {
                     error: NonControlToolError::Internal {
@@ -751,7 +744,6 @@ mod tests {
         let params = PublishResultParams {
             session_id: Uuid::now_v7(),
             tool_call_event_id: Uuid::now_v7(),
-            tool_name: "some_tool".to_string(),
             outcome: ToolOutcome::Success(AutopilotToolResult::typed(serde_json::json!({}))),
         };
 
