@@ -1,6 +1,8 @@
 #![expect(clippy::print_stdout)]
 
 use std::collections::HashSet;
+
+use googletest::prelude::*;
 use tensorzero::ClientExt;
 
 use axum::extract::State;
@@ -11,17 +13,18 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
-use crate::utils::skip_for_postgres;
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-    select_model_inference_clickhouse,
-};
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
+use tensorzero_core::db::model_inferences::ModelInferenceQueries;
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::openai_compatible::OpenAIStructuredJson;
 use tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler;
+use tensorzero_core::stored_inference::StoredInferenceDatabase;
+use tensorzero_core::test_helpers::get_e2e_config;
 
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_openai_compatible_route_new_format() {
-    skip_for_postgres!();
     Box::pin(test_openai_compatible_route_with_function_name_as_model(
         "tensorzero::function_name::basic_test_no_system_schema",
     ))
@@ -29,7 +32,6 @@ async fn test_openai_compatible_route_new_format() {
 }
 
 async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
-    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let state = client.get_app_state_data().unwrap().clone();
     let episode_id = Uuid::now_v7();
@@ -94,23 +96,31 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for data to be written to the database
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-
-    // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Check Inference table
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test_no_system_schema");
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(inferences.len(), 1);
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    assert_eq!(chat.inference_id, inference_id);
+    assert_eq!(chat.function_name, "basic_test_no_system_schema");
+    let input = serde_json::to_value(&chat.input).unwrap();
     let correct_input = json!({
         "system": "TensorBot",
         "messages": [
@@ -121,59 +131,48 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
         ]
     });
     assert_eq!(input, correct_input);
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
+    let tags = &chat.tags;
+    assert_eq!(tags.get("foo").unwrap(), "bar");
     assert_eq!(tags.len(), 1);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    // Check that content_blocks is a list of blocks length 1
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    // Check the type and content in the block
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let output = chat.output.as_ref().unwrap();
+    assert_eq!(output.len(), 1);
+    let output_value = serde_json::to_value(&output[0]).unwrap();
+    assert_eq!(output_value.get("type").unwrap().as_str().unwrap(), "text");
+    assert_eq!(output_value.get("text").unwrap().as_str().unwrap(), content);
     // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    assert_eq!(chat.episode_id, episode_id);
     // Check the variant name
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
+    assert_eq!(chat.variant_name, "test");
     // Check the processing time
-    let _processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(chat.processing_time_ms.is_some());
 
     // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    println!("ModelInference result: {result:?}");
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "test");
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, "good");
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert_eq!(raw_request, "raw request");
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 5);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert_eq!(model_inferences.len(), 1);
+    let mi = &model_inferences[0];
+    println!("ModelInference result: {mi:?}");
+    assert_eq!(mi.inference_id, inference_id);
+    assert_eq!(mi.model_name, "test");
+    assert_eq!(mi.model_provider_name, "good");
+    assert_eq!(mi.raw_request.as_deref().unwrap(), "raw request");
+    assert!(mi.input_tokens.unwrap() > 5);
+    assert!(mi.output_tokens.unwrap() > 0);
+    assert!(mi.response_time_ms.unwrap() > 0);
+    assert!(mi.ttft_ms.is_none());
+    let raw_response = mi.raw_response.as_deref().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
-    let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
-    assert_eq!(finish_reason, "stop");
+    assert_eq!(
+        mi.finish_reason,
+        Some(tensorzero_core::inference::types::FinishReason::Stop)
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_matches_response_fields() {
-    skip_for_postgres!();
     let client = Client::new();
 
     let tensorzero_payload = json!({
@@ -210,14 +209,14 @@ async fn test_openai_compatible_matches_response_fields() {
     let (tensorzero_response, openai_response) =
         tokio::try_join!(tensorzero_response_fut, openai_response_fut).unwrap();
 
-    assert_eq!(
+    assert_that!(
         tensorzero_response.status(),
-        StatusCode::OK,
+        eq(StatusCode::OK),
         "TensorZero request failed"
     );
-    assert_eq!(
+    assert_that!(
         openai_response.status(),
-        StatusCode::OK,
+        eq(StatusCode::OK),
         "OpenAI request failed"
     );
 
@@ -228,15 +227,16 @@ async fn test_openai_compatible_matches_response_fields() {
     let tensorzero_keys: HashSet<_> = tensorzero_json.as_object().unwrap().keys().collect();
 
     let missing_keys: Vec<_> = openai_keys.difference(&tensorzero_keys).collect();
-    assert!(
+    expect_that!(
         missing_keys.is_empty(),
+        eq(true),
         "Missing keys in TensorZero response: {missing_keys:?}"
     );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_dryrun() {
-    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -264,21 +264,24 @@ async fn test_openai_compatible_dryrun() {
         .await
         .unwrap();
     // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     println!("response_json: {response_json:?}");
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
-    assert!(choices.len() == 1);
+    assert_that!(choices.len(), eq(1));
     let choice = choices.first().unwrap();
-    assert_eq!(choice.get("index").unwrap().as_u64().unwrap(), 0);
+    expect_that!(choice.get("index").unwrap().as_u64().unwrap(), eq(0));
     let message = choice.get("message").unwrap();
-    assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
+    expect_that!(
+        message.get("role").unwrap().as_str().unwrap(),
+        eq("assistant")
+    );
     let content = message.get("content").unwrap().as_str().unwrap();
-    assert_eq!(content, "{\"answer\":\"Hello\"}");
+    expect_that!(content, eq("{\"answer\":\"Hello\"}"));
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
-    assert_eq!(finish_reason, "stop");
+    expect_that!(finish_reason, eq("stop"));
     let response_model = response_json.get("model").unwrap().as_str().unwrap();
-    assert_eq!(response_model, "tensorzero::model_name::json");
+    expect_that!(response_model, eq("tensorzero::model_name::json"));
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -288,28 +291,39 @@ async fn test_openai_compatible_dryrun() {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for data to be written to the database
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-
-    let chat_result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    let json_result = select_json_inference_clickhouse(&clickhouse, inference_id).await;
-    // No inference should be written to ClickHouse when dryrun is true
-    assert!(chat_result.is_none());
-    assert!(json_result.is_none());
+    // No inference should be written to the database when dryrun is true
+    let config = get_e2e_config().await;
+    let chat_inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        chat_inferences.is_empty(),
+        eq(true),
+        "No inference should be written when dryrun is true"
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_route_model_name_shorthand() {
-    skip_for_postgres!();
     test_openai_compatible_route_with_default_function("tensorzero::model_name::dummy::good", "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.").await;
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_route_model_name_toml() {
-    skip_for_postgres!();
     test_openai_compatible_route_with_default_function(
         "tensorzero::model_name::json",
         "{\"answer\":\"Hello\"}",
@@ -321,7 +335,6 @@ async fn test_openai_compatible_route_with_default_function(
     prefixed_model_name: &str,
     expected_content: &str,
 ) {
-    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -372,23 +385,31 @@ async fn test_openai_compatible_route_with_default_function(
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for data to be written to the database
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-
-    // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Check Inference table
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "tensorzero::default");
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(inferences.len(), 1);
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    assert_eq!(chat.inference_id, inference_id);
+    assert_eq!(chat.function_name, "tensorzero::default");
+    let input = serde_json::to_value(&chat.input).unwrap();
     let correct_input = json!({
         "system": "TensorBot",
         "messages": [
@@ -399,55 +420,46 @@ async fn test_openai_compatible_route_with_default_function(
         ]
     });
     assert_eq!(input, correct_input);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    // Check that content_blocks is a list of blocks length 1
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    // Check the type and content in the block
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let output = chat.output.as_ref().unwrap();
+    assert_eq!(output.len(), 1);
+    let output_value = serde_json::to_value(&output[0]).unwrap();
+    assert_eq!(output_value.get("type").unwrap().as_str().unwrap(), "text");
+    assert_eq!(output_value.get("text").unwrap().as_str().unwrap(), content);
     // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    assert_eq!(chat.episode_id, episode_id);
     // Check the processing time
-    let _processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(chat.processing_time_ms.is_some());
 
     // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_inferences.len(), 1);
+    let mi = &model_inferences[0];
+    assert_eq!(mi.inference_id, inference_id);
     assert_eq!(
-        model_name,
+        mi.model_name,
         prefixed_model_name
             .strip_prefix("tensorzero::model_name::")
             .unwrap()
     );
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert_eq!(raw_request, "raw request");
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 5);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert_eq!(mi.raw_request.as_deref().unwrap(), "raw request");
+    assert!(mi.input_tokens.unwrap() > 5);
+    assert!(mi.output_tokens.unwrap() > 0);
+    assert!(mi.response_time_ms.unwrap() > 0);
+    assert!(mi.ttft_ms.is_none());
+    let raw_response = mi.raw_response.as_deref().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
-    let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
-    assert_eq!(finish_reason, "stop");
+    assert_eq!(
+        mi.finish_reason,
+        Some(tensorzero_core::inference::types::FinishReason::Stop)
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_route_bad_model_name() {
-    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -473,31 +485,29 @@ async fn test_openai_compatible_route_bad_model_name() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
-    assert_eq!(
-        response_json,
-        json!({
-            "error": {
-                "message": "Invalid inference target: Invalid model name: Model name 'my_missing_model' not found in model table",
-                "error_json": {
-                    "InvalidInferenceTarget": {
-                        "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
-                    }
-                },
-                "tensorzero_error_json": {
-                    "InvalidInferenceTarget": {
-                        "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
-                    }
+    let expected = json!({
+        "error": {
+            "message": "Invalid inference target: Invalid model name: Model name 'my_missing_model' not found in model table",
+            "error_json": {
+                "InvalidInferenceTarget": {
+                    "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
+                }
+            },
+            "tensorzero_error_json": {
+                "InvalidInferenceTarget": {
+                    "message": "Invalid model name: Model name 'my_missing_model' not found in model table"
                 }
             }
-        })
-    );
+        }
+    });
+    expect_that!(response_json, eq(&expected));
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_route_with_json_mode_on() {
-    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -525,23 +535,28 @@ async fn test_openai_compatible_route_with_json_mode_on() {
         .await
         .unwrap();
     // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
-    assert!(choices.len() == 1);
+    assert_that!(choices.len(), eq(1));
     let choice = choices.first().unwrap();
-    assert_eq!(choice.get("index").unwrap().as_u64().unwrap(), 0);
+    expect_that!(choice.get("index").unwrap().as_u64().unwrap(), eq(0));
     let message = choice.get("message").unwrap();
-    assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
+    expect_that!(
+        message.get("role").unwrap().as_str().unwrap(),
+        eq("assistant")
+    );
     let content = message.get("content").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         content,
-        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+        eq(
+            "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+        )
     );
     let response_model = response_json.get("model").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         response_model,
-        "tensorzero::function_name::basic_test_no_system_schema::variant_name::test"
+        eq("tensorzero::function_name::basic_test_no_system_schema::variant_name::test")
     );
 
     let inference_id: Uuid = response_json
@@ -552,23 +567,31 @@ async fn test_openai_compatible_route_with_json_mode_on() {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for data to be written to the database
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-
-    // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Check Inference table
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test_no_system_schema");
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_that!(inferences.len(), eq(1));
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    expect_that!(chat.inference_id, eq(inference_id));
+    expect_that!(&chat.function_name, eq("basic_test_no_system_schema"));
+    let input = serde_json::to_value(&chat.input).unwrap();
     let correct_input = json!({
         "system": "TensorBot",
         "messages": [
@@ -578,64 +601,53 @@ async fn test_openai_compatible_route_with_json_mode_on() {
             }
         ]
     });
-    assert_eq!(input, correct_input);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    // Check that content_blocks is a list of blocks length 1
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    // Check the type and content in the block
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
-    // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    // Check the variant name
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
-    // Check the processing time
-    let _processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let clickhouse_json_mode = inference_params
+    expect_that!(input, eq(&correct_input));
+    let output = chat.output.as_ref().unwrap();
+    assert_that!(output.len(), eq(1));
+    let output_value = serde_json::to_value(&output[0]).unwrap();
+    expect_that!(
+        output_value.get("type").unwrap().as_str().unwrap(),
+        eq("text")
+    );
+    expect_that!(
+        output_value.get("text").unwrap().as_str().unwrap(),
+        eq(content)
+    );
+    expect_that!(chat.episode_id, eq(episode_id));
+    expect_that!(&chat.variant_name, eq("test"));
+    expect_that!(&chat.processing_time_ms, some(anything()));
+    let inference_params = serde_json::to_value(&chat.inference_params).unwrap();
+    let json_mode = inference_params
         .get("chat_completion")
         .unwrap()
         .get("json_mode")
         .unwrap()
         .as_str()
         .unwrap();
-    assert_eq!("on", clickhouse_json_mode);
+    expect_that!(json_mode, eq("on"));
 
     // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "test");
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, "good");
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert_eq!(raw_request, "raw request");
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 5);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert_that!(model_inferences.len(), eq(1));
+    let mi = &model_inferences[0];
+    expect_that!(mi.inference_id, eq(inference_id));
+    expect_that!(&mi.model_name, eq("test"));
+    expect_that!(&mi.model_provider_name, eq("good"));
+    expect_that!(mi.raw_request.as_deref().unwrap(), eq("raw request"));
+    expect_that!(mi.input_tokens.unwrap(), gt(5));
+    expect_that!(mi.output_tokens.unwrap(), gt(0));
+    expect_that!(mi.response_time_ms.unwrap(), gt(0));
+    expect_that!(&mi.ttft_ms, none());
+    let raw_response = mi.raw_response.as_deref().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_route_with_json_schema() {
-    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -663,26 +675,31 @@ async fn test_openai_compatible_route_with_json_schema() {
         .await
         .unwrap();
     // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     println!("response_json: {response_json:?}");
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
-    assert!(choices.len() == 1);
+    assert_that!(choices.len(), eq(1));
     let choice = choices.first().unwrap();
-    assert_eq!(choice.get("index").unwrap().as_u64().unwrap(), 0);
+    expect_that!(choice.get("index").unwrap().as_u64().unwrap(), eq(0));
     let message = choice.get("message").unwrap();
-    assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
+    expect_that!(
+        message.get("role").unwrap().as_str().unwrap(),
+        eq("assistant")
+    );
     let content = message.get("content").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         content,
-        "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+        eq(
+            "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+        )
     );
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
-    assert_eq!(finish_reason, "stop");
+    expect_that!(finish_reason, eq("stop"));
     let response_model = response_json.get("model").unwrap().as_str().unwrap();
-    assert_eq!(
+    expect_that!(
         response_model,
-        "tensorzero::function_name::basic_test_no_system_schema::variant_name::test"
+        eq("tensorzero::function_name::basic_test_no_system_schema::variant_name::test")
     );
 
     let inference_id: Uuid = response_json
@@ -693,23 +710,31 @@ async fn test_openai_compatible_route_with_json_schema() {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for data to be written to the database
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-
-    // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Check Inference table
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test_no_system_schema");
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_that!(inferences.len(), eq(1));
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    expect_that!(chat.inference_id, eq(inference_id));
+    expect_that!(&chat.function_name, eq("basic_test_no_system_schema"));
+    let input = serde_json::to_value(&chat.input).unwrap();
     let correct_input = json!({
         "system": "TensorBot",
         "messages": [
@@ -719,64 +744,53 @@ async fn test_openai_compatible_route_with_json_schema() {
             }
         ]
     });
-    assert_eq!(input, correct_input);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    // Check that content_blocks is a list of blocks length 1
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    // Check the type and content in the block
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
-    // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    // Check the variant name
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
-    // Check the processing time
-    let _processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let clickhouse_json_mode = inference_params
+    expect_that!(input, eq(&correct_input));
+    let output = chat.output.as_ref().unwrap();
+    assert_that!(output.len(), eq(1));
+    let output_value = serde_json::to_value(&output[0]).unwrap();
+    expect_that!(
+        output_value.get("type").unwrap().as_str().unwrap(),
+        eq("text")
+    );
+    expect_that!(
+        output_value.get("text").unwrap().as_str().unwrap(),
+        eq(content)
+    );
+    expect_that!(chat.episode_id, eq(episode_id));
+    expect_that!(&chat.variant_name, eq("test"));
+    expect_that!(&chat.processing_time_ms, some(anything()));
+    let inference_params = serde_json::to_value(&chat.inference_params).unwrap();
+    let json_mode = inference_params
         .get("chat_completion")
         .unwrap()
         .get("json_mode")
         .unwrap()
         .as_str()
         .unwrap();
-    assert_eq!("strict", clickhouse_json_mode);
+    expect_that!(json_mode, eq("strict"));
 
     // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "test");
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, "good");
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert_eq!(raw_request, "raw request");
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 5);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert_that!(model_inferences.len(), eq(1));
+    let mi = &model_inferences[0];
+    expect_that!(mi.inference_id, eq(inference_id));
+    expect_that!(&mi.model_name, eq("test"));
+    expect_that!(&mi.model_provider_name, eq("good"));
+    expect_that!(mi.raw_request.as_deref().unwrap(), eq("raw request"));
+    expect_that!(mi.input_tokens.unwrap(), gt(5));
+    expect_that!(mi.output_tokens.unwrap(), gt(0));
+    expect_that!(mi.response_time_ms.unwrap(), gt(0));
+    expect_that!(&mi.ttft_ms, none());
+    let raw_response = mi.raw_response.as_deref().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_streaming_tool_call() {
-    skip_for_postgres!();
     use futures::StreamExt;
     use reqwest_sse_stream::{Event, RequestBuilderExt};
 
@@ -844,58 +858,58 @@ async fn test_openai_compatible_streaming_tool_call() {
             }
         }
     }
-    assert!(found_done_chunk);
+    expect_that!(found_done_chunk, eq(true));
     let first_chunk = chunks.first().unwrap();
     let parsed_chunk: Value = serde_json::from_str(first_chunk).unwrap();
-    assert_eq!(parsed_chunk["choices"][0]["index"].as_i64().unwrap(), 0);
-    assert_eq!(
+    expect_that!(parsed_chunk["choices"][0]["index"].as_i64().unwrap(), eq(0));
+    expect_that!(
         parsed_chunk["choices"][0]["delta"]["role"]
             .as_str()
             .unwrap(),
-        "assistant"
+        eq("assistant")
     );
-    assert!(parsed_chunk["choices"][0]["delta"].get("content").is_none());
+    expect_that!(parsed_chunk["choices"][0]["delta"].get("content"), none());
     println!("parsed_chunk: {parsed_chunk:?}");
     let tool_calls = parsed_chunk["choices"][0]["delta"]["tool_calls"]
         .as_array()
         .unwrap();
-    assert_eq!(tool_calls.len(), 1);
+    assert_that!(tool_calls.len(), eq(1));
     let tool_call = tool_calls[0].as_object().unwrap();
-    assert_eq!(tool_call["index"].as_i64().unwrap(), 0);
-    assert_eq!(
+    expect_that!(tool_call["index"].as_i64().unwrap(), eq(0));
+    expect_that!(
         tool_call["function"]["name"].as_str().unwrap(),
-        "get_current_weather"
+        eq("get_current_weather")
     );
-    assert_eq!(tool_call["function"]["arguments"].as_str().unwrap(), "");
+    expect_that!(tool_call["function"]["arguments"].as_str().unwrap(), eq(""));
     for (i, chunk) in chunks.iter().enumerate() {
         let parsed_chunk: Value = serde_json::from_str(chunk).unwrap();
         if let Some(tool_calls) = parsed_chunk["choices"][0]["delta"]["tool_calls"].as_array() {
             for tool_call in tool_calls {
                 let index = tool_call["index"].as_i64().unwrap();
-                assert_eq!(index, 0);
+                expect_that!(index, eq(0));
             }
         }
         if let Some(finish_reason) = parsed_chunk["choices"][0]["finish_reason"].as_str() {
-            assert_eq!(finish_reason, "tool_calls");
-            assert_eq!(
+            expect_that!(finish_reason, eq("tool_calls"));
+            expect_that!(
                 i,
-                chunks.len() - 1,
+                eq(chunks.len() - 1),
                 "finish_reason should be on final chunk"
             );
         }
         if i == chunks.len() - 1 {
             let usage = parsed_chunk["usage"].as_object().unwrap();
-            assert!(usage["prompt_tokens"].as_i64().unwrap() > 0);
-            assert!(usage["completion_tokens"].as_i64().unwrap() > 0);
+            expect_that!(usage["prompt_tokens"].as_i64().unwrap(), gt(0));
+            expect_that!(usage["completion_tokens"].as_i64().unwrap(), gt(0));
         }
         let response_model = parsed_chunk.get("model").unwrap().as_str().unwrap();
-        assert_eq!(response_model, "tensorzero::model_name::openai::gpt-4o");
+        expect_that!(response_model, eq("tensorzero::model_name::openai::gpt-4o"));
     }
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_warn_unknown_fields() {
-    skip_for_postgres!();
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
@@ -914,14 +928,15 @@ async fn test_openai_compatible_warn_unknown_fields() {
     .await
     .unwrap();
 
-    assert!(logs_contain(
-        "Ignoring unknown fields in OpenAI-compatible request: [\"my_fake_param\"]"
-    ));
+    expect_that!(
+        logs_contain("Ignoring unknown fields in OpenAI-compatible request: [\"my_fake_param\"]"),
+        eq(true)
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_deny_unknown_fields() {
-    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
     let err = chat_completions_handler(
@@ -940,15 +955,17 @@ async fn test_openai_compatible_deny_unknown_fields() {
     )
     .await
     .unwrap_err();
-    assert_eq!(
+    expect_that!(
         err.to_string(),
-        "Invalid request to OpenAI-compatible endpoint: `tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [my_fake_param, my_other_fake_param]"
+        eq(
+            "Invalid request to OpenAI-compatible endpoint: `tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [my_fake_param, my_other_fake_param]"
+        )
     );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_streaming() {
-    skip_for_postgres!();
     use futures::StreamExt;
     use reqwest_sse_stream::{Event, RequestBuilderExt};
 
@@ -989,52 +1006,50 @@ async fn test_openai_compatible_streaming() {
             }
         }
     }
-    assert!(found_done_chunk);
+    expect_that!(found_done_chunk, eq(true));
     let first_chunk = chunks.first().unwrap();
     let parsed_chunk: Value = serde_json::from_str(first_chunk).unwrap();
-    assert_eq!(parsed_chunk["choices"][0]["index"].as_i64().unwrap(), 0);
-    assert_eq!(
+    expect_that!(parsed_chunk["choices"][0]["index"].as_i64().unwrap(), eq(0));
+    expect_that!(
         parsed_chunk["choices"][0]["delta"]["role"]
             .as_str()
             .unwrap(),
-        "assistant"
+        eq("assistant")
     );
     let _content = parsed_chunk["choices"][0]["delta"]["content"]
         .as_str()
         .unwrap();
-    assert!(
-        parsed_chunk["choices"][0]["delta"]
-            .get("tool_calls")
-            .is_none()
+    expect_that!(
+        parsed_chunk["choices"][0]["delta"].get("tool_calls"),
+        none()
     );
     for (i, chunk) in chunks.iter().enumerate() {
         let parsed_chunk: Value = serde_json::from_str(chunk).unwrap();
-        assert!(
-            parsed_chunk["choices"][0]["delta"]
-                .get("tool_calls")
-                .is_none()
+        expect_that!(
+            parsed_chunk["choices"][0]["delta"].get("tool_calls"),
+            none()
         );
         if i < chunks.len() - 2 {
             let _content = parsed_chunk["choices"][0]["delta"]["content"]
                 .as_str()
                 .unwrap();
         }
-        assert!(parsed_chunk["service_tier"].is_null());
-        assert!(parsed_chunk["choices"][0]["logprobs"].is_null());
+        expect_that!(parsed_chunk["service_tier"].is_null(), eq(true));
+        expect_that!(parsed_chunk["choices"][0]["logprobs"].is_null(), eq(true));
         if let Some(finish_reason) = parsed_chunk["choices"][0]["delta"]["finish_reason"].as_str() {
-            assert_eq!(finish_reason, "stop");
-            assert_eq!(i, chunks.len() - 2);
+            expect_that!(finish_reason, eq("stop"));
+            expect_that!(i, eq(chunks.len() - 2));
         }
 
         let response_model = parsed_chunk.get("model").unwrap().as_str().unwrap();
-        assert_eq!(response_model, "tensorzero::model_name::openai::gpt-4o");
+        expect_that!(response_model, eq("tensorzero::model_name::openai::gpt-4o"));
     }
 }
 
 // Test using 'stop' parameter in the openai-compatible endpoint
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_stop_sequence() {
-    skip_for_postgres!();
     let client = Client::new();
 
     let payload = json!({
@@ -1062,22 +1077,25 @@ async fn test_openai_compatible_stop_sequence() {
     let finish_reason = response_json["choices"][0]["finish_reason"]
         .as_str()
         .unwrap();
-    assert_eq!(finish_reason, "stop");
+    expect_that!(finish_reason, eq("stop"));
     let output = response_json["choices"][0]["message"]["content"]
         .as_str()
         .unwrap();
-    assert!(output.contains("Hello"), "Unexpected output: {output}");
-    assert!(
-        !output.contains("zero") && !output.contains("one"),
+    expect_that!(
+        output.contains("Hello"),
+        eq(true),
         "Unexpected output: {output}"
     );
-
-    // We don't bother checking ClickHouse, as we do that in lots of other tests
+    expect_that!(
+        !output.contains("zero") && !output.contains("one"),
+        eq(true),
+        "Unexpected output: {output}"
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_file_with_custom_filename() {
-    skip_for_postgres!();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let state = client.get_app_state_data().unwrap().clone();
     let episode_id = Uuid::now_v7();
@@ -1116,7 +1134,7 @@ async fn test_openai_compatible_file_with_custom_filename() {
     .unwrap();
 
     // Check Response is OK
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.into_body().collect().await.unwrap().to_bytes();
     let response_json: Value = serde_json::from_slice(&response_json).unwrap();
     let inference_id: Uuid = response_json
@@ -1127,39 +1145,54 @@ async fn test_openai_compatible_file_with_custom_filename() {
         .parse()
         .unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Wait for data to be written to the database
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences.len(), eq(1));
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
     // Verify the input was stored correctly with the custom filename
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(&chat.input).unwrap();
 
     // Check that the file content block has the custom filename
     let messages = input.get("messages").unwrap().as_array().unwrap();
-    assert_eq!(messages.len(), 1);
+    assert_that!(messages.len(), eq(1));
     let content = messages[0].get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 2);
+    assert_that!(content.len(), eq(2));
 
     // Second content block should be the file
     let file_block = &content[1];
-    assert_eq!(file_block.get("type").unwrap().as_str().unwrap(), "file");
+    expect_that!(
+        file_block.get("type").unwrap().as_str().unwrap(),
+        eq("file")
+    );
 
     // Verify filename is present in the stored file (fields are at top level, not nested)
-    assert_eq!(
+    expect_that!(
         file_block.get("filename").unwrap().as_str().unwrap(),
-        "myfile.pdf"
+        eq("myfile.pdf")
     );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
-    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -1186,12 +1219,11 @@ async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("First request response: {response_json:#?}");
-    // Sleep to allow ClickHouse writes
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     // Extract inference_id from response
     let inference_id: Uuid = response_json
         .get("id")
@@ -1201,27 +1233,43 @@ async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
         .parse()
         .unwrap();
 
-    // ClickHouse validation
-    let clickhouse = get_clickhouse().await;
+    // Wait for data to be written to the database
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Validate ChatInference table
-    let chat_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Validate Inference table
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-
-    println!("ClickHouse - ChatInference: {chat_inference:#?}");
+    assert_that!(inferences.len(), eq(1));
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    println!("ChatInference: {chat:#?}");
 
     // Validate ModelInference table
-    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-
-    println!("ClickHouse - ModelInference: {model_inference:#?}");
+    assert_that!(model_inferences.len(), eq(1));
+    let mi = &model_inferences[0];
+    println!("ModelInference: {mi:#?}");
 
     // Extract tool calls from response
     let first_message = response_json["choices"][0]["message"].clone();
     let tool_calls = first_message["tool_calls"].as_array().unwrap();
-    assert_eq!(tool_calls.len(), 2);
+    assert_that!(tool_calls.len(), eq(2));
 
     // Build messages with tool results (one tool message per tool call)
     let mut messages = vec![
@@ -1267,7 +1315,7 @@ async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_that!(response.status(), eq(StatusCode::OK));
     let final_response_json = response.json::<Value>().await.unwrap();
 
     println!("Final response: {final_response_json:#?}");
@@ -1276,16 +1324,17 @@ async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
     let final_choice = &final_response_json["choices"][0];
     let finish_reason = final_choice["finish_reason"].as_str().unwrap();
     // Should be "stop" (normal completion) not "tool_calls" since we provided results
-    assert_eq!(finish_reason, "stop");
+    expect_that!(finish_reason, eq("stop"));
 
     // Should have text content in the response
     let content = final_choice["message"]["content"].as_str();
-    assert!(content.is_some());
-    assert!(!content.unwrap().is_empty());
+    assert_that!(&content, some(anything()));
+    expect_that!(content.unwrap().is_empty(), eq(false));
 
     // Should not have tool_calls in final response
-    assert!(
-        final_choice["message"].get("tool_calls").is_none(),
+    expect_that!(
+        final_choice["message"].get("tool_calls"),
+        none(),
         "Expected no tool_calls field in final response"
     );
 
