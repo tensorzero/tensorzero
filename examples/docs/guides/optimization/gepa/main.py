@@ -1,20 +1,16 @@
 import asyncio
-import os
-import random
+import time
 
 from ner import Row, compute_exact_match, compute_jaccard_similarity, load_dataset
 from tensorzero import (
     AsyncTensorZeroGateway,
-    GEPAConfig,
     JsonInferenceResponse,
-    ListInferencesRequest,
 )
 from tqdm.asyncio import tqdm
 
 FUNCTION_NAME = "extract_entities"
 EVALUATION_NAME = "extract_entities_eval"
-
-TEMPLATE_VARIANT_NAME = "baseline"
+DATASET_NAME = "extract_entities_dataset"
 
 # Models to use for analyzing inferences and generating prompt mutations
 ANALYSIS_MODEL = "openai::gpt-5.2"
@@ -74,9 +70,8 @@ async def process_datapoint(datapoint: Row, t0: AsyncTensorZeroGateway, semaphor
 
 
 async def main():
-    t0 = await AsyncTensorZeroGateway.build_embedded(  # type: ignore[misc]
-        config_file="config/tensorzero.toml",
-        clickhouse_url=os.environ.get("TENSORZERO_CLICKHOUSE_URL"),
+    t0 = await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
     )
 
     # Load datapoints
@@ -94,47 +89,60 @@ async def main():
     tasks = [process_datapoint(dp, t0, semaphore) for dp in datapoints]
     await tqdm.gather(*tasks, desc="Processing samples")
 
-    inferences_response = await t0.list_inferences(
-        request=ListInferencesRequest(
-            function_name=FUNCTION_NAME,
-            output_source="inference",  # could also be "demonstration"
-            limit=NUM_SAMPLES,
-        ),
+    # Create a dataset from the inferences we just ran
+    await t0.create_datapoints_from_inferences(
+        dataset_name=DATASET_NAME,
+        params={
+            "type": "inference_query",
+            "function_name": FUNCTION_NAME,
+            "output_source": "inference",
+        },
     )
 
-    rendered_samples = await t0.experimental_render_samples(
-        stored_samples=inferences_response.inferences,
-        variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
-    )
-
-    random.shuffle(rendered_samples)
-    split_idx = len(rendered_samples) // 2
-    train_samples = rendered_samples[:split_idx]
-    val_samples = rendered_samples[split_idx:]
-
-    optimization_config = GEPAConfig(
+    # Launch GEPA optimization
+    result = await t0.optimization.gepa.launch(
         function_name=FUNCTION_NAME,
+        dataset_name=DATASET_NAME,
         evaluation_name=EVALUATION_NAME,
         analysis_model=ANALYSIS_MODEL,
         mutation_model=MUTATION_MODEL,
         initial_variants=INITIAL_VARIANTS,
         max_iterations=MAX_ITERATIONS,
-        max_concurrency=MAX_CONCURRENCY,
-        max_tokens=16384,
     )
 
-    job_handle = await t0.experimental_launch_optimization(
-        train_samples=train_samples,
-        val_samples=val_samples,
-        optimization_config=optimization_config,
-    )
+    task_id = result.task_id
+    print(f"GEPA task launched: {task_id}")
 
-    job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
+    # Poll for results
+    while True:
+        response = await t0.optimization.gepa.get(task_id=task_id)
 
-    assert job_info.output is not None
-    variant_configs = job_info.output["content"]
+        if response["status"] == "completed":
+            print("GEPA optimization completed!")
+            break
+        elif response["status"] == "error":
+            print(f"GEPA optimization failed: {response['error']}")
+            return
+        else:
+            progress = response.get("progress")
+            if progress:
+                print(
+                    f"  Iteration {progress['current_iteration']}/{progress['max_iterations']}"
+                    f" — {progress['current_step']}"
+                )
+            time.sleep(10)
 
-    for variant_name, variant_config in variant_configs.items():
+    # Print optimized variants and their evaluation statistics
+    for variant_name, stats in response["statistics"].items():
+        print(f"\n# Variant: {variant_name}")
+        for evaluator_name, evaluator_stats in stats.items():
+            print(
+                f"  {evaluator_name}: mean={evaluator_stats['mean']:.3f}"
+                f" stdev={evaluator_stats['stdev']:.3f}"
+                f" (n={evaluator_stats['count']})"
+            )
+
+    for variant_name, variant_config in response["variants"].items():
         print(f"\n# Optimized variant: {variant_name}")
         for template_name, template in variant_config["templates"].items():
             print(f"## '{template_name}' template:")
