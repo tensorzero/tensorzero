@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -8,7 +7,6 @@ use crate::db::clickhouse::query_builder::{ClickhouseType, JoinRegistry, QueryPa
 use crate::db::{EpisodeByIdRow, EpisodeQueries, TableBoundsWithCount};
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::{Error, ErrorDetails};
-use crate::serde_util::deserialize_u64;
 
 use super::ClickHouseConnectionInfo;
 
@@ -373,42 +371,4 @@ pub(crate) fn build_pagination_clause(
         ),
         _ => (String::new(), vec![]),
     }
-}
-
-pub(crate) fn parse_json_rows<T: serde::de::DeserializeOwned>(
-    response: &str,
-) -> Result<Vec<T>, Error> {
-    response
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|row| {
-            serde_json::from_str(row).map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseDeserialization {
-                    message: format!("Failed to deserialize row: {e}"),
-                })
-            })
-        })
-        .collect()
-}
-
-pub(crate) fn parse_count(response: &str) -> Result<u64, Error> {
-    #[derive(Deserialize)]
-    struct CountResult {
-        #[serde(deserialize_with = "deserialize_u64")]
-        count: u64,
-    }
-
-    let line = response.trim().lines().next().ok_or_else(|| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: "No count result returned from database".to_string(),
-        })
-    })?;
-
-    let result: CountResult = serde_json::from_str(line).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: format!("Failed to deserialize count: {e}"),
-        })
-    })?;
-
-    Ok(result.count)
 }

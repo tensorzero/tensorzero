@@ -140,7 +140,7 @@ redis = { workspace = true }
 rustls = { workspace = true }
 
 [dev-dependencies]
-googletest = "0.14.2"
+googletest = { workspace = true }
 googletest-matchers = { path = "../googletest-matchers" }
 tempfile = { workspace = true }
 rand_distr = "0.6.0"

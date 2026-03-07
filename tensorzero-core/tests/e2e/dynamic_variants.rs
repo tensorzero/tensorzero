@@ -1,5 +1,6 @@
 #![expect(clippy::print_stdout)]
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -8,6 +9,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn test_dynamic_chat_variant() {
+    skip_for_postgres!();
     let mut payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -68,6 +70,7 @@ async fn test_dynamic_chat_variant() {
 
 #[tokio::test]
 async fn test_dynamic_mixture_of_n() {
+    skip_for_postgres!();
     let mut payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -131,6 +134,7 @@ async fn test_dynamic_mixture_of_n() {
 
 #[tokio::test]
 async fn test_dynamic_best_of_n() {
+    skip_for_postgres!();
     let mut payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),

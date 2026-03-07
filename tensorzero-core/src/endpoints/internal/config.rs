@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tracing::instrument;
 
 use crate::config::UninitializedConfig;
@@ -19,8 +20,10 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 /// Response containing a config snapshot.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetConfigResponse {
-    /// The config in a form suitable for serialization.
-    pub config: UninitializedConfig,
+    /// The config as a JSON value.
+    /// Important: This should not be a strongly typed UninitializedConfig.
+    /// Nothing outside of the gateway should attempt to deserialize it into UninitializedConfig.
+    pub config: Value,
     /// The hash identifying this config version.
     pub hash: String,
     /// Templates that were loaded from the filesystem.
@@ -31,13 +34,20 @@ pub struct GetConfigResponse {
 
 impl GetConfigResponse {
     fn from_snapshot(snapshot: ConfigSnapshot) -> Result<Self, Error> {
-        Ok(Self {
-            hash: snapshot.hash.to_string(),
-            config: snapshot.config.try_into().map_err(|e: &'static str| {
+        let uninitialized: UninitializedConfig =
+            snapshot.config.try_into().map_err(|e: &'static str| {
                 Error::new(ErrorDetails::Config {
                     message: e.to_string(),
                 })
-            })?,
+            })?;
+        let config = serde_json::to_value(&uninitialized).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to serialize config: {e}"),
+            })
+        })?;
+        Ok(Self {
+            hash: snapshot.hash.to_string(),
+            config,
             extra_templates: snapshot.extra_templates,
             tags: snapshot.tags,
         })

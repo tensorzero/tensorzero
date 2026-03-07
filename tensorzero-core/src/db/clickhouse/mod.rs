@@ -16,6 +16,7 @@ use crate::db::clickhouse::clickhouse_client::DisabledClickHouseClient;
 use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
 use crate::error::DelayedError;
 use crate::error::{Error, ErrorDetails};
+use crate::serde_util::deserialize_u64;
 
 // Re-export for backwards compatibility.
 pub use crate::db::BatchWriterHandle;
@@ -490,6 +491,44 @@ where
 {
     let s = String::deserialize(deserializer)?;
     s.parse::<u64>().map_err(serde::de::Error::custom)
+}
+
+pub(crate) fn parse_json_rows<T: serde::de::DeserializeOwned>(
+    response: &str,
+) -> Result<Vec<T>, Error> {
+    response
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|row| {
+            serde_json::from_str(row).map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseDeserialization {
+                    message: format!("Failed to deserialize row: {e}"),
+                })
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn parse_count(response: &str) -> Result<u64, Error> {
+    #[derive(Deserialize)]
+    struct CountResult {
+        #[serde(deserialize_with = "deserialize_u64")]
+        count: u64,
+    }
+
+    let line = response.trim().lines().next().ok_or_else(|| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: "No count result returned from database".to_string(),
+        })
+    })?;
+
+    let result: CountResult = serde_json::from_str(line).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: format!("Failed to deserialize count: {e}"),
+        })
+    })?;
+
+    Ok(result.count)
 }
 
 #[cfg(test)]

@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use serde::Deserialize;
 
-use super::ClickHouseConnectionInfo;
-use super::episode_queries::{parse_count, parse_json_rows};
-use super::escape_string_for_clickhouse_literal;
+use super::{
+    ClickHouseConnectionInfo, escape_string_for_clickhouse_literal, parse_count, parse_json_rows,
+};
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::db::evaluation_queries::EvaluationResultRow;
 use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
@@ -16,6 +16,8 @@ use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::db::evaluation_queries::EvaluationStatisticsRow;
 use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
 use crate::db::evaluation_queries::InferenceEvaluationRunInsert;
+use crate::db::evaluation_queries::InferenceEvaluationRunMetadata;
+use crate::db::evaluation_queries::InferenceEvaluationRunMetricMetadata;
 use crate::db::evaluation_queries::RawEvaluationResultRow;
 use crate::endpoints::inference::InferenceResponse;
 use crate::error::{Error, ErrorDetails};
@@ -126,6 +128,84 @@ fn get_evaluation_result_datapoint_id_subquery(
 
 #[async_trait]
 impl EvaluationQueries for ClickHouseConnectionInfo {
+    async fn get_inference_evaluation_run_metadata(
+        &self,
+        evaluation_run_ids: &[uuid::Uuid],
+    ) -> Result<Vec<(uuid::Uuid, InferenceEvaluationRunMetadata)>, Error> {
+        if evaluation_run_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let run_ids_strs: Vec<String> = evaluation_run_ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect();
+        let run_ids_formatted = format!("[{}]", run_ids_strs.join(","));
+
+        let query = r"
+            SELECT
+                toString(uint_to_uuid(run_id_uint)) AS run_id,
+                argMax(evaluation_name, updated_at) AS evaluation_name,
+                argMax(function_name, updated_at) AS function_name,
+                argMax(function_type, updated_at) AS function_type,
+                argMax(metrics, updated_at) AS metrics
+            FROM InferenceEvaluationRuns
+            WHERE run_id_uint IN (
+                SELECT arrayJoin(arrayMap(x -> toUInt128(toUUID(x)), {run_ids:Array(String)}))
+            )
+            GROUP BY run_id_uint
+            FORMAT JSONEachRow
+        "
+        .to_string();
+
+        let mut params = HashMap::new();
+        params.insert("run_ids", run_ids_formatted.as_str());
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        if response.response.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct RawRow {
+            run_id: String,
+            evaluation_name: String,
+            function_name: String,
+            function_type: FunctionConfigType,
+            metrics: String,
+        }
+
+        let rows: Vec<RawRow> = parse_json_rows(&response.response)?;
+        let mut results = Vec::with_capacity(rows.len());
+
+        for row in rows {
+            let run_id: uuid::Uuid = row.run_id.parse().map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to parse run_id UUID: {e}"),
+                })
+            })?;
+            let metrics: Vec<InferenceEvaluationRunMetricMetadata> =
+                serde_json::from_str(&row.metrics).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to deserialize metrics: {e}"),
+                    })
+                })?;
+
+            results.push((
+                run_id,
+                InferenceEvaluationRunMetadata {
+                    evaluation_name: row.evaluation_name,
+                    function_name: row.function_name,
+                    function_type: row.function_type,
+                    metrics,
+                },
+            ));
+        }
+
+        Ok(results)
+    }
+
     async fn insert_inference_evaluation_run(
         &self,
         run: &InferenceEvaluationRunInsert,
