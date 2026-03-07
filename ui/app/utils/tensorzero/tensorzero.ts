@@ -791,8 +791,14 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    */
   async getVariantSamplingProbabilities(
     functionName: string,
+    namespace?: string,
   ): Promise<GetVariantSamplingProbabilitiesResponse> {
-    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_sampling_probabilities`;
+    const searchParams = new URLSearchParams();
+    if (namespace) {
+      searchParams.append("namespace", namespace);
+    }
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_sampling_probabilities${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {

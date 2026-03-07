@@ -18,6 +18,7 @@ import { CHART_COLORS } from "~/utils/chart";
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
   functionName: string;
+  namespace: string | undefined;
   feedbackTimeseries?: CumulativeFeedbackTimeSeriesPoint[];
   variantSamplingProbabilities: { [key in string]?: number };
 }
@@ -25,6 +26,7 @@ interface FunctionExperimentationProps {
 export const FunctionExperimentation = memo(function FunctionExperimentation({
   functionConfig,
   functionName,
+  namespace,
   feedbackTimeseries,
   variantSamplingProbabilities,
 }: FunctionExperimentationProps) {
@@ -59,9 +61,16 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
     return null;
   }
 
+  // Resolve the active experimentation config (namespace-specific or base)
+  const namespaces = functionConfig.experimentation.namespaces;
+  const activeExperimentationConfig =
+    namespace && Object.hasOwn(namespaces, namespace)
+      ? namespaces[namespace]
+      : functionConfig.experimentation.base;
+
   // Transform feedback timeseries data once for both charts
   const shouldShowTimeseries =
-    functionConfig.experimentation.base.type === "adaptive" &&
+    activeExperimentationConfig.type === "adaptive" &&
     feedbackTimeseries &&
     feedbackTimeseries.length > 0;
 
@@ -71,8 +80,8 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
 
   // Extract metric name for adaptive experimentation
   const metricName =
-    functionConfig.experimentation.base.type === "adaptive"
-      ? functionConfig.experimentation.base.metric
+    activeExperimentationConfig.type === "adaptive"
+      ? activeExperimentationConfig.metric
       : "";
 
   // Create a centralized chart config to ensure consistent colors across all panels

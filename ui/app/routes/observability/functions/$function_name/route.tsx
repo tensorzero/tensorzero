@@ -1,5 +1,6 @@
 import type { Route } from "./+types/route";
-import { data, useLocation } from "react-router";
+import { data, useLocation, useSearchParams } from "react-router";
+import { useCallback, useMemo } from "react";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
@@ -15,6 +16,7 @@ import {
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { FunctionTypeBadge } from "~/components/function/FunctionSelector";
+import { NamespaceSelector } from "~/components/function/NamespaceSelector";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type { FunctionConfig, TimeWindow } from "~/types/tensorzero";
 import { fetchVariantsSectionData } from "./variants-data.server";
@@ -31,14 +33,29 @@ import {
 } from "./inferences-data.server";
 import { InferencesSection } from "./InferencesSection";
 
+function getNamespaceNames(functionConfig: FunctionConfig | null): string[] {
+  if (!functionConfig) return [];
+  return Object.keys(functionConfig.experimentation.namespaces).sort();
+}
+
+interface FunctionDetailPageHeaderProps {
+  functionName: string;
+  functionConfig: FunctionConfig | null;
+  namespace: string | undefined;
+  onNamespaceChange: (namespace: string | undefined) => void;
+}
+
 function FunctionDetailPageHeader({
   functionName,
   functionConfig,
-}: {
-  functionName: string;
-  functionConfig: FunctionConfig | null;
-}) {
+  namespace,
+  onNamespaceChange,
+}: FunctionDetailPageHeaderProps) {
   const autopilotAvailable = useAutopilotAvailable();
+  const namespaces = useMemo(
+    () => getNamespaceNames(functionConfig),
+    [functionConfig],
+  );
 
   return (
     <PageHeader
@@ -55,9 +72,18 @@ function FunctionDetailPageHeader({
       }
     >
       {functionConfig && <BasicInfo functionConfig={functionConfig} />}
-      {autopilotAvailable && (
-        <AskAutopilotButton message={`Function: ${functionName}\n\n`} />
-      )}
+      <div className="flex items-center gap-3">
+        {namespaces.length > 0 && (
+          <NamespaceSelector
+            namespaces={namespaces}
+            value={namespace}
+            onChange={onNamespaceChange}
+          />
+        )}
+        {autopilotAvailable && (
+          <AskAutopilotButton message={`Function: ${functionName}\n\n`} />
+        )}
+      </div>
     </PageHeader>
   );
 }
@@ -70,6 +96,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;
   const metric_name = url.searchParams.get("metric_name") || undefined;
+  const namespace = url.searchParams.get("namespace") || undefined;
   const time_granularity = (url.searchParams.get("time_granularity") ||
     "week") as TimeWindow;
   const throughput_time_granularity = (url.searchParams.get(
@@ -91,6 +118,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     function_name,
+    namespace,
     variantsData: fetchVariantsSectionData({ function_name, function_config }),
     experimentationData:
       function_name !== DEFAULT_FUNCTION
@@ -98,6 +126,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             function_name,
             function_config,
             time_granularity: feedback_time_granularity,
+            namespace,
           })
         : null,
     throughputData: fetchThroughputSectionData({
@@ -125,6 +154,7 @@ export default function FunctionDetailPage({
 }: Route.ComponentProps) {
   const {
     function_name,
+    namespace,
     variantsData,
     experimentationData,
     throughputData,
@@ -133,7 +163,26 @@ export default function FunctionDetailPage({
     inferencesData,
   } = loaderData;
   const location = useLocation();
+  const [, setSearchParams] = useSearchParams();
   const function_config = useFunctionConfig(function_name);
+
+  const handleNamespaceChange = useCallback(
+    (ns: string | undefined) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (ns) {
+            next.set("namespace", ns);
+          } else {
+            next.delete("namespace");
+          }
+          return next;
+        },
+        { preventScrollReset: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
@@ -144,6 +193,8 @@ export default function FunctionDetailPage({
       <FunctionDetailPageHeader
         functionName={function_name}
         functionConfig={function_config}
+        namespace={namespace}
+        onNamespaceChange={handleNamespaceChange}
       />
 
       <SectionsGroup>
@@ -158,6 +209,7 @@ export default function FunctionDetailPage({
             experimentationData={experimentationData}
             functionConfig={function_config}
             functionName={function_name}
+            namespace={namespace}
             locationKey={location.key}
           />
         )}

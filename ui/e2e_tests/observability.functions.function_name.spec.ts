@@ -137,9 +137,8 @@ test("should show experimentation section with pie chart for write_haiku functio
     page.getByText("This chart displays the current sampling probabilities"),
   ).toBeVisible();
 
-  // Check that all four variants are shown with 25.0% weight
-  // The pie chart should display percentages on the chart (use first since there are 4 instances)
-  await expect(page.getByText("25.0%").first()).toBeVisible();
+  // Check that the pie chart shows the configured static weights (50%, 30%, 20%, 0%)
+  await expect(page.getByText("50.0%").first()).toBeVisible();
 
   // Check that the legend contains all four variant names
   // Just verify they exist on the page - they appear in multiple places

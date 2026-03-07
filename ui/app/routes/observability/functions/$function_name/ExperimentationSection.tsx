@@ -12,6 +12,7 @@ interface ExperimentationSectionProps {
   experimentationData: Promise<ExperimentationSectionData>;
   functionConfig: FunctionConfig;
   functionName: string;
+  namespace: string | undefined;
   locationKey: string;
 }
 
@@ -19,6 +20,7 @@ export function ExperimentationSection({
   experimentationData,
   functionConfig,
   functionName,
+  namespace,
   locationKey,
 }: ExperimentationSectionProps) {
   return (
@@ -50,6 +52,7 @@ export function ExperimentationSection({
             <FunctionExperimentation
               functionConfig={functionConfig}
               functionName={functionName}
+              namespace={namespace}
               feedbackTimeseries={data.feedback_timeseries}
               variantSamplingProbabilities={data.variant_sampling_probabilities}
             />
