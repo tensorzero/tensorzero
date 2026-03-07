@@ -112,7 +112,7 @@ pub async fn get_or_load_config(
 pub async fn action(
     app_state: &AppStateData,
     params: ActionInputInfo,
-    heartbeater: Option<Arc<dyn Heartbeater>>,
+    heartbeater: Arc<dyn Heartbeater>,
 ) -> Result<ActionResponse, Error> {
     let config = get_or_load_config(app_state, &params.snapshot_hash).await?;
 

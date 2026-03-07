@@ -216,7 +216,7 @@ impl SimpleTool for RunEvaluationTool {
             .action(
                 snapshot_hash,
                 ActionInput::RunEvaluation(Box::new(params)),
-                Some(ctx.heartbeater().clone()),
+                ctx.heartbeater().clone(),
             )
             .await
             .map_err(|e| AutopilotToolError::client_error("run_evaluation", e))?;

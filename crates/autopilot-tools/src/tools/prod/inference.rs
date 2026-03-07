@@ -212,7 +212,7 @@ impl SimpleTool for InferenceTool {
             .action(
                 snapshot_hash,
                 ActionInput::Inference(Box::new(client_params)),
-                None,
+                ctx.heartbeater().clone(),
             )
             .await
             .map_err(|e| AutopilotToolError::client_error("inference", e))?;

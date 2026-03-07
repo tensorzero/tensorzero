@@ -146,7 +146,7 @@ pub struct RunEvaluationResponse {
 pub async fn run_evaluation(
     app_state: AppStateData,
     params: &RunEvaluationParams,
-    heartbeater: Option<Arc<dyn Heartbeater>>,
+    heartbeater: Arc<dyn Heartbeater>,
 ) -> Result<RunEvaluationResponse, RunEvaluationError> {
     // Validate concurrency
     if params.concurrency == 0 {
@@ -245,7 +245,7 @@ pub async fn run_evaluation(
 async fn collect_results(
     result: evaluations::EvaluationStreamResult,
     include_datapoint_results: bool,
-    heartbeater: Option<Arc<dyn Heartbeater>>,
+    heartbeater: Arc<dyn Heartbeater>,
 ) -> Result<RunEvaluationResponse, RunEvaluationError> {
     let evaluation_run_id = result.run_info.evaluation_run_id;
     let num_datapoints = result.run_info.num_datapoints;
@@ -265,10 +265,8 @@ async fn collect_results(
         }
 
         // Heartbeat if >=30s since last heartbeat (real work just completed)
-        if let Some(ref hb) = heartbeater
-            && last_heartbeat.elapsed() >= std::time::Duration::from_secs(30)
-        {
-            let _ = hb.heartbeat(None).await;
+        if last_heartbeat.elapsed() >= std::time::Duration::from_secs(30) {
+            let _ = heartbeater.heartbeat(None).await;
             last_heartbeat = std::time::Instant::now();
         }
     }

@@ -426,13 +426,8 @@ impl TensorZeroClient for Client {
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
-        heartbeater: Option<Arc<dyn durable::Heartbeater>>,
+        _heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<ActionResponse, TensorZeroClientError> {
-        if heartbeater.is_some() {
-            return Err(TensorZeroClientError::NotSupported(
-                "Heartbeater cannot be threaded through HTTP action calls".to_string(),
-            ));
-        }
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
                 let url = http
@@ -852,7 +847,7 @@ impl TensorZeroClient for Client {
             } => crate::run_evaluation::run_evaluation(
                 gateway.handle.app_state.clone(),
                 &params,
-                None,
+                Arc::new(durable::NoopHeartbeater),
             )
             .await
             .map_err(|e| TensorZeroClientError::Evaluation(e.to_string())),

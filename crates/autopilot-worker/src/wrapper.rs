@@ -408,7 +408,7 @@ mod tests {
                 &self,
                 snapshot_hash: SnapshotHash,
                 params: ActionInput,
-                heartbeater: Option<std::sync::Arc<dyn durable_tools::Heartbeater>>,
+                heartbeater: std::sync::Arc<dyn durable_tools::Heartbeater>,
             ) -> Result<ActionResponse, TensorZeroClientError>;
 
             async fn get_config_snapshot(
