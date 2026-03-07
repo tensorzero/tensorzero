@@ -25,8 +25,11 @@ jobs:
       pull-requests: read
     runs-on: ubuntu-latest
     outputs:
-      docs: ${{ steps.filter.outputs.docs || 'true' }}
+      clickhouse-tests: ${{ steps.filter.outputs.clickhouse-tests || 'true' }}
+      client-tests: ${{ steps.filter.outputs.client-tests || 'true' }}
       code: ${{ steps.filter.outputs.code || 'true' }}
+      docs: ${{ steps.filter.outputs.docs || 'true' }}
+      live-tests: ${{ steps.filter.outputs.live-tests || 'true' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         if: github.event_name != 'pull_request'
@@ -35,11 +38,33 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         with:
           filters: |
-            docs:
-              - 'docs/**'
+            clickhouse-tests:
+              - '**'
+              - '!**/README.md'
+              - '!docs/**'
+              - '!examples/**'
+              - '!recipes/**'
+              - '!ui/**'
+            client-tests:
+              - '**'
+              - '!**/README.md'
+              - '!docs/**'
+              - '!examples/**'
+              - '!recipes/**'
+              - '!ui/**'
             code:
               - '**'
+              - '!**/README.md'
               - '!docs/**'
+            docs:
+              - 'docs/**'
+            live-tests:
+              - '**'
+              - '!**/README.md'
+              - '!docs/**'
+              - '!examples/**'
+              - '!recipes/**'
+              - '!ui/**'
 
   check-version-consistency:
     needs: [detect-changes]
@@ -800,11 +825,12 @@ jobs:
   clickhouse-tests:
     needs:
       [
+        detect-changes,
         build-gateway-e2e-container,
         build-mock-provider-api-container,
         build-fixtures-container,
       ]
-    if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ needs.detect-changes.outputs.clickhouse-tests == 'true' && (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository)) }}
     permissions:
       contents: read
       actions: read
@@ -1278,9 +1304,10 @@ jobs:
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
 
   live-tests:
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    if: ${{ needs.detect-changes.outputs.live-tests == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     needs:
       [
+        detect-changes,
         build-gateway-container,
         build-gateway-e2e-container,
         build-fixtures-container,
@@ -1294,9 +1321,10 @@ jobs:
     secrets: inherit
 
   client-tests:
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    if: ${{ needs.detect-changes.outputs.client-tests == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     needs:
       [
+        detect-changes,
         build-gateway-container,
         build-gateway-e2e-container,
         build-mock-provider-api-container,
