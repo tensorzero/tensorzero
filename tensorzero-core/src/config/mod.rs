@@ -42,7 +42,10 @@ use crate::config::snapshot::ConfigSnapshot;
 use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
-use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
+use crate::evaluations::{
+    EvaluationConfig, EvaluatorConfig, UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
+    get_top_level_evaluator_metric_name, get_top_level_llm_judge_function_name,
+};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, get_function};
 #[cfg(feature = "pyo3")]
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
@@ -126,6 +129,7 @@ pub struct Config {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
+    pub evaluators: HashMap<String, Arc<EvaluatorConfig>>, // evaluator name => evaluator config (top-level)
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: Arc<TemplateConfig<'static>>,
     pub object_store_info: Option<ObjectStoreInfo>,
@@ -929,6 +933,7 @@ struct ProcessedConfigInput {
     models: HashMap<Arc<str>, UninitializedModelConfig>,
     embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>,
     metrics: HashMap<String, MetricConfig>,
+    evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     evaluations: HashMap<String, UninitializedEvaluationConfig>,
     provider_types: ProviderTypesConfig,
     optimizers: HashMap<String, UninitializedOptimizerInfo>,
@@ -988,6 +993,7 @@ async fn process_config_input(
                 functions,
                 metrics,
                 tools,
+                evaluators,
                 evaluations,
                 provider_types,
                 optimizers,
@@ -1031,6 +1037,7 @@ async fn process_config_input(
                 models,
                 embedding_models,
                 metrics,
+                evaluators,
                 evaluations,
                 provider_types,
                 optimizers,
@@ -1071,6 +1078,7 @@ async fn process_config_input(
                 functions,
                 metrics,
                 tools,
+                evaluators,
                 evaluations,
                 provider_types,
                 optimizers,
@@ -1099,6 +1107,7 @@ async fn process_config_input(
                 functions: functions.clone(),
                 metrics: metrics.clone(),
                 tools: tools.clone(),
+                evaluators: evaluators.clone(),
                 evaluations: evaluations.clone(),
                 provider_types: provider_types.clone(),
                 optimizers: optimizers.clone(),
@@ -1133,6 +1142,7 @@ async fn process_config_input(
                 models,
                 embedding_models,
                 metrics,
+                evaluators,
                 evaluations,
                 provider_types,
                 optimizers,
@@ -1321,6 +1331,7 @@ impl Config {
             models,
             embedding_models,
             metrics,
+            evaluators: uninitialized_evaluators,
             evaluations: uninitialized_evaluations,
             provider_types,
             optimizers: uninitialized_optimizers,
@@ -1404,6 +1415,7 @@ impl Config {
             functions,
             metrics,
             tools,
+            evaluators: HashMap::new(),
             evaluations: HashMap::new(),
             templates: Arc::new(templates),
             object_store_info,
@@ -1418,6 +1430,61 @@ impl Config {
 
         // Validate the config
         config.validate().await?;
+
+        // Load top-level evaluators before evaluations, since evaluation presets may reference them
+        for (name, evaluator_config) in uninitialized_evaluators {
+            let (evaluator_config, function_config, metric_config) =
+                evaluator_config.load(None, &name)?;
+            // Register LLM judge function if present
+            if let Some(function_config) = function_config {
+                let function_name = get_top_level_llm_judge_function_name(&name);
+                if config.functions.contains_key(&function_name) {
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Duplicate top-level evaluator function name: `{function_name}` already exists"
+                        ),
+                    }
+                    .into());
+                }
+                let function_config = Arc::new(function_config);
+                let templates = Arc::get_mut(&mut config.templates).ok_or_else(|| {
+                    Error::from(ErrorDetails::Config {
+                        message: format!("Internal error: templates Arc has multiple references. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                    })
+                })?;
+                for variant in function_config.variants().values() {
+                    for template in variant.get_all_template_paths() {
+                        templates.add_template(
+                            template.path.get_template_key(),
+                            template.contents.clone(),
+                        )?;
+                    }
+                }
+                function_config
+                    .validate(
+                        &config.tools,
+                        &config.models,
+                        &config.embedding_models,
+                        &config.templates,
+                        &function_name,
+                        &config.gateway,
+                    )
+                    .await?;
+                config.functions.insert(function_name, function_config);
+            }
+            // Register canonical metric
+            let metric_name = get_top_level_evaluator_metric_name(&name);
+            if config.metrics.contains_key(&metric_name) {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                        "Duplicate top-level evaluator metric name: `{metric_name}` already exists"
+                    ),
+                }
+                .into());
+            }
+            config.metrics.insert(metric_name, metric_config);
+            config.evaluators.insert(name, Arc::new(evaluator_config));
+        }
 
         // We add the evaluations after validation since we will be writing tensorzero:: functions to the functions map
         // and tensorzero:: metrics to the metrics map
@@ -1778,6 +1845,8 @@ pub struct UninitializedConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
+    pub evaluators: HashMap<String, UninitializedEvaluatorConfig>, // evaluator name => evaluator config (top-level)
+    #[serde(default)]
     pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
     #[serde(default)]
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
@@ -1894,6 +1963,8 @@ struct TomlUninitializedConfig {
     #[serde(default)]
     tools: HashMap<String, UninitializedToolConfig>,
     #[serde(default)]
+    evaluators: HashMap<String, UninitializedEvaluatorConfig>,
+    #[serde(default)]
     evaluations: HashMap<String, UninitializedEvaluationConfig>,
     #[serde(default)]
     provider_types: ProviderTypesConfig,
@@ -1922,6 +1993,7 @@ impl TryFrom<TomlUninitializedConfig> for UninitializedConfig {
             functions: toml_config.functions,
             metrics: toml_config.metrics,
             tools: toml_config.tools,
+            evaluators: toml_config.evaluators,
             evaluations: toml_config.evaluations,
             provider_types: toml_config.provider_types,
             optimizers: toml_config.optimizers,

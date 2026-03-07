@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-googletest = "0.14.2"
+googletest = { workspace = true }
 serde_json = { workspace = true }
 
 [lints]

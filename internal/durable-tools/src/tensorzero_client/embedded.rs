@@ -15,6 +15,7 @@ use tensorzero::{
     TensorZeroError, UpdateDatapointRequest, UpdateDatapointsResponse, WriteConfigRequest,
     WriteConfigResponse,
 };
+use tensorzero_core::config::UninitializedConfig;
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
@@ -68,11 +69,9 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         params: ClientInferenceParams,
     ) -> Result<InferenceResponse, TensorZeroClientError> {
-        let internal_params = params
-            .try_into()
-            .map_err(|e: tensorzero_core::error::Error| {
-                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            })?;
+        let internal_params = params.try_into().map_err(|e: Error| {
+            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+        })?;
 
         let result = Box::pin(inference(
             self.app_state.config.clone(),
@@ -160,11 +159,14 @@ impl TensorZeroClient for EmbeddedClient {
             config_snapshot_hash,
         };
 
-        create_event(autopilot_client, session_id, full_request, &[])
-            .await
-            .map_err(|e| {
-                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            })
+        create_event(
+            autopilot_client,
+            session_id,
+            full_request,
+            Default::default(),
+        )
+        .await
+        .map_err(|e| TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() }))
     }
 
     async fn list_autopilot_events(
@@ -260,18 +262,26 @@ impl TensorZeroClient for EmbeddedClient {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
             })?;
 
-        Ok(GetConfigResponse {
-            hash: snapshot.hash.to_string(),
-            config: snapshot.config.try_into().map_err(|e: &'static str| {
+        let uninitialized: UninitializedConfig =
+            snapshot.config.try_into().map_err(|e: &'static str| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other {
-                    source: tensorzero_core::error::Error::new(
-                        tensorzero_core::error::ErrorDetails::Config {
-                            message: e.to_string(),
-                        },
-                    )
+                    source: Error::new(ErrorDetails::Config {
+                        message: e.to_string(),
+                    })
                     .into(),
                 })
-            })?,
+            })?;
+        let config = serde_json::to_value(&uninitialized).map_err(|e| {
+            TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::Config {
+                    message: format!("Failed to serialize config: {e}"),
+                })
+                .into(),
+            })
+        })?;
+        Ok(GetConfigResponse {
+            hash: snapshot.hash.to_string(),
+            config,
             extra_templates: snapshot.extra_templates,
             tags: snapshot.tags,
         })

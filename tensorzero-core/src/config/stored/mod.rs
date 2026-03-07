@@ -28,7 +28,7 @@ use crate::config::{
     AutopilotConfig, ClickHouseConfig, MetricConfig, PostgresConfig, UninitializedConfig,
     UninitializedFunctionConfig, UninitializedToolConfig,
 };
-use crate::evaluations::UninitializedEvaluationConfig;
+use crate::evaluations::{UninitializedEvaluationConfig, UninitializedEvaluatorConfig};
 use crate::inference::types::storage::StorageKind;
 use crate::model::UninitializedModelConfig;
 use crate::optimization::UninitializedOptimizerInfo;
@@ -60,6 +60,8 @@ pub struct StoredConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>,
     #[serde(default)]
+    pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
+    #[serde(default)]
     pub evaluations: HashMap<String, UninitializedEvaluationConfig>,
     #[serde(default)]
     pub provider_types: ProviderTypesConfig,
@@ -88,6 +90,7 @@ impl From<UninitializedConfig> for StoredConfig {
             functions,
             metrics,
             tools,
+            evaluators,
             evaluations,
             provider_types,
             optimizers,
@@ -104,6 +107,7 @@ impl From<UninitializedConfig> for StoredConfig {
             functions,
             metrics,
             tools,
+            evaluators,
             evaluations,
             provider_types,
             optimizers,
@@ -132,6 +136,7 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
             functions,
             metrics,
             tools,
+            evaluators,
             evaluations,
             provider_types,
             optimizers,
@@ -157,6 +162,7 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
             functions,
             metrics,
             tools,
+            evaluators,
             evaluations,
             provider_types,
             optimizers,
@@ -452,5 +458,15 @@ mod tests {
             !serialized.contains("enabled"),
             "serialized PostgresConfig should not include deprecated enabled field: {serialized}"
         );
+    }
+
+    /// Old snapshots without [evaluators] should load with empty evaluators
+    #[test]
+    fn test_stored_config_without_evaluators() {
+        let toml_str = "";
+        let stored: StoredConfig = toml::from_str(toml_str).expect("empty config should parse");
+        assert!(stored.evaluators.is_empty());
+        let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
+        assert!(uninit.evaluators.is_empty());
     }
 }

@@ -23,9 +23,8 @@ use crate::{
 };
 
 use super::{
-    ClickHouseConnectionInfo,
-    episode_queries::{build_pagination_clause, parse_count, parse_json_rows},
-    escape_string_for_clickhouse_literal,
+    ClickHouseConnectionInfo, episode_queries::build_pagination_clause,
+    escape_string_for_clickhouse_literal, parse_count, parse_json_rows,
 };
 
 /// Raw database result for metrics with feedback (without metric_type)

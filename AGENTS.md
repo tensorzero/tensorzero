@@ -18,6 +18,9 @@
 - Annotate new tests with `#[gtest]` (googletest crate).
 - Include descriptive messages: use `.expect("why")` over `.unwrap()`, and add custom messages to key assertions.
 - Prefer `expect_that!` to collect all failure messages; use `assert_that!` when subsequent code depends on the assertion.
+- To check a string is non-empty, use `not(eq(""))`.
+- Prefer `matches_pattern!` to assert on multiple struct fields at once rather than separate assertions per field.
+- Use `matches_json!` and `matches_json_literal!` from the `googletest_matchers` crate for JSON assertions.
 
 ## For APIs
 

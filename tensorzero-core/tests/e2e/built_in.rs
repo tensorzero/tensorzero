@@ -14,14 +14,15 @@
 //! - Experimentation/sampling - requires multiple variants
 
 use crate::common::get_gateway_endpoint;
+use googletest::prelude::*;
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
-use tensorzero_core::db::clickhouse::test_helpers::{
-    select_chat_inference_clickhouse, select_json_inference_clickhouse,
-};
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
+use tensorzero_core::test_helpers::get_e2e_config;
 use uuid::Uuid;
 
+#[gtest]
 #[tokio::test]
 async fn test_built_in_hello_chat_with_system_variables() {
     // Test calling the built-in tensorzero::hello_chat function with system template variables
@@ -57,7 +58,7 @@ async fn test_built_in_hello_chat_with_system_variables() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
 
     // Now try with dryrun enabled
     payload["dryrun"] = json!(true);
@@ -73,7 +74,7 @@ async fn test_built_in_hello_chat_with_system_variables() {
     let body = response.text().await.unwrap();
     println!("Response status: {status}");
     println!("Response body: {body}");
-    assert_eq!(status, StatusCode::OK, "Unexpected response: {body}");
+    expect_that!(status, eq(StatusCode::OK), "Unexpected response: {body}");
     let response_json: Value = serde_json::from_str(&body).unwrap();
     println!("{response_json:#}");
 
@@ -81,21 +82,37 @@ async fn test_built_in_hello_chat_with_system_variables() {
     let content = response_json["content"].as_array().unwrap();
     let text_block = content.first().unwrap();
     let text = text_block["text"].as_str().unwrap();
-    assert!(text.contains("Howdy! I am a built-in TensorZero chat function."));
+    expect_that!(
+        text,
+        contains_substring("Howdy! I am a built-in TensorZero chat function.")
+    );
 
     // Check that inference_id is present
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
-    // Check ClickHouse - no inference should be written when dryrun is true
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_none());
+    // No inference should be written when dryrun is true
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences,
+        is_empty(),
+        "No inference should be written when dryrun is true"
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_built_in_hello_json() {
     // Test calling the built-in tensorzero::hello_json function
@@ -129,7 +146,7 @@ async fn test_built_in_hello_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
 
     // Now try with dryrun enabled
     payload["dryrun"] = json!(true);
@@ -141,26 +158,39 @@ async fn test_built_in_hello_json() {
         .unwrap();
 
     // Check Response is OK
-    assert_eq!(response.status(), StatusCode::OK);
+    expect_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     println!("{response_json:#}");
 
     // For JSON functions, the response should have an "output" field instead of "content"
-    assert!(response_json.get("output").is_some());
+    expect_that!(response_json.get("output"), some(anything()));
 
     // Check that inference_id is present
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
-    // Check ClickHouse - no inference should be written when dryrun is true
-    let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id).await;
-    assert!(result.is_none());
+    // No inference should be written when dryrun is true
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    expect_that!(
+        inferences,
+        is_empty(),
+        "No inference should be written when dryrun is true"
+    );
 }
 
+#[gtest]
 #[tokio::test]
 async fn test_built_in_error_no_variant() {
     // Test that built-in functions fail gracefully without dynamic variant config
@@ -186,8 +216,8 @@ async fn test_built_in_error_no_variant() {
         .unwrap();
 
     // Should return 500 with error about no variants
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    expect_that!(response.status(), eq(StatusCode::INTERNAL_SERVER_ERROR));
     let error_json = response.json::<Value>().await.unwrap();
     let error_msg = error_json["error"].as_str().unwrap();
-    assert!(error_msg.contains("has no variants"));
+    expect_that!(error_msg, contains_substring("has no variants"));
 }

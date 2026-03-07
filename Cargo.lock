@@ -533,7 +533,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -561,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-tools"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "anyhow",
  "arrow",
@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-worker"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -661,9 +661,9 @@ dependencies = [
 
 [[package]]
 name = "aws-config"
-version = "1.8.14"
+version = "1.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a8fc176d53d6fe85017f230405e3255cedb4a02221cb55ed6d76dccbbb099b2"
+checksum = "11493b0bad143270fb8ad284a096dd529ba91924c5409adeac856cc1bf047dbc"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -681,7 +681,7 @@ dependencies = [
  "fastrand",
  "hex",
  "http 1.4.0",
- "ring",
+ "sha1",
  "time",
  "tokio",
  "tracing",
@@ -691,9 +691,9 @@ dependencies = [
 
 [[package]]
 name = "aws-credential-types"
-version = "1.2.13"
+version = "1.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d203b0bf2626dcba8665f5cd0871d7c2c0930223d6b6be9097592fea21242d0"
+checksum = "8f20799b373a1be121fe3005fba0c2090af9411573878f224df44b42727fcaf7"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-runtime-api",
@@ -726,9 +726,9 @@ dependencies = [
 
 [[package]]
 name = "aws-runtime"
-version = "1.7.1"
+version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ede2ddc593e6c8acc6ce3358c28d6677a6dc49b65ba4b37a2befe14a11297e75"
+checksum = "5fc0651c57e384202e47153c1260b84a9936e19803d747615edf199dc3b98d17"
 dependencies = [
  "aws-credential-types",
  "aws-sigv4",
@@ -751,9 +751,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-sso"
-version = "1.95.0"
+version = "1.96.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00c5ff27c6ba2cbd95e6e26e2e736676fdf6bcf96495b187733f521cfe4ce448"
+checksum = "f64a6eded248c6b453966e915d32aeddb48ea63ad17932682774eb026fbef5b1"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -775,9 +775,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-ssooidc"
-version = "1.97.0"
+version = "1.98.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d186f1e5a3694a188e5a0640b3115ccc6e084d104e16fd6ba968dca072ffef8"
+checksum = "db96d720d3c622fcbe08bae1c4b04a72ce6257d8b0584cb5418da00ae20a344f"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -799,9 +799,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-sts"
-version = "1.99.0"
+version = "1.100.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9acba7c62f3d4e2408fa998a3a8caacd8b9a5b5549cf36e2372fbdae329d5449"
+checksum = "fafbdda43b93f57f699c5dfe8328db590b967b8a820a13ccdd6687355dfcc7ca"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -824,9 +824,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sigv4"
-version = "1.4.1"
+version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37411f8e0f4bea0c3ca0958ce7f18f6439db24d555dbd809787262cd00926aa9"
+checksum = "b0b660013a6683ab23797778e21f1f854744fdf05f68204b4cca4c8c04b5d1f4"
 dependencies = [
  "aws-credential-types",
  "aws-smithy-http",
@@ -1015,9 +1015,9 @@ dependencies = [
 
 [[package]]
 name = "aws-types"
-version = "1.3.13"
+version = "1.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0470cc047657c6e286346bdf10a8719d26efd6a91626992e0e64481e44323e96"
+checksum = "47c8323699dd9b3c8d5b3c13051ae9cdef58fd179957c882f8374dd8725962d9"
 dependencies = [
  "aws-credential-types",
  "aws-smithy-async",
@@ -1586,7 +1586,7 @@ dependencies = [
 
 [[package]]
 name = "config-applier"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "pathdiff",
  "schemars 1.2.1",
@@ -1599,8 +1599,8 @@ dependencies = [
  "tensorzero-derive",
  "thiserror 2.0.18",
  "tokio",
- "toml 1.0.3+spec-1.1.0",
- "toml_edit 0.25.3+spec-1.1.0",
+ "toml 1.0.4+spec-1.1.0",
+ "toml_edit 0.25.4+spec-1.1.0",
  "ts-rs",
 ]
 
@@ -2203,7 +2203,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2237,7 +2237,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "async-trait",
  "durable",
@@ -2379,7 +2379,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2473,7 +2473,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2719,7 +2719,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "async-stream",
  "autopilot-client",
@@ -2949,7 +2949,7 @@ dependencies = [
 
 [[package]]
 name = "googletest-matchers"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "googletest",
  "serde_json",
@@ -4122,7 +4122,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "minijinja",
  "serde",
@@ -4859,7 +4859,7 @@ checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
 name = "postgres-inference-load-test"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4941,7 +4941,7 @@ version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
 dependencies = [
- "toml_edit 0.25.3+spec-1.1.0",
+ "toml_edit 0.25.4+spec-1.1.0",
 ]
 
 [[package]]
@@ -5448,7 +5448,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5783,7 +5783,7 @@ dependencies = [
 
 [[package]]
 name = "reqwest-sse-stream"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "async-stream",
  "futures",
@@ -6909,7 +6909,7 @@ dependencies = [
  "tensorzero-optimizers",
  "tokio",
  "tokio-stream",
- "toml 1.0.3+spec-1.1.0",
+ "toml 1.0.4+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -6918,7 +6918,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "axum",
  "chrono",
@@ -6938,11 +6938,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-config-paths"
-version = "2026.3.0"
+version = "2026.3.1"
 
 [[package]]
 name = "tensorzero-core"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -7039,7 +7039,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
- "toml 1.0.3+spec-1.1.0",
+ "toml 1.0.4+spec-1.1.0",
  "tonic",
  "tracing",
  "tracing-futures",
@@ -7068,7 +7068,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "config-applier",
  "napi",
@@ -7083,7 +7083,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -7118,7 +7118,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "evaluations",
  "futures",
@@ -7136,11 +7136,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-ts-types"
-version = "2026.3.0"
+version = "2026.3.1"
 
 [[package]]
 name = "tensorzero-types"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "aws-smithy-types",
  "infer",
@@ -7163,7 +7163,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types-providers"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -7173,7 +7173,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2026.3.0"
+version = "2026.3.1"
 
 [[package]]
 name = "termcolor"
@@ -7419,9 +7419,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.0.3+spec-1.1.0"
+version = "1.0.4+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7614eaf19ad818347db24addfa201729cf2a9b6fdfd9eb0ab870fcacc606c0c"
+checksum = "c94c3321114413476740df133f0d8862c61d87c8d26f04c6841e033c8c80db47"
 dependencies = [
  "indexmap 2.13.0",
  "serde_core",
@@ -7466,9 +7466,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.25.3+spec-1.1.0"
+version = "0.25.4+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0a07913e63758bc95142d9863a5a45173b71515e68b690cad70cf99c3255ce1"
+checksum = "7193cbd0ce53dc966037f54351dbbcf0d5a642c7f0038c382ef9e677ce8c13f2"
 dependencies = [
  "indexmap 2.13.0",
  "serde_core",
@@ -7728,7 +7728,7 @@ dependencies = [
  "serde_json",
  "target-triple",
  "termcolor",
- "toml 1.0.3+spec-1.1.0",
+ "toml 1.0.4+spec-1.1.0",
 ]
 
 [[package]]
@@ -8533,9 +8533,9 @@ checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
 
 [[package]]
 name = "winnow"
-version = "0.7.14"
+version = "0.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a5364e9d77fcdeeaa6062ced926ee3381faa2ee02d3eb83a5c27a8825540829"
+checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
 dependencies = [
  "memchr",
 ]

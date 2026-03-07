@@ -10,13 +10,14 @@ use crate::config::Config;
 use crate::db::evaluation_queries::{EvaluationQueries, EvaluationResultRow};
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::EvaluationConfig;
+use crate::function::FunctionConfigType;
 use crate::utils::gateway::{AppState, AppStateData};
 
 /// Query parameters for getting evaluation results.
 #[derive(Debug, Deserialize)]
 pub struct GetEvaluationResultsParams {
     /// The name of the evaluation (e.g., "haiku", "entity_extraction")
-    pub evaluation_name: String,
+    pub evaluation_name: Option<String>,
     /// Comma-separated list of evaluation run UUIDs
     pub evaluation_run_ids: String,
     /// Optional datapoint ID to filter results to a specific datapoint
@@ -65,7 +66,7 @@ pub async fn get_evaluation_results_handler(
     let response = get_evaluation_results(
         &app_state.config,
         &database,
-        &params.evaluation_name,
+        params.evaluation_name.as_deref(),
         &evaluation_run_ids,
         params.datapoint_id.as_ref(),
         limit,
@@ -76,24 +77,63 @@ pub async fn get_evaluation_results_handler(
     Ok(Json(response))
 }
 
-/// Core business logic for getting paginated evaluation results.
-pub async fn get_evaluation_results(
+/// Resolved metadata needed to query evaluation results.
+struct ResolvedEvaluationMetadata {
+    function_name: String,
+    function_type: FunctionConfigType,
+    metric_names: Vec<String>,
+}
+
+/// Resolves evaluation metadata by first checking the `inference_evaluation_runs` table,
+/// then falling back to the evaluation config.
+async fn resolve_evaluation_metadata(
     config: &Config,
-    clickhouse: &impl EvaluationQueries,
-    evaluation_name: &str,
+    db: &impl EvaluationQueries,
+    evaluation_name: Option<&str>,
     evaluation_run_ids: &[Uuid],
-    datapoint_id: Option<&Uuid>,
-    limit: u32,
-    offset: u32,
-) -> Result<GetEvaluationResultsResponse, Error> {
-    // Look up the evaluation config
+) -> Result<ResolvedEvaluationMetadata, Error> {
+    // Try to read metadata from the database for all requested runs
+    if !evaluation_run_ids.is_empty() {
+        let results = db
+            .get_inference_evaluation_run_metadata(evaluation_run_ids)
+            .await?;
+        if let Some((_, first_metadata)) = results.first() {
+            let function_name = first_metadata.function_name.clone();
+            let function_type = first_metadata.function_type;
+
+            // Collect metric names from all runs (deduplicated, preserving insertion order)
+            let mut seen = std::collections::HashSet::new();
+            let mut metric_names = Vec::new();
+            for (_, metadata) in &results {
+                for m in &metadata.metrics {
+                    if seen.insert(&m.name) {
+                        metric_names.push(m.name.clone());
+                    }
+                }
+            }
+
+            return Ok(ResolvedEvaluationMetadata {
+                function_name,
+                function_type,
+                metric_names,
+            });
+        }
+    }
+
+    // Fall back to reading from config (legacy path)
+    let Some(evaluation_name) = evaluation_name else {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Did not provide an evaluation name when resolving evaluation metadata, and run metadata is not stored."
+                .to_string(),
+        }));
+    };
+
     let evaluation_config = config.evaluations.get(evaluation_name).ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Evaluation '{evaluation_name}' not found in config"),
+            message: format!("Evaluation `{evaluation_name}` not found in config"),
         })
     })?;
 
-    // Extract function_name and evaluators from the config
     let (function_name, evaluators) = match evaluation_config.as_ref() {
         EvaluationConfig::Inference(inference_config) => (
             &inference_config.function_name,
@@ -101,19 +141,13 @@ pub async fn get_evaluation_results(
         ),
     };
 
-    // Get the function config to determine the function type
     let function_config = config.functions.get(function_name).ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
-            message: format!("Function '{function_name}' not found in config"),
+            message: format!("Function `{function_name}` not found in config"),
         })
     })?;
 
-    // Get function type
-    let function_type = function_config.config_type();
-
-    // Build metric names from evaluator names
-    // Format: tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}
-    let metric_names: Vec<String> = evaluators
+    let metric_names = evaluators
         .keys()
         .map(|evaluator_name| {
             format!(
@@ -122,13 +156,35 @@ pub async fn get_evaluation_results(
         })
         .collect();
 
-    // Query the database
-    let results = clickhouse
+    Ok(ResolvedEvaluationMetadata {
+        function_name: function_name.clone(),
+        function_type: function_config.config_type(),
+        metric_names,
+    })
+}
+
+/// Core business logic for getting paginated evaluation results.
+///
+/// Tries to read function_name and metric_names from the `inference_evaluation_runs` table first.
+/// Falls back to the evaluation config if the run metadata is not found in the database.
+pub async fn get_evaluation_results(
+    config: &Config,
+    db: &impl EvaluationQueries,
+    evaluation_name: Option<&str>,
+    evaluation_run_ids: &[Uuid],
+    datapoint_id: Option<&Uuid>,
+    limit: u32,
+    offset: u32,
+) -> Result<GetEvaluationResultsResponse, Error> {
+    let metadata =
+        resolve_evaluation_metadata(config, db, evaluation_name, evaluation_run_ids).await?;
+
+    let results = db
         .get_evaluation_results(
-            function_name,
+            &metadata.function_name,
             evaluation_run_ids,
-            function_type,
-            &metric_names,
+            metadata.function_type,
+            &metadata.metric_names,
             datapoint_id,
             limit,
             offset,
@@ -141,7 +197,10 @@ pub async fn get_evaluation_results(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::evaluation_queries::{ChatEvaluationResultRow, MockEvaluationQueries};
+    use crate::db::evaluation_queries::{
+        ChatEvaluationResultRow, InferenceEvaluationRunMetadata,
+        InferenceEvaluationRunMetricMetadata, MockEvaluationQueries,
+    };
     use crate::evaluations::{EvaluatorConfig, ExactMatchConfig, InferenceEvaluationConfig};
     use crate::function::{
         FunctionConfig, FunctionConfigChat, FunctionConfigJson, FunctionConfigType,
@@ -211,13 +270,155 @@ mod tests {
         }
     }
 
+    /// Helper to set up the mock to return empty metadata, triggering the config fallback.
+    fn mock_no_db_metadata(mock: &mut MockEvaluationQueries) {
+        mock.expect_get_inference_evaluation_run_metadata()
+            .returning(|_| Box::pin(async { Ok(Vec::new()) }));
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_from_db_metadata() {
+        let config = Config::default();
+        let evaluation_run_id = Uuid::now_v7();
+
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_db
+            .expect_get_inference_evaluation_run_metadata()
+            .withf(move |ids| ids == [evaluation_run_id])
+            .times(1)
+            .returning(move |ids| {
+                let run_id = ids[0];
+                Box::pin(async move {
+                    Ok(vec![(
+                        run_id,
+                        InferenceEvaluationRunMetadata {
+                            evaluation_name: "db_eval".to_string(),
+                            function_name: "db_function".to_string(),
+                            function_type: FunctionConfigType::Chat,
+                            metrics: vec![InferenceEvaluationRunMetricMetadata {
+                                name: "metric_from_db".to_string(),
+                                evaluator_name: Some("my_evaluator".to_string()),
+                                value_type: "boolean".to_string(),
+                                optimize: None,
+                            }],
+                        },
+                    )])
+                })
+            });
+        mock_db
+            .expect_get_evaluation_results()
+            .withf(
+                move |fn_name, _run_ids, fn_type, metrics, _dp_id, _limit, _offset| {
+                    fn_name == "db_function"
+                        && *fn_type == FunctionConfigType::Chat
+                        && metrics == ["metric_from_db"]
+                },
+            )
+            .times(1)
+            .returning(|_, _, _, _, _, _, _| Box::pin(async { Ok(vec![]) }));
+
+        let result =
+            get_evaluation_results(&config, &mock_db, None, &[evaluation_run_id], None, 100, 0)
+                .await
+                .unwrap();
+
+        assert_eq!(result.results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_merges_metrics_across_runs() {
+        let config = Config::default();
+        let run_id_1 = Uuid::now_v7();
+        let run_id_2 = Uuid::now_v7();
+
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_db
+            .expect_get_inference_evaluation_run_metadata()
+            .withf(move |ids| ids.len() == 2 && ids.contains(&run_id_1) && ids.contains(&run_id_2))
+            .times(1)
+            .returning(move |_| {
+                Box::pin(async move {
+                    Ok(vec![
+                        (
+                            run_id_1,
+                            InferenceEvaluationRunMetadata {
+                                evaluation_name: "eval".to_string(),
+                                function_name: "my_function".to_string(),
+                                function_type: FunctionConfigType::Chat,
+                                metrics: vec![
+                                    InferenceEvaluationRunMetricMetadata {
+                                        name: "metric_a".to_string(),
+                                        evaluator_name: Some("eval_a".to_string()),
+                                        value_type: "boolean".to_string(),
+                                        optimize: None,
+                                    },
+                                    InferenceEvaluationRunMetricMetadata {
+                                        name: "metric_shared".to_string(),
+                                        evaluator_name: Some("eval_shared".to_string()),
+                                        value_type: "float".to_string(),
+                                        optimize: None,
+                                    },
+                                ],
+                            },
+                        ),
+                        (
+                            run_id_2,
+                            InferenceEvaluationRunMetadata {
+                                evaluation_name: "eval".to_string(),
+                                function_name: "my_function".to_string(),
+                                function_type: FunctionConfigType::Chat,
+                                metrics: vec![
+                                    InferenceEvaluationRunMetricMetadata {
+                                        name: "metric_shared".to_string(),
+                                        evaluator_name: Some("eval_shared".to_string()),
+                                        value_type: "float".to_string(),
+                                        optimize: None,
+                                    },
+                                    InferenceEvaluationRunMetricMetadata {
+                                        name: "metric_b".to_string(),
+                                        evaluator_name: Some("eval_b".to_string()),
+                                        value_type: "boolean".to_string(),
+                                        optimize: None,
+                                    },
+                                ],
+                            },
+                        ),
+                    ])
+                })
+            });
+        mock_db
+            .expect_get_evaluation_results()
+            .withf(
+                move |fn_name, run_ids, fn_type, metrics, _dp_id, _limit, _offset| {
+                    fn_name == "my_function"
+                    && run_ids.len() == 2
+                    && *fn_type == FunctionConfigType::Chat
+                    // All three unique metrics should be present (deduplicated)
+                    && metrics.len() == 3
+                    && metrics.contains(&"metric_a".to_string())
+                    && metrics.contains(&"metric_shared".to_string())
+                    && metrics.contains(&"metric_b".to_string())
+                },
+            )
+            .times(1)
+            .returning(|_, _, _, _, _, _, _| Box::pin(async { Ok(vec![]) }));
+
+        let result =
+            get_evaluation_results(&config, &mock_db, None, &[run_id_1, run_id_2], None, 100, 0)
+                .await
+                .unwrap();
+
+        assert_eq!(result.results.len(), 0);
+    }
+
     #[tokio::test]
     async fn test_get_evaluation_results_chat_function() {
         let config = create_test_config_with_chat_function();
         let evaluation_run_id = Uuid::now_v7();
 
-        let mut mock_clickhouse = MockEvaluationQueries::new();
-        mock_clickhouse
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_no_db_metadata(&mut mock_db);
+        mock_db
             .expect_get_evaluation_results()
             .withf(
                 move |fn_name, run_ids, fn_type, metrics, dp_id, limit, offset| {
@@ -263,8 +464,8 @@ mod tests {
 
         let result = get_evaluation_results(
             &config,
-            &mock_clickhouse,
-            "test_eval",
+            &mock_db,
+            Some("test_eval"),
             &[evaluation_run_id],
             None,
             100,
@@ -287,8 +488,9 @@ mod tests {
         let config = create_test_config_with_json_function();
         let evaluation_run_id = Uuid::now_v7();
 
-        let mut mock_clickhouse = MockEvaluationQueries::new();
-        mock_clickhouse
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_no_db_metadata(&mut mock_db);
+        mock_db
             .expect_get_evaluation_results()
             .withf(
                 |_fn_name, _run_ids, fn_type, _metrics, _dp_id, _limit, _offset| {
@@ -300,8 +502,8 @@ mod tests {
 
         let result = get_evaluation_results(
             &config,
-            &mock_clickhouse,
-            "test_eval",
+            &mock_db,
+            Some("test_eval"),
             &[evaluation_run_id],
             None,
             100,
@@ -316,12 +518,13 @@ mod tests {
     #[tokio::test]
     async fn test_get_evaluation_results_evaluation_not_found() {
         let config = create_test_config_with_chat_function();
-        let mock_clickhouse = MockEvaluationQueries::new();
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_no_db_metadata(&mut mock_db);
 
         let result = get_evaluation_results(
             &config,
-            &mock_clickhouse,
-            "nonexistent_eval",
+            &mock_db,
+            Some("nonexistent_eval"),
             &[Uuid::now_v7()],
             None,
             100,
@@ -357,12 +560,13 @@ mod tests {
             ..Default::default()
         };
 
-        let mock_clickhouse = MockEvaluationQueries::new();
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_no_db_metadata(&mut mock_db);
 
         let result = get_evaluation_results(
             &config,
-            &mock_clickhouse,
-            "test_eval",
+            &mock_db,
+            Some("test_eval"),
             &[Uuid::now_v7()],
             None,
             100,
@@ -381,8 +585,9 @@ mod tests {
         let config = create_test_config_with_chat_function();
         let evaluation_run_id = Uuid::now_v7();
 
-        let mut mock_clickhouse = MockEvaluationQueries::new();
-        mock_clickhouse
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_no_db_metadata(&mut mock_db);
+        mock_db
             .expect_get_evaluation_results()
             .withf(
                 |_fn_name, _run_ids, _fn_type, _metrics, _dp_id, limit, offset| {
@@ -394,8 +599,8 @@ mod tests {
 
         let result = get_evaluation_results(
             &config,
-            &mock_clickhouse,
-            "test_eval",
+            &mock_db,
+            Some("test_eval"),
             &[evaluation_run_id],
             None,
             50,
@@ -439,8 +644,9 @@ mod tests {
             ..Default::default()
         };
 
-        let mut mock_clickhouse = MockEvaluationQueries::new();
-        mock_clickhouse
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_no_db_metadata(&mut mock_db);
+        mock_db
             .expect_get_evaluation_results()
             .withf(
                 |_fn_name, _run_ids, _fn_type, metrics, _dp_id, _limit, _offset| {
@@ -453,8 +659,8 @@ mod tests {
 
         let result = get_evaluation_results(
             &config,
-            &mock_clickhouse,
-            "test_eval",
+            &mock_db,
+            Some("test_eval"),
             &[Uuid::now_v7()],
             None,
             100,
@@ -472,8 +678,9 @@ mod tests {
         let evaluation_run_id = Uuid::now_v7();
         let datapoint_id = Uuid::now_v7();
 
-        let mut mock_clickhouse = MockEvaluationQueries::new();
-        mock_clickhouse
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_no_db_metadata(&mut mock_db);
+        mock_db
             .expect_get_evaluation_results()
             .withf(
                 move |_fn_name, _run_ids, _fn_type, _metrics, dp_id, _limit, _offset| {
@@ -509,8 +716,8 @@ mod tests {
 
         let result = get_evaluation_results(
             &config,
-            &mock_clickhouse,
-            "test_eval",
+            &mock_db,
+            Some("test_eval"),
             &[evaluation_run_id],
             Some(&datapoint_id),
             u32::MAX,

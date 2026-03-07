@@ -191,15 +191,15 @@ pub async fn list_events(
 ///
 /// This is the core function called by both the HTTP handler and embedded client.
 ///
-/// `beta_tools` is forwarded as the `tensorzero-beta-tools` header to the remote server.
+/// Any `tensorzero-` prefixed headers are forwarded to the remote server.
 pub async fn create_event(
     autopilot_client: &AutopilotClient,
     session_id: Uuid,
     request: CreateEventRequest,
-    beta_tools: &[String],
+    extra_headers: reqwest::header::HeaderMap,
 ) -> Result<CreateEventResponse, Error> {
     autopilot_client
-        .create_event(session_id, request, beta_tools)
+        .create_event(session_id, request, extra_headers)
         .await
         .map_err(Error::from)
 }
@@ -314,7 +314,7 @@ pub async fn list_events_handler(
 ///
 /// Creates an event in a session via the Autopilot API.
 /// The deployment_id is injected from the gateway's app state.
-/// The `tensorzero-beta-tools` header, if present, is forwarded to the remote server.
+/// Any headers with a `tensorzero-` prefix are forwarded to the remote server.
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.create_event", skip_all, fields(session_id = %session_id))]
 pub async fn create_event_handler(
@@ -325,12 +325,13 @@ pub async fn create_event_handler(
 ) -> Result<Json<CreateEventResponse>, Error> {
     let client = get_autopilot_client(&app_state)?;
 
-    // Extract beta tools from the incoming request header
-    let beta_tools: Vec<String> = headers
-        .get("tensorzero-beta-tools")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.split(',').map(|t| t.trim().to_string()).collect())
-        .unwrap_or_default();
+    // Extract all headers with a `tensorzero-` prefix to forward to the remote server
+    let mut extra_headers = reqwest::header::HeaderMap::new();
+    for (name, value) in &headers {
+        if name.as_str().starts_with("tensorzero-") {
+            extra_headers.append(name.clone(), value.clone());
+        }
+    }
 
     // Get deployment_id from app state
     let deployment_id = app_state
@@ -368,7 +369,7 @@ pub async fn create_event_handler(
         config_snapshot_hash,
     };
 
-    let response = create_event(&client, session_id, request, &beta_tools).await?;
+    let response = create_event(&client, session_id, request, extra_headers).await?;
     Ok(Json(response))
 }
 

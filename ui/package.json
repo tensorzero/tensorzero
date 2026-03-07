@@ -1,6 +1,6 @@
 {
   "name": "tensorzero-ui",
-  "version": "2026.3.0",
+  "version": "2026.3.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,10 +25,10 @@
     "@clickhouse/client": "^1.11.2",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.3.3",
-    "@codemirror/language": "^6.11.2",
+    "@codemirror/language": "^6.12.2",
     "@codemirror/legacy-modes": "^6.5.1",
-    "@codemirror/state": "^6.5.2",
-    "@codemirror/view": "^6.38.0",
+    "@codemirror/state": "^6.5.4",
+    "@codemirror/view": "^6.39.16",
     "@hookform/resolvers": "^5.1.1",
     "@radix-ui/react-switch": "^1.2.6",
     "@react-router/node": "^7.12.0",

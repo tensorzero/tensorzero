@@ -8,7 +8,8 @@ use uuid::Uuid;
 use crate::db::evaluation_queries::{
     EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
     EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
-    InferenceEvaluationRunInsert, RawEvaluationResultRow,
+    InferenceEvaluationRunInsert, InferenceEvaluationRunMetadata,
+    InferenceEvaluationRunMetricMetadata, RawEvaluationResultRow,
 };
 use crate::endpoints::inference::InferenceResponse;
 use crate::error::{Error, ErrorDetails};
@@ -60,6 +61,51 @@ impl RawEvaluationStatisticsRow {
 
 #[async_trait]
 impl EvaluationQueries for PostgresConnectionInfo {
+    async fn get_inference_evaluation_run_metadata(
+        &self,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, InferenceEvaluationRunMetadata)>, Error> {
+        if evaluation_run_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let pool = self.get_pool_result()?;
+
+        #[derive(sqlx::FromRow)]
+        struct InferenceEvaluationRunMetadataRow {
+            run_id: Uuid,
+            evaluation_name: String,
+            function_name: String,
+            function_type: FunctionConfigType,
+            metrics: sqlx::types::Json<Vec<InferenceEvaluationRunMetricMetadata>>,
+        }
+        let rows: Vec<InferenceEvaluationRunMetadataRow> = sqlx::query_as(
+            r"
+            SELECT run_id, evaluation_name, function_name, function_type, metrics
+            FROM tensorzero.inference_evaluation_runs
+            WHERE run_id = ANY($1)
+            ",
+        )
+        .bind(evaluation_run_ids)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                (
+                    row.run_id,
+                    InferenceEvaluationRunMetadata {
+                        evaluation_name: row.evaluation_name,
+                        function_name: row.function_name,
+                        function_type: row.function_type,
+                        metrics: row.metrics.0,
+                    },
+                )
+            })
+            .collect())
+    }
+
     async fn insert_inference_evaluation_run(
         &self,
         run: &InferenceEvaluationRunInsert,

@@ -55,6 +55,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 // use tensorzero_core::config::provider_types::*;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
@@ -1010,6 +1011,7 @@ fn uses_credential_location(provider_type: &str) -> bool {
 /// 4. Configures the gateway to use the custom location via provider_types config
 /// 5. Verifies inference works
 pub async fn test_provider_type_default_credentials_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.model_provider_name);
 
@@ -1126,6 +1128,7 @@ model = "test-model"
 pub async fn test_provider_type_default_credentials_shorthand_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.model_provider_name);
 
@@ -1233,6 +1236,7 @@ pub async fn test_provider_type_fallback_credentials_with_provider(
     supports_dynamic_credentials_test: bool,
     logs_contain: &impl Fn(&str) -> bool,
 ) {
+    skip_for_postgres!();
     reset_capture_logs();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.provider_type);
@@ -1392,6 +1396,7 @@ model = "test-model"
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
     Box::pin(test_url_image_inference_with_provider_and_store(
@@ -1475,6 +1480,7 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_dat
 /// so there's no need to re-test them with PDF inputs.
 /// All of our PDF-capable providers are tested against the filesystem object store.
 pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary pdf dir: {}", temp_dir.path().to_string_lossy());
     let (client, storage_path) = Box::pin(test_base64_pdf_inference_with_provider_and_store(
@@ -1515,6 +1521,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
 }
 
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
     let (client, storage_path) = Box::pin(test_base64_image_inference_with_provider_and_store(
@@ -1578,6 +1585,7 @@ fn create_s3_object_store(
 }
 
 pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let test_bucket = "tensorzero-e2e-test-images";
     let test_bucket_region = "us-east-1";
     let client = create_s3_object_store(
@@ -1963,6 +1971,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 }
 
 pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     test_extra_body_with_provider_and_stream(&provider, false).await;
     test_extra_body_with_provider_and_stream(&provider, true).await;
 }
@@ -2103,6 +2112,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
 }
 
 pub async fn test_inference_extra_body_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     test_inference_extra_body_with_provider_and_stream(&provider, false).await;
     test_inference_extra_body_with_provider_and_stream(&provider, true).await;
 }
@@ -2361,6 +2371,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
 }
 
 pub async fn test_bad_auth_extra_headers_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     test_bad_auth_extra_headers_with_provider_and_stream(&provider, false).await;
     test_bad_auth_extra_headers_with_provider_and_stream(&provider, true).await;
 }
@@ -2561,6 +2572,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
     provider: E2ETestProvider,
     logs_contain: &impl Fn(&str) -> bool,
 ) {
+    skip_for_postgres!();
     reset_capture_logs();
     // Bedrock rejects input thoughts for these models
     if provider.model_name == "claude-haiku-4-5-aws-bedrock"
@@ -2658,6 +2670,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
 }
 
 pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     // * Mistral doesn't support assistant prefill
     // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
     // * Some AWS Bedrock models error when the last message is an assistant message
@@ -2734,6 +2747,7 @@ pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2
 }
 
 pub async fn test_empty_message_content_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -2779,6 +2793,7 @@ pub async fn test_empty_message_content_with_provider(provider: E2ETestProvider)
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -3722,6 +3737,7 @@ pub async fn check_simple_image_inference_response(
 }
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     // This test is very flaky on Fireworks for some reason
     if provider.model_provider_name == "fireworks" || provider.model_provider_name == "together" {
         return;
@@ -3798,6 +3814,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     // We use a serverless Sagemaker endpoint, which doesn't support streaming
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
@@ -3828,6 +3845,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
 }
 
 pub async fn test_streaming_include_original_response_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     // We use a serverless Sagemaker endpoint, which doesn't support streaming
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
@@ -4154,6 +4172,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 pub async fn test_inference_params_dynamic_credentials_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Gemini 2.5 models don't support penalty parameters
     if provider.model_name.contains("gemini-2.5") {
         return;
@@ -4459,6 +4478,7 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Gemini 2.5 models don't support penalty parameters
     if provider.model_name.contains("gemini-2.5") {
         return;
@@ -4769,6 +4789,7 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -5150,6 +5171,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
         return;
@@ -5508,6 +5530,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -5769,6 +5792,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
         return;
@@ -6064,6 +6088,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
     // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
@@ -6365,6 +6390,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
     // Groq says they support it, but it doesn't return the required tool as expected
     // Fireworks returns trash.
@@ -6714,6 +6740,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // NOTE: The xAI API occasionally returns mangled output most of the time when this test runs.
     // The bug has been reported to the xAI team.
     //
@@ -6984,6 +7011,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Gemini 2.5 produces unexpected behavior for this test (empty content or 'executableCode' blocks)
     // We don't support 'executableCode' in streaming mode (since we don't have "unknown" streaming chunks)
     if provider.model_name.contains("gemini-2.5") {
@@ -7290,6 +7318,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // GCP Vertex AI, Groq, Mistral, Together, and Fireworks don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
@@ -7635,6 +7664,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // - GCP Vertex AI, Mistral, Together, Groq, and Fireworks don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
@@ -8048,6 +8078,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Groq isn't respecting allowed_tools and will call brave_search instead of get_humidity, for example
     if provider.model_provider_name == "groq" {
         return;
@@ -8325,6 +8356,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
         return;
@@ -8691,6 +8723,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
 }
 
 pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     // NOTE: The xAI API returns an error for multi-turn tool use when the assistant message only has tool_calls but no content.
     // The xAI team has acknowledged the issue and is working on a fix.
     // We skip this test for xAI until the fix is deployed.
@@ -8992,6 +9025,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
 pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
         return;
@@ -9315,6 +9349,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
+    skip_for_postgres!();
     // OpenAI Responses doesn't support stop sequences
     // Azure reasoning models don't support stop sequences
     if provider.variant_name == "openai-responses" || provider.variant_name.contains("azure") {
@@ -9455,6 +9490,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let response = client.inference(tensorzero::ClientInferenceParams {
@@ -9770,6 +9806,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let input_function_name = "basic_test";
@@ -10129,6 +10166,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
 }
 
 pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -10500,6 +10538,7 @@ pub async fn check_parallel_tool_use_inference_response(
 pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     // Groq also doesn't seem to produce the correct tool call chunks, but not sure what's happening there yet.
     if provider.model_provider_name == "together" || provider.model_provider_name == "groq" {
@@ -10921,6 +10960,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
 }
 
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -11173,6 +11213,7 @@ pub async fn check_json_mode_inference_response(
 }
 
 pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -11442,6 +11483,7 @@ pub async fn check_dynamic_json_mode_inference_response(
 }
 
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     if provider.variant_name.contains("tgi")
         || provider.variant_name.contains("cot")
         || provider.model_provider_name == "groq"
@@ -11720,6 +11762,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
 
 /// Test the behavior of model providers when the model tries to output a lot more than `max_tokens`.
 pub async fn test_short_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     // We currently host ollama on sagemaker, and use a wrapped 'openai' provider
     // in our tensorzero.toml. ollama doesn't support 'max_completion_tokens', so this test
     // currently fails. It's fine to skip it, since we really care about testing the sagemaker
@@ -11971,6 +12014,7 @@ async fn check_short_inference_response(
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Together's model is too dumb to figure out multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
     if provider.model_provider_name == "together" {
         return;
@@ -12274,6 +12318,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
 pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     // Together's model is too dumb to figure out multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
     if provider.model_provider_name == "together" {
         return;
@@ -12615,6 +12660,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 }
 
 pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -12782,6 +12828,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
 }
 
 pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -12854,6 +12901,7 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
 pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
+    skip_for_postgres!();
     if provider.variant_name == "together-deepseek-r1" {
         // This produces invalid tool calls within text blocks (e.g 🛠\u{fe0f}\n\n```json\n{\n  \"too)
         return;
@@ -13022,6 +13070,7 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
 }
 
 pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
+    skip_for_postgres!();
     if provider.variant_name == "fireworks-kimi-k2p5-reasoning" {
         // This either times out or returns "Internal Server Error"
         return;

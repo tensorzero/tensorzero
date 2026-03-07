@@ -328,7 +328,13 @@ impl AutopilotClient {
             {
                 true
             }
-            EventPayload::ToolCall(tool_call) if !available_tools.contains(&tool_call.name) => true,
+            EventPayload::ToolCall(tool_call) if !available_tools.contains(&tool_call.name) => {
+                tracing::warn!(
+                    "Ignoring autopilot tool call of unknown tool `{}`",
+                    tool_call.name
+                );
+                true
+            }
             _ => false,
         }
     }
@@ -656,13 +662,12 @@ impl AutopilotClient {
     ///
     /// Use `Uuid::nil()` as the `session_id` to create a new session.
     ///
-    /// If `beta_tools` is non-empty, they are forwarded as the `tensorzero-beta-tools`
-    /// header (comma-separated) to the remote autopilot server.
+    /// Any headers in `extra_headers` are forwarded as-is to the remote autopilot server.
     pub async fn create_event(
         &self,
         session_id: Uuid,
         request: CreateEventRequest,
-        beta_tools: &[String],
+        extra_headers: HeaderMap,
     ) -> Result<CreateEventResponse, AutopilotError> {
         let tool_call_event_id = match &request.payload {
             EventPayload::ToolCallAuthorization(auth) => match auth.status {
@@ -693,12 +698,7 @@ impl AutopilotClient {
             .base_url
             .join(&format!("/v1/sessions/{session_id}/events"))?;
         let mut headers = self.auth_headers();
-        if !beta_tools.is_empty() {
-            let value = beta_tools.join(",");
-            if let Ok(value) = HeaderValue::from_str(&value) {
-                headers.insert("tensorzero-beta-tools", value);
-            }
-        }
+        headers.extend(extra_headers);
         let response = self
             .http_client
             .post(url)
@@ -1111,7 +1111,10 @@ impl AutopilotClient {
             previous_user_message_event_id: None,
             config_snapshot_hash: None,
         };
-        if let Err(e) = self.create_event(session_id, request, &[]).await {
+        if let Err(e) = self
+            .create_event(session_id, request, Default::default())
+            .await
+        {
             tracing::warn!(
                 %session_id,
                 %tool_call_event_id,
