@@ -57,7 +57,7 @@ tensorzero-core/tests/e2e/postgres-logs
 tensorzero-core/bindings
 tensorzero-optimizers/bindings
 clients/rust/bindings/
-internal/tensorzero-node/bindings/
+crates/tensorzero-node/bindings/
 *.junit.xml
 tensorzero-core/schemas
 
