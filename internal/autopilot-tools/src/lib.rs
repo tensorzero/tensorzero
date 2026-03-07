@@ -207,9 +207,7 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> 
         .await?;
 
     // Evaluation tool
-    visitor
-        .visit_simple_tool::<tools::RunEvaluationTool>()
-        .await?;
+    visitor.visit_task_tool(tools::RunEvaluationTool).await?;
 
     // Config snapshot tools
     visitor.visit_simple_tool::<tools::GetConfigTool>().await?;
