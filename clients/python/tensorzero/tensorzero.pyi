@@ -15,6 +15,7 @@ from typing import (
 from uuid import UUID
 
 import uuid_utils
+from typing_extensions import deprecated
 
 # PyO3
 from tensorzero import (
@@ -768,6 +769,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetInferencesResponse` object.
         """
 
+    @deprecated(
+        "`experimental_render_samples` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead."
+    )
     def experimental_render_samples(
         self,
         *,
@@ -794,6 +798,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    @deprecated(
+        "`experimental_launch_optimization` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead."
+    )
     def experimental_launch_optimization(
         self,
         *,
@@ -1227,6 +1234,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetInferencesResponse` object.
         """
 
+    @deprecated(
+        "`experimental_render_samples` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead."
+    )
     async def experimental_render_samples(
         self,
         *,
@@ -1252,6 +1262,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A list of rendered samples.
         """
 
+    @deprecated(
+        "`experimental_launch_optimization` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead."
+    )
     async def experimental_launch_optimization(
         self,
         *,
