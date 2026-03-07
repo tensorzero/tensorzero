@@ -183,7 +183,25 @@ async fn execute_gepa(
 
     let evaluator_configs = &setup.evaluator_configs;
 
+    tracing::info!(
+        "Starting GEPA optimization for function '{}' with {} train and {} val datapoints",
+        setup.gepa_config.function_name,
+        setup.train_datapoint_ids.len(),
+        setup.val_datapoint_ids.len()
+    );
+
+    tracing::info!(
+        "Initialized with {} baseline variants: {:?}",
+        setup.original_variants.len(),
+        setup.original_variants.keys().collect::<Vec<_>>()
+    );
+
     // ── Step "init_eval": evaluate all initial variants ─────────
+    tracing::info!(
+        "Evaluating {} initial variants on validation set",
+        setup.original_variants.len()
+    );
+
     let init_eval_params = InitEvalStepParams {
         evaluation_name: setup.gepa_config.evaluation_name.clone(),
         datapoint_ids: setup.val_datapoint_ids.clone(),
@@ -193,6 +211,11 @@ async fn execute_gepa(
     let init_scores: HashMap<VariantName, VariantScores> = ctx
         .step("init_eval", init_eval_params, init_eval_step)
         .await?;
+
+    tracing::info!(
+        "Initial evaluation complete: collected validation scores for {} variants",
+        init_scores.len()
+    );
 
     if init_scores.is_empty() {
         return Err(AutopilotToolError::validation(
@@ -271,6 +294,10 @@ async fn execute_gepa(
             .collect();
 
         // ── Step: evaluate parent on minibatch ──────────────────
+        tracing::info!(
+            "GEPA iteration {iteration}: evaluating parent variant on minibatch ({batch_size} datapoints)"
+        );
+
         let parent_eval: Option<EvalResult> = ctx
             .step(
                 &format!("iter_{iteration}_eval_parent"),
@@ -293,7 +320,18 @@ async fn execute_gepa(
             continue;
         };
 
+        tracing::debug!(
+            "GEPA iteration {iteration}: parent '{}' minibatch evaluation stats: {:#?}",
+            parent.name,
+            parent_eval.stats
+        );
+
         // ── Step: mutate parent to create child ─────────────────
+        tracing::info!(
+            "GEPA iteration {iteration}: generating child variant from parent '{}'",
+            parent.name
+        );
+
         let mutation: Option<MutationResult> = ctx
             .step(
                 &format!("iter_{iteration}_mutate"),
@@ -313,7 +351,17 @@ async fn execute_gepa(
             continue;
         };
 
+        tracing::info!(
+            "GEPA iteration {iteration}: mutation complete, evaluating child variant '{}'",
+            mutation.child_name
+        );
+
         // ── Step: evaluate child on minibatch ────────────────────
+        tracing::info!(
+            "GEPA iteration {iteration}: evaluating child variant '{}' on minibatch",
+            mutation.child_name
+        );
+
         let child_eval: Option<EvalResult> = ctx
             .step(
                 &format!("iter_{iteration}_eval_child"),
@@ -336,6 +384,17 @@ async fn execute_gepa(
             continue;
         };
 
+        tracing::debug!(
+            "GEPA iteration {iteration}: child '{}' minibatch evaluation stats: {:#?}",
+            mutation.child_name,
+            child_eval.stats
+        );
+
+        tracing::info!(
+            "GEPA iteration {iteration}: child variant '{}' minibatch evaluation complete",
+            mutation.child_name
+        );
+
         // Check if child improves on parent (minibatch comparison)
         let child_improves =
             is_improvement(&parent_eval.stats, &child_eval.stats, evaluator_configs);
@@ -346,6 +405,11 @@ async fn execute_gepa(
         }
 
         // ── Step: evaluate child on validation set ───────────────
+        tracing::info!(
+            "GEPA iteration {iteration}: evaluating child variant '{}' on validation set",
+            mutation.child_name
+        );
+
         let child_val_eval: Option<EvalResult> = ctx
             .step(
                 &format!("iter_{iteration}_eval_child_val"),
@@ -362,6 +426,17 @@ async fn execute_gepa(
             .await?;
 
         if let Some(val_eval) = child_val_eval {
+            tracing::debug!(
+                "GEPA iteration {iteration}: child '{}' validation evaluation stats: {:#?}",
+                mutation.child_name,
+                val_eval.stats
+            );
+            tracing::info!(
+                "GEPA iteration {iteration}: child variant '{}' validation scores collected ({} datapoints)",
+                mutation.child_name,
+                val_eval.scores.len()
+            );
+
             let mut candidate = HashMap::new();
             candidate.insert(
                 mutation.child_name.clone(),
@@ -383,6 +458,11 @@ async fn execute_gepa(
                     );
                 }
             }
+        } else {
+            tracing::warn!(
+                "GEPA iteration {iteration}: validation evaluation returned no results for child '{}'",
+                mutation.child_name
+            );
         }
     }
 
@@ -394,6 +474,7 @@ async fn execute_gepa(
         "GEPA optimization complete: created {} new variant(s)",
         new_variants.len()
     );
+    tracing::debug!("New variants: {:#?}", new_variants);
 
     // Build statistics from the Pareto frontier
     let statistics = build_statistics(&pareto_frontier, evaluator_configs);
