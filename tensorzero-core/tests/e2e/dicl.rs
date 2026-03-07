@@ -385,7 +385,13 @@ async fn embed_insert_example(
     };
 
     let response = provider_config
-        .embed(&request, &clients, &(&provider_config).into())
+        .embed(
+            &request,
+            &clients,
+            &(&provider_config).into(),
+            &Default::default(),
+            "test_embedding_model",
+        )
         .await
         .unwrap();
     let embedding = response.embeddings[0]
