@@ -37,6 +37,7 @@ use crate::howdy::{get_deployment_id, setup_howdy};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, RateLimitingManager};
 use autopilot_client::AutopilotClient;
+use durable_tools_spawn::SpawnClient;
 
 #[cfg(test)]
 use crate::db::clickhouse::ClickHouseClient;
@@ -183,6 +184,8 @@ pub struct AppStateData {
     pub config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
     /// Optional Autopilot API client for proxying requests to the Autopilot API
     pub autopilot_client: Option<Arc<AutopilotClient>>,
+    /// Optional durable task spawning client for GEPA workflows
+    pub spawn_client: Option<Arc<SpawnClient>>,
     /// The deployment ID from ClickHouse (64-char hex string)
     pub deployment_id: Option<String>,
     /// Token pool manager for rate limiting pre-borrowing
@@ -327,6 +330,7 @@ impl GatewayHandle {
                 auth_cache,
                 config_snapshot_cache: None,
                 autopilot_client: None,
+                spawn_client: None,
                 deployment_id: None,
                 rate_limiting_manager,
                 shutdown_token: cancel_token,
@@ -439,6 +443,25 @@ impl GatewayHandle {
             .into());
         }
 
+        let spawn_client = if let Some(pool) = postgres_connection_info.get_pool() {
+            let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
+                .unwrap_or_else(|_| "autopilot".to_string());
+            match SpawnClient::builder()
+                .pool(pool.clone())
+                .queue_name(&queue_name)
+                .build()
+                .await
+            {
+                Ok(client) => Some(Arc::new(client)),
+                Err(e) => {
+                    tracing::warn!("Failed to create `SpawnClient`: {e}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let autopilot_client = setup_autopilot_client(
             &postgres_connection_info,
             deployment_id.as_ref(),
@@ -479,6 +502,7 @@ impl GatewayHandle {
                 auth_cache,
                 config_snapshot_cache,
                 autopilot_client,
+                spawn_client,
                 deployment_id,
                 rate_limiting_manager,
                 shutdown_token: cancel_token,
@@ -508,6 +532,7 @@ impl AppStateData {
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
+            spawn_client: None,
             deployment_id: None,
             rate_limiting_manager: Arc::new(RateLimitingManager::new(
                 Arc::new(RateLimitingConfig::default()),
@@ -583,6 +608,7 @@ impl AppStateData {
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
+            spawn_client: None,
             deployment_id: None,
             rate_limiting_manager,
             shutdown_token,
@@ -814,20 +840,19 @@ async fn setup_autopilot_client(
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
-            let pool = postgres_connection_info.get_pool().ok_or_else(|| {
-                Error::new(ErrorDetails::AppState {
-                    message: "Autopilot client requires Postgres; set `TENSORZERO_POSTGRES_URL`."
-                        .to_string(),
-                })
-            })?;
+            let pool = match postgres_connection_info.get_pool() {
+                Some(pool) => pool,
+                None => {
+                    tracing::warn!(
+                        "Autopilot client requires Postgres; set `TENSORZERO_POSTGRES_URL`. Skipping autopilot setup."
+                    );
+                    return Ok(None);
+                }
+            };
 
-            // Require `deployment_id` (from ClickHouse) for autopilot
             if deployment_id.is_none() {
-                return Err(Error::new(ErrorDetails::AppState {
-                    message:
-                        "Failed to fetch the deployment ID from ClickHouse. Please make sure that ClickHouse is running and accessible."
-                            .to_string(),
-                }));
+                tracing::warn!("Failed to fetch the deployment ID. Skipping autopilot setup.");
+                return Ok(None);
             }
             let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
                 .unwrap_or_else(|_| "autopilot".to_string());

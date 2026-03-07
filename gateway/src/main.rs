@@ -624,24 +624,19 @@ pub async fn shutdown_signal() {
     };
 }
 
-/// Spawn the autopilot worker if environment variables are set.
+/// Spawn the durable worker if Postgres is configured.
+///
+/// The worker processes tasks from the durable queue. It starts whenever Postgres
+/// is available, regardless of whether the autopilot API key is set. This allows
+/// standalone durable tools (e.g. GEPA) to run without autopilot credentials.
 async fn spawn_autopilot_worker_if_configured(
     gateway_handle: &gateway::GatewayHandle,
 ) -> Result<Option<AutopilotWorkerHandle>, ExitCode> {
-    // Only start if autopilot client is configured
-    if gateway_handle.app_state.autopilot_client.is_none() {
-        tracing::debug!("Autopilot worker not configured: TENSORZERO_AUTOPILOT_API_KEY not set");
-        return Ok(None);
-    }
-
-    // Only start if postgres is enabled (needed for durable task queue)
+    // Only start if Postgres is enabled (needed for durable task queue)
     let pool = match &gateway_handle.app_state.postgres_connection_info {
         PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
         PostgresConnectionInfo::Disabled => {
-            tracing::error!(
-                "TENSORZERO_AUTOPILOT_API_KEY env var set, but Postgres is not enabled."
-            );
-            return Err(ExitCode::FAILURE);
+            return Ok(None);
         }
         #[cfg(test)]
         #[expect(unreachable_patterns)]

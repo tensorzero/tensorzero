@@ -73,9 +73,7 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
 
     type LlmParams = T::LlmParams;
     type SideInfo = AutopilotSideInfo;
-    /// The wrapped tool "returns" by writing to the autopilot API
-    /// so for our purposes the output of the tool is ()
-    type Output = ();
+    type Output = serde_json::Value;
 
     #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
@@ -89,12 +87,12 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
 
     #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
-        tensorzero_ts_types::UNIT
+        tensorzero_ts_types::TsTypeBundle("type JsonValue = any;")
     }
 
     #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
-        "void".to_string()
+        "JsonValue".to_string()
     }
 }
 
@@ -121,14 +119,18 @@ where
 
         // Prepare the outcome for the autopilot API
         let tool_name = self.inner.name().to_string();
-        let outcome = match result {
+        let (outcome, output_value) = match result {
             Ok(output) => {
-                let result_value = serde_json::to_value(&output)?;
-                ToolOutcome::Success(AutopilotToolResult::typed(result_value))
+                let value = serde_json::to_value(&output)?;
+                let outcome = ToolOutcome::Success(AutopilotToolResult::typed(value.clone()));
+                (outcome, value)
             }
-            Err(e) => ToolOutcome::Failure {
-                error: ToolFailure::Tool { error: e },
-            },
+            Err(e) => {
+                let outcome = ToolOutcome::Failure {
+                    error: ToolFailure::Tool { error: e },
+                };
+                (outcome, serde_json::Value::Null)
+            }
         };
 
         // Publish result to autopilot API (checkpointed)
@@ -138,11 +140,10 @@ where
             tool_name,
             outcome,
         };
-
         ctx.step("publish_result", publish_params, publish_result_step)
             .await?;
 
-        Ok(())
+        Ok(output_value)
     }
 }
 
@@ -221,9 +222,7 @@ where
 
     type LlmParams = T::LlmParams;
     type SideInfo = AutopilotSideInfo;
-    /// The wrapped tool "returns" by writing to the autopilot API
-    /// so for our purposes the output of the tool is ()
-    type Output = ();
+    type Output = serde_json::Value;
 
     #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
@@ -237,12 +236,12 @@ where
 
     #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
-        tensorzero_ts_types::UNIT
+        tensorzero_ts_types::TsTypeBundle("type JsonValue = any;")
     }
 
     #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
-        "void".to_string()
+        "JsonValue".to_string()
     }
 }
 
@@ -285,12 +284,16 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
             .await?;
 
         // Prepare the outcome for the autopilot API
-        let outcome = match step_result {
+        let (outcome, output_value) = match step_result {
             Ok(output) => {
-                let result_value = serde_json::to_value(&output)?;
-                ToolOutcome::Success(AutopilotToolResult::typed(result_value))
+                let value = serde_json::to_value(&output)?;
+                let outcome = ToolOutcome::Success(AutopilotToolResult::typed(value.clone()));
+                (outcome, value)
             }
-            Err(error) => ToolOutcome::Failure { error },
+            Err(error) => {
+                let outcome = ToolOutcome::Failure { error };
+                (outcome, serde_json::Value::Null)
+            }
         };
 
         // Publish result to autopilot API (checkpointed)
@@ -300,11 +303,10 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
             tool_name,
             outcome,
         };
-
         ctx.step("publish_result", publish_params, publish_result_step)
             .await?;
 
-        Ok(())
+        Ok(output_value)
     }
 }
 
