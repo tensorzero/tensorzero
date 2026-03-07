@@ -18,29 +18,30 @@ The TensorZero Gateway supports the following cache modes:
 You can also optionally specify a maximum age for cache entries in seconds for inference reads.
 This parameter is ignored for inference writes.
 
-See [API Reference](/gateway/api-reference/inference/#cache_options) for more details.
+See the [API Reference](/gateway/api-reference/inference-openai-compatible/#tensorzero_cache_options) for more details.
 
 ## Example
 
 ```python
-from tensorzero import TensorZeroGateway
+from openai import OpenAI
 
-with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
-    response = client.inference(
-        model_name="openai::gpt-4o-mini",
-        input={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the capital of Japan?",
-                }
-            ]
-        },
-        cache_options={
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
+
+response = client.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-4o-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": "What is the capital of Japan?",
+        }
+    ],
+    extra_body={
+        "tensorzero::cache_options": {
             "enabled": "on",  # read and write to cache
             "max_age_s": 3600,  # optional: cache entries >1h (>3600s) old are disregarded for reads
         },
-    )
+    },
+)
 
 print(response)
 ```
