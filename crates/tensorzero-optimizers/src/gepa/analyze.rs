@@ -93,7 +93,7 @@ fn strip_signatures_from_input(input: &mut Input) {
 }
 
 /// Strip signatures from stored input message content blocks.
-fn strip_signatures_from_stored_input(input: &mut StoredInput) {
+pub fn strip_signatures_from_stored_input(input: &mut StoredInput) {
     for message in &mut input.messages {
         for content in &mut message.content {
             if let StoredInputMessageContent::Thought(thought) = content {
@@ -104,7 +104,7 @@ fn strip_signatures_from_stored_input(input: &mut StoredInput) {
 }
 
 /// Strip signatures from chat output content blocks.
-fn strip_signatures_from_chat_output(blocks: &mut [ContentBlockChatOutput]) {
+pub fn strip_signatures_from_chat_output(blocks: &mut [ContentBlockChatOutput]) {
     for block in blocks {
         if let ContentBlockChatOutput::Thought(thought) = block {
             thought.signature = None;

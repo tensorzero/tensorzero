@@ -196,6 +196,7 @@ impl SimpleTool for RunEvaluationTool {
             include_datapoint_results: llm_params.include_datapoint_results,
             tags: side_info.to_tags(),
             internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
         };
 
         // Since autopilot sessions always have a config snapshot hash set, we use the action

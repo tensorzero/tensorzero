@@ -147,14 +147,21 @@ pub struct InitEvalStepParams {
     pub max_concurrency: u32,
 }
 
-/// Params for the mutation step.
+/// Params for the combined eval + analyze + mutate step.
+///
+/// Runs parent evaluation with `include_evaluation_infos: true`, then
+/// analyzes the inferences in-memory, then mutates using those analyses.
+/// This avoids checkpointing large `EvaluationInfo` data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MutateStepParams {
+pub struct EvalAnalyzeMutateStepParams {
+    pub evaluation_name: String,
+    pub datapoint_ids: Vec<Uuid>,
+    pub variant_name: VariantName,
+    pub variant_config: UninitializedChatCompletionConfig,
     pub function_context: SerializableFunctionContext,
     pub gepa_config: ResolvedGEPAConfig,
-    pub parent_name: VariantName,
-    pub parent_config: UninitializedChatCompletionConfig,
     pub iteration: u32,
+    pub max_concurrency: u32,
 }
 
 // ── Step result types ───────────────────────────────────────────────────
@@ -165,6 +172,13 @@ pub struct EvalResult {
     pub variant_name: VariantName,
     pub scores: VariantScores,
     pub stats: HashMap<EvaluatorName, evaluations::EvaluatorStats>,
+}
+
+/// Result of the combined eval + analyze + mutate step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalAnalyzeMutateResult {
+    pub parent_eval: EvalResult,
+    pub mutation: Option<MutationResult>,
 }
 
 /// Result of a mutation step.

@@ -570,6 +570,8 @@ dependencies = [
  "config-applier",
  "durable",
  "durable-tools",
+ "evaluations",
+ "futures",
  "mockall",
  "object_store",
  "parquet",

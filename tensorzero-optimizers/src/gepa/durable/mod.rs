@@ -3,6 +3,7 @@
 pub mod types;
 
 pub use types::{
-    EvalResult, EvalStepParams, GepaToolOutput, GepaToolParams, InitEvalStepParams,
-    MutateStepParams, MutationResult, ResolvedGEPAConfig, SetupResult,
+    EvalAnalyzeMutateResult, EvalAnalyzeMutateStepParams, EvalResult, EvalStepParams,
+    GepaToolOutput, GepaToolParams, InitEvalStepParams, MutationResult, ResolvedGEPAConfig,
+    SetupResult,
 };

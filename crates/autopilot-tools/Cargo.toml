@@ -31,6 +31,8 @@ serde_arrow = { workspace = true }
 rand.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
+evaluations = { path = "../../evaluations" }
+futures.workspace = true
 schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

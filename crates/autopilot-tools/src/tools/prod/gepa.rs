@@ -10,6 +10,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -17,6 +18,7 @@ use durable_tools::{
     RunEvaluationParams, RunEvaluationResponse, TaskTool, ToolAppState, ToolContext, ToolMetadata,
     ToolResult,
 };
+use futures::future::join_all;
 use rand::seq::{IndexedRandom, SliceRandom};
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
@@ -29,18 +31,27 @@ use tensorzero_core::config::{
 use tensorzero_core::endpoints::datasets::v1::types::ListDatapointsRequest;
 use tensorzero_core::endpoints::inference::InferenceResponse;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
-use tensorzero_core::inference::types::{InputMessage, InputMessageContent, Role, Template};
+use tensorzero_core::inference::types::{
+    ContentBlockChatOutput, InputExt, InputMessage, InputMessageContent, Role, Template, Text,
+};
 use tensorzero_core::optimization::gepa::{GEPAConfig, GepaEvaluatorStats};
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
+use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 use autopilot_client::AutopilotSideInfo;
+use tensorzero_optimizers::gepa::analyze::{
+    Analysis, Inference, build_analyze_input, create_analyze_variant_config,
+    strip_signatures_from_chat_output, strip_signatures_from_stored_input,
+};
 use tensorzero_optimizers::gepa::durable::types::{
-    EvalResult, EvalStepParams, GepaToolOutput, GepaToolParams, InitEvalStepParams,
-    MutateStepParams, MutationResult, ResolvedGEPAConfig, SetupResult,
+    EvalAnalyzeMutateResult, EvalAnalyzeMutateStepParams, EvalResult, EvalStepParams,
+    GepaToolOutput, GepaToolParams, InitEvalStepParams, MutationResult, ResolvedGEPAConfig,
+    SetupResult,
 };
 use tensorzero_optimizers::gepa::evaluate::{EvaluatorName, VariantName, VariantScores};
 use tensorzero_optimizers::gepa::pareto::{Candidate, ParetoFrontier, is_improvement};
+use tensorzero_optimizers::gepa::validate::FunctionContext;
 
 use crate::error::AutopilotToolError;
 
@@ -108,7 +119,7 @@ impl TaskTool for GepaTool {
         _side_info: AutopilotSideInfo,
         ctx: &mut ToolContext,
     ) -> ToolResult<GepaToolOutput> {
-        execute_gepa(llm_params, ctx).await
+        Box::pin(execute_gepa(llm_params, ctx)).await
     }
 }
 
@@ -170,7 +181,7 @@ impl TaskTool for StandaloneGepaTool {
         _side_info: (),
         ctx: &mut ToolContext,
     ) -> ToolResult<GepaToolOutput> {
-        execute_gepa(llm_params, ctx).await
+        Box::pin(execute_gepa(llm_params, ctx)).await
     }
 }
 
@@ -295,32 +306,37 @@ async fn execute_gepa(
             .copied()
             .collect();
 
-        // ── Step: evaluate parent on minibatch ──────────────────
+        // ── Step: evaluate parent + analyze + mutate ─────────────
         tracing::info!(
-            "GEPA iteration {iteration}: evaluating parent variant on minibatch ({batch_size} datapoints)"
+            "GEPA iteration {iteration}: eval+analyze+mutate for parent '{}' on minibatch ({batch_size} datapoints)",
+            parent.name
         );
 
-        let parent_eval: Option<EvalResult> = ctx
+        let eval_analyze_mutate: Option<EvalAnalyzeMutateResult> = ctx
             .step(
-                &format!("iter_{iteration}_eval_parent"),
-                EvalStepParams {
+                &format!("iter_{iteration}_eval_analyze_mutate"),
+                EvalAnalyzeMutateStepParams {
                     evaluation_name: setup.gepa_config.evaluation_name.clone(),
-                    dataset_name: None,
-                    datapoint_ids: Some(sampled_ids.clone()),
+                    datapoint_ids: sampled_ids.clone(),
                     variant_name: parent.name.clone(),
                     variant_config: parent.config.clone(),
+                    function_context: setup.function_context.clone(),
+                    gepa_config: setup.gepa_config.clone(),
+                    iteration: iteration as u32,
                     max_concurrency: setup.gepa_config.max_concurrency,
                 },
-                eval_variant_step,
+                eval_analyze_mutate_step,
             )
             .await?;
 
-        let Some(parent_eval) = parent_eval else {
+        let Some(result) = eval_analyze_mutate else {
             tracing::warn!(
-                "GEPA iteration {iteration}: parent evaluation returned no results, skipping"
+                "GEPA iteration {iteration}: eval+analyze+mutate returned no results, skipping"
             );
             continue;
         };
+
+        let parent_eval = result.parent_eval;
 
         tracing::debug!(
             "GEPA iteration {iteration}: parent '{}' minibatch evaluation stats: {:#?}",
@@ -328,27 +344,7 @@ async fn execute_gepa(
             parent_eval.stats
         );
 
-        // ── Step: mutate parent to create child ─────────────────
-        tracing::info!(
-            "GEPA iteration {iteration}: generating child variant from parent '{}'",
-            parent.name
-        );
-
-        let mutation: Option<MutationResult> = ctx
-            .step(
-                &format!("iter_{iteration}_mutate"),
-                MutateStepParams {
-                    function_context: setup.function_context.clone(),
-                    gepa_config: setup.gepa_config.clone(),
-                    parent_name: parent.name.clone(),
-                    parent_config: parent.config.clone(),
-                    iteration: iteration as u32,
-                },
-                mutate_step,
-            )
-            .await?;
-
-        let Some(mutation) = mutation else {
+        let Some(mutation) = result.mutation else {
             tracing::warn!("GEPA iteration {iteration}: mutation failed, skipping");
             continue;
         };
@@ -722,6 +718,7 @@ async fn init_eval_step(
             include_datapoint_results: true,
             tags: HashMap::new(),
             internal_dynamic_variant_config: Some(variant_info),
+            include_evaluation_infos: false,
         };
 
         match client.run_evaluation(eval_params).await {
@@ -764,6 +761,7 @@ async fn eval_variant_step(
         include_datapoint_results: true,
         tags: HashMap::new(),
         internal_dynamic_variant_config: Some(variant_info),
+        include_evaluation_infos: false,
     };
 
     match client.run_evaluation(eval_params).await {
@@ -788,35 +786,66 @@ async fn eval_variant_step(
     }
 }
 
-/// Mutate parent variant to produce a child.
+/// Combined eval + analyze + mutate step.
 ///
-/// This builds the mutate variant config and input, calls inference via the
-/// TensorZero client, then parses the mutation response to extract new templates.
-async fn mutate_step(
-    params: MutateStepParams,
+/// Runs parent evaluation with `include_evaluation_infos: true` to get full
+/// `EvaluationInfo` objects, then analyzes them in-memory, then mutates using
+/// those analyses. This keeps large inference data in-memory only — never
+/// checkpointed.
+async fn eval_analyze_mutate_step(
+    params: EvalAnalyzeMutateStepParams,
     state: ToolAppState,
-) -> anyhow::Result<Option<MutationResult>> {
+) -> anyhow::Result<Option<EvalAnalyzeMutateResult>> {
     let client = state.t0_client();
 
-    // Reconstruct GEPAConfig for analysis/mutation
-    let gepa_config = GEPAConfig {
-        function_name: params.gepa_config.function_name.clone(),
-        evaluation_name: params.gepa_config.evaluation_name.clone(),
-        initial_variants: params.gepa_config.initial_variants.clone(),
-        variant_prefix: params.gepa_config.variant_prefix.clone(),
-        batch_size: params.gepa_config.batch_size,
-        max_iterations: params.gepa_config.max_iterations,
-        max_concurrency: params.gepa_config.max_concurrency,
-        analysis_model: params.gepa_config.analysis_model.clone(),
-        mutation_model: params.gepa_config.mutation_model.clone(),
-        seed: params.gepa_config.seed,
-        timeout: 300,
-        include_inference_for_mutation: params.gepa_config.include_inference_for_mutation,
-        retries: Default::default(),
-        max_tokens: params.gepa_config.max_tokens,
+    // ── 1. Evaluate parent with evaluation_infos ────────────────
+    let variant_info = UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(params.variant_config.clone()),
+        timeouts: None,
     };
 
-    // Reconstruct FunctionContext from serializable form
+    let eval_params = RunEvaluationParams {
+        evaluation_name: params.evaluation_name.clone(),
+        dataset_name: None,
+        datapoint_ids: Some(params.datapoint_ids.clone()),
+        variant_name: params.variant_name.clone(),
+        concurrency: params.max_concurrency as usize,
+        inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: HashMap::new(),
+        include_datapoint_results: true,
+        tags: HashMap::new(),
+        internal_dynamic_variant_config: Some(variant_info),
+        include_evaluation_infos: true,
+    };
+
+    let response = match client.run_evaluation(eval_params).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(
+                "Evaluation failed for variant `{}`: {e}",
+                params.variant_name
+            );
+            return Ok(None);
+        }
+    };
+
+    let scores = extract_scores_from_response(&response);
+    if scores.is_empty() {
+        return Ok(None);
+    }
+
+    let parent_eval = EvalResult {
+        variant_name: params.variant_name.clone(),
+        scores,
+        stats: response.stats,
+    };
+
+    let evaluation_infos = response.evaluation_infos.unwrap_or_default();
+
+    // ── 2. Reconstruct GEPAConfig and FunctionContext ────────────
+    let gepa_config = reconstruct_gepa_config(&params.gepa_config);
+
     let config_response = client
         .get_config_snapshot(None)
         .await
@@ -834,14 +863,44 @@ async fn mutate_step(
         )
         .map_err(|e| anyhow::anyhow!("Failed to load function context: {e}"))?;
 
-    // Build mutate variant config and input
+    // ── 3. Analyze inferences ───────────────────────────────────
+    let analyses = durable_analyze_inferences(
+        &**client,
+        &evaluation_infos,
+        &function_context,
+        &params.variant_config,
+        &gepa_config,
+    )
+    .await;
+
+    let analyses = match analyses {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(
+                "GEPA iteration {}: analysis failed for parent `{}`: {e}. Proceeding with empty analyses.",
+                params.iteration,
+                params.variant_name,
+            );
+            Vec::new()
+        }
+    };
+
+    tracing::info!(
+        "GEPA iteration {}: analyzed {}/{} inferences for parent `{}`",
+        params.iteration,
+        analyses.len(),
+        evaluation_infos.len(),
+        params.variant_name,
+    );
+
+    // ── 4. Mutate using analyses ────────────────────────────────
     let mutate_variant_config =
         tensorzero_optimizers::gepa::mutate::create_mutate_variant_config(&gepa_config);
 
     let mutate_input = tensorzero_optimizers::gepa::mutate::build_mutate_input(
-        &[], // empty analyses — in the durable path we skip per-inference analysis
+        &analyses,
         &function_context,
-        &params.parent_config,
+        &params.variant_config,
     )
     .map_err(|e| anyhow::anyhow!("Failed to build mutate input: {e}"))?;
 
@@ -872,31 +931,261 @@ async fn mutate_step(
             tracing::warn!(
                 "GEPA iteration {}: mutation inference failed for parent `{}`: {e}",
                 params.iteration,
-                params.parent_name,
+                params.variant_name,
             );
-            return Ok(None);
+            return Ok(Some(EvalAnalyzeMutateResult {
+                parent_eval,
+                mutation: None,
+            }));
         }
     };
 
-    // Parse mutation response to extract new templates
-    let child = parse_mutate_response(
+    let mutation = match parse_mutate_response(
         &mutate_response,
-        &params.parent_name,
-        &params.parent_config,
+        &params.variant_name,
+        &params.variant_config,
         &gepa_config,
         params.iteration as usize,
-    )?;
-
-    match child {
-        Some(result) => Ok(Some(result)),
+    )? {
+        Some(result) => Some(result),
         None => {
             tracing::warn!(
                 "GEPA iteration {}: failed to parse mutation response for parent `{}`",
                 params.iteration,
-                params.parent_name,
+                params.variant_name,
             );
-            Ok(None)
+            None
         }
+    };
+
+    Ok(Some(EvalAnalyzeMutateResult {
+        parent_eval,
+        mutation,
+    }))
+}
+
+/// Analyze inferences using the `TensorZeroClient::inference()` API.
+///
+/// Mirrors `analyze_inferences()` from the sequential path but uses the
+/// `TensorZeroClient` trait (returns `InferenceResponse` directly) instead
+/// of the SDK `Client` (returns `InferenceOutput`).
+///
+/// Graceful degradation: individual failures are logged and skipped.
+/// Returns error only if all analyses fail.
+async fn durable_analyze_inferences(
+    client: &dyn durable_tools::TensorZeroClient,
+    evaluation_infos: &[evaluations::stats::EvaluationInfo],
+    function_context: &FunctionContext,
+    variant_config: &UninitializedChatCompletionConfig,
+    gepa_config: &GEPAConfig,
+) -> anyhow::Result<Vec<Analysis>> {
+    if evaluation_infos.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let max_concurrency = gepa_config.max_concurrency as usize;
+
+    tracing::info!(
+        "Analyzing {} inferences using model '{}' with max concurrency {}",
+        evaluation_infos.len(),
+        gepa_config.analysis_model,
+        max_concurrency
+    );
+
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
+
+    let analysis_futures: Vec<_> = evaluation_infos
+        .iter()
+        .map(|eval_info| {
+            let semaphore = Arc::clone(&semaphore);
+            durable_analyze_single_inference(
+                semaphore,
+                client,
+                function_context,
+                variant_config,
+                gepa_config,
+                eval_info,
+            )
+        })
+        .collect();
+
+    let results = join_all(analysis_futures).await;
+
+    let (successes, failures): (Vec<_>, Vec<_>) = results
+        .into_iter()
+        .enumerate()
+        .partition(|(_, result)| result.is_ok());
+
+    let successes: Vec<Analysis> = successes
+        .into_iter()
+        .filter_map(|(_, result)| result.ok())
+        .collect();
+
+    for (index, result) in &failures {
+        if let Err(e) = result {
+            tracing::warn!(
+                "Analysis failed for inference {}/{}: {}",
+                index + 1,
+                evaluation_infos.len(),
+                e
+            );
+        }
+    }
+
+    if successes.is_empty() {
+        let first_error = failures
+            .into_iter()
+            .find_map(|(_, r)| r.err())
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "Unknown error".to_string());
+        return Err(anyhow::anyhow!(
+            "All {} analyses failed. First error: {}",
+            evaluation_infos.len(),
+            first_error
+        ));
+    }
+
+    if failures.is_empty() {
+        tracing::info!(
+            "Successfully completed all {} analyses",
+            evaluation_infos.len()
+        );
+    } else {
+        tracing::warn!(
+            "Completed {}/{} analyses successfully ({} failed)",
+            successes.len(),
+            evaluation_infos.len(),
+            failures.len()
+        );
+    }
+
+    Ok(successes)
+}
+
+/// Analyze a single inference using the durable TensorZero client.
+async fn durable_analyze_single_inference(
+    semaphore: Arc<Semaphore>,
+    client: &dyn durable_tools::TensorZeroClient,
+    function_context: &FunctionContext,
+    variant_config: &UninitializedChatCompletionConfig,
+    gepa_config: &GEPAConfig,
+    eval_info: &evaluations::stats::EvaluationInfo,
+) -> anyhow::Result<Analysis> {
+    let _permit = semaphore
+        .acquire()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to acquire semaphore: {e}"))?;
+
+    let analyze_config = create_analyze_variant_config(gepa_config);
+    let analyze_variant_config = UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(analyze_config),
+        timeouts: None,
+    };
+
+    let arguments = build_analyze_input(eval_info, function_context, variant_config)
+        .map_err(|e| anyhow::anyhow!("Failed to build analyze input: {e}"))?;
+
+    let params = ClientInferenceParams {
+        function_name: Some("tensorzero::optimization::gepa::analyze".to_string()),
+        input: tensorzero_core::client::Input {
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::Template(Template {
+                    name: "user".to_string(),
+                    arguments,
+                })],
+            }],
+            system: None,
+        },
+        dryrun: Some(true),
+        internal: true,
+        internal_dynamic_variant_config: Some(analyze_variant_config),
+        ..Default::default()
+    };
+
+    let response = client
+        .inference(params)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to call analyze function: {e}"))?;
+
+    let InferenceResponse::Chat(chat_response) = &response else {
+        return Err(anyhow::anyhow!(
+            "analyze function is defined as Chat, cannot return JSON"
+        ));
+    };
+
+    if chat_response.content.len() > 1 {
+        tracing::warn!(
+            "Analyze function returned {} content blocks, expected 1. Using first Text block.",
+            chat_response.content.len()
+        );
+    }
+
+    let text_block = chat_response.content.iter().find_map(|block| {
+        if let ContentBlockChatOutput::Text(Text { text }) = block {
+            Some(text.clone())
+        } else {
+            None
+        }
+    });
+
+    let analysis_text = text_block.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Expected at least one Text content block from analyze function, found none"
+        )
+    })?;
+
+    tracing::debug!("Generated analysis: {}", analysis_text);
+
+    let inference = if gepa_config.include_inference_for_mutation {
+        let mut stored_input = eval_info
+            .datapoint
+            .input()
+            .clone()
+            .into_stored_input_without_file_handling()
+            .map_err(|e| anyhow::anyhow!("Failed to convert input: {e}"))?;
+        strip_signatures_from_stored_input(&mut stored_input);
+
+        let output_value = match &eval_info.response {
+            InferenceResponse::Chat(chat_response) => {
+                let mut content = chat_response.content.clone();
+                strip_signatures_from_chat_output(&mut content);
+                serde_json::to_value(&content)?
+            }
+            InferenceResponse::Json(json_response) => serde_json::to_value(&json_response.output)?,
+        };
+
+        Some(Inference {
+            input: stored_input,
+            output: output_value,
+        })
+    } else {
+        None
+    };
+
+    Ok(Analysis {
+        inference,
+        analysis: analysis_text,
+    })
+}
+
+/// Reconstruct a `GEPAConfig` from the resolved config stored in checkpoints.
+fn reconstruct_gepa_config(resolved: &ResolvedGEPAConfig) -> GEPAConfig {
+    GEPAConfig {
+        function_name: resolved.function_name.clone(),
+        evaluation_name: resolved.evaluation_name.clone(),
+        initial_variants: resolved.initial_variants.clone(),
+        variant_prefix: resolved.variant_prefix.clone(),
+        batch_size: resolved.batch_size,
+        max_iterations: resolved.max_iterations,
+        max_concurrency: resolved.max_concurrency,
+        analysis_model: resolved.analysis_model.clone(),
+        mutation_model: resolved.mutation_model.clone(),
+        seed: resolved.seed,
+        timeout: 300,
+        include_inference_for_mutation: resolved.include_inference_for_mutation,
+        retries: Default::default(),
+        max_tokens: resolved.max_tokens,
     }
 }
 

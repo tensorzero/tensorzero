@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use evaluations::run_evaluation_with_app_state;
-use evaluations::stats::{EvaluationStats, EvaluationUpdate};
+use evaluations::stats::{EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use evaluations::types::{EvaluationVariant, RunEvaluationWithAppStateParams};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::UninitializedVariantInfo;
@@ -104,6 +104,11 @@ pub struct RunEvaluationParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
+    /// Internal: whether to include full `EvaluationInfo` objects in the response.
+    /// Used by the durable GEPA path for analysis. Not exposed to the LLM-facing tool.
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[serde(default)]
+    pub include_evaluation_infos: bool,
 }
 
 /// Result for a single datapoint evaluation.
@@ -144,6 +149,11 @@ pub struct RunEvaluationResponse {
     /// Per-datapoint results (only populated if `include_datapoint_results` was true).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub datapoint_results: Option<Vec<DatapointResult>>,
+    /// Full evaluation info objects (only populated if `include_evaluation_infos` was true).
+    /// Used internally by the durable GEPA path for analysis.
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluation_infos: Option<Vec<EvaluationInfo>>,
 }
 
 // ============================================================================
@@ -253,13 +263,20 @@ pub async fn run_evaluation(
         .await
         .map_err(|e| RunEvaluationError::Runtime(format!("Evaluation failed: {e}")))?;
 
-    collect_results(result, params.include_datapoint_results, heartbeater).await
+    collect_results(
+        result,
+        params.include_datapoint_results,
+        params.include_evaluation_infos,
+        heartbeater,
+    )
+    .await
 }
 
 /// Collects evaluation results from the stream and computes statistics.
 async fn collect_results(
     result: evaluations::EvaluationStreamResult,
     include_datapoint_results: bool,
+    include_evaluation_infos: bool,
     heartbeater: Arc<dyn Heartbeater>,
 ) -> Result<RunEvaluationResponse, RunEvaluationError> {
     let evaluation_run_id = result.run_info.evaluation_run_id;
@@ -292,6 +309,15 @@ async fn collect_results(
         None
     };
 
+    let num_successes = stats_collector.evaluation_infos.len();
+    let num_errors = stats_collector.evaluation_errors.len();
+
+    let evaluation_infos = if include_evaluation_infos {
+        Some(std::mem::take(&mut stats_collector.evaluation_infos))
+    } else {
+        None
+    };
+
     // Wait for batch writes to complete
     for handle in result.batcher_join_handles {
         handle
@@ -302,10 +328,11 @@ async fn collect_results(
     Ok(RunEvaluationResponse {
         evaluation_run_id,
         num_datapoints,
-        num_successes: stats_collector.evaluation_infos.len(),
-        num_errors: stats_collector.evaluation_errors.len(),
+        num_successes,
+        num_errors,
         stats,
         datapoint_results,
+        evaluation_infos,
     })
 }
 
