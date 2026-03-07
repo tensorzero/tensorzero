@@ -67,7 +67,9 @@ pub fn decimal_cost_to_nano_cost(cost: Decimal) -> u64 {
  */
 
 /// Specifies which backend to use for rate limiting.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum RateLimitingBackend {
     /// Automatically select: Valkey if available, otherwise Postgres
@@ -91,7 +93,9 @@ pub struct RateLimitingConfig {
     pub(crate) default_nano_cost: u64,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
     pub(crate) rules: Vec<RateLimitingConfigRule>,

@@ -115,10 +115,16 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "HashMap<String, UninitializedEmbeddingProviderConfig>")
+    )]
     pub providers: HashMap<Arc<str>, UninitializedEmbeddingProviderConfig>,
     #[serde(default)]
     pub timeout_ms: Option<u64>,
@@ -715,7 +721,9 @@ impl EmbeddingProviderInfo {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
@@ -725,10 +733,13 @@ pub struct UninitializedEmbeddingProviderConfig {
     // For backward compatibility with stored snapshots, see `StoredEmbeddingProviderConfig`
     // in config/stored.rs which accepts the deprecated field and migrates it.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub cost: Option<UninitializedUnifiedCostConfig>,
 }
 

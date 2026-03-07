@@ -107,7 +107,9 @@ pub async fn with_skip_credential_validation<T>(f: impl Future<Output = T>) -> T
 }
 
 /// Configuration for the autopilot system.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct AutopilotConfig {
     /// Tools that are automatically approved without manual intervention.
@@ -231,7 +233,9 @@ impl TimeoutsConfig {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct TemplateFilesystemAccess {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for `{% include %}`
@@ -402,7 +406,9 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
 /// - `Auto` (default): prefers ClickHouse if available, falls back to Postgres.
 /// - `ClickHouse`: explicitly use ClickHouse.
 /// - `Postgres`: explicitly use Postgres.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum ObservabilityBackend {
     #[default]
@@ -411,7 +417,9 @@ pub enum ObservabilityBackend {
     Postgres,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct ObservabilityConfig {
     /// Controls whether the gateway writes observability data (inferences, feedback).
@@ -432,10 +440,13 @@ pub struct ObservabilityConfig {
         note = "Use `clickhouse.disable_automatic_migrations` instead"
     )]
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub disable_automatic_migrations: bool,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct ClickHouseConfig {
     /// When `true`, the gateway will not run ClickHouse schema migrations on startup.
@@ -459,13 +470,16 @@ fn default_max_rows() -> usize {
     1000
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct BatchWritesConfig {
     pub enabled: bool,
     // An internal flag to allow us to test batch writes in embedded gateway mode.
     // This can currently cause deadlocks, so we don't want normal embedded clients to use it.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub __force_allow_embedded_batch_writes: bool,
     #[serde(default = "default_flush_interval_ms")]
     pub flush_interval_ms: u64,
@@ -489,14 +503,18 @@ impl Default for BatchWritesConfig {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct ExportConfig {
     #[serde(default)]
     pub otlp: OtlpConfig,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct OtlpConfig {
     #[serde(default)]
@@ -550,7 +568,9 @@ impl OtlpConfig {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
@@ -563,7 +583,9 @@ pub struct OtlpTracesConfig {
     pub extra_headers: HashMap<String, String>,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields, rename_all = "lowercase")]
 pub enum OtlpTracesFormat {
     /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
@@ -1822,7 +1844,9 @@ pub trait LoadableConfig<T> {
 ///
 /// This allows us to avoid using Option types to represent variables that are initialized after the
 /// config is initially parsed.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedConfig {
     #[serde(default)]
@@ -1835,8 +1859,16 @@ pub struct UninitializedConfig {
     pub rate_limiting: UninitializedRateLimitingConfig,
     pub object_storage: Option<StorageKind>,
     #[serde(default)]
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "HashMap<String, UninitializedModelConfig>")
+    )]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "HashMap<String, UninitializedEmbeddingModelConfig>")
+    )]
     pub embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>, // embedding model name => embedding model config
     #[serde(default)]
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
@@ -1856,11 +1888,14 @@ pub struct UninitializedConfig {
     pub autopilot: AutopilotConfig,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedRelayConfig {
     /// If set, all models will be forwarded to this gateway URL
     /// (instead of calling the providers defined in our config)
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<String>"))]
     pub gateway_url: Option<Url>,
     /// If set, provides a TensorZero API key when invoking `gateway_url`.
     /// If unset, no API key will be sent.
@@ -2023,7 +2058,9 @@ impl TryFrom<toml::Table> for UninitializedConfig {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -2032,7 +2069,9 @@ pub enum UninitializedFunctionConfig {
     Json(UninitializedFunctionConfigJson),
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 struct UninitializedSchema {
     path: ResolvedTomlPathData,
@@ -2057,7 +2096,9 @@ impl UninitializedSchemas {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
     pub variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
@@ -2065,6 +2106,11 @@ pub struct UninitializedFunctionConfigChat {
     pub user_schema: Option<ResolvedTomlPathData>,
     pub assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
+    // ts-rs does not handle #[serde(transparent)], so we treat this as the inner HashMap
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "HashMap<String, UninitializedSchema>")
+    )]
     pub schemas: UninitializedSchemas,
     #[serde(default)]
     pub tools: Vec<String>, // tool names
@@ -2077,7 +2123,9 @@ pub struct UninitializedFunctionConfigChat {
     pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
     pub variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
@@ -2085,6 +2133,11 @@ pub struct UninitializedFunctionConfigJson {
     pub user_schema: Option<ResolvedTomlPathData>,
     pub assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
+    // ts-rs does not handle #[serde(transparent)], so we treat this as the inner HashMap
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "HashMap<String, UninitializedSchema>")
+    )]
     pub schemas: UninitializedSchemas,
     pub output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
@@ -2522,7 +2575,9 @@ impl UninitializedVariantInfo {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
@@ -2561,7 +2616,9 @@ impl PathWithContents {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(default)]
 pub struct PostgresConfig {
     /// DEPRECATED (2026.3+): Postgres connectivity is now determined by the
@@ -2571,6 +2628,7 @@ pub struct PostgresConfig {
         note = "Postgres connectivity is now determined by the `TENSORZERO_POSTGRES_URL` environment variable. Remove `postgres.enabled` from your config."
     )]
     #[serde(default, skip_serializing)]
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
