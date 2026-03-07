@@ -1,35 +1,42 @@
 import asyncio
+import json
 
 from ner import Row, compute_exact_match, compute_jaccard_similarity, load_dataset
-from tensorzero import AsyncTensorZeroGateway, JsonInferenceResponse
+from openai import AsyncOpenAI
+from tensorzero import AsyncTensorZeroGateway
 from tqdm.asyncio import tqdm
 
 NUM_SAMPLES = 500
 MAX_CONCURRENCY = 50  # lower this value if you get rate limited
 
 
-async def process_datapoint(datapoint: Row, t0: AsyncTensorZeroGateway, semaphore: asyncio.Semaphore):
+async def process_datapoint(
+    datapoint: Row,
+    openai_client: AsyncOpenAI,
+    t0: AsyncTensorZeroGateway,
+    semaphore: asyncio.Semaphore,
+):
     async with semaphore:
         try:
-            response = await t0.inference(
-                function_name="extract_entities",
-                input={
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": datapoint.input,
-                        }
-                    ]
+            response = await openai_client.chat.completions.create(
+                model="tensorzero::function_name::extract_entities",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": datapoint.input,
+                    }
+                ],
+                extra_body={
+                    "tensorzero::cache_options": {"enabled": "on"},
                 },
-                cache_options={"enabled": "on"},
             )
-            assert isinstance(response, JsonInferenceResponse)
         except Exception as e:
             print(f"Error occurred: {e}")
             return None
 
         # Get the predicted output
-        predicted = response.output.parsed if response.output.parsed else {}
+        content = response.choices[0].message.content
+        predicted = json.loads(content) if content else {}
 
         # Compute metrics
         exact_match = compute_exact_match(predicted, datapoint.label)
@@ -39,19 +46,24 @@ async def process_datapoint(datapoint: Row, t0: AsyncTensorZeroGateway, semaphor
         await t0.feedback(
             metric_name="exact_match",
             value=exact_match,
-            inference_id=response.inference_id,
+            inference_id=response.id,
         )
 
         await t0.feedback(
             metric_name="jaccard_similarity",
             value=jaccard_similarity,
-            inference_id=response.inference_id,
+            inference_id=response.id,
         )
 
         return response
 
 
 async def main():
+    openai_client = AsyncOpenAI(
+        base_url="http://localhost:3000/openai/v1",
+        api_key="unused",
+    )
+
     t0 = await AsyncTensorZeroGateway.build_http(  # type: ignore
         gateway_url="http://localhost:3000",
         timeout=30,
@@ -69,7 +81,7 @@ async def main():
 
     # Run inferences in parallel with semaphore
     semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
-    tasks = [process_datapoint(dp, t0, semaphore) for dp in datapoints]
+    tasks = [process_datapoint(dp, openai_client, t0, semaphore) for dp in datapoints]
     await tqdm.gather(*tasks, desc="Processing samples")
 
 
