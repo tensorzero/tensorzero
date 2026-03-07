@@ -28,6 +28,14 @@ export function isModifiedEvent(e: React.MouseEvent): boolean {
  * defines its own classes and receives potentially conflicting classes via props. If all you need is
  * to conditionally apply classes, it is preferred to use `clsx` directly.
  */
+/**
+ * Returns true if the mouse event has modifier keys or is a non-primary click,
+ * indicating the browser should handle it natively (e.g. open in new tab).
+ */
+export function isModifiedEvent(e: React.MouseEvent): boolean {
+  return Boolean(e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0);
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
