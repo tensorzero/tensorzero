@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Awaitable, Dict, Iterator, List, Optional, cast
 
 import pytest
 import pytest_asyncio
@@ -292,11 +292,14 @@ async def async_openai_client(request: FixtureRequest):
             yield client
     else:
         async with AsyncOpenAI(api_key="donotuse") as client:
-            await patch_openai_client(  # type: ignore[reportGeneralTypeIssues]
-                client,
-                config_file=TEST_CONFIG_FILE,
-                clickhouse_url=CLICKHOUSE_URL,
-                async_setup=True,
+            await cast(
+                Awaitable[Any],
+                patch_openai_client(  # pyright: ignore[reportDeprecated]
+                    client,
+                    config_file=TEST_CONFIG_FILE,
+                    clickhouse_url=CLICKHOUSE_URL,
+                    async_setup=True,
+                ),
             )
             yield client
 

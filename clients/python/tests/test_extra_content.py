@@ -1,4 +1,3 @@
-# type: ignore
 """
 Tests for `tensorzero_extra_content` round-trip support.
 
@@ -7,12 +6,15 @@ These tests verify that extra content blocks (Thought, Unknown) can be:
 2. Sent back to the API in follow-up requests (round-trip)
 """
 
+from typing import Any, cast
+
 import pytest
+from openai import AsyncOpenAI
 from uuid_utils.compat import uuid7
 
 
 @pytest.mark.asyncio
-async def test_extra_content_roundtrip_non_streaming(async_openai_client):
+async def test_extra_content_roundtrip_non_streaming(async_openai_client: AsyncOpenAI):
     """Test that extra content can be round-tripped in non-streaming mode."""
     episode_id = str(uuid7())
 
@@ -43,15 +45,21 @@ async def test_extra_content_roundtrip_non_streaming(async_openai_client):
     # Step 3: Round-trip - send the extra content back as an assistant message
     roundtrip_result = await async_openai_client.chat.completions.create(
         extra_body={"tensorzero::episode_id": episode_id},
-        messages=[
-            {"role": "user", "content": "Hello"},
-            {
-                "role": "assistant",
-                "content": message.content,
-                "tensorzero_extra_content": extra_content,
-            },
-            {"role": "user", "content": "Continue"},
-        ],
+        messages=cast(
+            Any,
+            [
+                {
+                    "role": "user",
+                    "content": "Hello",
+                },
+                {
+                    "role": "assistant",
+                    "content": message.content,
+                    "tensorzero_extra_content": extra_content,
+                },
+                {"role": "user", "content": "Continue"},
+            ],
+        ),
         model="tensorzero::model_name::dummy::echo",
         stream=False,
     )
@@ -61,7 +69,7 @@ async def test_extra_content_roundtrip_non_streaming(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_extra_content_roundtrip_streaming(async_openai_client):
+async def test_extra_content_roundtrip_streaming(async_openai_client: AsyncOpenAI):
     """Test that extra content can be round-tripped in streaming mode."""
     episode_id = str(uuid7())
 
@@ -74,8 +82,8 @@ async def test_extra_content_roundtrip_streaming(async_openai_client):
     )
 
     # Step 2: Collect chunks and extract extra content
-    chunks = []
-    extra_content_chunks = []
+    chunks: list[Any] = []
+    extra_content_chunks: list[Any] = []
     content_text = ""
 
     async for chunk in stream:
@@ -101,15 +109,21 @@ async def test_extra_content_roundtrip_streaming(async_openai_client):
     if reconstructed_extra_content and content_text:
         roundtrip_result = await async_openai_client.chat.completions.create(
             extra_body={"tensorzero::episode_id": episode_id},
-            messages=[
-                {"role": "user", "content": "Hello"},
-                {
-                    "role": "assistant",
-                    "content": content_text,
-                    "tensorzero_extra_content": reconstructed_extra_content,
-                },
-                {"role": "user", "content": "Continue"},
-            ],
+            messages=cast(
+                Any,
+                [
+                    {
+                        "role": "user",
+                        "content": "Hello",
+                    },
+                    {
+                        "role": "assistant",
+                        "content": content_text,
+                        "tensorzero_extra_content": reconstructed_extra_content,
+                    },
+                    {"role": "user", "content": "Continue"},
+                ],
+            ),
             model="tensorzero::model_name::dummy::echo",
             stream=False,
         )

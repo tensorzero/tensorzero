@@ -300,11 +300,13 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
         finish_reason = data.get("finish_reason")
         finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
 
+        raw_content = cast(List[Dict[str, Any]], data["content"])
+
         return ChatInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            content=[parse_content_block(block) for block in data["content"]],  # type: ignore
+            content=[parse_content_block(block) for block in raw_content],
             usage=Usage(**data["usage"]),
             raw_usage=parse_raw_usage(data.get("raw_usage")),
             raw_response=parse_raw_response(data.get("raw_response")),

@@ -1,4 +1,3 @@
-# type: ignore
 """
 Tests for the TensorZero embeddings API using the OpenAI Python client
 
@@ -18,10 +17,11 @@ import asyncio
 import random
 
 import pytest
+from openai import APIStatusError, AsyncOpenAI
 
 
 @pytest.mark.asyncio
-async def test_basic_embeddings(async_openai_client):
+async def test_basic_embeddings(async_openai_client: AsyncOpenAI):
     """Test basic embeddings generation with a single input"""
     result = await async_openai_client.embeddings.create(
         input="Hello, world!",
@@ -39,7 +39,7 @@ async def test_basic_embeddings(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_basic_embeddings_shorthand(async_openai_client):
+async def test_basic_embeddings_shorthand(async_openai_client: AsyncOpenAI):
     """Test basic embeddings generation with a single input"""
     result = await async_openai_client.embeddings.create(
         input="Hello, world!",
@@ -57,7 +57,7 @@ async def test_basic_embeddings_shorthand(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_batch_embeddings(async_openai_client):
+async def test_batch_embeddings(async_openai_client: AsyncOpenAI):
     """Test embeddings generation with multiple inputs"""
     inputs = [
         "Hello, world!",
@@ -84,7 +84,7 @@ async def test_batch_embeddings(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_dimensions(async_openai_client):
+async def test_embeddings_with_dimensions(async_openai_client: AsyncOpenAI):
     """Test embeddings with specified dimensions"""
     result = await async_openai_client.embeddings.create(
         input="Test with specific dimensions",
@@ -100,7 +100,7 @@ async def test_embeddings_with_dimensions(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_encoding_format_float(async_openai_client):
+async def test_embeddings_with_encoding_format_float(async_openai_client: AsyncOpenAI):
     """Test embeddings with different encoding formats"""
     result = await async_openai_client.embeddings.create(
         input="Test encoding format",
@@ -115,7 +115,7 @@ async def test_embeddings_with_encoding_format_float(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_encoding_format_base64(async_openai_client):
+async def test_embeddings_with_encoding_format_base64(async_openai_client: AsyncOpenAI):
     """Test embeddings with different encoding formats"""
     result = await async_openai_client.embeddings.create(
         input="Test encoding format",
@@ -130,7 +130,7 @@ async def test_embeddings_with_encoding_format_base64(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_with_user_parameter(async_openai_client):
+async def test_embeddings_with_user_parameter(async_openai_client: AsyncOpenAI):
     """Test embeddings with user parameter for tracking"""
     user_id = "test_user_123"
     result = await async_openai_client.embeddings.create(
@@ -146,9 +146,9 @@ async def test_embeddings_with_user_parameter(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_invalid_model_error(async_openai_client):
+async def test_embeddings_invalid_model_error(async_openai_client: AsyncOpenAI):
     """Test that invalid model name raises appropriate error"""
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(APIStatusError) as exc_info:
         await async_openai_client.embeddings.create(
             input="Test invalid model",
             model="tensorzero::embedding_model_name::nonexistent_model",
@@ -159,7 +159,7 @@ async def test_embeddings_invalid_model_error(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_large_batch(async_openai_client):
+async def test_embeddings_large_batch(async_openai_client: AsyncOpenAI):
     """Test embeddings with a larger batch of inputs"""
     # Create a batch of 10 different inputs
     inputs = [f"This is test input number {i + 1}" for i in range(10)]
@@ -184,7 +184,7 @@ async def test_embeddings_large_batch(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_consistency(async_openai_client):
+async def test_embeddings_consistency(async_openai_client: AsyncOpenAI):
     """Test that the same input produces consistent embeddings"""
     input_text = "This is a consistency test"
 
@@ -215,7 +215,7 @@ async def test_embeddings_consistency(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_cache_with_float_encoding(async_openai_client):
+async def test_embeddings_cache_with_float_encoding(async_openai_client: AsyncOpenAI):
     """Test that caching works correctly with float encoding format"""
     # Use a unique input to ensure we're not hitting existing cache
     input_text = f"Cache test with float encoding - {random.randint(0, 1000000)}"
@@ -252,7 +252,7 @@ async def test_embeddings_cache_with_float_encoding(async_openai_client):
 
 
 @pytest.mark.asyncio
-async def test_embeddings_cache_with_base64_encoding(async_openai_client):
+async def test_embeddings_cache_with_base64_encoding(async_openai_client: AsyncOpenAI):
     """Test that caching works correctly with base64 encoding format"""
     # Use a unique input to ensure we're not hitting existing cache
     input_text = f"Cache test with base64 encoding - {random.randint(0, 1000000)}"
