@@ -184,29 +184,29 @@ INSERT_SETTINGS="SETTINGS optimize_on_insert=0"
 
 # Insert large fixtures in parallel
 pids=()
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ChatInference FROM INFILE './large-fixtures/large_chat_inference_v2.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ChatInference FROM INFILE './large-fixtures/large_chat_inference_v2.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO JsonInference FROM INFILE './large-fixtures/large_json_inference_v2.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO JsonInference FROM INFILE './large-fixtures/large_json_inference_v2.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FROM INFILE './large-fixtures/large_chat_model_inference_v2.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FROM INFILE './large-fixtures/large_chat_model_inference_v2.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FROM INFILE './large-fixtures/large_json_model_inference_v2.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO ModelInference FROM INFILE './large-fixtures/large_json_model_inference_v2.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FROM INFILE './large-fixtures/large_chat_boolean_feedback.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FROM INFILE './large-fixtures/large_chat_boolean_feedback.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FROM INFILE './large-fixtures/large_json_boolean_feedback.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO BooleanMetricFeedback FROM INFILE './large-fixtures/large_json_boolean_feedback.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO FloatMetricFeedback FROM INFILE './large-fixtures/large_chat_float_feedback.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO FloatMetricFeedback FROM INFILE './large-fixtures/large_chat_float_feedback.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO FloatMetricFeedback FROM INFILE './large-fixtures/large_json_float_feedback.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO FloatMetricFeedback FROM INFILE './large-fixtures/large_json_float_feedback.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO CommentFeedback FROM INFILE './large-fixtures/large_chat_comment_feedback.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO CommentFeedback FROM INFILE './large-fixtures/large_chat_comment_feedback.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO CommentFeedback FROM INFILE './large-fixtures/large_json_comment_feedback.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO CommentFeedback FROM INFILE './large-fixtures/large_json_comment_feedback.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO DemonstrationFeedback FROM INFILE './large-fixtures/large_chat_demonstration_feedback.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO DemonstrationFeedback FROM INFILE './large-fixtures/large_chat_demonstration_feedback.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
-clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO DemonstrationFeedback FROM INFILE './large-fixtures/large_json_demonstration_feedback.native.lz4' FORMAT Native $INSERT_SETTINGS" &
+clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG --database "$DATABASE_NAME" --query "INSERT INTO DemonstrationFeedback FROM INFILE './large-fixtures/large_json_demonstration_feedback.native.lz4' $INSERT_SETTINGS FORMAT Native" &
 pids+=($!)
 
 # Wait for all inserts and fail if any failed
