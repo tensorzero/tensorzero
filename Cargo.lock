@@ -6893,7 +6893,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "async-trait",
  "clap",
