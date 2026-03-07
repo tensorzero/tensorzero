@@ -23,7 +23,9 @@ use serde::Deserialize;
 use serde_json::from_value;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::ClientInferenceParams;
-use tensorzero_core::config::{UninitializedVariantConfig, UninitializedVariantInfo};
+use tensorzero_core::config::{
+    UninitializedConfig, UninitializedVariantConfig, UninitializedVariantInfo,
+};
 use tensorzero_core::endpoints::datasets::v1::types::ListDatapointsRequest;
 use tensorzero_core::endpoints::inference::InferenceResponse;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
@@ -497,7 +499,9 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
         .await
         .map_err(|e| anyhow::anyhow!("Failed to get config: {e}"))?;
 
-    let uninitialized_config = &config_response.config;
+    let uninitialized_config: UninitializedConfig =
+        serde_json::from_value(config_response.config.clone())
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize config snapshot: {e}"))?;
 
     // Build GEPAConfig from params
     let evaluation_name = params.evaluation_name.clone().ok_or_else(|| {
@@ -527,7 +531,7 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
     let function_context =
         tensorzero_optimizers::gepa::validate::validate_gepa_config_uninitialized(
             &gepa_config,
-            uninitialized_config,
+            &uninitialized_config,
         )
         .map_err(|e| anyhow::anyhow!("Config validation failed: {e}"))?;
 
@@ -700,9 +704,6 @@ async fn init_eval_step(
     let client = state.t0_client();
     let mut all_scores: HashMap<VariantName, VariantScores> = HashMap::new();
 
-    let num_variants = params.variants.len();
-    let per_variant_concurrency = (params.max_concurrency as usize / num_variants).max(1);
-
     for (variant_name, variant_config) in &params.variants {
         let variant_info = UninitializedVariantInfo {
             inner: UninitializedVariantConfig::ChatCompletion(variant_config.clone()),
@@ -714,7 +715,7 @@ async fn init_eval_step(
             dataset_name: None,
             datapoint_ids: Some(params.datapoint_ids.clone()),
             variant_name: variant_name.clone(),
-            concurrency: per_variant_concurrency,
+            concurrency: params.max_concurrency as usize,
             inference_cache: CacheEnabledMode::Off,
             max_datapoints: None,
             precision_targets: HashMap::new(),
@@ -821,11 +822,15 @@ async fn mutate_step(
         .await
         .map_err(|e| anyhow::anyhow!("Failed to get config: {e}"))?;
 
+    let uninitialized_config: UninitializedConfig =
+        serde_json::from_value(config_response.config.clone())
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize config snapshot: {e}"))?;
+
     let function_context = params
         .function_context
         .load(
             &params.gepa_config.function_name,
-            &config_response.config.metrics,
+            &uninitialized_config.metrics,
         )
         .map_err(|e| anyhow::anyhow!("Failed to load function context: {e}"))?;
 

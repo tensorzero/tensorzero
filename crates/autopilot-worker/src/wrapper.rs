@@ -110,7 +110,6 @@ where
     ) -> DurableToolResult<Self::Output> {
         let session_id = side_info.session_id;
         let tool_call_event_id = side_info.tool_call_event_id;
-        let skip_publish = side_info.skip_publish;
         // Execute the underlying tool
         let result = self
             .inner
@@ -284,7 +283,6 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
         let tool_name = self.inner.name().to_string();
         let tool_call_event_id = side_info.tool_call_event_id;
         let session_id = side_info.session_id;
-        let skip_publish = side_info.skip_publish;
 
         // Execute the underlying simple tool within a checkpointed step.
         // The step returns Ok(Result<output, ToolFailure>) so tool errors are
