@@ -141,10 +141,10 @@ rustls = { workspace = true }
 
 [dev-dependencies]
 googletest = { workspace = true }
-googletest-matchers = { path = "../googletest-matchers" }
+googletest-matchers = { path = "../crates/googletest-matchers" }
 tempfile = { workspace = true }
 rand_distr = "0.6.0"
-tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
+tensorzero = { path = "../crates/tensorzero-client", features = ["e2e_tests"] }
 paste = "1.0.15"
 base64 = "0.22.1"
 tensorzero-derive = { path = "../crates/tensorzero-derive" }

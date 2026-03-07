@@ -22,8 +22,8 @@ services:
   # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
   gateway:
     build:
-      context: ../../
-      dockerfile: gateway/Dockerfile
+      context: ../../../
+      dockerfile: crates/gateway/Dockerfile
       target: gateway
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
