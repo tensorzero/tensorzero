@@ -40,7 +40,9 @@ not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !t
 junit.path = "junit.xml"
 
 [profile.live-batch]
-default-filter = 'test(batch) and not test(mock)'
+# `live-batch-tests.yml` only provisions ClickHouse, so exclude Postgres-only
+# batch tests from this profile.
+default-filter = 'test(batch) and not test(mock) and not test(postgres)'
 
 [profile.mock-batch]
 default-filter = 'test(batch) and test(mock)'
