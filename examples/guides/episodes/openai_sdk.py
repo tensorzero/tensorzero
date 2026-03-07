@@ -1,0 +1,38 @@
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
+
+haiku_response = client.chat.completions.create(
+    model="tensorzero::function_name::generate_haiku",
+    # We don't provide an episode_id for the first inference in the episode
+    messages=[
+        {
+            "role": "user",
+            "content": "Write a haiku about TensorZero.",
+        }
+    ],
+)
+
+print(haiku_response)
+
+# When we don't provide an episode_id, the gateway will generate a new one for us
+episode_id = haiku_response.episode_id
+
+# In a production application, we'd first validate the response to ensure the model returned the correct fields
+haiku = haiku_response.choices[0].message.content
+
+analysis_response = client.chat.completions.create(
+    model="tensorzero::function_name::analyze_haiku",
+    # For future inferences in that episode, we provide the episode_id that we received
+    messages=[
+        {
+            "role": "user",
+            "content": f"Write a one-paragraph analysis of the following haiku:\n\n{haiku}",
+        }
+    ],
+    extra_body={
+        "tensorzero::episode_id": episode_id,
+    },
+)
+
+print(analysis_response)
