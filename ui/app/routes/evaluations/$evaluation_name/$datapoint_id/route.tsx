@@ -161,6 +161,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const datapoint_id = params.datapoint_id;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
+  // Eval pages get snapshotHash from the eval run lookup, not from the URL,
+  // because evaluations might only exist in a historical config snapshot.
   const {
     evaluationConfig: evaluation_config,
     effectiveConfig,

@@ -149,6 +149,8 @@ async function fetchEvaluationData(
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  // Eval pages get snapshotHash from the eval run lookup, not from the URL,
+  // because evaluations might only exist in a historical config snapshot.
   const { evaluationConfig, effectiveConfig, snapshotHash } =
     await resolveEvaluationConfig(params.evaluation_name);
 
