@@ -1245,6 +1245,18 @@ jobs:
     uses: ./.github/workflows/live-tests.yml
     secrets: inherit
 
+  inference-cache-tests:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    needs:
+      [
+        build-live-tests-container,
+      ]
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/inference-cache-tests.yml
+    secrets: inherit
+
   client-tests:
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     needs:
@@ -1371,6 +1383,7 @@ jobs:
         clickhouse-tests,
         client-tests,
         endpoint-tests,
+        inference-cache-tests,
         lint-rust,
         live-tests,
         minikube,

@@ -88,6 +88,17 @@ services:
       start_interval: 1s
       timeout: 1s
 
+  redis:
+    image: redis:7
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
   tempo:
     image: grafana/tempo:2.8.2
     command: ["-config.file=/etc/tempo.yaml"]
