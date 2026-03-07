@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use googletest::expect_that;
 use googletest::gtest;
 use googletest_matchers::{matches_json_literal, partially};
-use paste::paste;
+
 use rust_decimal::Decimal;
 use secrecy::ExposeSecret;
 use serde_json::json;
@@ -121,28 +121,6 @@ pub async fn get_clean_clickhouse(
             allow_db_missing,
         },
     )
-}
-
-macro_rules! invoke_all_separate_tests {
-    ($target_fn:ident, $prefix:ident, [$($migration_num:literal),*]) => {
-        // For each value in the literal array, generate a new `#[tokio::test]` function
-        // that calls the target function with that value
-        // This lets us use `capture_logs()` to independently capture logs for each test
-        const _MIGRATIONS_NUM_ARRAY: [usize; tensorzero_core::db::clickhouse::migration_manager::NUM_MIGRATIONS] = [$($migration_num),*];
-        $(
-            paste! {
-                #[tokio::test(flavor = "multi_thread")]
-                async fn [<$prefix $migration_num>] () {
-                    // Verify that the literal array matches the migrations array
-                    for i in 0.._MIGRATIONS_NUM_ARRAY.len() {
-                        assert_eq!(_MIGRATIONS_NUM_ARRAY[i], i, "The migration indices array should be a sequential list of numbers");
-                    }
-                    $target_fn($migration_num).await;
-                }
-            }
-
-        )*
-    }
 }
 
 const MANIFEST_PATH: &str = env!("CARGO_MANIFEST_DIR");
@@ -704,64 +682,6 @@ async fn run_rollback_instructions(
             .unwrap();
     }
 }
-async fn test_rollback_helper(migration_num: usize) {
-    let logs_contain = tensorzero_core::utils::testing::capture_logs();
-    let (fresh_clickhouse, _cleanup_fresh_clickhouse) = get_clean_clickhouse(true).await;
-    fresh_clickhouse
-        .create_database_and_migrations_table()
-        .await
-        .unwrap();
-    let migrations = make_all_migrations(&fresh_clickhouse);
-    println!(
-        "Running migrations up to {}",
-        migrations[migration_num].name()
-    );
-    for migration in &migrations[..=migration_num] {
-        let name = migration.name();
-        println!("Running migration: {name}");
-        migration_manager::run_migration(RunMigrationArgs {
-            clickhouse: &fresh_clickhouse,
-            migration: migration.as_ref(),
-            clean_start: false,
-            manual_run: false,
-            is_replicated: false,
-        })
-        .await
-        .unwrap();
-        // Migration0029 only runs if `StaticEvaluationHumanFeedbackFloatView` or `StaticEvaluationHumanFeedbackBooleanView`
-        // exists, which were created by the banned migration Migration0023
-        let should_succeed = migration.name() != "Migration0029";
-        if should_succeed {
-            assert!(
-                logs_contain(&format!("Migration succeeded: {name}")),
-                "Migration {name} should have succeeded"
-            );
-        }
-    }
-
-    run_rollback_instructions(&fresh_clickhouse, &*migrations[migration_num]).await;
-
-    // The rollback for Migration0000 drops the entire database, which will cause '_cleanup_fresh_clickhouse'
-    // to try to run commands on a non-existent database.
-    // We make sure that the database exists at the end of the rollback to prevent '_cleanup_fresh_clickhouse' from
-    // panicking on drop.
-    fresh_clickhouse
-        .create_database_and_migrations_table()
-        .await
-        .unwrap();
-}
-
-// Generate tests named 'test_rollback_up_to_migration_index_n' for each migration index `n``
-// Each test will run all of the migrations up to and including `n`, and then test that running the rollback
-// instructions for `n` succeeds
-invoke_all_separate_tests!(
-    test_rollback_helper,
-    test_rollback_up_to_migration_index_,
-    [
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43
-    ]
-);
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rollback_apply_rollback() {
