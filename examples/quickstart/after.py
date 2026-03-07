@@ -1,16 +1,15 @@
-from tensorzero import TensorZeroGateway
+from openai import OpenAI
 
-with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
-    response = client.inference(
-        function_name="generate_haiku",
-        input={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Write a haiku about TensorZero.",
-                }
-            ]
-        },
-    )
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
+
+response = client.chat.completions.create(
+    model="tensorzero::function_name::generate_haiku",
+    messages=[
+        {
+            "role": "user",
+            "content": "Write a haiku about TensorZero.",
+        }
+    ],
+)
 
 print(response)
