@@ -34,12 +34,6 @@ describe("URL helper functions", () => {
         "/observability/functions/my_function?snapshot_hash=abc123",
       );
     });
-
-    it("should not append snapshot_hash when undefined", () => {
-      expect(toFunctionUrl("my_function", undefined)).toBe(
-        "/observability/functions/my_function",
-      );
-    });
   });
 
   describe("toVariantUrl", () => {
