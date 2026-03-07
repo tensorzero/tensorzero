@@ -869,13 +869,24 @@ max_tokens = 100
 
 # Variant fallback: error variant fails, fallback variant succeeds initially but errors mid-stream
 # Retry tests: flaky model (fails on even calls, succeeds on odd) with raw_response
-[functions.raw_response_retries_flaky]
+[functions.raw_response_retries_flaky_non_streaming]
 type = "chat"
 system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
 
-[functions.raw_response_retries_flaky.variants.test]
+[functions.raw_response_retries_flaky_non_streaming.variants.test]
 type = "chat_completion"
-model = "flaky_raw_response_retries"
+model = "flaky_raw_response_retries_non_streaming"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+retries = { num_retries = 5, max_delay_s = 0.01 }
+
+[functions.raw_response_retries_flaky_streaming]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.raw_response_retries_flaky_streaming.variants.test]
+type = "chat_completion"
+model = "flaky_raw_response_retries_streaming"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 retries = { num_retries = 5, max_delay_s = 0.01 }

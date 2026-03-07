@@ -19,6 +19,7 @@ interface Env {
   TENSORZERO_GATEWAY_URL: string;
   TENSORZERO_API_KEY?: string;
   TENSORZERO_UI_CONFIG_FILE?: string;
+  TENSORZERO_AUTOPILOT_BETA_TOOLS?: string;
 }
 
 let _env: Env | undefined;
@@ -74,6 +75,8 @@ export function getEnv(): Env {
     TENSORZERO_GATEWAY_URL,
     TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY,
     TENSORZERO_UI_CONFIG_FILE: process.env.TENSORZERO_UI_CONFIG_FILE,
+    TENSORZERO_AUTOPILOT_BETA_TOOLS:
+      process.env.TENSORZERO_AUTOPILOT_BETA_TOOLS,
   };
 
   return _env;

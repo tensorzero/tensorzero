@@ -29,6 +29,7 @@ use tensorzero_core::inference::types::Role;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use tensorzero::test_helpers::{
     make_embedded_gateway_e2e_with_unique_db,
     make_embedded_gateway_e2e_with_unique_db_all_backends,
@@ -84,6 +85,7 @@ fn is_batched_writes_enabled() -> bool {
 make_cache_tests!(test_dont_cache_invalid_tool_call);
 
 async fn test_dont_cache_invalid_tool_call(backend: CacheBackend) {
+    skip_for_postgres!();
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     if is_batched_writes_enabled() {
         // Skip test if batched writes are enabled.
@@ -146,6 +148,7 @@ async fn test_dont_cache_invalid_tool_call(backend: CacheBackend) {
 make_cache_tests!(test_dont_cache_tool_call_schema_error);
 
 async fn test_dont_cache_tool_call_schema_error(backend: CacheBackend) {
+    skip_for_postgres!();
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     if is_batched_writes_enabled() {
         // Skip test if batched writes are enabled (same reason as above)
@@ -232,6 +235,7 @@ async fn test_dont_cache_tool_call_schema_error(backend: CacheBackend) {
 
 #[tokio::test]
 pub async fn test_streaming_cache_with_err() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     // Generate random u32
     let seed = rand::rng().random_range(0..u32::MAX);
@@ -246,6 +250,7 @@ pub async fn test_streaming_cache_with_err() {
 
 #[tokio::test]
 pub async fn test_streaming_cache_without_err() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     // Generate random u32
     let seed = rand::rng().random_range(0..u32::MAX);
@@ -520,6 +525,7 @@ pub async fn check_test_streaming_cache_with_err(
 make_cache_tests!(test_streaming_cache_usage_only_in_final_chunk_native);
 
 async fn test_streaming_cache_usage_only_in_final_chunk_native(backend: CacheBackend) {
+    skip_for_postgres!();
     use serde_json::Map;
     use tensorzero::InferenceResponseChunk;
     use tensorzero_core::inference::types::System;
@@ -639,6 +645,7 @@ async fn test_streaming_cache_usage_only_in_final_chunk_native(backend: CacheBac
 /// Tests that cached streaming responses only have usage on the final chunk (OpenAI-compatible API)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
+    skip_for_postgres!();
     let (base_url, _shutdown_handle) =
         make_http_gateway_openai_only_with_unique_db("cache_usage_final_chunk_openai").await;
 

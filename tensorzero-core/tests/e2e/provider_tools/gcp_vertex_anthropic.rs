@@ -17,6 +17,8 @@ use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
 use tensorzero_core::tool::{ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider};
 use uuid::Uuid;
 
+use crate::utils::skip_for_postgres;
+
 // =============================================================================
 // Static Provider Tools Tests (configured in model config)
 // =============================================================================
@@ -186,6 +188,7 @@ provider_tools = [{type = "web_search_20250305", name = "web_search", max_uses =
 /// Test GCP Vertex Anthropic provider tools with web_search (streaming, multi-turn)
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_gcp_vertex_anthropic_provider_tools_web_search_streaming() {
+    skip_for_postgres!();
     let config = r#"
 gateway.debug = true
 

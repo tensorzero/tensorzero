@@ -25,10 +25,12 @@ use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 #[tokio::test]
 async fn test_comment_feedback_normal_function() {
+    skip_for_postgres!();
     test_comment_feedback_with_payload(serde_json::json!({
         "function_name": "json_success",
         "input": {
@@ -41,6 +43,7 @@ async fn test_comment_feedback_normal_function() {
 
 #[tokio::test]
 async fn test_comment_feedback_default_function() {
+    skip_for_postgres!();
     test_comment_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
@@ -52,6 +55,7 @@ async fn test_comment_feedback_default_function() {
 }
 
 async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value) {
+    skip_for_postgres!();
     let client = Client::new();
     // // Running without valid episode_id. Should fail.
     let episode_id = Uuid::now_v7();
@@ -246,6 +250,7 @@ async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_comment_feedback_validation_disabled() {
+    skip_for_postgres!();
     let mut config = Config::new_empty()
         .await
         .unwrap()
@@ -292,6 +297,7 @@ async fn test_comment_feedback_validation_disabled() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_normal_function() {
+    skip_for_postgres!();
     test_demonstration_feedback_with_payload(serde_json::json!({
         "function_name": "basic_test",
         "input": {
@@ -305,6 +311,7 @@ async fn test_demonstration_feedback_normal_function() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_default_function() {
+    skip_for_postgres!();
     test_demonstration_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
@@ -316,6 +323,7 @@ async fn test_demonstration_feedback_default_function() {
 }
 
 async fn test_demonstration_feedback_with_payload(inference_payload: serde_json::Value) {
+    skip_for_postgres!();
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let tag_value = Uuid::now_v7().to_string();
@@ -484,6 +492,7 @@ async fn test_demonstration_feedback_with_payload(inference_payload: serde_json:
 
 #[tokio::test]
 async fn test_demonstration_feedback_json() {
+    skip_for_postgres!();
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -619,6 +628,7 @@ async fn test_demonstration_feedback_json() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_llm_judge() {
+    skip_for_postgres!();
     let client = Client::new();
     // Run inference (standard, no dryrun) to get an inference_id
     let old_output_schema = json!({
@@ -705,6 +715,7 @@ async fn test_demonstration_feedback_llm_judge() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_dynamic_json() {
+    skip_for_postgres!();
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -875,6 +886,7 @@ async fn test_demonstration_feedback_dynamic_json() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_tool() {
+    skip_for_postgres!();
     // Running without valid inference_id. Should fail.
     let client = Client::new();
     let inference_id = Uuid::now_v7();
@@ -1071,6 +1083,7 @@ async fn test_demonstration_feedback_tool() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_dynamic_tool() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an inference_id
@@ -1265,6 +1278,7 @@ async fn test_demonstration_feedback_dynamic_tool() {
 
 #[tokio::test]
 async fn test_float_feedback_normal_function() {
+    skip_for_postgres!();
     test_float_feedback_with_payload(serde_json::json!({
         "function_name": "json_success",
         "input": {
@@ -1277,6 +1291,7 @@ async fn test_float_feedback_normal_function() {
 
 #[tokio::test]
 async fn test_float_feedback_default_function() {
+    skip_for_postgres!();
     test_float_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
@@ -1288,6 +1303,7 @@ async fn test_float_feedback_default_function() {
 }
 
 async fn test_float_feedback_with_payload(inference_payload: serde_json::Value) {
+    skip_for_postgres!();
     let client = Client::new();
     let tag_value = Uuid::now_v7().to_string();
     // Running without valid episode_id. Should fail.
@@ -1546,6 +1562,7 @@ async fn test_float_feedback_with_payload(inference_payload: serde_json::Value) 
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_float_feedback_validation_disabled() {
+    skip_for_postgres!();
     let mut config = Config::new_empty()
         .await
         .unwrap()
@@ -1601,6 +1618,7 @@ async fn test_float_feedback_validation_disabled() {
 
 #[tokio::test]
 async fn test_boolean_feedback_normal_function() {
+    skip_for_postgres!();
     test_boolean_feedback_with_payload(serde_json::json!({
         "function_name": "json_success",
         "input": {
@@ -1613,6 +1631,7 @@ async fn test_boolean_feedback_normal_function() {
 
 #[tokio::test]
 async fn test_boolean_feedback_default_function() {
+    skip_for_postgres!();
     test_boolean_feedback_with_payload(serde_json::json!({
         "model_name": "dummy::good",
         "input": {
@@ -1624,6 +1643,7 @@ async fn test_boolean_feedback_default_function() {
 }
 
 async fn test_boolean_feedback_with_payload(inference_payload: serde_json::Value) {
+    skip_for_postgres!();
     let client = Client::new();
     let inference_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
@@ -1890,6 +1910,7 @@ async fn test_boolean_feedback_with_payload(inference_payload: serde_json::Value
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_boolean_feedback_validation_disabled() {
+    skip_for_postgres!();
     let mut config = Config::new_empty()
         .await
         .unwrap()
@@ -1945,6 +1966,7 @@ async fn test_boolean_feedback_validation_disabled() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fast_inference_then_feedback() {
+    skip_for_postgres!();
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     use serde_json::json;
     use std::collections::HashMap;
@@ -2018,6 +2040,7 @@ async fn test_fast_inference_then_feedback() {
 
 #[tokio::test]
 async fn test_feedback_internal_tag_auto_injection() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // First, run an inference to get a valid inference_id

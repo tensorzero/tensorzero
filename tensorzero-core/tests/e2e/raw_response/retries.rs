@@ -17,13 +17,16 @@ use crate::common::get_gateway_endpoint;
 // Flaky model retry tests (fail then succeed)
 // =============================================================================
 
+// TODO(#6796): Redesign the dummy model so we provide responses in the test body
+// instead of relying on a global counter that requires warmup calls.
+
 /// Helper to make a warm-up call so the flaky model counter advances.
 /// The flaky model fails on even-numbered calls (2, 4, 6, ...),
 /// so we need to ensure the counter is at an even value before the real test call.
-async fn warmup_flaky_retries() {
+async fn warmup_flaky_model(function_name: &str) {
     let episode_id = Uuid::now_v7();
     let payload = json!({
-        "function_name": "raw_response_retries_flaky",
+        "function_name": function_name,
         "variant_name": "test",
         "episode_id": episode_id,
         "input": {
@@ -52,12 +55,10 @@ async fn warmup_flaky_retries() {
 /// Expects `raw_response` to have error entry from failed attempt + success entry from retry.
 #[tokio::test]
 async fn test_retries_fail_then_succeed_non_streaming() {
-    // Warm up to advance counter to 1
-    warmup_flaky_retries().await;
-
+    warmup_flaky_model("raw_response_retries_flaky_non_streaming").await;
     let episode_id = Uuid::now_v7();
     let payload = json!({
-        "function_name": "raw_response_retries_flaky",
+        "function_name": "raw_response_retries_flaky_non_streaming",
         "variant_name": "test",
         "episode_id": episode_id,
         "input": {
@@ -125,14 +126,10 @@ async fn test_retries_fail_then_succeed_non_streaming() {
 /// Expects failed retry entries in `raw_response` chunk, then `raw_chunk` from successful streaming.
 #[tokio::test]
 async fn test_retries_fail_then_succeed_streaming() {
-    // Warm up to advance counter to 1 (odd = success).
-    // Both infer and infer_stream share the same FLAKY_COUNTERS,
-    // so a non-streaming warmup works for the streaming test.
-    warmup_flaky_retries().await;
-
+    warmup_flaky_model("raw_response_retries_flaky_streaming").await;
     let episode_id = Uuid::now_v7();
     let payload = json!({
-        "function_name": "raw_response_retries_flaky",
+        "function_name": "raw_response_retries_flaky_streaming",
         "variant_name": "test",
         "episode_id": episode_id,
         "input": {

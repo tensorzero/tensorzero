@@ -32,7 +32,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2026.3.0"
+version = "2026.3.1"
 rust-version = "1.93.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -137,6 +137,7 @@ rust_decimal = { version = "1.37", features = ["serde-float", "serde-with-float"
 walkdir = "2.5.0"
 tempfile = "3.26.0"
 toml_edit = "0.25"
+googletest = "0.14.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
