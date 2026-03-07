@@ -7,11 +7,9 @@ import type {
   InferenceEvaluationConfig,
   MetricConfig,
 } from "~/types/tensorzero";
-import {
-  getConfig,
-  getFunctionConfig,
-  getConfigForSnapshot,
-} from "~/utils/config/index.server";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
+import { getFunctionConfig } from "~/utils/config/index.server";
+import { resolveEvaluationConfig } from "~/utils/evaluations.server";
 import {
   getEvaluationResults,
   pollForEvaluationResults,
@@ -151,30 +149,10 @@ async function fetchEvaluationData(
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const config = await getConfig();
-  let evaluationConfig = config.evaluations[params.evaluation_name];
-  let effectiveConfig = config;
-
-  if (!evaluationConfig) {
-    // Evaluation not in current config — try to find it from a historical snapshot
-    const client = getTensorZeroClient();
-    const runs = await client.listEvaluationRuns(100, 0);
-    const matchingRun = runs.runs.find(
-      (r) => r.evaluation_name === params.evaluation_name,
-    );
-
-    if (matchingRun?.snapshot_hash) {
-      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
-      evaluationConfig = effectiveConfig.evaluations[params.evaluation_name];
-    }
-
-    if (!evaluationConfig) {
-      throw data(
-        `Evaluation config not found for evaluation ${params.evaluation_name}`,
-        { status: 404 },
-      );
-    }
-  }
+  // Eval pages get snapshotHash from the eval run lookup, not from the URL,
+  // because evaluations might only exist in a historical config snapshot.
+  const { evaluationConfig, effectiveConfig, snapshotHash } =
+    await resolveEvaluationConfig(params.evaluation_name);
 
   const function_name = evaluationConfig.function_name;
   const functionConfig = await getFunctionConfig(
@@ -257,6 +235,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     evaluation_name: params.evaluation_name,
     evaluationConfig,
+    snapshotHash,
     function_type,
     metricsConfig,
     evaluationData: fetchEvaluationData(
@@ -479,6 +458,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const {
     evaluation_name,
     evaluationConfig: evaluation_config,
+    snapshotHash,
     function_type,
     metricsConfig,
     evaluationData,
@@ -550,6 +530,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader
+        banner={snapshotHash ? <SnapshotBanner /> : undefined}
         eyebrow={
           <Breadcrumbs
             segments={[{ label: "Evaluations", href: "/evaluations" }]}
@@ -560,6 +541,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
         <BasicInfo
           evaluation_config={evaluation_config}
           functionType={function_type}
+          snapshotHash={snapshotHash}
         />
         <ActionBar>
           <DatasetSelect

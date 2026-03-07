@@ -31,6 +31,7 @@ interface BasicInfoProps {
   datapoint_name?: string;
   datapoint_staled_at?: string;
   onRenameDatapoint?: (newName: string) => void | Promise<void>;
+  snapshotHash?: string;
 }
 
 export default function BasicInfo({
@@ -42,6 +43,7 @@ export default function BasicInfo({
   datapoint_name,
   datapoint_staled_at,
   onRenameDatapoint,
+  snapshotHash,
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const isReadOnly = useReadOnly();
@@ -80,7 +82,7 @@ export default function BasicInfo({
               iconBg={functionIconConfig.iconBg}
               label={functionName}
               secondaryLabel={`· ${functionType}`}
-              link={toFunctionUrl(functionName)}
+              link={toFunctionUrl(functionName, snapshotHash)}
               font="mono"
             />
           )}

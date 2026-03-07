@@ -33,6 +33,7 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 );
 
 interface PageHeaderProps {
+  banner?: ReactNode;
   eyebrow?: ReactNode;
   heading?: string;
   name?: string;
@@ -43,6 +44,7 @@ interface PageHeaderProps {
 }
 
 function PageHeader({
+  banner,
   eyebrow,
   heading,
   name,
@@ -55,6 +57,7 @@ function PageHeader({
 
   return (
     <div className="flex flex-col">
+      {banner && <div className="mb-4">{banner}</div>}
       <div className="flex flex-col gap-3">
         {eyebrow && (
           <div className="text-fg-secondary text-sm font-normal">{eyebrow}</div>

@@ -48,7 +48,8 @@ import {
   ColorAssignerProvider,
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
-import { getConfig, getConfigForSnapshot } from "~/utils/config/index.server";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
+import { resolveEvaluationConfig } from "~/utils/evaluations.server";
 import type {
   EvaluatorConfig,
   InferenceEvaluationConfig,
@@ -160,30 +161,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const datapoint_id = params.datapoint_id;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
-  const config = await getConfig();
-  let evaluation_config = config.evaluations[evaluation_name];
-  let effectiveConfig = config;
+  // Eval pages get snapshotHash from the eval run lookup, not from the URL,
+  // because evaluations might only exist in a historical config snapshot.
+  const {
+    evaluationConfig: evaluation_config,
+    effectiveConfig,
+    snapshotHash,
+  } = await resolveEvaluationConfig(evaluation_name);
 
-  if (!evaluation_config) {
-    // Evaluation not in current config — try to find it from a historical snapshot
-    const client = getTensorZeroClient();
-    const runs = await client.listEvaluationRuns(100, 0);
-    const matchingRun = runs.runs.find(
-      (r) => r.evaluation_name === evaluation_name,
-    );
-
-    if (matchingRun?.snapshot_hash) {
-      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
-      evaluation_config = effectiveConfig.evaluations[evaluation_name];
-    }
-
-    if (!evaluation_config) {
-      throw data(
-        `Evaluation config not found for evaluation ${evaluation_name}`,
-        { status: 404 },
-      );
-    }
-  }
   const function_name = evaluation_config.function_name;
 
   // Resolve function type from effective config
@@ -236,6 +221,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     evaluationConfig: evaluation_config,
     functionType,
+    snapshotHash,
     metricsConfig,
     runInfoData,
     evaluationResultsData,
@@ -328,12 +314,14 @@ function BasicInfoWithData({
   evaluationConfig: evaluation_config,
   functionType,
   datapoint_id,
+  snapshotHash,
 }: {
   data: EvaluationResultsData;
   evaluation_name: string;
   evaluationConfig: InferenceEvaluationConfig;
   functionType: "chat" | "json";
   datapoint_id: string;
+  snapshotHash?: string;
 }) {
   const { consolidatedEvaluationResults, datapoint_staled_at } = data;
   const fetcher = useFetcher();
@@ -360,6 +348,7 @@ function BasicInfoWithData({
       datapoint_name={consolidatedEvaluationResults[0].name}
       datapoint_staled_at={datapoint_staled_at}
       onRenameDatapoint={handleRenameDatapoint}
+      snapshotHash={snapshotHash}
     />
   );
 }
@@ -446,6 +435,7 @@ export default function EvaluationDatapointPage({
   const {
     evaluationConfig,
     functionType,
+    snapshotHash,
     metricsConfig,
     runInfoData,
     evaluationResultsData,
@@ -469,6 +459,7 @@ export default function EvaluationDatapointPage({
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
         <PageHeader
+          banner={snapshotHash ? <SnapshotBanner /> : undefined}
           eyebrow={
             <Breadcrumbs
               segments={[
@@ -499,6 +490,7 @@ export default function EvaluationDatapointPage({
                   evaluationConfig={evaluationConfig}
                   functionType={functionType}
                   datapoint_id={params.datapoint_id}
+                  snapshotHash={snapshotHash}
                 />
               )}
             </Await>
