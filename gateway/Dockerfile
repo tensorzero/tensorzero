@@ -20,6 +20,7 @@ ARG PROFILE
 WORKDIR /tensorzero
 ENV CARGO_INCREMENTAL=0
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+COPY rust-toolchain.toml .
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --profile ${PROFILE} -p gateway ${CARGO_BUILD_FLAGS}
 COPY . /tensorzero
