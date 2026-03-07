@@ -11,7 +11,7 @@ path = "tests/tests.rs"
 required-features = ["e2e_tests"]
 
 [dependencies]
-tensorzero-core = { path = "../tensorzero-core" }
+tensorzero-core = { path = "../../tensorzero-core" }
 async-trait = { workspace = true }
 clap = { workspace = true }
 url = { workspace = true }
@@ -29,7 +29,7 @@ indicatif = "0.18.4"
 ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
-tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
+tensorzero-core = { path = "../../tensorzero-core", features = ["e2e_tests"] }
 
 [lints]
 workspace = true

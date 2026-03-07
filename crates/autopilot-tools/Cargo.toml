@@ -19,11 +19,11 @@ ts-bindings = [
 
 [dependencies]
 durable-tools = { path = "../durable-tools" }
-tensorzero = { path = "../../clients/rust" }
+tensorzero = { path = "../tensorzero-client" }
 autopilot-client = { path = "../autopilot-client" }
 tensorzero-core = { path = "../../tensorzero-core" }
 config-applier = { path = "../config-applier" }
-tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 object_store = { workspace = true }
 arrow = { workspace = true }
 parquet = { workspace = true }

@@ -4,7 +4,7 @@ services:
     image: tensorzero/provider-proxy:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       context: ../../..
-      dockerfile: provider-proxy/Dockerfile
+      dockerfile: crates/provider-proxy/Dockerfile
       target: provider-proxy
     ports:
       - "3003:3003"
@@ -134,7 +134,7 @@ services:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
       context: ../../..
-      dockerfile: gateway/Dockerfile
+      dockerfile: crates/gateway/Dockerfile
       target: gateway
       args:
         PROFILE: dev
@@ -164,7 +164,7 @@ services:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
       context: ../../..
-      dockerfile: gateway/Dockerfile
+      dockerfile: crates/gateway/Dockerfile
       target: gateway
       args:
         PROFILE: dev

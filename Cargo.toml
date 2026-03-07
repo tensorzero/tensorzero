@@ -1,18 +1,18 @@
 [workspace]
 members = [
     "tensorzero-core",
-    "googletest-matchers",
+    "crates/googletest-matchers",
     "tensorzero-core/tests/mock-provider-api",
     "tensorzero-core/tests/load/rate-limit-load-test",
     "tensorzero-core/tests/load/postgres-inference-load-test",
     "tensorzero-core/tests/load/feedback",
-    "gateway",
+    "crates/gateway",
     "crates/tensorzero-node",
-    "clients/rust",
+    "crates/tensorzero-client",
     "clients/python",
-    "provider-proxy",
-    "evaluations",
-    "tensorzero-optimizers",
+    "crates/provider-proxy",
+    "crates/evaluations",
+    "crates/tensorzero-optimizers",
     "crates/tensorzero-derive",
     "crates/tensorzero-auth",
     "crates/tensorzero-unsafe-helpers",
@@ -120,7 +120,7 @@ blake3 = "1.8.3"
 moka = { version = "0.12.14", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", branch = "viraj/heartbeat-in-steps" }
 durable-tools-spawn = { path = "crates/durable-tools-spawn" }
-tensorzero = { path = "clients/rust" }
+tensorzero = { path = "crates/tensorzero-client" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"
 redis = { version = "1.0.4", features = [

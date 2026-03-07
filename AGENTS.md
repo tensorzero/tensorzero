@@ -21,6 +21,7 @@
 - To check a string is non-empty, use `not(eq(""))`.
 - Prefer `matches_pattern!` to assert on multiple struct fields at once rather than separate assertions per field.
 - Use `matches_json!` and `matches_json_literal!` from the `googletest_matchers` crate for JSON assertions.
+- Never compare serialized JSON strings directly — Postgres JSONB does not preserve key order, so parse to `serde_json::Value` and use `matches_json_literal!` instead.
 
 ## For APIs
 

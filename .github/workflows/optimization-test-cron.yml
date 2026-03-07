@@ -68,7 +68,7 @@ jobs:
           tool: cargo-nextest
 
       - name: Launch ClickHouse container for optimization tests
-        run: docker compose -f tensorzero-optimizers/tests/docker-compose.yml up --wait
+        run: docker compose -f crates/tensorzero-optimizers/tests/docker-compose.yml up --wait
 
       - name: Run daily optimization tests
         if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
@@ -81,7 +81,7 @@ jobs:
       - name: Print ClickHouse container logs
         if: always()
         continue-on-error: true
-        run: docker compose -f tensorzero-optimizers/tests/docker-compose.yml logs -t
+        run: docker compose -f crates/tensorzero-optimizers/tests/docker-compose.yml logs -t
 
       - name: Log test completion
         if: always()

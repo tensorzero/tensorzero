@@ -17,7 +17,7 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-core = { path = "../../tensorzero-core" }
-tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
+tensorzero-optimizers = { path = "../../crates/tensorzero-optimizers" }
 url = { workspace = true }
 pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }

@@ -46,7 +46,7 @@ jobs:
 
       - name: Build `gateway-e2e` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f gateway/Dockerfile --build-arg PROFILE=dev --build-arg "CARGO_BUILD_FLAGS=--features e2e_tests" --target gateway . -t tensorzero/gateway-e2e:sha-${{ github.sha }}
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f crates/gateway/Dockerfile --build-arg PROFILE=dev --build-arg "CARGO_BUILD_FLAGS=--features e2e_tests" --target gateway . -t tensorzero/gateway-e2e:sha-${{ github.sha }}
 
       # Note that this pushes an e2e build of the gateway to 'tensorzero/gateway-e2e'.
       # It does *not* push to the production 'tensorzero/gateway' repo.
