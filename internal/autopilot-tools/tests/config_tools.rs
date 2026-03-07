@@ -10,7 +10,6 @@ use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext};
 use sqlx::PgPool;
 use tensorzero::{GetConfigResponse, WriteConfigResponse};
-use tensorzero_core::config::UninitializedConfig;
 use uuid::Uuid;
 
 use autopilot_tools::tools::{
@@ -20,12 +19,9 @@ use common::MockTensorZeroClient;
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_get_config_tool_with_hash(pool: PgPool) {
-    let config: UninitializedConfig =
-        serde_json::from_value(serde_json::json!({})).expect("Config should deserialize");
-
     let response = GetConfigResponse {
         hash: "1234567".to_string(),
-        config,
+        config: serde_json::json!({}),
         extra_templates: HashMap::new(),
         tags: HashMap::new(),
     };

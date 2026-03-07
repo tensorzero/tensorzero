@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 //! Tool definitions for TensorZero Autopilot.
 //!
 //! This crate provides tool traits and implementations for the autopilot system.

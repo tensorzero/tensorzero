@@ -7,6 +7,8 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 use uuid::Uuid;
 
+use crate::utils::skip_for_postgres;
+
 use crate::{
     common::get_gateway_endpoint,
     providers::common::{E2ETestProvider, E2ETestProviders},
@@ -348,6 +350,7 @@ async fn test_gemini_double_thought() {
 /// the model is forced to use tools (because internally we set mode to Any).
 #[tokio::test]
 async fn test_google_ai_studio_gemini_tool_choice_auto_with_allowed_tools() {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

@@ -44,6 +44,7 @@ use crate::{
             check_tool_use_tool_choice_specific_inference_response,
         },
     },
+    utils::skip_for_postgres,
 };
 
 /// Poll for batch completion with retries
@@ -285,6 +286,7 @@ pub async fn test_simple_image_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     // Use unique episode_id for test isolation
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
@@ -369,6 +371,7 @@ pub async fn test_json_mode_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -437,6 +440,7 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     let mut episode_ids = Vec::new();
     for _ in 0..5 {
         episode_ids.push(Uuid::now_v7());
@@ -608,6 +612,7 @@ pub async fn test_parallel_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -692,6 +697,7 @@ pub async fn test_inference_params_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -772,6 +778,7 @@ pub async fn test_multi_turn_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -859,6 +866,7 @@ pub async fn test_multi_turn_parallel_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -967,6 +975,7 @@ pub async fn test_dynamic_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -1055,6 +1064,7 @@ pub async fn test_dynamic_json_mode_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     // Skip chain of thought variants with batch mode
     if provider.variant_name.ends_with("cot") {
         println!(
@@ -1148,6 +1158,7 @@ pub async fn test_allowed_tools_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
+    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 

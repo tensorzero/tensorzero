@@ -273,12 +273,28 @@ impl From<LLMJudgeOptimize> for MetricConfigOptimize {
     }
 }
 
-pub fn get_llm_judge_function_name(evaluation_name: &str, evaluator_name: &str) -> String {
-    format!("tensorzero::llm_judge::{evaluation_name}::{evaluator_name}")
+pub fn get_llm_judge_function_name(evaluation_name: Option<&str>, evaluator_name: &str) -> String {
+    match evaluation_name {
+        Some(eval_name) => format!("tensorzero::llm_judge::{eval_name}::{evaluator_name}"),
+        None => get_top_level_llm_judge_function_name(evaluator_name),
+    }
 }
 
-pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) -> String {
-    format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}")
+pub fn get_evaluator_metric_name(evaluation_name: Option<&str>, evaluator_name: &str) -> String {
+    match evaluation_name {
+        Some(eval_name) => {
+            format!("tensorzero::evaluation_name::{eval_name}::evaluator_name::{evaluator_name}")
+        }
+        None => get_top_level_evaluator_metric_name(evaluator_name),
+    }
+}
+
+pub fn get_top_level_llm_judge_function_name(evaluator_name: &str) -> String {
+    format!("tensorzero::llm_judge::{evaluator_name}")
+}
+
+pub fn get_top_level_evaluator_metric_name(evaluator_name: &str) -> String {
+    format!("tensorzero::evaluator::{evaluator_name}")
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize)]
@@ -293,7 +309,6 @@ impl UninitializedEvaluationConfig {
     pub fn load(
         self,
         functions: &HashMap<String, Arc<FunctionConfig>>,
-
         evaluation_name: &str,
     ) -> EvaluationLoadResult {
         match self {
@@ -415,11 +430,12 @@ impl UninitializedInferenceEvaluationConfig {
             }
             .into());
         }
+
         let evaluator_results = self
             .evaluators
             .into_iter()
             .map(|(name, config)| {
-                config.load(evaluation_name, &name).map(
+                config.load(Some(evaluation_name), &name).map(
                     |(evaluation_config, func_config, metric_config)| {
                         (name, evaluation_config, func_config, metric_config)
                     },
@@ -427,28 +443,24 @@ impl UninitializedInferenceEvaluationConfig {
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
-        // Create HashMaps from the results
+        // When initializing evaluators, we also need to initialize:
+        // - Function configs for LLM judge evaluators
+        // - Metric configs for all evaluators
         let mut evaluators = HashMap::new();
         let mut function_configs = HashMap::new();
         let mut metric_configs = HashMap::new();
         for (evaluator_name, evaluator_config, function_config, metric_config) in evaluator_results
         {
-            // Add to evaluators map
             evaluators.insert(evaluator_name.clone(), evaluator_config);
 
-            // Add to function_configs map if Some
             if let Some(config) = function_config {
-                function_configs.insert(
-                    get_llm_judge_function_name(evaluation_name, &evaluator_name),
-                    Arc::new(config),
-                );
+                let function_name =
+                    get_llm_judge_function_name(Some(evaluation_name), &evaluator_name);
+                function_configs.insert(function_name, Arc::new(config));
             }
 
-            // Add to metric_configs map
-            metric_configs.insert(
-                get_evaluator_metric_name(evaluation_name, &evaluator_name),
-                metric_config,
-            );
+            let metric_name = get_evaluator_metric_name(Some(evaluation_name), &evaluator_name);
+            metric_configs.insert(metric_name, metric_config);
         }
         Ok((
             InferenceEvaluationConfig {
@@ -501,18 +513,28 @@ pub struct UninitializedLLMJudgeConfig {
 impl UninitializedEvaluatorConfig {
     pub fn load(
         self,
-        evaluation_name: &str,
+        evaluation_name: Option<&str>,
         evaluator_name: &str,
     ) -> Result<(EvaluatorConfig, Option<FunctionConfig>, MetricConfig), Error> {
+        let error_context = match evaluation_name {
+            Some(eval_name) => format!("`[evaluations.{eval_name}]`"),
+            None => "`[evaluators]`".to_string(),
+        };
+
         // Evaluator names cannot have "::" in them since we use it as a delimiter in our function names later on
         if evaluator_name.contains("::") {
+            let context = match evaluation_name {
+                Some(eval_name) => {
+                    format!("`[evaluations.{eval_name}.{evaluator_name}]`")
+                }
+                None => format!("`[evaluators.{evaluator_name}]`"),
+            };
             return Err(ErrorDetails::Config {
-                message: format!(
-                    "Evaluator names cannot contain \"::\" (referenced in `[evaluations.{evaluation_name}.{evaluator_name}]`)"
-                ),
+                message: format!("Evaluator names cannot contain \"::\" (referenced in {context})"),
             }
             .into());
         }
+
         match self {
             UninitializedEvaluatorConfig::ExactMatch(params) => Ok((
                 EvaluatorConfig::ExactMatch(params),
@@ -572,7 +594,7 @@ impl UninitializedEvaluatorConfig {
                 if nonzero_weights != 1 && variants.len() > 1 {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
+                            "Evaluator `{evaluator_name}` in {error_context} must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
                         ),
                     }
                     .into());
@@ -587,7 +609,7 @@ impl UninitializedEvaluatorConfig {
                         && weight == 0.0
                     {
                         return Err(ErrorDetails::Config {
-                                message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                                message: format!("Evaluator `{evaluator_name}` in {error_context} must have exactly 1 variant that is active. You have specified a single inactive variant."),
                             }
                             .into());
                     }
@@ -662,7 +684,7 @@ impl UninitializedEvaluatorConfig {
                         if tools.is_empty() {
                             return Err(ErrorDetails::Config {
                                 message: format!(
-                                    "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                                    "Evaluator `{evaluator_name}` in {error_context}: \
                                      `tools` must be a non-empty list when behavior is `{config}`",
                                 ),
                             }
@@ -685,7 +707,7 @@ impl UninitializedEvaluatorConfig {
                 if config.must_match.is_none() && config.must_not_match.is_none() {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                            "Evaluator `{evaluator_name}` in {error_context}: \
                              at least one of `must_match` or `must_not_match` must be specified"
                         ),
                     }
@@ -695,7 +717,7 @@ impl UninitializedEvaluatorConfig {
                     regex::Regex::new(pattern).map_err(|e| {
                         Error::new(ErrorDetails::Config {
                             message: format!(
-                                "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                                "Evaluator `{evaluator_name}` in {error_context}: \
                                  invalid regex in `must_match`: {e}"
                             ),
                         })
@@ -705,7 +727,7 @@ impl UninitializedEvaluatorConfig {
                     regex::Regex::new(pattern).map_err(|e| {
                         Error::new(ErrorDetails::Config {
                             message: format!(
-                                "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]`: \
+                                "Evaluator `{evaluator_name}` in {error_context}: \
                                  invalid regex in `must_not_match`: {e}"
                             ),
                         })
@@ -812,7 +834,7 @@ pub struct UninitializedLLMJudgeChatCompletionVariantConfig {
 /// This is factored out so that both the chain of thought and chat completion judges
 /// can use the same implementation.
 fn convert_chat_completion_judge_to_variant(
-    evaluation_name: &str,
+    evaluation_name: Option<&str>,
     evaluator_name: &str,
     variant_name: &str,
     input_format: &LLMJudgeInputFormat,
@@ -973,18 +995,19 @@ pub struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
 }
 
 fn get_template_path(
-    evaluation_name: &str,
+    evaluation_name: Option<&str>,
     evaluator_name: &str,
     variant_name: &str,
     template_name: &str,
     data: String,
 ) -> ResolvedTomlPathData {
-    ResolvedTomlPathData::new_fake_path(
-        format!(
-            "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
+    let path = match evaluation_name {
+        Some(eval_name) => format!(
+            "tensorzero::llm_judge::{eval_name}::{evaluator_name}::{variant_name}::{template_name}"
         ),
-        data,
-    )
+        None => format!("tensorzero::llm_judge::{evaluator_name}::{variant_name}::{template_name}"),
+    };
+    ResolvedTomlPathData::new_fake_path(path, data)
 }
 
 fn get_weight(active: Option<bool>) -> Option<f64> {
@@ -1003,7 +1026,7 @@ fn get_weight(active: Option<bool>) -> Option<f64> {
 impl UninitializedLLMJudgeVariantInfo {
     pub fn load(
         self,
-        evaluation_name: &str,
+        evaluation_name: Option<&str>,
         evaluator_name: &str,
         input_format: &LLMJudgeInputFormat,
         variant_name: &str,
@@ -1403,6 +1426,8 @@ fn check_convert_variant_to_llm_judge_variant(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use googletest::matchers::{anything, has_entry};
+    use googletest::prelude::*;
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -1470,7 +1495,8 @@ mod tests {
             assert_eq!(metric_configs.len(), 1);
 
             // Check the metric name follows expected format
-            let metric_config_name = get_evaluator_metric_name(evaluation_name, "em_evaluator");
+            let metric_config_name =
+                get_evaluator_metric_name(Some(evaluation_name), "em_evaluator");
             assert_eq!(
                 metric_config_name,
                 "tensorzero::evaluation_name::test_evaluation::evaluator_name::em_evaluator"
@@ -1576,7 +1602,7 @@ mod tests {
             // Verify additional function config was created
             assert_eq!(additional_functions.len(), 1);
             let function_name =
-                get_llm_judge_function_name(evaluation_name, "llm_judge_evaluation");
+                get_llm_judge_function_name(Some(evaluation_name), "llm_judge_evaluation");
             assert!(additional_functions.contains_key(&function_name));
 
             // Verify the function config has the correct type
@@ -1595,7 +1621,7 @@ mod tests {
 
             // Check the metric name follows expected format
             let metric_config_name =
-                get_evaluator_metric_name(evaluation_name, "llm_judge_evaluation");
+                get_evaluator_metric_name(Some(evaluation_name), "llm_judge_evaluation");
             assert_eq!(
                 metric_config_name,
                 "tensorzero::evaluation_name::test_evaluation::evaluator_name::llm_judge_evaluation"
@@ -1719,14 +1745,16 @@ mod tests {
 
             // Verify additional function config was created
             assert_eq!(additional_functions.len(), 1);
-            let function_name = get_llm_judge_function_name(evaluation_name, "llm_judge_float");
+            let function_name =
+                get_llm_judge_function_name(Some(evaluation_name), "llm_judge_float");
             assert!(additional_functions.contains_key(&function_name));
 
             // Verify the metrics
             assert_eq!(metric_configs.len(), 1);
 
             // Check the metric name follows expected format
-            let metric_config_name = get_evaluator_metric_name(evaluation_name, "llm_judge_float");
+            let metric_config_name =
+                get_evaluator_metric_name(Some(evaluation_name), "llm_judge_float");
             assert_eq!(
                 metric_config_name,
                 "tensorzero::evaluation_name::test_evaluation::evaluator_name::llm_judge_float"
@@ -2106,7 +2134,7 @@ mod tests {
             let (_config, additional_functions, _metric_configs) =
                 result.expect("LLM judge with default active variant should load successfully");
             let function_config_name =
-                get_llm_judge_function_name(evaluation_name, "llm_judge_default_active");
+                get_llm_judge_function_name(Some(evaluation_name), "llm_judge_default_active");
             let function_config = additional_functions
                 .get(&function_config_name)
                 .expect("function config should exist for llm_judge_default_active");
@@ -2266,7 +2294,7 @@ mod tests {
             must_match: Some("(?i)please".to_string()),
             must_not_match: None,
         });
-        let result = config.load("test_eval", "test_evaluator");
+        let result = config.load(Some("test_eval"), "test_evaluator");
         assert!(result.is_ok(), "must_match only should load successfully");
         let (eval_config, func_config, metric_config) = result.expect("should succeed");
         assert!(
@@ -2284,7 +2312,7 @@ mod tests {
             must_match: None,
             must_not_match: Some("(?i)badword".to_string()),
         });
-        let result = config.load("test_eval", "test_evaluator");
+        let result = config.load(Some("test_eval"), "test_evaluator");
         assert!(
             result.is_ok(),
             "must_not_match only should load successfully"
@@ -2297,7 +2325,7 @@ mod tests {
             must_match: Some("(?i)please".to_string()),
             must_not_match: Some("(?i)badword".to_string()),
         });
-        let result = config.load("test_eval", "test_evaluator");
+        let result = config.load(Some("test_eval"), "test_evaluator");
         assert!(
             result.is_ok(),
             "both must_match and must_not_match should load successfully"
@@ -2310,7 +2338,7 @@ mod tests {
             must_match: None,
             must_not_match: None,
         });
-        let result = config.load("test_eval", "test_evaluator");
+        let result = config.load(Some("test_eval"), "test_evaluator");
         assert!(
             result.is_err(),
             "should fail when neither must_match nor must_not_match is specified"
@@ -2328,7 +2356,7 @@ mod tests {
             must_match: Some("[invalid".to_string()),
             must_not_match: None,
         });
-        let result = config.load("test_eval", "test_evaluator");
+        let result = config.load(Some("test_eval"), "test_evaluator");
         assert!(
             result.is_err(),
             "should fail with invalid regex in must_match"
@@ -2346,7 +2374,7 @@ mod tests {
             must_match: None,
             must_not_match: Some("[invalid".to_string()),
         });
-        let result = config.load("test_eval", "test_evaluator");
+        let result = config.load(Some("test_eval"), "test_evaluator");
         assert!(
             result.is_err(),
             "should fail with invalid regex in must_not_match"
@@ -2358,6 +2386,103 @@ mod tests {
         );
     }
 
+    #[gtest]
+    fn test_evaluator_config_toml_deserialization() {
+        let toml_str = r#"
+            [evaluators.my_em]
+            type = "exact_match"
+        "#;
+        let table: toml::Table = toml::from_str(toml_str).expect("TOML should parse");
+        let evaluators: HashMap<String, UninitializedEvaluatorConfig> = table
+            .get("evaluators")
+            .and_then(|v| v.clone().try_into().ok())
+            .unwrap_or_default();
+        expect_that!(evaluators, has_entry("my_em".to_string(), anything()));
+        expect_that!(
+            evaluators.get("my_em"),
+            some(pat!(UninitializedEvaluatorConfig::ExactMatch(_)))
+        );
+    }
+
+    #[gtest]
+    fn test_top_level_evaluator_naming_helpers() {
+        expect_that!(
+            get_top_level_llm_judge_function_name("my_judge"),
+            eq("tensorzero::llm_judge::my_judge")
+        );
+        expect_that!(
+            get_top_level_evaluator_metric_name("my_judge"),
+            eq("tensorzero::evaluator::my_judge")
+        );
+    }
+
+    #[gtest]
+    fn test_load_top_level_exact_match() {
+        #[expect(deprecated)]
+        let config = UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        let (evaluator, function_config, metric) = config
+            .load(None, "my_em")
+            .expect("top-level exact match should load");
+        expect_that!(evaluator, pat!(EvaluatorConfig::ExactMatch(_)));
+        expect_that!(function_config, none());
+        expect_that!(metric.r#type, eq(MetricConfigType::Boolean));
+    }
+
+    #[gtest]
+    fn test_load_top_level_evaluator_rejects_double_colon() {
+        #[expect(deprecated)]
+        let config = UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        let result = config.load(None, "bad::name");
+        expect_that!(result, err(displays_as(contains_substring("::"))));
+    }
+
+    #[gtest]
+    fn test_inline_evaluation_metric_naming() {
+        let function_name = "generate_draft";
+        let mut functions = HashMap::new();
+        functions.insert(
+            function_name.to_string(),
+            Arc::new(FunctionConfig::Json(FunctionConfigJson {
+                variants: HashMap::new(),
+                schemas: SchemaData::default(),
+                output_schema: create_test_schema(),
+                json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
+                description: None,
+                all_explicit_template_names: HashSet::new(),
+                experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
+                    &HashMap::new(),
+                ),
+            })),
+        );
+
+        let mut evaluators = HashMap::new();
+        #[expect(deprecated)]
+        evaluators.insert(
+            "em_evaluator".to_string(),
+            UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let config = UninitializedInferenceEvaluationConfig {
+            evaluators,
+            function_name: function_name.to_string(),
+            description: None,
+        };
+
+        let (_inference_config, _functions, metrics) = config
+            .load(&functions, "test_eval")
+            .expect("inline evaluation should load");
+
+        let expected_metric_name =
+            "tensorzero::evaluation_name::test_eval::evaluator_name::em_evaluator";
+        expect_that!(
+            get_evaluator_metric_name(Some("test_eval"), "em_evaluator"),
+            eq(expected_metric_name)
+        );
+        expect_that!(
+            metrics,
+            has_entry(expected_metric_name.to_string(), anything())
+        );
+    }
     // Helper functions for tests
     fn create_test_schema() -> JSONSchema {
         let schema_value = serde_json::json!({

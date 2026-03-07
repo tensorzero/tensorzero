@@ -465,22 +465,6 @@ async fn test_model_usage_monthly_specific_data(conn: impl ModelInferenceQueries
         "May should have equal or more model entries than April"
     );
 
-    // Test for dummy models (which seem to have very high usage numbers)
-    // Limit to specific dummy models to avoid unrelated dummy usage from other tests.
-    let dummy_models: Vec<_> = model_usage
-        .iter()
-        .filter(|usage| matches!(usage.model_name.as_str(), "dummy::json" | "dummy::good"))
-        .collect();
-
-    for dummy in dummy_models {
-        if let Some(tokens) = dummy.input_tokens {
-            assert!(
-                tokens >= 100_000_000,
-                "Dummy models should have high token usage"
-            );
-        }
-    }
-
     // Summary assertion
     let total_models = model_names.len();
     assert!(

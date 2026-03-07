@@ -1,10 +1,12 @@
 //! E2E tests for the UI config endpoints.
 
+use googletest::gtest;
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 
 use crate::common::get_gateway_endpoint;
 
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_ui_config_by_hash() {
     let http_client = Client::new();

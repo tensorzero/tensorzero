@@ -15,12 +15,14 @@ use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::skip_for_postgres;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
 // TODO: make these write human feedback and make sure this is writing correctly.
 
 #[tokio::test]
 async fn test_comment_human_feedback() {
+    skip_for_postgres!();
     let client = Client::new();
     // Run inference (standard, no dryrun) to get an episode_id.
     let inference_payload = serde_json::json!({
@@ -176,6 +178,7 @@ async fn test_comment_human_feedback() {
 
 #[tokio::test]
 async fn test_demonstration_feedback() {
+    skip_for_postgres!();
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let tag_value = Uuid::now_v7().to_string();
@@ -329,6 +332,7 @@ async fn test_demonstration_feedback() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_json() {
+    skip_for_postgres!();
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -464,6 +468,7 @@ async fn test_demonstration_feedback_json() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_dynamic_json() {
+    skip_for_postgres!();
     let client = Client::new();
     // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
@@ -634,6 +639,7 @@ async fn test_demonstration_feedback_dynamic_json() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_tool() {
+    skip_for_postgres!();
     // Running without valid inference_id. Should fail.
     let client = Client::new();
     let inference_id = Uuid::now_v7();
@@ -830,6 +836,7 @@ async fn test_demonstration_feedback_tool() {
 
 #[tokio::test]
 async fn test_demonstration_feedback_dynamic_tool() {
+    skip_for_postgres!();
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an inference_id
@@ -1024,6 +1031,7 @@ async fn test_demonstration_feedback_dynamic_tool() {
 
 #[tokio::test]
 async fn test_float_feedback() {
+    skip_for_postgres!();
     let client = Client::new();
     let tag_value = Uuid::now_v7().to_string();
     // Running without valid episode_id. Should fail.
@@ -1248,6 +1256,7 @@ async fn test_float_feedback() {
 
 #[tokio::test]
 async fn test_boolean_feedback() {
+    skip_for_postgres!();
     let client = Client::new();
     let inference_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
@@ -1480,6 +1489,7 @@ async fn test_boolean_feedback() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fast_inference_then_feedback() {
+    skip_for_postgres!();
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     use serde_json::json;
     use std::collections::HashMap;
