@@ -39,8 +39,8 @@ tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
 
 [dev-dependencies]
 mockall = "0.14"
-tensorzero = { path = "../../clients/rust" }
-tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
+tensorzero = { path = "../tensorzero-client" }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]

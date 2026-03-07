@@ -1300,7 +1300,9 @@ mod tests {
     async fn test_gateway_fails_to_start_with_observability_and_missing_clickhouse_url() {
         // This config file requires ClickHouse (backend = "clickhouse"), so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_file: Some(PathBuf::from("../clients/rust/tests/test_config.toml")),
+            config_file: Some(PathBuf::from(
+                "../crates/tensorzero-client/tests/test_config.toml",
+            )),
             clickhouse_url: None,
             postgres_config: None,
             valkey_url: None,
@@ -1325,7 +1327,7 @@ mod tests {
         // the gateway should fail to start without a Postgres connection.
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from(
-                "../clients/rust/tests/test_config_postgres.toml",
+                "../crates/tensorzero-client/tests/test_config_postgres.toml",
             )),
             clickhouse_url: None,
             postgres_config: None,
@@ -1350,7 +1352,7 @@ mod tests {
         // the gateway should start even without ClickHouse.
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from(
-                "../clients/rust/tests/test_config_postgres.toml",
+                "../crates/tensorzero-client/tests/test_config_postgres.toml",
             )),
             clickhouse_url: None,
             postgres_config: Some(PostgresConfig::ExistingConnectionInfo(

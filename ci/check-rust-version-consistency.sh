@@ -63,7 +63,7 @@ echo ""
 
 # Gateway Dockerfile uses cargo-chef with rust-X.YY format
 check_dockerfile \
-  "gateway/Dockerfile" \
+  "crates/gateway/Dockerfile" \
   "FROM lukemathwalker/cargo-chef:" \
   "rust-$RUST_MAJOR_MINOR" \
   "cargo-chef uses rust-$RUST_MAJOR_MINOR"
@@ -83,8 +83,8 @@ check_dockerfile \
 
 # Other Dockerfiles using rust:X.YY.Z
 DOCKERFILES=(
-  "provider-proxy/Dockerfile"
-  "evaluations/Dockerfile"
+  "crates/provider-proxy/Dockerfile"
+  "crates/evaluations/Dockerfile"
   "tensorzero-core/tests/e2e/Dockerfile.gateway.e2e"
   "tensorzero-core/tests/e2e/Dockerfile.clickhouse"
   "tensorzero-core/tests/mock-provider-api/Dockerfile"

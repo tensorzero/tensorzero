@@ -37,8 +37,8 @@ tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-core.workspace = true
 tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
 ts-rs = { workspace = true, optional = true }
-evaluations = { path = "../../evaluations" }
-tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
+evaluations = { path = "../evaluations" }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 indexmap = "2.13.0"
 
 [dev-dependencies]
