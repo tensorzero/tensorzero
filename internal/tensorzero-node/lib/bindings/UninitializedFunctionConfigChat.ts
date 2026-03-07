@@ -2,7 +2,7 @@
 import type { ResolvedTomlPathData } from "./ResolvedTomlPathData";
 import type { ToolChoice } from "./ToolChoice";
 import type { UninitializedExperimentationConfigWithNamespaces } from "./UninitializedExperimentationConfigWithNamespaces";
-import type { UninitializedSchemas } from "./UninitializedSchemas";
+import type { UninitializedSchema } from "./UninitializedSchema";
 import type { UninitializedVariantInfo } from "./UninitializedVariantInfo";
 
 export type UninitializedFunctionConfigChat = {
@@ -10,7 +10,7 @@ export type UninitializedFunctionConfigChat = {
   system_schema?: ResolvedTomlPathData;
   user_schema?: ResolvedTomlPathData;
   assistant_schema?: ResolvedTomlPathData;
-  schemas: UninitializedSchemas;
+  schemas: { [key in string]: UninitializedSchema };
   tools: Array<string>;
   tool_choice: ToolChoice;
   parallel_tool_calls?: boolean;

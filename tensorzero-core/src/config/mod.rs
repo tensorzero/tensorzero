@@ -2005,9 +2005,7 @@ struct UninitializedSchema {
     path: ResolvedTomlPathData,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 #[serde(transparent)]
 pub struct UninitializedSchemas {
@@ -2036,6 +2034,11 @@ pub struct UninitializedFunctionConfigChat {
     pub user_schema: Option<ResolvedTomlPathData>,
     pub assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
+    // ts-rs does not handle #[serde(transparent)], so we treat this as the inner HashMap
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "HashMap<String, UninitializedSchema>")
+    )]
     pub schemas: UninitializedSchemas,
     #[serde(default)]
     pub tools: Vec<String>, // tool names
@@ -2058,6 +2061,11 @@ pub struct UninitializedFunctionConfigJson {
     pub user_schema: Option<ResolvedTomlPathData>,
     pub assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
+    // ts-rs does not handle #[serde(transparent)], so we treat this as the inner HashMap
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "HashMap<String, UninitializedSchema>")
+    )]
     pub schemas: UninitializedSchemas,
     pub output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]

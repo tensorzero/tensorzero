@@ -514,7 +514,6 @@ export * from "./UninitializedProviderConfig";
 export * from "./UninitializedRateLimitingConfig";
 export * from "./UninitializedRelayConfig";
 export * from "./UninitializedSchema";
-export * from "./UninitializedSchemas";
 export * from "./UninitializedTogetherSFTConfig";
 export * from "./UninitializedToolConfig";
 export * from "./UninitializedTrackAndStopExperimentationConfig";
