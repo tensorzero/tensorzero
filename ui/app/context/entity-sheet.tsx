@@ -12,7 +12,10 @@ import { canUseDOM, isModifiedEvent } from "~/utils/common";
 const SHEET_PARAM = "sheet";
 const SHEET_ID_PARAM = "sheetId";
 
-type EntitySheetState = { type: "inference"; id: string } | null;
+type EntitySheetState =
+  | { type: "inference"; id: string }
+  | { type: "episode"; id: string }
+  | null;
 
 function parseSheetStateFromUrl(): EntitySheetState {
   if (!canUseDOM) return null;
@@ -22,12 +25,16 @@ function parseSheetStateFromUrl(): EntitySheetState {
   if (type === "inference" && id) {
     return { type, id };
   }
+  if (type === "episode" && id) {
+    return { type, id };
+  }
   return null;
 }
 
 interface EntitySheetContextValue {
   sheetState: EntitySheetState;
   openInferenceSheet: (id: string) => void;
+  openEpisodeSheet: (id: string) => void;
   closeSheet: () => void;
   /** Click handler that intercepts entity links to open the sheet. */
   handleUuidLinkClick: (
@@ -81,6 +88,14 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
     setSheetState({ type: "inference", id });
   }, []);
 
+  const openEpisodeSheet = useCallback((id: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set(SHEET_PARAM, "episode");
+    url.searchParams.set(SHEET_ID_PARAM, id);
+    window.history.pushState(null, "", url.toString());
+    setSheetState({ type: "episode", id });
+  }, []);
+
   // Use replaceState (not pushState) so that closing via X doesn't create
   // a new history entry, which would cause back-button cycling between
   // open and closed states.
@@ -101,10 +116,15 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
           openInferenceSheet(id);
           break;
         }
+        case "episode": {
+          e.preventDefault();
+          openEpisodeSheet(id);
+          break;
+        }
         // Other entity types fall through to default link navigation
       }
     },
-    [openInferenceSheet],
+    [openInferenceSheet, openEpisodeSheet],
   );
 
   return (
@@ -112,6 +132,7 @@ export function EntitySheetProvider({ children }: { children: ReactNode }) {
       value={{
         sheetState,
         openInferenceSheet,
+        openEpisodeSheet,
         closeSheet,
         handleUuidLinkClick,
       }}

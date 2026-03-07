@@ -25,7 +25,7 @@ import {
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
@@ -63,12 +63,10 @@ export const handle: RouteHandle = {
 
 /**
  * Prevent revalidation of this route when actions are submitted to API routes.
- * This is needed because:
- * 1. The InferencePreviewSheet submits feedback to /api/feedback
- * 2. The AddToDatasetButton submits to /api/datasets/datapoints/from-inference
- * 3. By default, React Router revalidates all active loaders after any action
- * 4. We don't want to reload the entire episode page when these actions complete
- *    because the sheet handles its own data refresh
+ * The global inference side sheet and AddToDatasetButton submit to /api/feedback
+ * and /api/datasets/datapoints/from-inference respectively. By default, React
+ * Router revalidates all active loaders after any action — we opt out here to
+ * avoid reloading the entire episode page when these actions complete.
  */
 export function shouldRevalidate({
   formAction,
@@ -324,18 +322,6 @@ export default function EpisodeDetailPage({
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [openSheetInferenceId, setOpenSheetInferenceId] = useState<
-    string | null
-  >(null);
-
-  const handleOpenSheet = useCallback((inferenceId: string) => {
-    setOpenSheetInferenceId(inferenceId);
-  }, []);
-
-  const handleCloseSheet = useCallback(() => {
-    setOpenSheetInferenceId(null);
-  }, []);
-
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {
@@ -402,12 +388,7 @@ export default function EpisodeDetailPage({
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Inferences" count={num_inferences} />
-          <EpisodeInferenceTable
-            data={inferencesData}
-            onOpenSheet={handleOpenSheet}
-            onCloseSheet={handleCloseSheet}
-            openSheetInferenceId={openSheetInferenceId}
-          />
+          <EpisodeInferenceTable data={inferencesData} />
           <Suspense fallback={<PageButtons disabled />}>
             <Await
               resolve={inferencesData}
