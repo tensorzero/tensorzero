@@ -183,30 +183,36 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
 
     // We use our latest fixtures - new columns will get ignored when inserting.
     let insert_futures = [
-        ("large_chat_inference_v2.parquet", "ChatInference"),
-        ("large_json_inference_v2.parquet", "JsonInference"),
-        ("large_chat_model_inference_v2.parquet", "ModelInference"),
-        ("large_json_model_inference_v2.parquet", "ModelInference"),
+        ("large_chat_inference_v2.native.lz4", "ChatInference"),
+        ("large_json_inference_v2.native.lz4", "JsonInference"),
+        ("large_chat_model_inference_v2.native.lz4", "ModelInference"),
+        ("large_json_model_inference_v2.native.lz4", "ModelInference"),
         (
-            "large_chat_boolean_feedback.parquet",
+            "large_chat_boolean_feedback.native.lz4",
             "BooleanMetricFeedback",
         ),
         (
-            "large_json_boolean_feedback.parquet",
+            "large_json_boolean_feedback.native.lz4",
             "BooleanMetricFeedback",
         ),
-        ("large_chat_comment_feedback.parquet", "CommentFeedback"),
-        ("large_json_comment_feedback.parquet", "CommentFeedback"),
+        ("large_chat_comment_feedback.native.lz4", "CommentFeedback"),
+        ("large_json_comment_feedback.native.lz4", "CommentFeedback"),
         (
-            "large_chat_demonstration_feedback.parquet",
+            "large_chat_demonstration_feedback.native.lz4",
             "DemonstrationFeedback",
         ),
         (
-            "large_json_demonstration_feedback.parquet",
+            "large_json_demonstration_feedback.native.lz4",
             "DemonstrationFeedback",
         ),
-        ("large_chat_float_feedback.parquet", "FloatMetricFeedback"),
-        ("large_json_float_feedback.parquet", "FloatMetricFeedback"),
+        (
+            "large_chat_float_feedback.native.lz4",
+            "FloatMetricFeedback",
+        ),
+        (
+            "large_json_float_feedback.native.lz4",
+            "FloatMetricFeedback",
+        ),
     ]
     .into_iter()
     .map(|(file, table)| {
@@ -228,7 +234,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                     "--database",
                     database,
                     "--query",
-                    &format!("INSERT INTO {table} SELECT * FROM file('{file}', 'Parquet')"),
+                    &format!("INSERT INTO {table} SELECT * FROM file('{file}', 'Native')"),
                 ]);
                 cmd
             } else {
@@ -253,7 +259,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                     "--query",
                     &format!(
                         r"
-        INSERT INTO {table} FROM INFILE '/large-fixtures/{file}' FORMAT Parquet
+        INSERT INTO {table} FROM INFILE '/large-fixtures/{file}' FORMAT Native
     "
                     ),
                 ]);

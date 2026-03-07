@@ -16,25 +16,37 @@ TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS=1 docker compose -f docker-comp
 
 This downloads fixtures via public HTTP URLs. You can also run the HTTP scripts directly:
 
-- **Parquet files** (large tables): `uv run ./download-large-fixtures-http.py`
+- **Native+LZ4 files** (large tables): `uv run ./download-large-fixtures-http.py`
 - **JSONL files** (small tables): `uv run ./download-small-fixtures-http.py`
 
 ### CI / With R2 credentials (faster)
 
-Set `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` environment variables. This uses `aws s3 sync` for faster, more reliable downloads:
+Set `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` environment variables. This uses `s5cmd` for faster, more reliable downloads:
 
-- **Parquet files** (large tables): `uv run ./download-large-fixtures.py`
+- **Native+LZ4 files** (large tables): `uv run ./download-large-fixtures.py`
 - **JSONL files** (small tables): `uv run ./download-small-fixtures.py`
 
 ## Writing new fixtures
 
 Large fixtures should _not_ be committed to the repository. Instead:
 
-**For parquet files:**
+**For large fixture files (Parquet -> Native+LZ4):**
 
-1. Add the new fixtures to `./large-fixtures`
-2. Run `./upload-large-fixtures.sh`
-3. List the new fixture files in `download-large-fixtures.py`
+Parquet files are the developer-facing source format. Native+LZ4 files are used by CI for faster ClickHouse ingestion.
+
+1. Add or update the Parquet files in `./large-fixtures/`
+2. Run `./convert-parquet-to-native.sh` to generate `.native.lz4` files (requires `clickhouse-local`)
+3. Run `./upload-large-fixtures.sh` to upload both formats to R2
+4. List the new fixture files in `download_fixtures_consts.py`
+5. If row counts changed, update the hardcoded counts in `check-fixtures.sh`
+
+To get row counts for `check-fixtures.sh`:
+
+```bash
+for f in large-fixtures/*.parquet; do
+  echo "$f: $(clickhouse-local --query "SELECT count() FROM file('$f', 'Parquet')")"
+done
+```
 
 **For JSONL files:**
 

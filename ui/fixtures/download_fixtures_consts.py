@@ -26,18 +26,18 @@ SMALL_FIXTURES = {
 }
 
 LARGE_FIXTURES = [
-    "large_chat_inference_v2.parquet",
-    "large_chat_model_inference_v2.parquet",
-    "large_json_inference_v2.parquet",
-    "large_json_model_inference_v2.parquet",
-    "large_chat_boolean_feedback.parquet",
-    "large_chat_float_feedback.parquet",
-    "large_chat_comment_feedback.parquet",
-    "large_chat_demonstration_feedback.parquet",
-    "large_json_boolean_feedback.parquet",
-    "large_json_float_feedback.parquet",
-    "large_json_comment_feedback.parquet",
-    "large_json_demonstration_feedback.parquet",
+    "large_chat_inference_v2.native.lz4",
+    "large_chat_model_inference_v2.native.lz4",
+    "large_json_inference_v2.native.lz4",
+    "large_json_model_inference_v2.native.lz4",
+    "large_chat_boolean_feedback.native.lz4",
+    "large_chat_float_feedback.native.lz4",
+    "large_chat_comment_feedback.native.lz4",
+    "large_chat_demonstration_feedback.native.lz4",
+    "large_json_boolean_feedback.native.lz4",
+    "large_json_float_feedback.native.lz4",
+    "large_json_comment_feedback.native.lz4",
+    "large_json_demonstration_feedback.native.lz4",
 ]
 R2_PUBLIC_BUCKET_URL = "https://pub-147e9850a60643208c411e70b636e956.r2.dev"
 R2_S3_ENDPOINT_URL = "https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/"

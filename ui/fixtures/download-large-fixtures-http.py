@@ -1,7 +1,6 @@
 # /// script
 # dependencies = [
 #   "requests",
-#   "pyarrow",
 # ]
 # ///
 # HTTP-only version for local development without R2 credentials.
@@ -12,7 +11,6 @@ import hashlib
 import os
 import time
 
-import pyarrow.parquet as pq
 import requests
 from download_fixtures_consts import LARGE_FIXTURES as FIXTURES
 from download_fixtures_consts import LARGE_FIXTURES_DIR, PART_SIZE, R2_PUBLIC_BUCKET_URL
@@ -147,10 +145,8 @@ def main():
     download_fixtures_http()
 
     for fixture in FIXTURES:
-        print(f"Fixture {fixture}:", flush=True)
-        metadata = pq.read_metadata(LARGE_FIXTURES_DIR / fixture)
-        print(f"  num_rows: {metadata.num_rows}", flush=True)
-        print(f"  num_row_groups: {metadata.num_row_groups}", flush=True)
+        size_mb = (LARGE_FIXTURES_DIR / fixture).stat().st_size / (1024 * 1024)
+        print(f"Fixture {fixture}: {size_mb:.1f} MB", flush=True)
 
 
 if __name__ == "__main__":

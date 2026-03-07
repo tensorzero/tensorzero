@@ -14,27 +14,58 @@ fi
 echo "Verifying fixture counts for tables..."
 echo "==============================================="
 
-# Define tables and their corresponding files
-declare -A all_tables
-all_tables["JsonInference"]="./small-fixtures/json_inference_examples.jsonl ./large-fixtures/large_json_inference_v2.parquet"
-all_tables["BooleanMetricFeedback"]="./small-fixtures/boolean_metric_feedback_examples.jsonl ./large-fixtures/large_chat_boolean_feedback.parquet ./large-fixtures/large_json_boolean_feedback.parquet"
-all_tables["BooleanMetricFeedbackByTargetId"]="./small-fixtures/boolean_metric_feedback_examples.jsonl ./large-fixtures/large_chat_boolean_feedback.parquet ./large-fixtures/large_json_boolean_feedback.parquet"
-all_tables["FloatMetricFeedback"]="./small-fixtures/float_metric_feedback_examples.jsonl ./small-fixtures/jaro_winkler_similarity_feedback.jsonl ./large-fixtures/large_chat_float_feedback.parquet ./large-fixtures/large_json_float_feedback.parquet"
-all_tables["FloatMetricFeedbackByTargetId"]="./small-fixtures/float_metric_feedback_examples.jsonl ./small-fixtures/jaro_winkler_similarity_feedback.jsonl ./large-fixtures/large_chat_float_feedback.parquet ./large-fixtures/large_json_float_feedback.parquet"
-all_tables["CommentFeedback"]="./small-fixtures/comment_feedback_examples.jsonl ./large-fixtures/large_chat_comment_feedback.parquet ./large-fixtures/large_json_comment_feedback.parquet"
-all_tables["DemonstrationFeedback"]="./small-fixtures/demonstration_feedback_examples.jsonl ./large-fixtures/large_chat_demonstration_feedback.parquet ./large-fixtures/large_json_demonstration_feedback.parquet"
-all_tables["ChatInference"]="./small-fixtures/chat_inference_examples.jsonl ./large-fixtures/large_chat_inference_v2.parquet"
-all_tables["ModelInference"]="./small-fixtures/model_inference_examples.jsonl ./large-fixtures/large_chat_model_inference_v2.parquet ./large-fixtures/large_json_model_inference_v2.parquet"
-all_tables["ChatInferenceDatapoint FINAL"]="./small-fixtures/chat_inference_datapoint_examples.jsonl"
-all_tables["JsonInferenceDatapoint FINAL"]="./small-fixtures/json_inference_datapoint_examples.jsonl"
-all_tables["DynamicEvaluationRun"]="./small-fixtures/dynamic_evaluation_run_examples.jsonl"
-all_tables["DynamicEvaluationRunEpisode"]="./small-fixtures/dynamic_evaluation_run_episode_examples.jsonl"
+# Hardcoded row counts for large Native+LZ4 fixture files.
+# To update these counts after regenerating fixtures, run:
+#   for f in large-fixtures/*.parquet; do
+#     echo "$f: $(clickhouse-local --query "SELECT count() FROM file('$f', 'Parquet')")"
+#   done
+declare -A large_fixture_counts
+large_fixture_counts["large_chat_inference_v2.native.lz4"]=10000000
+large_fixture_counts["large_chat_model_inference_v2.native.lz4"]=10000000
+large_fixture_counts["large_json_inference_v2.native.lz4"]=10000000
+large_fixture_counts["large_json_model_inference_v2.native.lz4"]=10000000
+large_fixture_counts["large_chat_boolean_feedback.native.lz4"]=2500000
+large_fixture_counts["large_chat_float_feedback.native.lz4"]=2500000
+large_fixture_counts["large_chat_comment_feedback.native.lz4"]=2500000
+large_fixture_counts["large_chat_demonstration_feedback.native.lz4"]=2500000
+large_fixture_counts["large_json_boolean_feedback.native.lz4"]=2500000
+large_fixture_counts["large_json_float_feedback.native.lz4"]=2500000
+large_fixture_counts["large_json_comment_feedback.native.lz4"]=2500000
+large_fixture_counts["large_json_demonstration_feedback.native.lz4"]=2500000
+
+# Define tables and their corresponding JSONL files + large fixture file basenames
+declare -A table_jsonl_files
+table_jsonl_files["JsonInference"]="./small-fixtures/json_inference_examples.jsonl"
+table_jsonl_files["BooleanMetricFeedback"]="./small-fixtures/boolean_metric_feedback_examples.jsonl"
+table_jsonl_files["BooleanMetricFeedbackByTargetId"]="./small-fixtures/boolean_metric_feedback_examples.jsonl"
+table_jsonl_files["FloatMetricFeedback"]="./small-fixtures/float_metric_feedback_examples.jsonl ./small-fixtures/jaro_winkler_similarity_feedback.jsonl"
+table_jsonl_files["FloatMetricFeedbackByTargetId"]="./small-fixtures/float_metric_feedback_examples.jsonl ./small-fixtures/jaro_winkler_similarity_feedback.jsonl"
+table_jsonl_files["CommentFeedback"]="./small-fixtures/comment_feedback_examples.jsonl"
+table_jsonl_files["DemonstrationFeedback"]="./small-fixtures/demonstration_feedback_examples.jsonl"
+table_jsonl_files["ChatInference"]="./small-fixtures/chat_inference_examples.jsonl"
+table_jsonl_files["ModelInference"]="./small-fixtures/model_inference_examples.jsonl"
+table_jsonl_files["ChatInferenceDatapoint FINAL"]="./small-fixtures/chat_inference_datapoint_examples.jsonl"
+table_jsonl_files["JsonInferenceDatapoint FINAL"]="./small-fixtures/json_inference_datapoint_examples.jsonl"
+table_jsonl_files["DynamicEvaluationRun"]="./small-fixtures/dynamic_evaluation_run_examples.jsonl"
+table_jsonl_files["DynamicEvaluationRunEpisode"]="./small-fixtures/dynamic_evaluation_run_episode_examples.jsonl"
+
+# Map tables to their large fixture file basenames
+declare -A table_large_fixtures
+table_large_fixtures["JsonInference"]="large_json_inference_v2.native.lz4"
+table_large_fixtures["BooleanMetricFeedback"]="large_chat_boolean_feedback.native.lz4 large_json_boolean_feedback.native.lz4"
+table_large_fixtures["BooleanMetricFeedbackByTargetId"]="large_chat_boolean_feedback.native.lz4 large_json_boolean_feedback.native.lz4"
+table_large_fixtures["FloatMetricFeedback"]="large_chat_float_feedback.native.lz4 large_json_float_feedback.native.lz4"
+table_large_fixtures["FloatMetricFeedbackByTargetId"]="large_chat_float_feedback.native.lz4 large_json_float_feedback.native.lz4"
+table_large_fixtures["CommentFeedback"]="large_chat_comment_feedback.native.lz4 large_json_comment_feedback.native.lz4"
+table_large_fixtures["DemonstrationFeedback"]="large_chat_demonstration_feedback.native.lz4 large_json_demonstration_feedback.native.lz4"
+table_large_fixtures["ChatInference"]="large_chat_inference_v2.native.lz4"
+table_large_fixtures["ModelInference"]="large_chat_model_inference_v2.native.lz4 large_json_model_inference_v2.native.lz4"
 
 # Track if there's any mismatch
 mismatch=0
 
 # Check each table
-for table in "${!all_tables[@]}"; do
+for table in "${!table_jsonl_files[@]}"; do
     # Get total count from database
     db_count=$(clickhouse-client --host $CLICKHOUSE_HOST_VAR --user $CLICKHOUSE_USER_VAR --password $CLICKHOUSE_PASSWORD_VAR $CLICKHOUSE_SECURE_FLAG \
               --database "$DATABASE_NAME" --query "SELECT count() FROM $table" 2>/dev/null || echo "ERROR")
@@ -45,34 +76,29 @@ for table in "${!all_tables[@]}"; do
         continue
     fi
 
-    # Get the list of files for this table
-    read -r -a files <<< "${all_tables[$table]}"
-    echo "Files: ${files[@]}"
-
-    # Count total non-empty lines across all source files
+    # Count JSONL rows
+    read -r -a jsonl_files <<< "${table_jsonl_files[$table]}"
     total_file_count=0
-    for file in "${files[@]}"; do
+    for file in "${jsonl_files[@]}"; do
         if [ -f "$file" ]; then
-            if [[ "$file" == *.parquet ]]; then
-                # For parquet files, use pyarrow to count rows
-                if command -v uv &> /dev/null; then
-                    file_count=$(uv run python -c "import pyarrow.parquet as pq; print(pq.read_metadata('$file').num_rows)")
-                    echo "  - $file: $file_count rows (parquet)"
-                else
-                    echo "  - WARNING: uv not installed, cannot count rows in $file"
-                    mismatch=1
-                fi
-            else
-                # For regular text files, count non-empty lines
-                file_count=$(grep -v '^[[:space:]]*$' "$file" | wc -l)
-                echo "  - $file: $file_count rows"
-            fi
+            file_count=$(grep -v '^[[:space:]]*$' "$file" | wc -l)
+            echo "  - $file: $file_count rows"
+            total_file_count=$(($total_file_count + $file_count))
         else
             echo "  - WARNING: File $file not found"
             mismatch=1
         fi
-        total_file_count=$(($total_file_count + $file_count))
     done
+
+    # Add hardcoded counts for large fixtures
+    if [ -n "${table_large_fixtures[$table]+x}" ]; then
+        read -r -a native_files <<< "${table_large_fixtures[$table]}"
+        for native_file in "${native_files[@]}"; do
+            count=${large_fixture_counts[$native_file]}
+            echo "  - $native_file: $count rows (hardcoded)"
+            total_file_count=$(($total_file_count + $count))
+        done
+    fi
 
     # Compare counts
     if [ "$db_count" -eq "$total_file_count" ]; then

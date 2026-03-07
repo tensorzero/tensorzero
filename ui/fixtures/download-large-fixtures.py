@@ -1,7 +1,6 @@
 # /// script
 # dependencies = [
 #   "requests",
-#   "pyarrow",
 # ]
 # ///
 # For local development without R2 credentials, use download-large-fixtures-http.py instead.
@@ -169,13 +168,9 @@ def main():
     print("R2 credentials found, downloading fixtures using `s5cmd`", flush=True)
     download_fixtures_from_r2()
 
-    import pyarrow.parquet as pq
-
     for fixture in FIXTURES:
-        print(f"Fixture {fixture}:", flush=True)
-        metadata = pq.read_metadata(LARGE_FIXTURES_DIR / fixture)
-        print(f"  num_rows: {metadata.num_rows}", flush=True)
-        print(f"  num_row_groups: {metadata.num_row_groups}", flush=True)
+        size_mb = (LARGE_FIXTURES_DIR / fixture).stat().st_size / (1024 * 1024)
+        print(f"Fixture {fixture}: {size_mb:.1f} MB", flush=True)
 
 
 if __name__ == "__main__":
