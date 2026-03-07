@@ -21,6 +21,7 @@
 - To check a string is non-empty, use `not(eq(""))`.
 - Prefer `matches_pattern!` to assert on multiple struct fields at once rather than separate assertions per field.
 - Use `matches_json!` and `matches_json_literal!` from the `googletest_matchers` crate for JSON assertions.
+- Never compare serialized JSON strings directly — Postgres JSONB does not preserve key order, so parse to `serde_json::Value` and use `matches_json_literal!` instead.
 
 ## For APIs
 
@@ -58,8 +59,8 @@ We use `uv` to manage Python dependencies.
 
 We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 
-- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`. Then, rebuild `tensorzero-node` with `pnpm -r build`. The generated type definitions will live in `internal/tensorzero-node/lib/bindings/`.
-- To generate implementations for `n-api` functions to be called in TypeScript, and package types in `internal/tensorzero-node` for UI, run `pnpm --filter=tensorzero-node run build`.
+- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`. Then, rebuild `tensorzero-node` with `pnpm -r build`. The generated type definitions will live in `crates/tensorzero-node/lib/bindings/`.
+- To generate implementations for `n-api` functions to be called in TypeScript, and package types in `crates/tensorzero-node` for UI, run `pnpm --filter=tensorzero-node run build`.
 - Remember to run `pnpm -r typecheck` to make sure TypeScript and Rust implementations agree on types. Prefer to maintain all types in Rust.
 
 # CI/CD

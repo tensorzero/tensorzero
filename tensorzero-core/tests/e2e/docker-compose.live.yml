@@ -11,7 +11,7 @@ services:
     image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG}
     build:
       context: ../../..
-      dockerfile: gateway/Dockerfile
+      dockerfile: crates/gateway/Dockerfile
       target: gateway
       args:
         CARGO_BUILD_FLAGS: --features e2e_tests

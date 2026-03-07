@@ -1,0 +1,26 @@
+[package]
+name = "tensorzero-node"
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
+napi = { version = "3.8.2", default-features = false, features = [
+    "napi4",
+    "tokio_rt",
+] }
+napi-derive = "3.5.1"
+serde_json.workspace = true
+secrecy.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+config-applier = { path = "../config-applier" }
+tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-auth = { path = "../tensorzero-auth" }
+
+[build-dependencies]
+napi-build = "2.3.1"

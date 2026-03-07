@@ -14,7 +14,10 @@ use crate::{
     config::{Config, MetricConfig, UninitializedConfig},
     db::ConfigQueries,
     error::{Error, ErrorDetails},
-    evaluations::EvaluationConfig,
+    evaluations::{
+        EvaluationConfig, get_top_level_evaluator_metric_name,
+        get_top_level_llm_judge_function_name,
+    },
     function::FunctionConfig,
     tool::StaticToolConfig,
     utils::gateway::{AppState, AppStateData},
@@ -80,6 +83,7 @@ impl UiConfig {
             functions,
             metrics,
             tools,
+            evaluators,
             evaluations,
             gateway: _,
             clickhouse: _,
@@ -103,10 +107,22 @@ impl UiConfig {
             .map(|(name, tool)| tool.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<_, _>>()?;
 
-        // Load evaluations (sync, needs loaded functions)
-        // Also collects generated evaluation functions and metrics
+        // Load top-level evaluators — generates metrics (and optional functions for LLM judges)
         let mut all_functions = loaded_functions;
         let mut all_metrics = metrics;
+        for (name, evaluator_config) in evaluators {
+            let (_evaluator, function_config, metric_config) =
+                evaluator_config.load(None, &name)?;
+            let metric_name = get_top_level_evaluator_metric_name(&name);
+            all_metrics.insert(metric_name, metric_config);
+            if let Some(func) = function_config {
+                let function_name = get_top_level_llm_judge_function_name(&name);
+                all_functions.insert(function_name, Arc::new(func));
+            }
+        }
+
+        // Load evaluations (sync, needs loaded functions)
+        // Also collects generated evaluation functions and metrics
         let mut loaded_evaluations = HashMap::new();
         for (name, eval_config) in evaluations {
             let (eval, eval_functions, eval_metrics) = eval_config.load(&all_functions, &name)?;
