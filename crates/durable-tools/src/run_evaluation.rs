@@ -8,7 +8,9 @@
 //! provide an aggregated response suitable for programmatic use.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use durable::Heartbeater;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -144,6 +146,7 @@ pub struct RunEvaluationResponse {
 pub async fn run_evaluation(
     app_state: AppStateData,
     params: &RunEvaluationParams,
+    heartbeater: Option<Arc<dyn Heartbeater>>,
 ) -> Result<RunEvaluationResponse, RunEvaluationError> {
     // Validate concurrency
     if params.concurrency == 0 {
@@ -235,13 +238,14 @@ pub async fn run_evaluation(
         .await
         .map_err(|e| RunEvaluationError::Runtime(format!("Evaluation failed: {e}")))?;
 
-    collect_results(result, params.include_datapoint_results).await
+    collect_results(result, params.include_datapoint_results, heartbeater).await
 }
 
 /// Collects evaluation results from the stream and computes statistics.
 async fn collect_results(
     result: evaluations::EvaluationStreamResult,
     include_datapoint_results: bool,
+    heartbeater: Option<Arc<dyn Heartbeater>>,
 ) -> Result<RunEvaluationResponse, RunEvaluationError> {
     let evaluation_run_id = result.run_info.evaluation_run_id;
     let num_datapoints = result.run_info.num_datapoints;
@@ -253,10 +257,19 @@ async fn collect_results(
         EvaluationStats::new(evaluations::OutputFormat::Jsonl, num_datapoints);
     let mut sink = std::io::sink();
     let mut receiver = result.receiver;
+    let mut last_heartbeat = std::time::Instant::now();
 
     while let Some(update) = receiver.recv().await {
         if !matches!(update, EvaluationUpdate::RunInfo(_)) {
             let _ = stats_collector.push(update, &mut sink);
+        }
+
+        // Heartbeat if >=30s since last heartbeat (real work just completed)
+        if let Some(ref hb) = heartbeater
+            && last_heartbeat.elapsed() >= std::time::Duration::from_secs(30)
+        {
+            let _ = hb.heartbeat(None).await;
+            last_heartbeat = std::time::Instant::now();
         }
     }
 

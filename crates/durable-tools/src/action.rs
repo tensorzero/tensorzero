@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use durable::Heartbeater;
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
@@ -111,6 +112,7 @@ pub async fn get_or_load_config(
 pub async fn action(
     app_state: &AppStateData,
     params: ActionInputInfo,
+    heartbeater: Option<Arc<dyn Heartbeater>>,
 ) -> Result<ActionResponse, Error> {
     let config = get_or_load_config(app_state, &params.snapshot_hash).await?;
 
@@ -179,7 +181,7 @@ pub async fn action(
             )?;
 
             // Run the evaluation using the shared helper
-            let response = run_evaluation(snapshot_app_state, &eval_params)
+            let response = run_evaluation(snapshot_app_state, &eval_params, heartbeater)
                 .await
                 .map_err(|e| match e {
                     RunEvaluationError::Validation(message) => {

@@ -16,6 +16,6 @@ pub async fn action_handler(
     State(app_state): AppState,
     StructuredJson(params): StructuredJson<ActionInputInfo>,
 ) -> Result<Json<ActionResponse>, Error> {
-    let response = action(&app_state, params).await?;
+    let response = action(&app_state, params, None).await?;
     Ok(Json(response))
 }

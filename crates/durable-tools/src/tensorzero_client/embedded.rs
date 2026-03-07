@@ -224,13 +224,14 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
+        heartbeater: Option<Arc<dyn durable::Heartbeater>>,
     ) -> Result<ActionResponse, TensorZeroClientError> {
         let action_input = ActionInputInfo {
             snapshot_hash,
             input,
         };
 
-        crate::action::action(&self.app_state, action_input)
+        crate::action::action(&self.app_state, action_input, heartbeater)
             .await
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
@@ -569,7 +570,7 @@ impl TensorZeroClient for EmbeddedClient {
         &self,
         params: RunEvaluationParams,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError> {
-        crate::run_evaluation::run_evaluation(self.app_state.clone(), &params)
+        crate::run_evaluation::run_evaluation(self.app_state.clone(), &params, None)
             .await
             .map_err(|e| TensorZeroClientError::Evaluation(e.to_string()))
     }
