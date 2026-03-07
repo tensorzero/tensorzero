@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use evaluations::{
@@ -9,7 +10,7 @@ use pyo3::{
     prelude::*,
 };
 use tensorzero_core::{
-    evaluations::EvaluationConfig, inference::types::pyo3_helpers::serialize_to_dict,
+    evaluations::EvaluatorConfig, inference::types::pyo3_helpers::serialize_to_dict,
 };
 use tokio::sync::Mutex;
 
@@ -34,7 +35,7 @@ fn compute_evaluation_stats(
     py: Python<'_>,
     evaluation_infos: Vec<EvaluationInfo>,
     evaluation_errors: Vec<EvaluationError>,
-    evaluation_config: Arc<EvaluationConfig>,
+    evaluators: Arc<HashMap<String, EvaluatorConfig>>,
 ) -> PyResult<Py<PyAny>> {
     let stats = EvaluationStats {
         output_format: OutputFormat::Jsonl,
@@ -42,9 +43,7 @@ fn compute_evaluation_stats(
         evaluation_errors,
         progress_bar: None,
     };
-    // Extract evaluators from the evaluation config
-    let EvaluationConfig::Inference(inference_config) = &*evaluation_config;
-    let computed_stats = stats.compute_stats(&inference_config.evaluators);
+    let computed_stats = stats.compute_stats(&evaluators);
     serialize_to_dict(py, &computed_stats)
 }
 
@@ -53,7 +52,7 @@ fn compute_evaluation_stats(
 pub struct EvaluationJobHandler {
     pub(crate) receiver: Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>,
     pub(crate) run_info: RunInfo,
-    pub(crate) evaluation_config: Arc<EvaluationConfig>,
+    pub(crate) evaluators: Arc<HashMap<String, EvaluatorConfig>>,
     pub(crate) evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
     pub(crate) evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
 }
@@ -112,12 +111,12 @@ impl EvaluationJobHandler {
     fn summary_stats(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let evaluation_infos = self.evaluation_infos.clone();
         let evaluation_errors = self.evaluation_errors.clone();
-        let evaluation_config = self.evaluation_config.clone();
+        let evaluators = self.evaluators.clone();
 
         tokio_block_on_without_gil(py, async move {
             let infos = evaluation_infos.lock().await.clone();
             let errors = evaluation_errors.lock().await.clone();
-            Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluation_config))
+            Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluators))
         })
     }
 
@@ -140,7 +139,7 @@ impl std::fmt::Display for EvaluationJobHandler {
 pub struct AsyncEvaluationJobHandler {
     pub(crate) receiver: Arc<Mutex<tokio::sync::mpsc::Receiver<EvaluationUpdate>>>,
     pub(crate) run_info: RunInfo,
-    pub(crate) evaluation_config: Arc<EvaluationConfig>,
+    pub(crate) evaluators: Arc<HashMap<String, EvaluatorConfig>>,
     pub(crate) evaluation_infos: Arc<Mutex<Vec<EvaluationInfo>>>,
     pub(crate) evaluation_errors: Arc<Mutex<Vec<EvaluationError>>>,
 }
@@ -197,12 +196,12 @@ impl AsyncEvaluationJobHandler {
     fn summary_stats<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         let evaluation_infos = self.evaluation_infos.clone();
         let evaluation_errors = self.evaluation_errors.clone();
-        let evaluation_config = self.evaluation_config.clone();
+        let evaluators = self.evaluators.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let infos = evaluation_infos.lock().await.clone();
             let errors = evaluation_errors.lock().await.clone();
-            Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluation_config))
+            Python::attach(|py| compute_evaluation_stats(py, infos, errors, evaluators))
         })
     }
 

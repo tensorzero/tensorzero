@@ -4,6 +4,8 @@
 )]
 
 mod common;
+mod test_top_level_evaluator;
+
 use clap::Parser;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
 use evaluations::stopping::MIN_DATAPOINTS;
@@ -29,7 +31,9 @@ use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
     v1::{list_datapoints, types::ListDatapointsRequest},
 };
-use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
+use tensorzero_core::evaluations::{
+    EvaluationConfig, LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType,
+};
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::stored_inference::StoredInferenceDatabase;
 use tokio::time::sleep;
@@ -37,8 +41,8 @@ use url::Url;
 
 use common::{get_config, get_e2e_config_path, get_tensorzero_client, init_tracing_for_tests};
 use evaluations::{
-    Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
-    EvaluationVariant, OutputFormat, run_evaluation, run_evaluation_core_streaming,
+    Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationVariant, OutputFormat,
+    run_evaluation, run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
 };
 use std::collections::HashMap;
@@ -549,20 +553,17 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
 
     let evaluation_name = "entity_extraction".to_string();
 
-    // Extract evaluation config from config
+    // Extract evaluation config fields
     let evaluation_config = config
         .evaluations
         .get(&evaluation_name)
-        .expect("evaluation 'entity_extraction' not found")
-        .clone();
-
-    // Build function configs table from all functions in config
-    let function_configs: EvaluationFunctionConfigTable = config
+        .expect("evaluation 'entity_extraction' not found");
+    let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+    let function_config = config
         .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+        .get(&inference_config.function_name)
+        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+        .expect("function should exist");
 
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
@@ -571,10 +572,10 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(db.clone()),
-
-        evaluation_config,
-        function_configs,
-        evaluation_name,
+        function_name: inference_config.function_name.clone(),
+        function_config,
+        evaluators: inference_config.evaluators.clone(),
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         dataset_name: None,
         datapoint_ids: Some(vec![Uuid::now_v7()]),
@@ -1819,6 +1820,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1836,6 +1838,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "sad_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1853,6 +1856,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "zero",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1870,6 +1874,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "one",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1914,6 +1919,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2008,6 +2014,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2025,6 +2032,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "sad_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2042,6 +2050,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "zero",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2059,6 +2068,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "one",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2103,6 +2113,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2777,19 +2788,17 @@ async fn test_evaluation_with_dynamic_variant() {
     let evaluation_run_id = Uuid::now_v7();
     let evaluation_name = "haiku_with_outputs".to_string();
 
-    // Extract evaluation config and function config
+    // Extract evaluation config fields
     let evaluation_config = config
         .evaluations
         .get(&evaluation_name)
-        .expect("evaluation config should exist")
-        .clone();
-    // Build function configs table from all functions in config
-    let function_configs: EvaluationFunctionConfigTable = config
+        .expect("evaluation config should exist");
+    let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+    let function_config = config
         .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+        .get(&inference_config.function_name)
+        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+        .expect("function should exist");
 
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
@@ -2797,13 +2806,13 @@ async fn test_evaluation_with_dynamic_variant() {
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(db.clone()),
-
-        evaluation_config,
-        function_configs,
+        function_name: inference_config.function_name.clone(),
+        function_config,
+        evaluators: inference_config.evaluators.clone(),
         dataset_name: Some(dataset_name),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
@@ -2844,19 +2853,17 @@ async fn test_max_datapoints_parameter() {
     let evaluation_run_id = Uuid::now_v7();
     let evaluation_name = "entity_extraction".to_string();
 
-    // Extract evaluation config and function config
+    // Extract evaluation config fields
     let evaluation_config = config
         .evaluations
         .get(&evaluation_name)
-        .expect("evaluation config should exist")
-        .clone();
-    // Build function configs table from all functions in config
-    let function_configs: EvaluationFunctionConfigTable = config
+        .expect("evaluation config should exist");
+    let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+    let function_config = config
         .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+        .get(&inference_config.function_name)
+        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+        .expect("function should exist");
 
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
@@ -2865,13 +2872,13 @@ async fn test_max_datapoints_parameter() {
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(db.clone()),
-
-        evaluation_config,
-        function_configs,
+        function_name: inference_config.function_name.clone(),
+        function_config,
+        evaluators: inference_config.evaluators.clone(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
@@ -2930,19 +2937,17 @@ async fn test_precision_targets_parameter() {
     let evaluation_name = "haiku_without_outputs".to_string(); // Has both exact_match and topic_starts_with_f
     let evaluation_name_tag = evaluation_name.clone();
 
-    // Extract evaluation config and function configs table
+    // Extract evaluation config fields
     let evaluation_config = config
         .evaluations
         .get(&evaluation_name)
-        .expect("evaluation config should exist")
-        .clone();
-    // Build function configs table from all functions in config
-    let function_configs: EvaluationFunctionConfigTable = config
+        .expect("evaluation config should exist");
+    let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+    let function_config = config
         .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+        .get(&inference_config.function_name)
+        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+        .expect("function should exist");
 
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
@@ -2967,12 +2972,13 @@ async fn test_precision_targets_parameter() {
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(db.clone()),
-        evaluation_config,
-        function_configs,
+        function_name: inference_config.function_name.clone(),
+        function_config,
+        evaluators: inference_config.evaluators.clone(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 5,

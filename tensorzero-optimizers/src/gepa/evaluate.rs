@@ -21,9 +21,8 @@ use tensorzero_core::{
 };
 
 use evaluations::{
-    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationFunctionConfig,
-    EvaluationFunctionConfigTable, EvaluationStats, EvaluationVariant, EvaluatorStats,
-    OutputFormat, stats::EvaluationInfo,
+    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationStats,
+    EvaluationVariant, EvaluatorStats, OutputFormat, stats::EvaluationInfo,
 };
 
 // Type aliases for score map signatures used for pareto filtering
@@ -172,14 +171,18 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         timeouts: None,
     };
 
-    // Get function name from evaluation config and look up function
-    // Build function configs table from all functions
-    let function_configs: EvaluationFunctionConfigTable = params
+    // Extract function name and evaluators from evaluation config
+    let EvaluationConfig::Inference(ref inference_config) = *params.evaluation_config;
+    let function_name = inference_config.function_name.clone();
+    let function_config = params
         .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+        .get(&function_name)
+        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Function `{function_name}` not found in config"),
+            })
+        })?;
 
     // Wrap the gateway client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(params.gateway_client));
@@ -188,9 +191,10 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: params.db,
-        evaluation_config: params.evaluation_config.clone(),
-        function_configs,
-        evaluation_name: params.evaluation_name,
+        function_name,
+        function_config,
+        evaluators: inference_config.evaluators.clone(),
+        evaluation_name: Some(params.evaluation_name),
         evaluation_run_id,
         dataset_name: Some(params.dataset_name),
         datapoint_ids: None,
@@ -225,13 +229,7 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
     }
 
     // Compute aggregated statistics using EvaluationStats
-    let evaluation_config = &params.evaluation_config;
-    let evaluation_stats_map = {
-        let evaluators = match &**evaluation_config {
-            EvaluationConfig::Inference(inference_config) => &inference_config.evaluators,
-        };
-        evaluation_stats.compute_stats(evaluators)
-    };
+    let evaluation_stats_map = evaluation_stats.compute_stats(&stream_result.evaluators);
 
     Ok(EvaluationResults::new(
         evaluation_stats.evaluation_infos,
