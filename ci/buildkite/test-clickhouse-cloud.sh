@@ -160,5 +160,5 @@ sleep 2
 echo "Waiting for test compilation to complete..."
 wait $TEST_BUILD_PID
 
-cargo test-clickhouse --no-fail-fast -- --skip test_concurrent_clickhouse_migrations
+cargo test-clickhouse -j 12 --no-fail-fast -- --skip test_concurrent_clickhouse_migrations
 cat e2e_logs.txt
