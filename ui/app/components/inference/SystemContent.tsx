@@ -48,19 +48,15 @@ export function SystemContent({
   };
 
   return (
-    <div className="rounded border border-slate-200 p-4 dark:border-slate-800">
-      <div className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">
-        System
-      </div>
+    <div className="rounded border border-border p-4">
+      <div className="mb-3 text-lg font-semibold text-fg-primary">System</div>
       {isEditing ? (
         <div className="w-full">
           <Textarea
             value={displayValue}
             onChange={handleChange}
             className={`min-h-32 font-mono text-sm ${
-              jsonError
-                ? "border-red-500 dark:border-red-500"
-                : "border-slate-200 dark:border-slate-800"
+              jsonError ? "border-red-500" : "border-border"
             }`}
             placeholder="System instructions..."
           />

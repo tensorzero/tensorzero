@@ -60,7 +60,7 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
   };
 
   const getEntryClassName = (entry: OptimizationJobInfo) => {
-    return entry.status === "failed" ? "border-red-200" : "border-gray-200";
+    return entry.status === "failed" ? "border-red-200" : "border-border";
   };
 
   return (
@@ -84,7 +84,7 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
                 className={`rounded-md border p-3 ${getEntryClassName(entry)}`}
               >
                 <div className="mb-1 flex items-center justify-between">
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-fg-tertiary">
                     {new Date(entry.timestamp).toLocaleTimeString()}
                   </div>
                   {entry.status === "failed" && (
@@ -96,7 +96,7 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
                 <Textarea
                   value={serializedData}
                   style={{ height: `${height}px` }}
-                  className={`w-full resize-none rounded border-none bg-slate-100 p-2 font-mono text-sm focus:ring-0 dark:bg-slate-800 ${
+                  className={`w-full resize-none rounded border-none bg-bg-tertiary p-2 font-mono text-sm focus:ring-0 ${
                     entry.status === "failed" ? "bg-red-50 text-red-700" : ""
                   }`}
                   readOnly

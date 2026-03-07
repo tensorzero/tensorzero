@@ -35,6 +35,7 @@ import { Link } from "react-router";
 import type { IconProps } from "~/components/icons/Icons";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
 import { ReadOnlyBadge } from "./ReadOnlyBadge";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface NavigationItem {
   title: string;
@@ -132,7 +133,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              className="text-black hover:bg-transparent focus-visible:bg-transparent active:bg-transparent"
+              className="text-fg-primary hover:bg-transparent focus-visible:bg-transparent active:bg-transparent"
             >
               <Link to="/" className="flex items-center gap-2">
                 <TensorZeroLogo size={16} />
@@ -215,6 +216,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter className="relative">
         <ReadOnlyBadge />
         <TensorZeroStatusIndicator collapsed={state === "collapsed"} />
+        <ThemeToggle />
         <SidebarMenuItem className="list-none">
           <SidebarMenuButton
             aria-label="Toggle sidebar"

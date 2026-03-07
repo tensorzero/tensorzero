@@ -22,12 +22,12 @@ export default function MetricValue({
     return (
       <span
         className={`inline-flex items-center gap-2 whitespace-nowrap ${
-          failed ? "text-red-700" : "text-gray-700"
+          failed ? "text-red-700" : "text-fg-secondary"
         } ${className}`}
       >
         <div
           className={`h-2 w-2 rounded-full ${
-            failed ? "bg-red-700" : "bg-gray-700"
+            failed ? "bg-red-700" : "bg-fg-secondary"
           }`}
         />
         {boolValue ? "True" : "False"}
@@ -40,7 +40,7 @@ export default function MetricValue({
     if (!isNaN(numValue)) {
       return (
         <span
-          className={`inline-flex items-center gap-2 whitespace-nowrap text-gray-700 ${className}`}
+          className={`inline-flex items-center gap-2 whitespace-nowrap text-fg-secondary ${className}`}
         >
           {numValue}
           {isHumanFeedback && <UserFeedback />}

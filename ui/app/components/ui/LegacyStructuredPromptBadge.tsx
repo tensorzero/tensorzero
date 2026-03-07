@@ -32,7 +32,7 @@ export function LegacyStructuredPromptBadge({
             href="https://www.tensorzero.com/docs/gateway/create-a-prompt-template#migrate-from-legacy-prompt-templates"
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-gray-300"
+            className="underline opacity-90 hover:opacity-70"
           >
             Read more
           </a>

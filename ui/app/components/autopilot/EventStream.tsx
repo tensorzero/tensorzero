@@ -650,7 +650,7 @@ function EventItem({
               <ChevronRight className="h-4 w-4" />
             </span>
             {((isPendingToolCall && !yoloMode) || isPendingQuestion) && (
-              <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+              <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800">
                 Action Required
               </span>
             )}

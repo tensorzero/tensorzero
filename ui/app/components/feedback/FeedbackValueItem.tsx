@@ -22,7 +22,7 @@ function ValueItem({ iconType, children, onClick }: ValueItemProps) {
     <div
       className={
         onClick
-          ? "flex cursor-pointer items-center gap-2 transition-colors duration-300 hover:text-gray-500"
+          ? "flex cursor-pointer items-center gap-2 transition-colors duration-300 hover:text-fg-tertiary"
           : "flex items-center gap-2"
       }
       onClick={onClick}

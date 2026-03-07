@@ -197,7 +197,7 @@ export function ModelUsage({
                   {selectedMetric === "cost" &&
                     costCoveragePercent != null &&
                     costCoveragePercent < 100 && (
-                      <div className="mb-4 flex items-center gap-2 rounded-md border border-yellow-500 bg-yellow-50 p-3 text-sm text-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
+                      <div className="mb-4 flex items-center gap-2 rounded-md border border-yellow-500 bg-yellow-50 p-3 text-sm text-yellow-700">
                         <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
                         <span>
                           Cost data only covers ~{costCoveragePercent}% of model

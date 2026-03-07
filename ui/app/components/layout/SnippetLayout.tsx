@@ -169,7 +169,7 @@ interface SnippetTabsProps {
 const tabIndicator = cva("", {
   variants: {
     indicator: {
-      empty: "bg-gray-300",
+      empty: "bg-bg-muted",
       content: "bg-green-500",
       fail: "bg-red-500",
       warning: "bg-yellow-500",

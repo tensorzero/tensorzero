@@ -63,7 +63,7 @@ test.describe("Custom Named Templates and Schemas", () => {
     );
 
     // Legacy system template should still be displayed (lowercase as in config)
-    await expect(page.getByText("system")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "system" })).toBeVisible();
 
     // Assert no errors
     await expect(page.getByText("error", { exact: false })).not.toBeVisible();
@@ -74,8 +74,8 @@ test.describe("Custom Named Templates and Schemas", () => {
     await page.goto("/observability/functions/judge_answer");
 
     // Legacy system and user schemas should still be displayed (lowercase as in config)
-    await expect(page.getByText("system")).toBeVisible();
-    await expect(page.getByText("user")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "system" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "user" })).toBeVisible();
 
     // Assert no errors
     await expect(page.getByText("error", { exact: false })).not.toBeVisible();

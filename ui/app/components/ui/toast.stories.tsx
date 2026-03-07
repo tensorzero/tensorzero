@@ -94,7 +94,7 @@ export const CustomIcon: Story = {
   render: () => (
     <ToastIconDemo
       icon={AlertTriangle}
-      iconClassName="text-amber-500 dark:text-amber-400"
+      iconClassName="text-amber-500"
       title="Rate limit warning"
       description="You are approaching the API rate limit."
     />
@@ -105,7 +105,7 @@ export const WithCheckIcon: Story = {
   render: () => (
     <ToastIconDemo
       icon={Check}
-      iconClassName="text-green-500 dark:text-green-400"
+      iconClassName="text-green-500"
       title="Changes saved"
       description="Your configuration has been updated."
     />

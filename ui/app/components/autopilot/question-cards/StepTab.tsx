@@ -25,32 +25,27 @@ export function StepTab({
       onClick={onClick}
       className={cn(
         "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full py-1 pr-2.5 pl-1 text-xs font-medium transition-all disabled:cursor-default disabled:opacity-50",
-        state === "active" &&
-          "bg-purple-200/70 text-purple-800 dark:bg-purple-800/50 dark:text-purple-200",
-        state === "completed" &&
-          "text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20",
-        state === "skipped" &&
-          "text-fg-muted hover:bg-gray-100 dark:hover:bg-gray-800/20",
-        state === "upcoming" &&
-          "text-fg-muted hover:bg-purple-100/50 dark:hover:bg-purple-900/20",
+        state === "active" && "bg-purple-200/70 text-purple-800",
+        state === "completed" && "text-green-700 hover:bg-green-50",
+        state === "skipped" && "text-fg-muted hover:bg-bg-tertiary",
+        state === "upcoming" && "text-fg-muted hover:bg-purple-100/50",
       )}
       aria-label={`Go to question ${index + 1}: ${label}`}
       aria-current={state === "active" ? "step" : undefined}
     >
       {state === "completed" ? (
-        <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40">
+        <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-green-100">
           <Check className="h-2.5 w-2.5" />
         </span>
       ) : state === "skipped" ? (
-        <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800/40">
+        <span className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-bg-tertiary">
           <Minus className="h-2.5 w-2.5" />
         </span>
       ) : (
         <span
           className={cn(
             "flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
-            state === "active" &&
-              "bg-purple-600 text-white dark:bg-purple-400 dark:text-purple-950",
+            state === "active" && "bg-purple-600 text-white",
             state === "upcoming" && "border-fg-muted border bg-transparent",
           )}
         >

@@ -6,7 +6,7 @@ export default function ImageBlock({
   image: ZodResolvedFileContent;
 }) {
   return (
-    <div className="w-60 rounded bg-slate-100 p-2 text-xs text-slate-300">
+    <div className="w-60 rounded bg-bg-tertiary p-2 text-xs text-fg-muted">
       <div className="mb-2">Image</div>
       <a
         href={image.file.data}

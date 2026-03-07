@@ -114,7 +114,14 @@ ${colorConfig
   );
 };
 
-const ChartTooltip = RechartsPrimitive.Tooltip;
+const ChartTooltip = (
+  props: React.ComponentProps<typeof RechartsPrimitive.Tooltip>,
+) => (
+  <RechartsPrimitive.Tooltip
+    contentStyle={{ background: "transparent", border: "none", padding: 0 }}
+    {...props}
+  />
+);
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,

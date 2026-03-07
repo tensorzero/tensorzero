@@ -84,7 +84,7 @@ function TableRows({
               variantName={inference.variant_name}
               functionName={inference.function_name}
             >
-              <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+              <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-fg-tertiary">
                 {inference.variant_name}
               </code>
             </VariantLink>

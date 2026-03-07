@@ -43,7 +43,7 @@ export default function WorkflowEvaluationRunsTable({
                     to={toWorkflowEvaluationRunUrl(run.id)}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-fg-tertiary">
                       {run.name}
                     </code>
                   </Link>
@@ -60,12 +60,12 @@ export default function WorkflowEvaluationRunsTable({
                       to={`${toWorkflowEvaluationProjectUrl(run.project_name)}?run_ids=${run.id}`}
                       className="block no-underline"
                     >
-                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-fg-tertiary">
                         {run.project_name}
                       </code>
                     </Link>
                   ) : (
-                    <span className="text-gray-400">-</span>
+                    <span className="text-fg-muted">-</span>
                   )}
                 </TableCell>
                 <TableCell>{run.num_episodes}</TableCell>

@@ -15,7 +15,7 @@ export function SFTResult({
 
   return (
     finalResult && (
-      <div className="mt-4 rounded-lg bg-gray-100 p-4">
+      <div className="mt-4 rounded-lg bg-bg-tertiary p-4">
         <div className="mb-2 flex min-h-8 items-center justify-between font-medium">
           <span>Configuration</span>
           {(isCopyAvailable || forceShowCopyButton) && (

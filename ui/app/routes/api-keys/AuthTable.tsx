@@ -75,7 +75,7 @@ function ApiKeyRow({
             {apiKey.description}
           </span>
         ) : (
-          <span className="text-gray-400">—</span>
+          <span className="text-fg-muted">—</span>
         )}
       </TableCell>
       <TableCell className="w-0">

@@ -30,11 +30,11 @@ export const AllTypes: Story = {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <FunctionTypeBadge type="chat" />
-        <span className="text-sm text-gray-500">Chat function</span>
+        <span className="text-sm text-fg-tertiary">Chat function</span>
       </div>
       <div className="flex items-center gap-2">
         <FunctionTypeBadge type="json" />
-        <span className="text-sm text-gray-500">JSON function</span>
+        <span className="text-sm text-fg-tertiary">JSON function</span>
       </div>
     </div>
   ),

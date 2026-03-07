@@ -70,7 +70,7 @@ export function PendingToolCallCard({
     <div
       key={event.id}
       className={cn(
-        "flex flex-col gap-2 rounded-md border border-blue-300 bg-blue-50 px-4 py-3 dark:border-blue-700 dark:bg-blue-950/30",
+        "flex flex-col gap-2 rounded-md border border-blue-300 bg-blue-50 px-4 py-3",
         isInCooldown &&
           "animate-in fade-in zoom-in-95 duration-1000 ease-in-out",
         className,
@@ -99,7 +99,7 @@ export function PendingToolCallCard({
           >
             <ChevronRight className="h-4 w-4" />
           </span>
-          <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+          <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800">
             Action Required
           </span>
         </button>
@@ -133,7 +133,7 @@ export function PendingToolCallCard({
           ) : (
             <div className="flex items-center gap-2">
               {additionalCount > 0 && (
-                <span className="flex h-6 items-center rounded bg-blue-200 px-1.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+                <span className="flex h-6 items-center rounded bg-blue-200 px-1.5 text-xs font-medium text-blue-800">
                   +{additionalCount}
                 </span>
               )}

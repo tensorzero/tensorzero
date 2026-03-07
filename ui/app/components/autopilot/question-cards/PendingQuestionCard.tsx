@@ -78,7 +78,7 @@ export function PendingQuestionCard({
   return (
     <div
       className={cn(
-        "flex flex-col rounded-md border border-purple-300 bg-purple-50 dark:border-purple-700 dark:bg-purple-950/30",
+        "flex flex-col rounded-md border border-purple-300 bg-purple-50",
         className,
       )}
     >
@@ -91,7 +91,7 @@ export function PendingQuestionCard({
           type="button"
           onClick={handleDismiss}
           disabled={isLoading}
-          className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-400 transition-colors hover:text-purple-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-purple-500 dark:hover:text-purple-300"
+          className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-400 transition-colors hover:text-purple-600 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Dismiss questions"
         >
           <X className="h-4 w-4" />
@@ -138,7 +138,7 @@ export function PendingQuestionCard({
                 size="xs"
                 disabled={isLoading}
                 onClick={() => state.setActiveStep((s) => s - 1)}
-                className="gap-0.5 pl-1 text-purple-700 hover:text-purple-800 dark:text-purple-300 dark:hover:text-purple-200"
+                className="gap-0.5 pl-1 text-purple-700 hover:text-purple-800"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
                 Back
@@ -151,7 +151,7 @@ export function PendingQuestionCard({
               size="xs"
               disabled={isLoading}
               onClick={state.handleSkipStep}
-              className="text-purple-700 hover:text-purple-800 dark:text-purple-300 dark:hover:text-purple-200"
+              className="text-purple-700 hover:text-purple-800"
             >
               Skip
             </Button>
@@ -160,7 +160,7 @@ export function PendingQuestionCard({
                 size="xs"
                 disabled={!state.isStepComplete(state.activeStep) || isLoading}
                 onClick={state.handleSubmit}
-                className="gap-1 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
+                className="gap-1 bg-purple-600 text-white hover:bg-purple-700"
               >
                 {isLoading ? "Submitting..." : "Submit"}
                 <Check className="h-3.5 w-3.5" />
@@ -170,7 +170,7 @@ export function PendingQuestionCard({
                 size="xs"
                 disabled={!state.isStepComplete(state.activeStep) || isLoading}
                 onClick={() => state.setActiveStep((s) => s + 1)}
-                className="gap-0.5 bg-purple-600 pr-1 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
+                className="gap-0.5 bg-purple-600 pr-1 text-white hover:bg-purple-700"
               >
                 Next
                 <ChevronRight className="h-3.5 w-3.5" />

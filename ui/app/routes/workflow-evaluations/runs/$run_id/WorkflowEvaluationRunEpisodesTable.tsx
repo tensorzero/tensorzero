@@ -117,7 +117,7 @@ export default function WorkflowEvaluationRunEpisodesTable({
                           episodeId={episode.episode_id}
                         />
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-fg-muted">-</span>
                       )}
                     </TableCell>
                   );
@@ -172,7 +172,7 @@ function FeedbackMetricValue({
   }
 
   // Unknown metric type
-  return <span className="text-gray-400">-</span>;
+  return <span className="text-fg-muted">-</span>;
 }
 
 function MetricHeader({

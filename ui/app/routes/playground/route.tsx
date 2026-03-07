@@ -394,7 +394,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                 </Link>
                               ) : (
                                 <span
-                                  className="min-w-0 truncate font-mono text-gray-500"
+                                  className="min-w-0 truncate font-mono text-fg-tertiary"
                                   title={variant.name}
                                 >
                                   {getDisplayVariantName(variant)}
@@ -440,7 +440,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                   {datapoints.map((datapoint: Datapoint, index: number) => (
                     <GridRow key={datapoint.id} variantCount={variants.length}>
                       <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
-                        <div className="text-xs font-medium text-gray-500">
+                        <div className="text-xs font-medium text-fg-tertiary">
                           Datapoint:{" "}
                           <Link
                             to={toDatapointUrl(datasetName, datapoint.id)}
@@ -450,13 +450,13 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                           </Link>
                         </div>
                         <div>
-                          <h3 className="mb-2 text-sm font-medium text-gray-500">
+                          <h3 className="mb-2 text-sm font-medium text-fg-tertiary">
                             Input
                           </h3>
                           <InputElement input={inputs[index]} maxHeight={150} />
                         </div>
                         <div>
-                          <h3 className="mb-2 text-sm font-medium text-gray-500">
+                          <h3 className="mb-2 text-sm font-medium text-fg-tertiary">
                             Reference Output
                           </h3>
                           {datapoint.output ? (
@@ -469,7 +469,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                               <ChatOutputElement output={datapoint.output} />
                             )
                           ) : (
-                            <div className="text-sm text-gray-500">None</div>
+                            <div className="text-sm text-fg-tertiary">None</div>
                           )}
                         </div>
                       </div>

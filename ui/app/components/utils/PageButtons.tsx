@@ -31,7 +31,7 @@ export default function PageButtons(props: PageButtonsProps) {
         size="icon"
         onClick={onPreviousPage}
         disabled={disablePrevious}
-        className="rounded-md bg-white p-2"
+        className="rounded-md bg-bg-primary p-2"
       >
         <ChevronLeft className="h-4 w-4" />
       </Button>
@@ -40,7 +40,7 @@ export default function PageButtons(props: PageButtonsProps) {
         size="icon"
         onClick={onNextPage}
         disabled={disableNext}
-        className="rounded-md bg-white p-2"
+        className="rounded-md bg-bg-primary p-2"
       >
         <ChevronRight className="h-4 w-4" />
       </Button>

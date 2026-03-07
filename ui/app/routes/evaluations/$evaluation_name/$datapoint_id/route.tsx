@@ -647,7 +647,7 @@ const MetricRow = ({
     <div className="group flex items-center gap-2">
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="cursor-help text-sm text-gray-600">
+          <div className="cursor-help text-sm text-fg-secondary">
             {evaluatorName}:
           </div>
         </TooltipTrigger>
@@ -741,7 +741,7 @@ function OutputsSection({
                     evaluation_run_id: "",
                     variant_name: result.variant_name,
                   }}
-                  getColor={() => "bg-gray-100 text-gray-700"}
+                  getColor={() => "bg-bg-tertiary text-fg-secondary"}
                 />
               ) : (
                 <>
@@ -753,7 +753,7 @@ function OutputsSection({
                     getColor={getColor}
                   />
                   {result.inferenceId && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-2 text-xs text-fg-tertiary">
                       <span>
                         Inference:{" "}
                         <Link
