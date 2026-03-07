@@ -20,7 +20,7 @@ secrecy.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 config-applier = { path = "../config-applier" }
 tensorzero-core = { path = "../../tensorzero-core" }
-tensorzero-auth = { path = "../../internal/tensorzero-auth" }
+tensorzero-auth = { path = "../tensorzero-auth" }
 
 [build-dependencies]
 napi-build = "2.3.1"

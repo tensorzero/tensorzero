@@ -20,11 +20,11 @@ metrics-exporter-prometheus = { workspace = true }
 http = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }
-tensorzero-auth = { path = "../internal/tensorzero-auth" }
-autopilot-client = { path = "../internal/autopilot-client" }
-autopilot-worker = { path = "../internal/autopilot-worker" }
-autopilot-tools = { path = "../internal/autopilot-tools" }
-durable-tools = { path = "../internal/durable-tools" }
+tensorzero-auth = { path = "../crates/tensorzero-auth" }
+autopilot-client = { path = "../crates/autopilot-client" }
+autopilot-worker = { path = "../crates/autopilot-worker" }
+autopilot-tools = { path = "../crates/autopilot-tools" }
+durable-tools = { path = "../crates/durable-tools" }
 sqlx = { version = "0.9.0-alpha.1", features = ["sqlx-toml", "postgres", "runtime-tokio", "chrono"] }
 secrecy = { workspace = true }
 serde = { workspace = true }
@@ -50,7 +50,7 @@ reqwest-sse-stream = { workspace = true }
 futures = { workspace = true }
 secrecy = { workspace = true }
 uuid = { workspace = true }
-tensorzero-unsafe-helpers = { path = "../internal/tensorzero-unsafe-helpers" }
+tensorzero-unsafe-helpers = { path = "../crates/tensorzero-unsafe-helpers" }
 flate2 = "1.1.8"
 zstd = "0.13.3"
 brotli = "8.0.2"

@@ -7,4 +7,4 @@
 
 /tensorzero-core/src/db/clickhouse/migration_manager @virajmehta @Aaron1011
 /tensorzero-core/src/db/postgres/migrations @virajmehta @Aaron1011
-/internal/tensorzero-auth/src/postgres/migrations @virajmehta @Aaron1011
+/crates/tensorzero-auth/src/postgres/migrations @virajmehta @Aaron1011
