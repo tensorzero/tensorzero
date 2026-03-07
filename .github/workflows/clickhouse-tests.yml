@@ -29,7 +29,7 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
 
-    runs-on: runs-on=${{ github.run_id }}/runner=8cpu-linux-arm64/volume=64gb
+    runs-on: runs-on=${{ github.run_id }}/runner=8cpu-linux-x64/volume=64gb
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     if: github.repository == 'tensorzero/tensorzero'
     # TODO - switch back to 'latest': https://github.com/tensorzero/tensorzero/issues/6080
