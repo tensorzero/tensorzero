@@ -1,0 +1,44 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "openai::o4-mini-2025-04-16"
+templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+
+# After running RFT optimization, you can add the fine-tuned variant:
+#
+# [models.extract_entities_fine_tuned]
+# routing = ["openai"]
+#
+# [models.extract_entities_fine_tuned.providers.openai]
+# type = "openai"
+# model_name = "ft:o4-mini-2025-04-16:org::xxxxx"  # from job output
+#
+# [functions.extract_entities.variants.fine_tuned]
+# type = "chat_completion"
+# model = "extract_entities_fine_tuned"
+# templates.system.path = "functions/extract_entities/initial_prompt/system_template.minijinja"
+# json_mode = "strict"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# These metrics are optional but useful for tracking the performance of your model.
+
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
