@@ -3,8 +3,6 @@ run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref
 
 on:
   merge_group:
-    paths-ignore:
-      - "docs/**"
   pull_request:
   workflow_dispatch:
 
@@ -21,11 +19,33 @@ env:
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
+  detect-changes:
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    outputs:
+      docs: ${{ steps.filter.outputs.docs || 'true' }}
+      code: ${{ steps.filter.outputs.code || 'true' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        if: github.event_name != 'pull_request'
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            docs:
+              - 'docs/**'
+            code:
+              - '!(docs/**)'
+
   check-version-consistency:
+    needs: [detect-changes]
+    if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -41,6 +61,8 @@ jobs:
   # Only runs on Pull Requests; merge queue jobs can't access the 'skip-if-edited-check' label so we
   # always mark them as successful.
   check-if-edited-then-edit:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -111,6 +133,8 @@ jobs:
   # Checks our docker-compose files against the most recent published `gateway` and `ui` container images
   # (not the ones built for this PR)
   check-docker-compose-released:
+    needs: [detect-changes]
+    if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -118,7 +142,6 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    if: github.repository == 'tensorzero/tensorzero'
 
     steps:
       - name: Set DNS
@@ -156,17 +179,20 @@ jobs:
         run: ./ci/check-all-docker-compose.sh
 
   check-python-client-build:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/python-client-build.yml
 
   check-node-bindings:
+    needs: [detect-changes]
+    if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
       # Permission to upload artifacts
       actions: write
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -223,10 +249,11 @@ jobs:
         run: pnpm --filter=tensorzero-node run check-exports
 
   check-python-schemas:
+    needs: [detect-changes]
+    if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -272,12 +299,13 @@ jobs:
         run: git diff --exit-code
 
   build-windows:
+    needs: [detect-changes]
+    if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
       # Permission for rust-cache to read/write cache
       actions: read
     runs-on: windows-latest
-    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust (from rust-toolchain.toml)
@@ -323,6 +351,8 @@ jobs:
         run: cargo build --workspace
 
   lint-rust:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
       # Permission for rust-cache
@@ -362,6 +392,8 @@ jobs:
           cargo hack --partition '${{ matrix.partition }}/${{ matrix.total_partitions }}' clippy --all-targets --each-feature -- -D warnings
 
   validate-python:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -440,6 +472,8 @@ jobs:
         run: ci/compile-check-notebooks.sh
 
   validate-node:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -518,6 +552,8 @@ jobs:
         run: pnpm --filter=tensorzero-ui run typecheck
 
   rust-build:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -553,6 +589,8 @@ jobs:
           cargo run-e2e --validate-and-exit
 
   rust-test:
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -587,12 +625,13 @@ jobs:
           cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
 
   validate:
+    needs: [detect-changes]
+    if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
 
     timeout-minutes: 30
-    if: github.repository == 'tensorzero/tensorzero'
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -741,10 +780,11 @@ jobs:
   # This job is intentionally NOT included in check-all-general-jobs-passed
   # It runs as an optional check that shows up in the PR but doesn't block merging
   cargo-deny:
+    needs: [detect-changes]
+    if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -1062,7 +1102,8 @@ jobs:
         run: cat e2e_logs.txt
 
   build-gateway-e2e-container:
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     uses: ./.github/workflows/build-gateway-e2e-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1073,7 +1114,8 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-provider-proxy-container:
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     uses: ./.github/workflows/build-provider-proxy-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1084,8 +1126,9 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-live-tests-container:
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     uses: ./.github/workflows/build-live-tests-container.yml
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -1095,7 +1138,8 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-gateway-container:
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     uses: ./.github/workflows/build-gateway-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1106,7 +1150,8 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-ui-container:
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     uses: ./.github/workflows/build-ui-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1117,7 +1162,8 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-mock-provider-api-container:
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     uses: ./.github/workflows/build-mock-provider-api-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1128,8 +1174,9 @@ jobs:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-fixtures-container:
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     uses: ./.github/workflows/build-fixtures-container.yml
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -1289,13 +1336,14 @@ jobs:
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
 
   publish-dev-docker-hub-images:
+    needs: [detect-changes]
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group' && needs.detect-changes.outputs.code == 'true'
     permissions:
       contents: read
       actions: read
       attestations: write
       id-token: write
       packages: write
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     uses: ./.github/workflows/docker-hub-publish.yml
     with:
       is_dev: true
@@ -1304,10 +1352,11 @@ jobs:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   check-docs-broken-links:
+    needs: [detect-changes]
+    if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.docs == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -1352,6 +1401,7 @@ jobs:
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
+        detect-changes,
         autopilot-e2e,
         build-gateway-container,
         build-gateway-e2e-container,
@@ -1392,7 +1442,7 @@ jobs:
         run: |
           echo "'needs': ${{ toJson(needs) }}"
           echo "github.event_name: ${{ github.event_name }}"
-      # When running in the merge queue, jobs should never be skipped.
-      # In PR CI, some jobs may be intentionally skipped (e.g. due to running from a fork, or to save money)
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
+      # Jobs may be intentionally skipped by the detect-changes path filter (e.g. docs-only or code-only changes).
+      # We only fail on actual failures or cancellations.
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
         run: exit 1
