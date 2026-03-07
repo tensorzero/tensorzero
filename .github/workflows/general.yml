@@ -38,7 +38,8 @@ jobs:
             docs:
               - 'docs/**'
             code:
-              - '!(docs/**)'
+              - '**'
+              - '!docs/**'
 
   check-version-consistency:
     needs: [detect-changes]
