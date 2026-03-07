@@ -37,6 +37,7 @@ jobs:
         id: filter
         if: github.event_name != 'workflow_dispatch'
         with:
+          predicate-quantifier: "every"
           filters: |
             clickhouse-tests:
               - '**'
