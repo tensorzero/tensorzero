@@ -5,22 +5,12 @@ import {
   loadFileDataForStoredInput,
 } from "~/utils/resolve.server";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
-import type {
-  FeedbackRow,
-  FeedbackBounds,
-  StoredInference,
-  Input,
-} from "~/types/tensorzero";
+import type { StoredInference, Input } from "~/types/tensorzero";
+import type { FeedbackData } from "~/utils/feedback";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 // Types for streamed data
 export type ModelInferencesData = ParsedModelInferenceRow[];
-
-export type FeedbackData = {
-  feedback: FeedbackRow[];
-  feedback_bounds: FeedbackBounds;
-  latestFeedbackByMetric: Record<string, string>;
-};
 
 // Fetch functions for independent streaming
 export async function fetchModelInferences(
@@ -85,24 +75,37 @@ export async function fetchFeedbackData(
       newFeedbackId,
       limit,
     );
-    const [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
+    const [feedbackBounds, latestFeedbackByMetric] = await Promise.all([
       tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
       tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
     ]);
-    return { feedback, feedback_bounds, latestFeedbackByMetric };
+    return {
+      feedback,
+      feedbackBounds,
+      latestFeedbackByMetric,
+    };
   }
 
   // Normal case: execute all queries in parallel
-  const [feedback, feedback_bounds, latestFeedbackByMetric] = await Promise.all(
-    [
-      tensorZeroClient.getFeedbackByTargetId(inference_id, {
-        before: beforeFeedback || undefined,
-        after: afterFeedback || undefined,
-        limit,
-      }),
-      tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
-      tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
-    ],
-  );
-  return { feedback, feedback_bounds, latestFeedbackByMetric };
+  const [feedback, feedbackBounds, latestFeedbackByMetric] = await Promise.all([
+    tensorZeroClient.getFeedbackByTargetId(inference_id, {
+      before: beforeFeedback || undefined,
+      after: afterFeedback || undefined,
+      limit,
+    }),
+    tensorZeroClient.getFeedbackBoundsByTargetId(inference_id),
+    tensorZeroClient.getLatestFeedbackIdByMetric(inference_id),
+  ]);
+  return {
+    feedback,
+    feedbackBounds,
+    latestFeedbackByMetric,
+  };
+}
+
+export async function fetchEpisodeFeedbackCount(
+  episodeId: string,
+): Promise<number> {
+  const tensorZeroClient = getTensorZeroClient();
+  return tensorZeroClient.countFeedbackByTargetId(episodeId);
 }

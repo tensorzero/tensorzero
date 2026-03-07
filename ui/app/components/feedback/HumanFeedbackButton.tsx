@@ -10,7 +10,7 @@ export function HumanFeedbackButton(props: HumanFeedbackButtonProps) {
   return (
     <Button variant="outline" size="sm" {...props}>
       <ButtonIcon as={AddFeedback} variant="tertiary" />
-      Add feedback
+      Add Feedback
     </Button>
   );
 }

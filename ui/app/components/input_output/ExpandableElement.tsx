@@ -5,7 +5,6 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface ExpandableElementProps {
   children: ReactNode;
-  className?: string;
   maxHeight?: number | "Content";
 }
 
@@ -69,7 +68,10 @@ export function ExpandableElement({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setExpanded(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(true);
+            }}
             className="flex items-center gap-1"
           >
             Show more
@@ -83,7 +85,10 @@ export function ExpandableElement({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setExpanded(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(false);
+            }}
             className="mt-4 flex items-center gap-1"
           >
             Show less

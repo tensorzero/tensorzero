@@ -1,11 +1,13 @@
 import { data, type LoaderFunctionArgs } from "react-router";
 import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
+import { filterToLatestFeedback } from "~/utils/feedback";
 import { resolveModelInferences } from "~/utils/resolve.server";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { logger } from "~/utils/logger";
 import type { InferenceDetailData } from "~/components/inference/InferenceDetailContent";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { loadFileDataForStoredInput } from "~/utils/resolve.server";
+import type { FeedbackRow, FeedbackBounds } from "~/types/tensorzero";
 
 export async function loader({
   request,
@@ -46,13 +48,13 @@ export async function loader({
     let inferences,
       model_inferences,
       demonstration_feedback,
-      feedback_bounds,
-      feedback,
-      latestFeedbackByMetric;
+      feedback_bounds: FeedbackBounds,
+      feedback: FeedbackRow[],
+      latestFeedbackByMetric: Record<string, string>;
 
     if (newFeedbackId) {
       // When there's new feedback, wait for polling to complete before querying
-      // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
+      // feedbackBounds to ensure ClickHouse materialized views are updated
       [inferences, model_inferences, demonstration_feedback, feedback] =
         await Promise.all([
           inferencesPromise,
@@ -105,10 +107,12 @@ export async function loader({
       inference,
       input: resolvedInput,
       model_inferences,
-      feedback,
-      feedback_bounds,
+      feedback: filterToLatestFeedback(
+        feedback,
+        feedback_bounds,
+        latestFeedbackByMetric,
+      ),
       hasDemonstration: demonstration_feedback.length > 0,
-      latestFeedbackByMetric,
       usedVariants,
     };
 

@@ -22,7 +22,7 @@ test("should be able to add comment feedback via the episode page", async ({
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
 
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
@@ -59,8 +59,10 @@ test("should be able to add comment feedback via the episode page", async ({
   if (!newFeedbackId) {
     throw new Error("newFeedbackId is not present in the url");
   }
-  // Assert that the feedback value is visible in its table cell
-  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
-  // Assert that the comment is visible in the comment section
-  await expect(page.getByText(json)).toBeVisible();
+  // Assert that the new feedback row is visible
+  await expect(page.getByTestId(`feedback-row-${newFeedbackId}`)).toBeVisible();
+  // Assert that the comment is visible in the feedback row (scoped to avoid matching the textarea)
+  await expect(
+    page.getByTestId(`feedback-row-${newFeedbackId}`).getByText(json),
+  ).toBeVisible();
 });

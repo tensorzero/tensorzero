@@ -1,19 +1,19 @@
-import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
-import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
-import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import type { Route } from "./+types/route";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import {
   Await,
   data,
-  useAsyncError,
+  useLocation,
   useNavigate,
   type RouteHandle,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
+import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
+import { pollForFeedbackItem } from "~/utils/clickhouse/feedback";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import type { Route } from "./+types/route";
+import { FeedbackSection } from "~/components/feedback/FeedbackSection";
+import type { FeedbackData } from "~/utils/feedback";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
-import FeedbackTable, {
-  FeedbackTableHeaders,
-} from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import {
@@ -25,36 +25,19 @@ import {
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { Suspense, useEffect, useState, useCallback } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
-import type {
-  StoredInference,
-  FeedbackRow,
-  FeedbackBounds,
-} from "~/types/tensorzero";
-import { Skeleton } from "~/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableRow } from "~/components/ui/table";
-import {
-  TableErrorNotice,
-  getErrorMessage,
-} from "~/components/ui/error/ErrorContentPrimitives";
+import { HelpTooltip } from "~/components/ui/HelpTooltip";
+import type { StoredInference } from "~/types/tensorzero";
 import type { FeedbackActionData } from "~/routes/api/feedback/route";
-import { AlertCircle } from "lucide-react";
 
 export type InferencesData = {
   inferences: StoredInference[];
   hasNextPage: boolean;
   hasPreviousPage: boolean;
-};
-
-export type FeedbackData = {
-  feedbacks: FeedbackRow[];
-  bounds: FeedbackBounds;
-  latestFeedbackByMetric: Record<string, string>;
 };
 
 export const handle: RouteHandle = {
@@ -110,8 +93,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // Count is already fetched, wrap in resolved promise for streaming
   const numInferencesPromise = Promise.resolve(numInferences);
-  const numFeedbacksPromise =
-    tensorZeroClient.countFeedbackByTargetId(episode_id);
 
   // Stream inferences data - will be resolved in the component
   const inferencesDataPromise: Promise<InferencesData> =
@@ -130,17 +111,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table and materialized views as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but time out and log a warning.
-  // When polling for new feedback, we also need to query feedbackBounds and latestFeedbackByMetric
+  // When polling for new feedback, we also need to query feedbackBounds
   // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise: Promise<FeedbackData> = newFeedbackId
     ? // Sequential case: poll first, then query bounds/metrics
       pollForFeedbackItem(episode_id, newFeedbackId, limit).then(
-        async (feedbacks) => {
-          const [bounds, latestFeedbackByMetric] = await Promise.all([
+        async (feedback) => {
+          const [feedbackBounds, latestFeedbackByMetric] = await Promise.all([
             tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
             tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
           ]);
-          return { feedbacks, bounds, latestFeedbackByMetric };
+          return {
+            feedback,
+            feedbackBounds,
+            latestFeedbackByMetric,
+          };
         },
       )
     : // Normal case: execute all queries in parallel
@@ -152,9 +137,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }),
         tensorZeroClient.getFeedbackBoundsByTargetId(episode_id),
         tensorZeroClient.getLatestFeedbackIdByMetric(episode_id),
-      ]).then(([feedbacks, bounds, latestFeedbackByMetric]) => ({
-        feedbacks,
-        bounds,
+      ]).then(([feedback, feedbackBounds, latestFeedbackByMetric]) => ({
+        feedback,
+        feedbackBounds,
         latestFeedbackByMetric,
       }));
 
@@ -164,7 +149,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     feedbackData: feedbackDataPromise,
     // Stream counts to section headers
     num_inferences: numInferencesPromise,
-    num_feedbacks: numFeedbacksPromise,
     newFeedbackId,
   };
 }
@@ -202,115 +186,6 @@ function InferencePaginationContent({ data }: { data: InferencesData }) {
   );
 }
 
-function FeedbackSectionError() {
-  const error = useAsyncError();
-  const message = getErrorMessage({
-    error,
-    fallback: "Failed to load feedback",
-  });
-
-  return (
-    <>
-      <Table>
-        <FeedbackTableHeaders />
-        <TableBody>
-          <TableRow>
-            <TableCell colSpan={5}>
-              <TableErrorNotice
-                icon={AlertCircle}
-                title="Error loading data"
-                description={message}
-              />
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-      <PageButtons disabled />
-    </>
-  );
-}
-
-function FeedbackTableSkeleton() {
-  return (
-    <Table>
-      <FeedbackTableHeaders />
-      <TableBody>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <TableRow key={i}>
-            <TableCell>
-              <Skeleton className="h-4 w-24" />
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-4 w-20" />
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-4 w-16" />
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-4 w-24" />
-            </TableCell>
-            <TableCell>
-              <Skeleton className="h-4 w-28" />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-function FeedbackSectionContent({ data }: { data: FeedbackData }) {
-  const { feedbacks, bounds, latestFeedbackByMetric } = data;
-  const navigate = useNavigate();
-
-  const topFeedback = feedbacks[0] as { id: string } | undefined;
-  const bottomFeedback = feedbacks[feedbacks.length - 1] as
-    | { id: string }
-    | undefined;
-
-  const handleNextPage = () => {
-    if (!bottomFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("afterFeedback");
-    searchParams.set("beforeFeedback", bottomFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousPage = () => {
-    if (!topFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("beforeFeedback");
-    searchParams.set("afterFeedback", topFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  // These are swapped because the table is sorted in descending order
-  const disablePrevious =
-    !topFeedback?.id || !bounds.last_id || bounds.last_id === topFeedback.id;
-
-  const disableNext =
-    !bottomFeedback?.id ||
-    !bounds.first_id ||
-    bounds.first_id === bottomFeedback.id;
-
-  return (
-    <>
-      <FeedbackTable
-        feedback={feedbacks}
-        latestCommentId={bounds.by_type.comment.last_id!}
-        latestDemonstrationId={bounds.by_type.demonstration.last_id!}
-        latestFeedbackIdByMetric={latestFeedbackByMetric}
-      />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={disablePrevious}
-        disableNext={disableNext}
-      />
-    </>
-  );
-}
-
 export default function EpisodeDetailPage({
   loaderData,
 }: Route.ComponentProps) {
@@ -319,11 +194,14 @@ export default function EpisodeDetailPage({
     inferencesData,
     feedbackData,
     num_inferences,
-    num_feedbacks,
     newFeedbackId,
   } = loaderData;
+  const location = useLocation();
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [feedbackCount, setFeedbackCount] = useState<number | undefined>(
+    undefined,
+  );
   const [openSheetInferenceId, setOpenSheetInferenceId] = useState<
     string | null
   >(null);
@@ -335,6 +213,11 @@ export default function EpisodeDetailPage({
   const handleCloseSheet = useCallback(() => {
     setOpenSheetInferenceId(null);
   }, []);
+
+  // Reset feedback count on navigation so stale count doesn't linger
+  useEffect(() => {
+    setFeedbackCount(undefined);
+  }, [location.key]);
 
   const { toast } = useToast();
   useEffect(() => {
@@ -370,31 +253,6 @@ export default function EpisodeDetailPage({
         name={episode_id}
       >
         <ActionBar>
-          <HumanFeedbackModal
-            isOpen={isModalOpen}
-            onOpenChange={(isOpen) => {
-              if (humanFeedbackFetcher.state !== "idle") {
-                return;
-              }
-
-              if (!isOpen) {
-                humanFeedbackFetcher.reset();
-              }
-              setIsModalOpen(isOpen);
-            }}
-            trigger={<HumanFeedbackButton />}
-          >
-            <humanFeedbackFetcher.Form method="post" action="/api/feedback">
-              <HumanFeedbackForm
-                episodeId={episode_id}
-                formError={formError}
-                isSubmitting={
-                  humanFeedbackFetcher.state === "submitting" ||
-                  humanFeedbackFetcher.state === "loading"
-                }
-              />
-            </humanFeedbackFetcher.Form>
-          </HumanFeedbackModal>
           <AskAutopilotButton message={`Episode ID: ${episode_id}\n\n`} />
         </ActionBar>
       </PageHeader>
@@ -421,30 +279,50 @@ export default function EpisodeDetailPage({
         </SectionLayout>
 
         <SectionLayout>
-          <SectionHeader
-            heading="Feedback"
-            count={num_feedbacks}
-            badge={{
-              name: "episode",
-              tooltip:
-                "This table only includes episode-level feedback. To see inference-level feedback, open the detail page for that inference.",
-            }}
-          />
-          <Suspense
-            fallback={
-              <>
-                <FeedbackTableSkeleton />
-                <PageButtons disabled />
-              </>
-            }
-          >
-            <Await
-              resolve={feedbackData}
-              errorElement={<FeedbackSectionError />}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SectionHeader
+              heading="Episode Feedback"
+              count={feedbackCount}
+              help={
+                <HelpTooltip>
+                  This table only includes episode-level feedback. To see
+                  inference-level feedback, open the detail page for that
+                  inference.
+                </HelpTooltip>
+              }
+            />
+            <HumanFeedbackModal
+              isOpen={isModalOpen}
+              onOpenChange={(isOpen) => {
+                if (humanFeedbackFetcher.state !== "idle") {
+                  return;
+                }
+
+                if (!isOpen) {
+                  humanFeedbackFetcher.reset();
+                }
+                setIsModalOpen(isOpen);
+              }}
+              trigger={<HumanFeedbackButton />}
             >
-              {(resolvedData) => <FeedbackSectionContent data={resolvedData} />}
-            </Await>
-          </Suspense>
+              <humanFeedbackFetcher.Form method="post" action="/api/feedback">
+                <HumanFeedbackForm
+                  episodeId={episode_id}
+                  formError={formError}
+                  isSubmitting={
+                    humanFeedbackFetcher.state === "submitting" ||
+                    humanFeedbackFetcher.state === "loading"
+                  }
+                />
+              </humanFeedbackFetcher.Form>
+            </HumanFeedbackModal>
+          </div>
+          <FeedbackSection
+            promise={feedbackData}
+            locationKey={location.key}
+            onCountUpdate={setFeedbackCount}
+            showDemonstrations={false}
+          />
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>

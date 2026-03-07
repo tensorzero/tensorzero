@@ -33,7 +33,7 @@ export function HumanFeedbackModal({
             {trigger}
           </DialogTrigger>
         )}
-        <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
+        <DialogContent className="max-h-[90vh] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Feedback</DialogTitle>
             <DialogDescription>

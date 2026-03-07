@@ -146,11 +146,12 @@ test("tag navigation works by datapoint_id", async ({ page }) => {
   // Wait for page to load completely
   await page.waitForLoadState("networkidle");
 
-  // Use a more specific selector and ensure it's visible before clicking
-  const datapointElement = page.getByText("tensorzero::datapoint_id");
+  // Scope to the Tags table cell to avoid matching tag badges in feedback rows
+  const datapointElement = page
+    .getByRole("cell", { name: "tensorzero::datapoint_id" })
+    .first();
   await datapointElement.waitFor({ state: "visible" });
 
-  // Force the click to ensure it happens correctly
   await datapointElement.click({ force: true });
 
   // Wait for navigation to complete
@@ -171,7 +172,7 @@ test("should be able to add float feedback via the inference page", async ({
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
 
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
@@ -206,10 +207,12 @@ test("should be able to add float feedback via the inference page", async ({
     timeout: 10000,
   });
 
-  // Verify the feedback value is visible in the table cell
-  await expect(
-    page.getByRole("cell", { name: randomFloat.toString() }),
-  ).toBeVisible();
+  // Verify the new feedback row is visible
+  const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
+  if (!newFeedbackId) {
+    throw new Error("newFeedbackId is not present in the url");
+  }
+  await expect(page.getByTestId(`feedback-row-${newFeedbackId}`)).toBeVisible();
 });
 
 test("should be able to add boolean feedback via the inference page", async ({
@@ -221,7 +224,7 @@ test("should be able to add boolean feedback via the inference page", async ({
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
 
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
@@ -255,8 +258,8 @@ test("should be able to add boolean feedback via the inference page", async ({
     throw new Error("newFeedbackId is not present in the url");
   }
 
-  // Assert that the feedback value is visible in its table cell
-  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+  // Assert that the new feedback row is visible
+  await expect(page.getByTestId(`feedback-row-${newFeedbackId}`)).toBeVisible();
 });
 
 test("should be able to add json demonstration feedback via the inference page", async ({
@@ -268,7 +271,7 @@ test("should be able to add json demonstration feedback via the inference page",
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
 
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
@@ -305,8 +308,8 @@ test("should be able to add json demonstration feedback via the inference page",
   if (!newFeedbackId) {
     throw new Error("newFeedbackId is not present in the url");
   }
-  // Assert that the feedback value is visible in its table cell
-  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+  // Assert that the new feedback row is visible
+  await expect(page.getByTestId(`feedback-row-${newFeedbackId}`)).toBeVisible();
 });
 
 test("should be able to add chat demonstration feedback via the inference page", async ({
@@ -316,7 +319,7 @@ test("should be able to add chat demonstration feedback via the inference page",
     "/observability/inferences/0196374b-0d7d-7422-b6dc-e94c572cc79b",
   );
   // Click on the Add feedback button
-  await page.getByText("Add feedback").click();
+  await page.getByText("Add Feedback").click();
   // Sleep for a little bit to ensure the dialog is open
   await page.waitForTimeout(500);
 
@@ -354,8 +357,8 @@ test("should be able to add chat demonstration feedback via the inference page",
   if (!newFeedbackId) {
     throw new Error("newFeedbackId is not present in the url");
   }
-  // Assert that the feedback value is visible in its table cell
-  await expect(page.getByRole("cell", { name: newFeedbackId })).toBeVisible();
+  // Assert that the new feedback row is visible
+  await expect(page.getByTestId(`feedback-row-${newFeedbackId}`)).toBeVisible();
 });
 
 test.describe("should be able to add demonstration feedback via Try with X flows", () => {
@@ -421,7 +424,7 @@ test.describe("should be able to add demonstration feedback via Try with X flows
           .getByText("Feedback Added"),
       ).toBeVisible();
 
-      // Get the feedback ID from URL and verify it appears in the feedback table
+      // Get the feedback ID from URL and verify the feedback row is visible
       const newFeedbackId = new URL(page.url()).searchParams.get(
         "newFeedbackId",
       );
@@ -429,9 +432,9 @@ test.describe("should be able to add demonstration feedback via Try with X flows
         throw new Error("newFeedbackId is not present in the url");
       }
 
-      // Assert that the feedback ID is visible in the feedback table
+      // Assert that the new feedback row is visible
       await expect(
-        page.getByRole("cell", { name: newFeedbackId }),
+        page.getByTestId(`feedback-row-${newFeedbackId}`),
       ).toBeVisible();
     });
   });
