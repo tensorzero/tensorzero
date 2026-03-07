@@ -29,10 +29,7 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
 
-    # We don't run many tests here, so use a normal runner with Github Actions caching
-    # to avoid unnecessarily using Namespace credits (it should still always finish before
-    # the main 'validate' job)
-    runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16;ephemeral-storage.size-multiplier=2' || 'namespace-profile-tensorzero-8x16' }}
+    runs-on: runs-on=${{ github.run_id }}/runner=8cpu-linux-x64/volume=128gb
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     if: github.repository == 'tensorzero/tensorzero'
     # TODO - switch back to 'latest': https://github.com/tensorzero/tensorzero/issues/6080
@@ -52,7 +49,16 @@ jobs:
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
     steps:
+      - uses: runs-on/action@v2
+        with:
+          metrics: cpu,network,memory,disk,io
+
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Cache large ClickHouse fixtures
+        uses: runs-on/snapshot@v1
+        with:
+          path: ${{ github.workspace }}/ui/fixtures/large-fixtures
 
       - name: Install Rust (from rust-toolchain.toml)
         run: |
@@ -90,12 +96,6 @@ jobs:
       - name: Set ClickHouse replicated cluster name
         if: matrix.replicated == true
         run: echo "TENSORZERO_CLICKHOUSE_CLUSTER_NAME=tensorzero_e2e_tests_cluster" >> $GITHUB_ENV
-
-      - name: Setup Namespace caching for Clickhouse fixtures
-        uses: namespacelabs/nscloud-cache-action@446d8f390563cd54ca27e8de5bdb816f63c0b706
-        with:
-          path: |
-            ./ui/fixtures/large-fixtures/
 
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
