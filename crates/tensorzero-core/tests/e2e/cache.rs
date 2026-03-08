@@ -1,6 +1,7 @@
 #![expect(clippy::print_stdout)]
 
 use futures::StreamExt;
+use googletest::prelude::*;
 use rand::RngExt;
 use reqwest::Client;
 use reqwest_sse_stream::Event;
@@ -35,9 +36,13 @@ use tensorzero::test_helpers::{
     make_embedded_gateway_e2e_with_unique_db_all_backends,
     make_http_gateway_openai_only_with_unique_db,
 };
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
-};
+use tensorzero_core::db::clickhouse::test_helpers::select_model_inference_clickhouse;
+use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
+use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
+use tensorzero_core::db::model_inferences::ModelInferenceQueries;
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::stored_inference::StoredInferenceDatabase;
+use tensorzero_core::test_helpers::get_e2e_config;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CacheBackend {
@@ -49,11 +54,13 @@ enum CacheBackend {
 macro_rules! make_cache_tests {
     ($test_name:ident) => {
         paste::paste! {
+            #[gtest]
             #[tokio::test(flavor = "multi_thread")]
             async fn [<$test_name _clickhouse>]() {
                 $test_name(CacheBackend::Clickhouse).await;
             }
 
+            #[gtest]
             #[tokio::test(flavor = "multi_thread")]
             async fn [<$test_name _valkey>]() {
                 $test_name(CacheBackend::Valkey).await;
@@ -233,6 +240,7 @@ async fn test_dont_cache_tool_call_schema_error(backend: CacheBackend) {
     }
 }
 
+#[gtest]
 #[tokio::test]
 pub async fn test_streaming_cache_with_err() {
     skip_for_postgres!();
@@ -245,9 +253,10 @@ pub async fn test_streaming_cache_with_err() {
     let original_content = check_test_streaming_cache_with_err(episode_id, seed, true, false).await;
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     let cached_content = check_test_streaming_cache_with_err(episode_id, seed, true, false).await;
-    assert_eq!(original_content, cached_content);
+    expect_that!(original_content, eq(&cached_content));
 }
 
+#[gtest]
 #[tokio::test]
 pub async fn test_streaming_cache_without_err() {
     skip_for_postgres!();
@@ -261,7 +270,7 @@ pub async fn test_streaming_cache_without_err() {
         check_test_streaming_cache_with_err(episode_id, seed, false, false).await;
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     let cached_content = check_test_streaming_cache_with_err(episode_id, seed, false, true).await;
-    assert_eq!(original_content, cached_content);
+    expect_that!(original_content, eq(&cached_content));
 }
 
 pub async fn check_test_streaming_cache_with_err(
@@ -382,35 +391,41 @@ pub async fn check_test_streaming_cache_with_err(
         assert_eq!(output_tokens, 16);
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Sleep to allow time for data to be inserted into the database (trailing writes from API)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let config = get_e2e_config().await;
+
+    // Check ChatInference
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_eq!(inferences.len(), 1, "Expected exactly one inference");
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    println!("ChatInference: {chat:#?}");
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(chat.inference_id, inference_id);
+    assert_eq!(chat.function_name, payload["function_name"]);
+    assert_eq!(chat.variant_name, input_variant_name);
+    assert_eq!(chat.episode_id, episode_id);
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, input_variant_name);
-
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input_value = serde_json::to_value(&chat.input).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": format!("AskJeeves")},
+        "system": {"assistant_name": "AskJeeves"},
         "messages": [
             {
                 "role": "user",
@@ -418,69 +433,62 @@ pub async fn check_test_streaming_cache_with_err(
             }
         ]
     });
-    assert_eq!(input, correct_input);
+    assert_eq!(input_value, correct_input);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<Value> = serde_json::from_str(output).unwrap();
+    let output = chat.output.as_ref().expect("Expected output");
     assert_eq!(output.len(), 1);
-    let content_block = output.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
+    let ContentBlockChatOutput::Text(text_block) = &output[0] else {
+        panic!("Expected text content block");
+    };
+    assert_eq!(text_block.text, full_content);
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
+    assert!(chat.tool_params.is_none(), "Expected no tool params");
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
+    let inference_params_value = serde_json::to_value(&chat.inference_params).unwrap();
+    let chat_completion = inference_params_value
+        .get("chat_completion")
+        .expect("Expected chat_completion in inference_params");
     assert_eq!(
-        inference_params.get("seed").unwrap().as_u64().unwrap(),
+        chat_completion.get("seed").unwrap().as_u64().unwrap(),
         seed as u64
     );
     assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
+        chat_completion.get("max_tokens").unwrap().as_u64().unwrap(),
         100
     );
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    let processing_time_ms = chat
+        .processing_time_ms
+        .expect("Expected processing_time_ms");
     assert!(processing_time_ms > 0);
 
-    // Check ClickHouse - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-
-    println!("ClickHouse - ModelInference: {result:#?}");
-
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
-
-    let result_cached = result.get("cached").unwrap().as_bool().unwrap();
-    assert_eq!(result_cached, expect_cached);
-
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, input_variant_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(
-        model_provider_name,
+        model_inferences.len(),
+        1,
+        "Expected exactly one model inference"
+    );
+
+    let mi = &model_inferences[0];
+
+    println!("ModelInference: {mi:#?}");
+
+    assert_eq!(mi.inference_id, inference_id);
+    assert_eq!(mi.cached, expect_cached);
+    assert_eq!(mi.model_name, input_variant_name);
+    assert_eq!(
+        mi.model_provider_name,
         if inject_err { "dummy" } else { "good" }
     );
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi.raw_request.as_ref().expect("Expected raw_request");
     assert!(raw_request.to_lowercase().contains("raw request"));
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
-    // Check if raw_response is non-empty
+    let raw_response = mi.raw_response.as_ref().expect("Expected raw_response");
     for line in raw_response.lines() {
         assert!(
             !line.is_empty(),
@@ -488,35 +496,31 @@ pub async fn check_test_streaming_cache_with_err(
         );
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    assert_eq!(mi.input_tokens, Some(10));
+    assert_eq!(mi.output_tokens, Some(16));
 
-    assert_eq!(input_tokens.as_u64().unwrap(), 10);
-    assert_eq!(output_tokens.as_u64().unwrap(), 16);
-
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     if expect_cached {
-        assert_eq!(response_time_ms, 0);
+        assert_eq!(mi.response_time_ms, Some(0));
     } else {
-        assert!(response_time_ms > 0);
+        assert!(mi.response_time_ms.unwrap() > 0);
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_ref().expect("Expected system");
     assert_eq!(
         system,
-        format!("You are a helpful and friendly assistant named AskJeeves")
+        "You are a helpful and friendly assistant named AskJeeves"
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+
+    let input_messages = mi.input_messages.as_ref().expect("Expected input_messages");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "My test input string".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(input_messages, &expected_input_messages);
+
+    let output = mi.output.as_ref().expect("Expected model inference output");
     assert_eq!(output.len(), 1);
 
     full_content
@@ -643,6 +647,7 @@ async fn test_streaming_cache_usage_only_in_final_chunk_native(backend: CacheBac
 }
 
 /// Tests that cached streaming responses only have usage on the final chunk (OpenAI-compatible API)
+#[gtest]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
     skip_for_postgres!();
@@ -734,16 +739,19 @@ async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
     let (chunks_with_usage, total_chunks, prompt_tokens, completion_tokens) =
         make_streaming_request(&base_url, input).await;
 
-    assert!(
-        total_chunks > 1,
+    expect_that!(
+        total_chunks,
+        gt(1),
         "Test expects multiple chunks to verify usage placement, got {total_chunks}"
     );
-    assert_eq!(
-        chunks_with_usage, 1,
+    expect_that!(
+        chunks_with_usage,
+        eq(1),
         "Cache miss: only the final chunk should have usage, got {chunks_with_usage} out of {total_chunks}"
     );
-    assert!(
+    expect_that!(
         prompt_tokens > 0 || completion_tokens > 0,
+        eq(true),
         "Cache miss: usage should have non-zero tokens"
     );
 
@@ -754,20 +762,24 @@ async fn test_streaming_cache_usage_only_in_final_chunk_openai() {
     let (chunks_with_usage, total_chunks, prompt_tokens, completion_tokens) =
         make_streaming_request(&base_url, input).await;
 
-    assert!(
-        total_chunks > 1,
+    expect_that!(
+        total_chunks,
+        gt(1),
         "Test expects multiple chunks to verify usage placement, got {total_chunks}"
     );
-    assert_eq!(
-        chunks_with_usage, 1,
+    expect_that!(
+        chunks_with_usage,
+        eq(1),
         "Cache hit: only the final chunk should have usage, got {chunks_with_usage} out of {total_chunks}"
     );
-    assert_eq!(
-        prompt_tokens, 0,
+    expect_that!(
+        prompt_tokens,
+        eq(0),
         "Cache hit: usage should have zero prompt tokens"
     );
-    assert_eq!(
-        completion_tokens, 0,
+    expect_that!(
+        completion_tokens,
+        eq(0),
         "Cache hit: usage should have zero completion tokens"
     );
 }
