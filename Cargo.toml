@@ -1,33 +1,33 @@
 [workspace]
 members = [
-    "tensorzero-core",
-    "googletest-matchers",
-    "tensorzero-core/tests/mock-provider-api",
-    "tensorzero-core/tests/load/rate-limit-load-test",
-    "tensorzero-core/tests/load/postgres-inference-load-test",
-    "tensorzero-core/tests/load/feedback",
-    "gateway",
-    "internal/tensorzero-node",
-    "clients/rust",
+    "crates/tensorzero-core",
+    "crates/googletest-matchers",
+    "crates/tensorzero-core/tests/mock-provider-api",
+    "crates/tensorzero-core/tests/load/rate-limit-load-test",
+    "crates/tensorzero-core/tests/load/postgres-inference-load-test",
+    "crates/tensorzero-core/tests/load/feedback",
+    "crates/gateway",
+    "crates/tensorzero-node",
+    "crates/tensorzero-client",
     "clients/python",
-    "provider-proxy",
-    "evaluations",
-    "tensorzero-optimizers",
-    "internal/tensorzero-derive",
-    "internal/tensorzero-auth",
-    "internal/tensorzero-unsafe-helpers",
-    "internal/minijinja-utils",
-    "internal/autopilot-client",
-    "internal/autopilot-tools",
-    "internal/durable-tools-spawn",
-    "internal/durable-tools",
-    "internal/tensorzero-types",
-    "internal/tensorzero-types-providers",
-    "internal/autopilot-worker",
-    "internal/reqwest-sse-stream",
-    "internal/config-applier",
-    "internal/tensorzero-config-paths",
-    "internal/tensorzero-ts-types",
+    "crates/provider-proxy",
+    "crates/evaluations",
+    "crates/tensorzero-optimizers",
+    "crates/tensorzero-derive",
+    "crates/tensorzero-auth",
+    "crates/tensorzero-unsafe-helpers",
+    "crates/minijinja-utils",
+    "crates/autopilot-client",
+    "crates/autopilot-tools",
+    "crates/durable-tools-spawn",
+    "crates/durable-tools",
+    "crates/tensorzero-types",
+    "crates/tensorzero-types-providers",
+    "crates/autopilot-worker",
+    "crates/reqwest-sse-stream",
+    "crates/config-applier",
+    "crates/tensorzero-config-paths",
+    "crates/tensorzero-ts-types",
 ]
 resolver = "2"
 
@@ -67,7 +67,7 @@ futures = "0.3.32"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
 sse-stream = "0.2.1"
-reqwest-sse-stream = { path = "internal/reqwest-sse-stream" }
+reqwest-sse-stream = { path = "crates/reqwest-sse-stream" }
 minijinja = { version = "2.16.0", features = [
     "loader",
     "debug",
@@ -119,9 +119,9 @@ serde_arrow = { version = "0.14", features = ["arrow-58"] }
 blake3 = "1.8.3"
 moka = { version = "0.12.14", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", rev = "43d73ea835f1e528462105250ce01822af09d7fc" }
-durable-tools-spawn = { path = "internal/durable-tools-spawn" }
-tensorzero = { path = "clients/rust" }
-tensorzero-core = { path = "tensorzero-core" }
+durable-tools-spawn = { path = "crates/durable-tools-spawn" }
+tensorzero = { path = "crates/tensorzero-client" }
+tensorzero-core = { path = "crates/tensorzero-core" }
 regex = "1.12.2"
 redis = { version = "1.0.4", features = [
     "tokio-comp",

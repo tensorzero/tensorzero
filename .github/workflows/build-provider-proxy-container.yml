@@ -41,7 +41,7 @@ jobs:
 
       - name: Build `provider-proxy` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f provider-proxy/Dockerfile --target provider-proxy . -t tensorzero/provider-proxy:sha-${{ github.sha }}
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f crates/provider-proxy/Dockerfile --target provider-proxy . -t tensorzero/provider-proxy:sha-${{ github.sha }}
 
       - name: Push `provider-proxy` container to DockerHub
         run: docker push tensorzero/provider-proxy:sha-${{ github.sha }}
