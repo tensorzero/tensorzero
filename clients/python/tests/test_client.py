@@ -78,12 +78,12 @@ GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+    "../../../crates/tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
 # Test image with File block
 basepath = path.dirname(__file__)
-with open(f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb") as f:
+with open(f"{basepath}/../../../crates/tensorzero-core/tests/e2e/providers/ferris.png", "rb") as f:
     ferris_png = base64.b64encode(f.read()).decode("ascii")
 
 
@@ -1448,7 +1448,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     # Test pdf with File block
     basepath = path.dirname(__file__)
     with open(
-        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf",
+        f"{basepath}/../../../crates/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf",
         "rb",
     ) as f:
         deepseek_paper_pdf = base64.b64encode(f.read()).decode("ascii")
@@ -2912,7 +2912,7 @@ def test_patch_openai_client_with_config():
     client = OpenAI()
     tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         client,
-        config_file="../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+        config_file="../../crates/tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         async_setup=False,
     )
     response = client.chat.completions.create(

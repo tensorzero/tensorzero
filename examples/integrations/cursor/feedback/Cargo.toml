@@ -21,7 +21,7 @@ tree-sitter-python = "0.25.0"
 tree-sitter-toml-ng = "0.7.0"
 tree-sitter-md = "0.5.1"
 tensorzero = { path = "../../../../crates/tensorzero-client" }
-tensorzero-core = { path = "../../../../tensorzero-core" }
+tensorzero-core = { path = "../../../../crates/tensorzero-core" }
 chrono = { version = "0.4.41", features = ["serde"] }
 uuid = { version = "1.19.0", features = ["serde", "v7"] }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
