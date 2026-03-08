@@ -41,6 +41,8 @@ echo "Starting background ClickHouse wake-up..."
 curl --retry 20 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
     "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SELECT 1' > /dev/null 2>&1 &
 
+REPO_ROOT="$(pwd)"
+
 # Set up cleanup function to run on exit
 cleanup_database() {
     if [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
@@ -57,8 +59,8 @@ cleanup_database() {
             echo "Cleanup completed for database: $DB_NAME"
         fi
     fi
-    docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml down -v || true
-    cat crates/e2e_logs.txt || echo "e2e logs don't exist"
+    docker compose -f "$REPO_ROOT/crates/tensorzero-core/tests/e2e/docker-compose.yml" down -v || true
+    cat "$REPO_ROOT/crates/e2e_logs.txt" || echo "e2e logs don't exist"
 }
 
 # Register cleanup function to run on script exit (success or failure)
