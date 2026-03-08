@@ -426,6 +426,7 @@ impl TensorZeroClient for Client {
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
+        _heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<ActionResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
@@ -843,9 +844,13 @@ impl TensorZeroClient for Client {
             ClientMode::EmbeddedGateway {
                 gateway,
                 timeout: _,
-            } => crate::run_evaluation::run_evaluation(gateway.handle.app_state.clone(), &params)
-                .await
-                .map_err(|e| TensorZeroClientError::Evaluation(e.to_string())),
+            } => crate::run_evaluation::run_evaluation(
+                gateway.handle.app_state.clone(),
+                &params,
+                Arc::new(durable::NoopHeartbeater),
+            )
+            .await
+            .map_err(|e| TensorZeroClientError::Evaluation(e.to_string())),
         }
     }
 }

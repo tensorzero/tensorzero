@@ -213,7 +213,11 @@ impl SimpleTool for RunEvaluationTool {
 
         let response = ctx
             .client()
-            .action(snapshot_hash, ActionInput::RunEvaluation(Box::new(params)))
+            .action(
+                snapshot_hash,
+                ActionInput::RunEvaluation(Box::new(params)),
+                ctx.heartbeater().clone(),
+            )
             .await
             .map_err(|e| AutopilotToolError::client_error("run_evaluation", e))?;
 

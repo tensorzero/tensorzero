@@ -118,7 +118,7 @@ schemars = "1.1.0"
 serde_arrow = { version = "0.14", features = ["arrow-58"] }
 blake3 = "1.8.3"
 moka = { version = "0.12.14", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "43d73ea835f1e528462105250ce01822af09d7fc" }
+durable = { git = "https://github.com/tensorzero/durable", branch = "viraj/heartbeat-in-steps" }
 durable-tools-spawn = { path = "crates/durable-tools-spawn" }
 tensorzero = { path = "crates/tensorzero-client" }
 tensorzero-core = { path = "crates/tensorzero-core" }
