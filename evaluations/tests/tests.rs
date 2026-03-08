@@ -534,7 +534,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
         result
             .unwrap_err()
             .to_string()
-            .contains("Cannot provide both datapoint_ids and max_datapoints")
+            .contains("Cannot provide both `datapoint_ids` and `max_datapoints`")
     );
 }
 
@@ -593,7 +593,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
     assert!(
         error
             .to_string()
-            .contains("Cannot provide both datapoint_ids and max_datapoints")
+            .contains("Cannot provide both `datapoint_ids` and `max_datapoints`")
     );
 }
 

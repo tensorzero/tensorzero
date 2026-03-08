@@ -176,19 +176,19 @@ pub async fn run_evaluation(
         .is_some_and(|ids| !ids.is_empty());
     if has_dataset && has_datapoints {
         return Err(RunEvaluationError::Validation(
-            "Cannot provide both dataset_name and datapoint_ids".to_string(),
+            "Cannot provide both `dataset_name` and `datapoint_ids`".to_string(),
         ));
     }
     if !has_dataset && !has_datapoints {
         return Err(RunEvaluationError::Validation(
-            "Must provide either dataset_name or datapoint_ids".to_string(),
+            "Must provide either `dataset_name` or `datapoint_ids`".to_string(),
         ));
     }
 
     // Validate max_datapoints cannot be used with datapoint_ids
     if has_datapoints && params.max_datapoints.is_some() {
         return Err(RunEvaluationError::Validation(
-            "Cannot use max_datapoints with datapoint_ids".to_string(),
+            "Cannot use `max_datapoints` with `datapoint_ids`".to_string(),
         ));
     }
 
