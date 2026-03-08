@@ -8,13 +8,15 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_core::evaluations::EvaluationConfig;
+use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 /// SSE event types for evaluation streaming.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum EvaluationRunEvent {
     Start(EvaluationRunStartEvent),
     Success(EvaluationRunSuccessEvent),
