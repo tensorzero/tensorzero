@@ -9,7 +9,6 @@ permissions:
 
 env:
   CARGO_INCREMENTAL: 0
-  RUST_TOOLCHAIN: "1.90"
 
 jobs:
   linux:
@@ -33,19 +32,9 @@ jobs:
         with:
           version: "0.9.27"
 
-      - name: Install Rust toolchain
-        run: |
-          for attempt in 1 2 3; do
-            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust toolchain after 3 attempts"
-              exit 1
-            fi
-            sleep $((10 * attempt))
-          done
-        shell: bash
+      - name: Install Rust (from rust-toolchain.toml)
+        run: rustup show
+        working-directory: crates
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -80,19 +69,9 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust toolchain
-        run: |
-          for attempt in 1 2 3; do
-            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust toolchain after 3 attempts"
-              exit 1
-            fi
-            sleep $((10 * attempt))
-          done
-        shell: bash
+      - name: Install Rust (from rust-toolchain.toml)
+        run: rustup show
+        working-directory: crates
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -131,18 +110,9 @@ jobs:
             target: x64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust toolchain
-        run: |
-          for attempt in 1 2 3; do
-            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust toolchain after 3 attempts"
-              exit 1
-            fi
-            sleep $((10 * attempt))
-          done
+      - name: Install Rust (from rust-toolchain.toml)
+        run: rustup show
+        working-directory: crates
         shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -187,19 +157,9 @@ jobs:
           #  target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Install Rust toolchain
-        run: |
-          for attempt in 1 2 3; do
-            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust toolchain after 3 attempts"
-              exit 1
-            fi
-            sleep $((10 * attempt))
-          done
-        shell: bash
+      - name: Install Rust (from rust-toolchain.toml)
+        run: rustup show
+        working-directory: crates
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
