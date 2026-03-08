@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 tensorzero-core = { path = "../../../", features = ["e2e_tests"] }
-tensorzero = { path = "../../../../crates/tensorzero-client", features = ["e2e_tests"] }
+tensorzero = { path = "../../../../tensorzero-client", features = ["e2e_tests"] }
 anyhow = { workspace = true }
 serde = { workspace = true }
 uuid = { workspace = true }
