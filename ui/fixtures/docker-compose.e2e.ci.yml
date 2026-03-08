@@ -27,7 +27,7 @@ services:
     image: tensorzero/gateway-dev:${TENSORZERO_COMMIT_TAG}
     build:
       context: ../..
-      dockerfile: gateway/Dockerfile
+      dockerfile: crates/gateway/Dockerfile
       target: gateway
       args:
         PROFILE: dev

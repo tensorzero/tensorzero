@@ -185,19 +185,19 @@ jobs:
       - name: Configure batch writes in tensorzero.toml
         if: matrix.batch_writes == true
         run: |
-          echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
-          echo "enabled = true" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
-          echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
-          echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "[gateway.observability.batch_writes]" >> crates/tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "enabled = true" >> crates/tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "flush_interval_ms = 80" >> crates/tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "__force_allow_embedded_batch_writes = true" >> crates/tensorzero-core/tests/e2e/config/tensorzero.misc.toml
 
       - name: Launch dependency services for E2E tests
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy up --no-build -d --wait
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy up --no-build -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs -t
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs -t
 
       - name: Set up gateway environment file
         run: |
@@ -250,7 +250,7 @@ jobs:
           docker run -d --name gateway-e2e --network host \
             --env-file gateway.env \
             -v ${{ github.workspace }}/gcp_jwt_key.json:/app/gcp_jwt_key.json:ro \
-            -v ${{ github.workspace }}/tensorzero-core:/app/tensorzero-core:ro \
+            -v ${{ github.workspace }}/crates/tensorzero-core:/app/tensorzero-core:ro \
             -v ${{ github.workspace }}/ui/fixtures:/app/ui/fixtures:ro \
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
             --config-file '/app/tensorzero-core/tests/e2e/config/tensorzero.*.toml'
@@ -363,7 +363,7 @@ jobs:
 
       - name: Print provider-proxy logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs provider-proxy 2>&1 || echo "No provider-proxy logs available"
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs provider-proxy 2>&1 || echo "No provider-proxy logs available"
 
       - name: Print vLLM modal logs
         if: always()

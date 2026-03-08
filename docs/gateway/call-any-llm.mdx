@@ -8,7 +8,7 @@ This page shows how to:
 
 - **Call any LLM with the same API.** TensorZero unifies every major LLM API (e.g. OpenAI) and inference server (e.g. Ollama).
 - **Get started with a few lines of code.** Later, you can optionally add observability, automatic fallbacks, A/B testing, and much more.
-- **Use any programming language.** You can use TensorZero with its Python SDK, any OpenAI SDK (Python, Node, Go, etc.), or its HTTP API.
+- **Use any programming language.** You can use TensorZero with any OpenAI SDK (Python, Node, Go, etc.).
 
 <Tip>
 
@@ -19,130 +19,6 @@ You can find a [complete runnable example](https://github.com/tensorzero/tensorz
 <Tabs>
 
 <Tab title="Python">
-
-The TensorZero Python SDK provides a unified API for calling any LLM.
-
-<Steps>
-
-<Step title="Set up the credentials for your LLM provider">
-
-For example, if you're using OpenAI, you can set the `OPENAI_API_KEY` environment variable with your API key.
-
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-
-<Tip>
-
-See the [Integrations](/integrations/model-providers) page to learn how to set up credentials for other LLM providers.
-
-</Tip>
-
-</Step>
-
-<Step title="Install the TensorZero Python SDK">
-
-You can install the TensorZero SDK with a Python package manager like `pip`.
-
-```bash
-pip install tensorzero
-```
-
-</Step>
-
-<Step title="Deploy the TensorZero Gateway">
-
-Let's deploy the TensorZero Gateway using Docker.
-For simplicity, we'll use the gateway without observability or custom configuration.
-
-```bash
-docker run \
-  -e OPENAI_API_KEY \
-  -p 3000:3000 \
-  tensorzero/gateway \
-  --default-config
-```
-
-<Tip>
-
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
-
-</Tip>
-
-</Step>
-
-<Step title="Initialize the TensorZero Client">
-
-Let's initialize the TensorZero client and point it to the gateway we just launched.
-
-```python
-from tensorzero import TensorZeroGateway
-
-t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
-```
-
-<Tip>
-
-The TensorZero Python SDK includes a synchronous `TensorZeroGateway` client and an asynchronous `AsyncTensorZeroGateway` client.
-See [Clients](/gateway/clients/) for more details.
-
-</Tip>
-
-</Step>
-
-<Step title="Call the LLM">
-
-```python
-response = t0.inference(
-    model_name="openai::gpt-5-mini",
-    # or: model="anthropic::claude-sonnet-4-20250514"
-    # or: Google, AWS, Azure, xAI, vLLM, Ollama, and many more
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": "Tell me a fun fact.",
-            }
-        ]
-    },
-)
-```
-
-<Accordion title="Sample Response">
-
-```python
-ChatInferenceResponse(
-    inference_id=UUID('0198d339-be77-74e0-b522-e08ec12d3831'),
-    episode_id=UUID('0198d339-be77-74e0-b522-e09f578f34d0'),
-    variant_name='openai::gpt-5-mini',
-    content=[
-        Text(
-            text='Fun fact: Botanically, bananas are berries but strawberries are not. \n\nA true berry develops from a single ovary and has seeds embedded in the flesh—bananas fit that definition. Strawberries are "aggregate accessory fruits": the tiny seeds on the outside are each from a separate ovary.',
-            arguments=None,
-            type='text'
-        )
-    ],
-    usage=Usage(input_tokens=12, output_tokens=261),
-    finish_reason=FinishReason.STOP,
-    raw_response=None
-)
-```
-
-</Accordion>
-
-<Tip>
-
-See the [Inference API Reference](/gateway/api-reference/inference) for more details on the request and response formats.
-
-</Tip>
-
-</Step>
-
-</Steps>
-
-</Tab>
-
-<Tab title="Python (OpenAI SDK)">
 
 You can point the OpenAI Python SDK to a TensorZero Gateway to call any LLM with a unified API.
 
@@ -274,7 +150,7 @@ See the [Inference (OpenAI) API Reference](/gateway/api-reference/inference-open
 
 </Tab>
 
-<Tab title="Node (OpenAI SDK)">
+<Tab title="Node">
 
 You can point the OpenAI Node SDK to a TensorZero Gateway to call any LLM with a unified API.
 
@@ -388,104 +264,6 @@ const response = await client.chat.completions.create({
 <Tip>
 
 See the [Inference (OpenAI) API Reference](/gateway/api-reference/inference-openai-compatible) for more details on the request and response formats.
-
-</Tip>
-
-</Step>
-
-</Steps>
-
-</Tab>
-
-<Tab title="HTTP">
-
-You can call the TensorZero Gateway directly over HTTP to access any LLM with a unified API.
-
-<Steps>
-
-<Step title="Set up the credentials for your LLM provider">
-
-For example, if you're using OpenAI, you can set the `OPENAI_API_KEY` environment variable with your API key.
-
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-
-<Tip>
-
-See the [Integrations](/integrations/model-providers) page to learn how to set up credentials for other LLM providers.
-
-</Tip>
-
-</Step>
-
-<Step title="Deploy the TensorZero Gateway">
-
-Let's deploy the TensorZero Gateway using Docker.
-For simplicity, we'll use the gateway without observability or custom configuration.
-
-```bash
-docker run \
-  -e OPENAI_API_KEY \
-  -p 3000:3000 \
-  tensorzero/gateway \
-  --default-config
-```
-
-<Tip>
-
-See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
-
-</Tip>
-
-</Step>
-
-<Step title="Call the LLM">
-
-You can call the LLM by sending a `POST` request to the `/inference` endpoint of the TensorZero Gateway.
-
-```bash
-curl -X POST "http://localhost:3000/inference" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model_name": "openai::gpt-5-mini",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Tell me a fun fact."
-        }
-      ]
-    }
-  }'
-```
-
-<Accordion title="Sample Response">
-
-```json
-{
-  "inference_id": "0198d351-b250-70d1-a24a-a255d148d7a6",
-  "episode_id": "0198d351-b250-70d1-a24a-a2690343bcf0",
-  "variant_name": "openai::gpt-5-mini",
-  "content": [
-    {
-      "type": "text",
-      "text": "Fun fact: botanically, bananas are berries but strawberries are not. \n\nIn botanical terms a \"berry\" develops from a single ovary and has seeds embedded in the flesh—bananas fit that definition, while strawberries are aggregate accessory fruits (the little \"seeds\" on the outside are actually separate ovaries). Want another fun fact?"
-    }
-  ],
-  "usage": {
-    "input_tokens": 12,
-    "output_tokens": 334
-  },
-  "finish_reason": "stop"
-}
-```
-
-</Accordion>
-
-<Tip>
-
-See the [Inference API Reference](/gateway/api-reference/inference) for more details on the request and response formats.
 
 </Tip>
 
