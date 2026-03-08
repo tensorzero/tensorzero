@@ -22,7 +22,7 @@ from tensorzero.generated_types import OrderByTimestamp, StoredInferenceChat
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+    "../../../crates/tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
 

@@ -3,7 +3,7 @@ services:
     image: tensorzero/provider-proxy:${TENSORZERO_PROVIDER_PROXY_TAG:-latest}
     build:
       context: ../../
-      dockerfile: provider-proxy/Dockerfile
+      dockerfile: crates/provider-proxy/Dockerfile
       target: provider-proxy
     ports:
       - "3003:3003"

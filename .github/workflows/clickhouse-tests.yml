@@ -134,11 +134,11 @@ jobs:
 
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build --wait
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up --no-build --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.replicated.yml up --no-build --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
@@ -155,8 +155,8 @@ jobs:
             -e TENSORZERO_CLICKHOUSE_URL \
             -e R2_ACCESS_KEY_ID \
             -e R2_SECRET_ACCESS_KEY \
-            -v $(pwd)/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
-            -v $(pwd)/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
+            -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
+            -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             --add-host howdy.tensorzero.com:127.0.0.1 \
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
             --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml'
@@ -179,8 +179,8 @@ jobs:
           docker run --rm --network host \
             -e TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests \
             -e TENSORZERO_CLICKHOUSE_CLUSTER_NAME \
-            -v $(pwd)/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
-            -v $(pwd)/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
+            -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
+            -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
             --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml' \
             --run-clickhouse-migrations
@@ -192,8 +192,8 @@ jobs:
             -e TENSORZERO_CLICKHOUSE_CLUSTER_NAME \
             -e R2_ACCESS_KEY_ID \
             -e R2_SECRET_ACCESS_KEY \
-            -v $(pwd)/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
-            -v $(pwd)/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
+            -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
+            -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             --add-host howdy.tensorzero.com:127.0.0.1 \
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
             --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml'
@@ -218,7 +218,7 @@ jobs:
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
         run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
 
       - name: Print ClickHouse error logs (replicated)
         if: always() && matrix.replicated == true
@@ -255,7 +255,7 @@ jobs:
       - name: Print docker compose logs (non-replicated)
         if: always() && matrix.replicated == false
         run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print ClickHouse error logs (non-replicated)
         if: always() && matrix.replicated == false
