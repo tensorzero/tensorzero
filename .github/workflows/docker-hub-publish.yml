@@ -41,9 +41,9 @@ jobs:
           - name: ${{ inputs.is_dev && 'ui-dev' || 'ui' }}
             path: ui
           - name: ${{ inputs.is_dev && 'gateway-dev' || 'gateway' }}
-            path: gateway
+            path: crates/gateway
           - name: ${{ inputs.is_dev && 'evaluations-dev' || 'evaluations' }}
-            path: evaluations
+            path: crates/evaluations
 
     permissions:
       packages: write
