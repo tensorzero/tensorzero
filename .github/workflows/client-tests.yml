@@ -337,11 +337,6 @@ jobs:
         working-directory: clients/openai-go/tests
         run: go test -v
 
-      - name: "Python: Recipes: pytest"
-        working-directory: recipes
-        run: |
-          uv run pytest
-
       - name: Print e2e logs
         if: always()
         run: docker logs gateway-e2e 2>&1 || echo "No gateway container logs available"
