@@ -13,7 +13,7 @@ ENV CARGO_INCREMENTAL=0
 
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
-COPY . .
+COPY crates/ crates/
 WORKDIR /src/crates
 
 RUN cargo build --profile ${PROFILE} -p evaluations $CARGO_BUILD_FLAGS

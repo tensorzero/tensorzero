@@ -7,7 +7,8 @@ ENV CARGO_INCREMENTAL=0
 
 RUN apt-get update && apt-get install -y clang libc++-dev git && rm -rf /var/lib/apt/lists/*
 
-COPY . .
+COPY .git .git
+COPY crates/ crates/
 RUN git rev-parse HEAD
 
 # Enable the e2e_tests feature by default for the gateway build

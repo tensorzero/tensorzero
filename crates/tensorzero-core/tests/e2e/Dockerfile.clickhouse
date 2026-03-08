@@ -25,8 +25,8 @@ FROM base AS build-env
 WORKDIR /build
 ENV CARGO_INCREMENTAL=0
 
-# Copy the entire project
-COPY . .
+# Copy the crates directory
+COPY crates/ crates/
 
 # Install cargo-nextest using binstall
 RUN cargo binstall -y cargo-nextest --secure
@@ -41,9 +41,8 @@ FROM base AS test-env
 
 WORKDIR /app
 
-# Copy workspace structure but exclude target directory
-COPY . ./
-RUN rm -rf crates/target
+# Copy workspace structure (only crates needed)
+COPY crates/ crates/
 
 # Copy only the test archive instead of entire target directory
 COPY --from=build-env /build/crates/tests.tar.zst /app/crates/tests.tar.zst
