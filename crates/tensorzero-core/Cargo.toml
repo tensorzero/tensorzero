@@ -86,11 +86,11 @@ tracing-subscriber = { version = "0.3.22", features = [
 ] }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
-tensorzero-derive = { path = "../crates/tensorzero-derive" }
-tensorzero-types = { path = "../crates/tensorzero-types" }
-tensorzero-config-paths = { path = "../crates/tensorzero-config-paths" }
-tensorzero-types-providers = { path = "../crates/tensorzero-types-providers" }
-minijinja-utils = { path = "../crates/minijinja-utils" }
+tensorzero-derive = { path = "../tensorzero-derive" }
+tensorzero-types = { path = "../tensorzero-types" }
+tensorzero-config-paths = { path = "../tensorzero-config-paths" }
+tensorzero-types-providers = { path = "../tensorzero-types-providers" }
+minijinja-utils = { path = "../minijinja-utils" }
 clap = { workspace = true }
 opentelemetry_sdk = "0.31.0"
 opentelemetry = "0.31.0"
@@ -128,8 +128,8 @@ arc-swap = "1.8.2"
 infer.workspace = true
 urlencoding = "2.1.3"
 http-body = "1.0.1"
-tensorzero-auth = { path = "../crates/tensorzero-auth" }
-autopilot-client = { path = "../crates/autopilot-client" }
+tensorzero-auth = { path = "../tensorzero-auth" }
+autopilot-client = { path = "../autopilot-client" }
 schemars = { workspace = true, features = ["uuid1"] }
 git2 = { workspace = true }
 opentelemetry-http = "0.31.0"
@@ -141,20 +141,20 @@ rustls = { workspace = true }
 
 [dev-dependencies]
 googletest = { workspace = true }
-googletest-matchers = { path = "../crates/googletest-matchers" }
+googletest-matchers = { path = "../googletest-matchers" }
 tempfile = { workspace = true }
 rand_distr = "0.6.0"
-tensorzero = { path = "../crates/tensorzero-client", features = ["e2e_tests"] }
+tensorzero = { path = "../tensorzero-client", features = ["e2e_tests"] }
 paste = "1.0.15"
 base64 = "0.22.1"
-tensorzero-derive = { path = "../crates/tensorzero-derive" }
-durable-tools = { path = "../crates/durable-tools" }
+tensorzero-derive = { path = "../tensorzero-derive" }
+durable-tools = { path = "../durable-tools" }
 http-body-util = "0.1.3"
 image = "0.25.6"
 gag = "1.0.0"
 log = "0.4.29"
 mockall = "0.14"
-tensorzero-unsafe-helpers = { path = "../crates/tensorzero-unsafe-helpers" }
+tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
 redis-test = { workspace = true }
 
 [build-dependencies]

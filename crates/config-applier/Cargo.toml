@@ -7,7 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 tensorzero-config-paths = { path = "../tensorzero-config-paths" }
-tensorzero-core = { path = "../../tensorzero-core", default-features = false }
+tensorzero-core = { path = "../tensorzero-core", default-features = false }
 tensorzero-derive = { path = "../tensorzero-derive" }
 pathdiff = "0.2"
 schemars = { workspace = true }

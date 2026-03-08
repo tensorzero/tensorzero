@@ -10,7 +10,7 @@ services:
   gateway:
     image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG}
     build:
-      context: ../../..
+      context: ../../../..
       dockerfile: crates/gateway/Dockerfile
       target: gateway
       args:
@@ -64,9 +64,9 @@ services:
       # Mount the fixtures directory so template paths can be resolved
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       # Mount the UI fixtures directory because we depend on some of those templates
-      - ../../../ui/fixtures:/app/ui/fixtures:ro
+      - ../../../../ui/fixtures:/app/ui/fixtures:ro
       # Mount GCP JWT key file
-      - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
+      - ${GCP_CREDENTIALS_PATH:-../../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:
@@ -102,10 +102,10 @@ services:
   fixtures:
     image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG}
     build:
-      context: ../../../
+      context: ../../../../
       dockerfile: ui/fixtures/Dockerfile
     volumes:
-      - ../../../ui/fixtures:/fixtures
+      - ../../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -133,9 +133,9 @@ services:
     image: tensorzero/fixtures-postgres:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       dockerfile: ui/fixtures/Dockerfile
-      context: ../../..
+      context: ../../../..
     volumes:
-      - ../../../ui/fixtures:/fixtures
+      - ../../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
@@ -162,8 +162,8 @@ services:
   live-tests:
     image: tensorzero/live-tests:${TENSORZERO_COMMIT_TAG}
     build:
-      context: ../../..
-      dockerfile: tensorzero-core/tests/e2e/Dockerfile.live
+      context: ../../../..
+      dockerfile: crates/tensorzero-core/tests/e2e/Dockerfile.live
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
@@ -208,11 +208,11 @@ services:
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
     volumes:
-      - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
+      - ${GCP_CREDENTIALS_PATH:-../../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
       - ./config:/app/tensorzero-core/tests/e2e/config:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
-      - ../../../target/nextest:/app/target/nextest
+      - ../../../../target/nextest:/app/target/nextest
       # Shared tmpdir filesystem
       - shared-tmpdir:/tmp
     depends_on:
