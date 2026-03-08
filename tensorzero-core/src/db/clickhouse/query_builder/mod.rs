@@ -2580,10 +2580,7 @@ FORMAT JSONEachRow";
         let StoredInferenceDatabase::Chat(chat_inference) = inference.try_into().unwrap() else {
             panic!("Expected a chat inference");
         };
-        assert_eq!(
-            chat_inference.tool_params,
-            Some(ToolCallConfigDatabaseInsert::default())
-        );
+        assert_eq!(chat_inference.tool_params, None);
         assert_eq!(
             chat_inference.dispreferred_outputs,
             vec![vec![ContentBlockChatOutput::Text(Text {
