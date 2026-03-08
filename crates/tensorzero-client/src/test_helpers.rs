@@ -38,7 +38,12 @@ pub async fn make_embedded_gateway_no_config() -> Client {
 /// the CI setup.
 pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
     let tmp_config = NamedTempFile::new().unwrap();
-    std::fs::write(tmp_config.path(), config).unwrap();
+    let backend = match PrimaryDatastore::from_test_env() {
+        PrimaryDatastore::Postgres => "postgres",
+        _ => "clickhouse",
+    };
+    let config_content = format!("[gateway.observability]\nbackend = \"{backend}\"\n\n{config}");
+    std::fs::write(tmp_config.path(), config_content).unwrap();
     make_embedded_gateway_with_config_path(Some(tmp_config.path())).await
 }
 
@@ -63,32 +68,6 @@ async fn make_embedded_gateway_with_config_path(config_path: Option<&Path>) -> C
         config_file: config_path.map(|path| path.to_owned()),
         clickhouse_url,
         postgres_config,
-        valkey_url,
-        timeout: None,
-        verify_credentials: true,
-        allow_batch_writes: true,
-    })
-    .build()
-    .await
-    .unwrap()
-}
-
-pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Client {
-    let clickhouse_url = if PrimaryDatastore::from_test_env() == PrimaryDatastore::ClickHouse {
-        Some(CLICKHOUSE_URL.clone())
-    } else {
-        None
-    };
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
-        .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
-    let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
-
-    let tmp_config = NamedTempFile::new().unwrap();
-    std::fs::write(tmp_config.path(), config).unwrap();
-    ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url,
-        postgres_config: Some(PostgresConfig::Url(postgres_url)),
         valkey_url,
         timeout: None,
         verify_credentials: true,
