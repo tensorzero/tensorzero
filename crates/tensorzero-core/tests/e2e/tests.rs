@@ -10,7 +10,6 @@ mod best_of_n;
 mod built_in;
 mod cache;
 mod clickhouse;
-#[macro_use]
 mod common;
 mod config;
 mod cost;
@@ -26,6 +25,7 @@ mod howdy;
 mod human_feedback;
 mod image_url;
 mod inference;
+mod inference_clickhouse;
 mod inference_evaluation_human_feedback;
 mod mixture_of_n;
 mod object_storage;
