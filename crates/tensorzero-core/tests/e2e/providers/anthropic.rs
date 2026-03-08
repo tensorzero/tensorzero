@@ -2,6 +2,8 @@
 use std::collections::HashMap;
 
 use futures::StreamExt;
+use googletest::prelude::*;
+use googletest_matchers::matches_json_literal;
 use indexmap::IndexMap;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
@@ -16,14 +18,16 @@ use uuid::Uuid;
 use crate::{
     common::get_gateway_endpoint,
     providers::common::{DEEPSEEK_PAPER_PDF, E2ETestProvider, E2ETestProviders, FERRIS_PNG},
-    utils::skip_for_postgres,
 };
-use tensorzero_core::{
-    db::clickhouse::test_helpers::{
-        get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
-    },
-    inference::types::{ContentBlockChatOutput, Text},
+use tensorzero_core::db::{
+    delegating_connection::DelegatingDatabaseConnection,
+    inferences::{InferenceQueries, ListInferencesParams},
+    model_inferences::ModelInferenceQueries,
+    test_helpers::TestDatabaseHelpers,
 };
+use tensorzero_core::inference::types::{ContentBlockChatOutput, StoredModelInference, Text};
+use tensorzero_core::stored_inference::{StoredChatInferenceDatabase, StoredInferenceDatabase};
+use tensorzero_core::test_helpers::get_e2e_config;
 
 use super::common::ModelTestProvider;
 
@@ -246,7 +250,6 @@ async fn test_thinking_rejected_128k() {
 
 #[tokio::test]
 async fn test_empty_chunks_success() {
-    skip_for_postgres!();
     let payload = json!({
         "model_name": "anthropic::claude-sonnet-4-5",
         "input":{
@@ -299,19 +302,35 @@ async fn test_empty_chunks_success() {
         assert_eq!(chunk_json["content"].as_array().unwrap().len(), 0);
     }
 
-    let clickhouse = get_clickhouse().await;
-    // Sleep for 500ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    let chat_inference = select_chat_inference_clickhouse(&clickhouse, first_inference_id.unwrap())
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[first_inference_id.unwrap()]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    println!("Chat inference: {chat_inference:?}");
-    assert_eq!(chat_inference["output"], "[]");
-    let ttft_ms = chat_inference["ttft_ms"].as_u64().unwrap();
-    assert!(
-        ttft_ms > 0,
-        "ttft_ms should be greater than 0, but was {ttft_ms}"
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    println!("Chat inference: {chat_inf:?}");
+    let output = chat_inf.output.as_ref().expect("output should be present");
+    assert!(output.is_empty(), "Expected empty output, got {output:?}");
+    expect_that!(
+        chat_inf,
+        matches_pattern!(StoredChatInferenceDatabase {
+            ttft_ms: some(gt(&0u64)),
+            ..
+        })
     );
 }
 
@@ -330,7 +349,6 @@ pub async fn test_thinking_signature_helper(
     model_name: &str,
     model_provider_name: &str,
 ) {
-    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -388,69 +406,85 @@ pub async fn test_thinking_signature_helper(
     assert_eq!(tool_call_block["name"], "get_temperature");
     let tool_id = tool_call_block.get("id").unwrap().as_str().unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
     // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    let correct_input = json!({
-        "system": {"assistant_name": "AskJeeves"},
-        "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather (use degrees Celsius)?"}]
-            }
-        ]
-    });
-    assert_eq!(input, correct_input);
-    // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    // Check the variant name
-    let retrieved_variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_variant_name, variant_name);
-    // Check the processing time
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    expect_that!(
+        chat_inf,
+        matches_pattern!(StoredChatInferenceDatabase {
+            inference_id: eq(&inference_id),
+            function_name: eq("weather_helper"),
+            episode_id: eq(&episode_id),
+            variant_name: eq(variant_name),
+            processing_time_ms: some(gt(&0u64)),
+            ..
+        })
+    );
+    expect_that!(
+        serde_json::to_value(&chat_inf.input),
+        ok(matches_json_literal!({
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather (use degrees Celsius)?"}]
+                }
+            ]
+        }))
+    );
 
     // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-    let retrieved_model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_model_name, model_name);
-    let retrieved_model_provider_name =
-        result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_model_provider_name, model_provider_name);
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
+
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("weather"));
-    // Check that raw_request is valid JSON
     let _: Value = serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 5);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
+
+    expect_that!(
+        mi,
+        matches_pattern!(StoredModelInference {
+            inference_id: eq(&inference_id),
+            model_name: eq(model_name),
+            model_provider_name: eq(model_provider_name),
+            input_tokens: some(gt(&5u32)),
+            output_tokens: some(gt(&5u32)),
+            response_time_ms: some(gt(&0u32)),
+            ttft_ms: none(),
+            ..
+        })
+    );
 
     println!("Original tensorzero_content_blocks: {tensorzero_content_blocks:?}");
     // Feed content blocks back in
@@ -518,7 +552,6 @@ pub async fn test_redacted_thinking_helper(
     model_provider_name: &str,
     provider_type: &str,
 ) {
-    skip_for_postgres!();
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -575,85 +608,104 @@ pub async fn test_redacted_thinking_helper(
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
     // First, check Inference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "tensorzero::default");
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    let correct_input = json!({
-        "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": "ANTHROPIC_MAGIC_STRING_TRIGGER_REDACTED_THINKING_46C9A13E193C177646C7398A98432ECCCE4C1253D5E2D82641AC0E52CC2876CB"}]
-            },
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
-            }
-        ]
-    });
-    assert_eq!(input, correct_input);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    // Check that content_blocks is a list of blocks length 1
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 2);
-    let first_block = &content_blocks[0];
-    // Check the type and content in the block
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    expect_that!(
+        chat_inf,
+        matches_pattern!(StoredChatInferenceDatabase {
+            inference_id: eq(&inference_id),
+            function_name: eq("tensorzero::default"),
+            episode_id: eq(&episode_id),
+            variant_name: eq(model_name),
+            processing_time_ms: some(gt(&0u64)),
+            ..
+        })
+    );
+    expect_that!(
+        serde_json::to_value(&chat_inf.input),
+        ok(matches_json_literal!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "ANTHROPIC_MAGIC_STRING_TRIGGER_REDACTED_THINKING_46C9A13E193C177646C7398A98432ECCCE4C1253D5E2D82641AC0E52CC2876CB"}]
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "What is the capital of Japan?"}]
+                }
+            ]
+        }))
+    );
+
+    let output = chat_inf.output.as_ref().expect("output should be present");
+    assert_that!(output, len(eq(2)));
+
+    // Check first block is a thought block
+    let output_json = serde_json::to_value(output).unwrap();
+    let first_block = &output_json[0];
     assert_eq!(first_block["type"], "thought");
     assert_eq!(first_block["provider_type"], provider_type);
     assert!(first_block["signature"].as_str().is_some());
-    let second_block = &content_blocks[1];
+
+    // Check second block is text with correct content
+    let second_block = &output_json[1];
     assert_eq!(second_block["type"], "text");
-    let clickhouse_content = second_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
-    // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    // Check the variant name
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, model_name);
-    // Check the processing time
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    let db_content = second_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(db_content, content);
 
     // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-    let retrieved_model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_model_name, model_name);
-    let retrieved_model_provider_name =
-        result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_model_provider_name, model_provider_name);
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
+
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
-    // Check that raw_request is valid JSON
     let _: Value = serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 5);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 5);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
+
+    expect_that!(
+        mi,
+        matches_pattern!(StoredModelInference {
+            inference_id: eq(&inference_id),
+            model_name: eq(model_name),
+            model_provider_name: eq(model_provider_name),
+            input_tokens: some(gt(&5u32)),
+            output_tokens: some(gt(&5u32)),
+            response_time_ms: some(gt(&0u32)),
+            ttft_ms: none(),
+            ..
+        })
+    );
 
     // Feed content blocks back in
 
@@ -723,7 +775,6 @@ async fn test_beta_structured_outputs_json_non_streaming() {
 }
 
 async fn test_beta_structured_outputs_json_helper(stream: bool) {
-    skip_for_postgres!();
     let client = Client::new();
     let payload = json!({
         "function_name": "anthropic_beta_structured_outputs_json",
@@ -786,22 +837,22 @@ async fn test_beta_structured_outputs_json_helper(stream: bool) {
         Uuid::parse_str(&inference_id).unwrap()
     };
 
-    // Wait one second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result_json = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    println!("Result: {result_json}");
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
+    println!("Result: {mi:?}");
 
-    // Check that the result is valid JSON
-    println!("Result JSON: {result_json}");
-    let output = result_json.get("output");
-    println!("Output: {output:?}");
-
-    let raw_request = result_json.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     if stream {
         assert_eq!(
             raw_request,
@@ -826,7 +877,6 @@ async fn test_beta_structured_outputs_strict_tool_non_streaming() {
 }
 
 async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
-    skip_for_postgres!();
     let client = Client::new();
     let payload = json!({
         "function_name": "anthropic_beta_structured_outputs_chat",
@@ -889,22 +939,22 @@ async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
         Uuid::parse_str(&inference_id).unwrap()
     };
 
-    // Wait one second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result_json = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    println!("Result: {result_json}");
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
+    println!("Result: {mi:?}");
 
-    // Check that the result is valid JSON
-    println!("Result JSON: {result_json}");
-    let output = result_json.get("output");
-    println!("Output: {output:?}");
-
-    let raw_request = result_json.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     if stream {
         assert_eq!(
             raw_request,
@@ -925,7 +975,6 @@ async fn test_streaming_thinking() {
 }
 
 pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &str) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1034,55 +1083,64 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
     );
     assert_eq!(content_block_signatures.len(), 1);
     let inference_id = Uuid::parse_str(&inference_id.unwrap()).unwrap();
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    let correct_input: Value = json!(
-        {
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    assert_that!(chat_inf.inference_id, eq(inference_id));
+
+    expect_that!(
+        serde_json::to_value(&chat_inf.input),
+        ok(matches_json_literal!({
             "system": "Always thinking before responding",
             "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
-            }
-        ]}
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "What is the capital of Japan?"}]
+                }
+            ]
+        }))
     );
-    assert_eq!(input, correct_input);
-    // Check content blocks
-    let clickhouse_content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let clickhouse_content_blocks: Vec<Value> =
-        serde_json::from_str(clickhouse_content_blocks).unwrap();
-    println!("Got content blocks: {clickhouse_content_blocks:?}");
-    assert!(
-        clickhouse_content_blocks.len() == 2 || clickhouse_content_blocks.len() == 3,
-        "Expected 2 or 3 content blocks in ClickHouse, got {}",
-        clickhouse_content_blocks.len()
-    );
-    assert_eq!(clickhouse_content_blocks[0]["type"], "thought");
 
-    let tool_call_index = clickhouse_content_blocks.len() - 1;
-    let has_text_block = clickhouse_content_blocks.len() == 3;
+    // Check content blocks
+    let output = chat_inf.output.as_ref().expect("output should be present");
+    let db_content_blocks = serde_json::to_value(output).unwrap();
+    let db_content_blocks = db_content_blocks.as_array().unwrap();
+    println!("Got content blocks: {db_content_blocks:?}");
+    assert!(
+        db_content_blocks.len() == 2 || db_content_blocks.len() == 3,
+        "Expected 2 or 3 content blocks in database, got {}",
+        db_content_blocks.len()
+    );
+    assert_eq!(db_content_blocks[0]["type"], "thought");
+
+    let tool_call_index = db_content_blocks.len() - 1;
+    let has_text_block = db_content_blocks.len() == 3;
 
     if has_text_block {
-        assert_eq!(clickhouse_content_blocks[1]["type"], "text");
+        assert_eq!(db_content_blocks[1]["type"], "text");
     }
-    assert_eq!(
-        clickhouse_content_blocks[tool_call_index]["type"],
-        "tool_call"
-    );
+    assert_eq!(db_content_blocks[tool_call_index]["type"], "tool_call");
 
     assert_eq!(
-        clickhouse_content_blocks[0],
+        db_content_blocks[0],
         serde_json::json!({
             "type": "thought",
             "text": content_blocks[&("thought".to_string(), "0".to_string())],
@@ -1093,17 +1151,15 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
 
     if has_text_block {
         assert_eq!(
-            clickhouse_content_blocks[1]["text"],
+            db_content_blocks[1]["text"],
             content_blocks[&("text".to_string(), "1".to_string())]
         );
     }
 
-    let tool_call_id = clickhouse_content_blocks[tool_call_index]["id"]
-        .as_str()
-        .unwrap();
+    let tool_call_id = db_content_blocks[tool_call_index]["id"].as_str().unwrap();
 
     assert_eq!(
-        clickhouse_content_blocks[tool_call_index]["raw_arguments"],
+        db_content_blocks[tool_call_index]["raw_arguments"],
         content_blocks[&("tool_call".to_string(), tool_call_id.to_string())]
     );
 
@@ -1123,7 +1179,7 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
                 },
                 {
                     "role": "assistant",
-                    "content": clickhouse_content_blocks
+                    "content": db_content_blocks
                 },
                 {
                     "role": "user",
@@ -1209,7 +1265,6 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
 
 #[tokio::test]
 async fn test_forward_image_url() {
-    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     let config = format!(
         r#"
@@ -1248,19 +1303,21 @@ async fn test_forward_image_url() {
         panic!("Expected non-streaming inference response");
     };
 
-    // Sleep for 1 second to allow writing to ClickHouse
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    let model_inference = select_model_inference_clickhouse(&clickhouse, response.inference_id())
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(response.inference_id())
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    let raw_request = model_inference
-        .get("raw_request")
-        .unwrap()
-        .as_str()
-        .unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert_eq!(
         raw_request,
         "{\"model\":\"claude-haiku-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the image\"},{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png\"}}]}],\"max_tokens\":64000,\"stream\":false}"
@@ -1292,7 +1349,6 @@ async fn test_forward_image_url() {
 
 #[tokio::test]
 async fn test_forward_file_url() {
-    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     let config = format!(
         r#"
@@ -1331,19 +1387,21 @@ async fn test_forward_file_url() {
         panic!("Expected non-streaming inference response");
     };
 
-    // Sleep for 1 second to allow writing to ClickHouse
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    let model_inference = select_model_inference_clickhouse(&clickhouse, response.inference_id())
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(response.inference_id())
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    let raw_request = model_inference
-        .get("raw_request")
-        .unwrap()
-        .as_str()
-        .unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert_eq!(
         raw_request,
         "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"max_tokens\":64000,\"stream\":false}"

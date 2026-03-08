@@ -10,26 +10,21 @@ use std::collections::HashMap;
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::collections::HashSet;
+use tensorzero_core::db::{
+    batch_inference::BatchInferenceQueries, delegating_connection::DelegatingDatabaseConnection,
+    test_helpers::TestDatabaseHelpers,
+};
+use tensorzero_core::inference::types::batch::{BatchRequestRow, BatchStatus};
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
 use tensorzero_core::tool::Tool;
 use tensorzero_core::{
-    db::clickhouse::{
-        ClickHouseConnectionInfo, TableName, test_helpers::select_batch_model_inferences_clickhouse,
-    },
     endpoints::batch_inference::PollPathParams,
-    inference::types::{
-        Role, Text,
-        batch::{BatchModelInferenceRow, BatchRequestRow},
-    },
+    inference::types::{Role, Text},
     tool::{ToolCall, ToolResult},
 };
 use tokio::time::{Duration, sleep};
 use url::Url;
 use uuid::Uuid;
-
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_batch_model_inference_clickhouse, select_latest_batch_request_clickhouse,
-};
 
 use crate::providers::common::{
     check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
@@ -42,7 +37,6 @@ use crate::providers::common::{
     check_tool_use_tool_choice_required_inference_response,
     check_tool_use_tool_choice_specific_inference_response,
 };
-use crate::utils::skip_for_postgres;
 use crate::{
     common::get_gateway_endpoint,
     providers::common::{check_inference_params_response, check_simple_image_inference_response},
@@ -439,40 +433,30 @@ macro_rules! generate_batch_inference_tests {
     };
 }
 
-pub async fn check_clickhouse_batch_request_status(
-    clickhouse: &ClickHouseConnectionInfo,
+pub async fn check_batch_request_status(
+    conn: &DelegatingDatabaseConnection,
     batch_id: Uuid,
     provider: &E2ETestProvider,
-    expected_status: &str,
+    expected_status: BatchStatus,
 ) {
-    // Check if ClickHouse is ok - BatchRequest Table
-    let result = select_latest_batch_request_clickhouse(clickhouse, batch_id)
+    let result = conn
+        .get_batch_request(batch_id, None)
         .await
-        .unwrap();
+        .expect("Failed to get batch request")
+        .expect("Batch request not found");
 
-    println!("ClickHouse - BatchRequest: {result:#?}");
+    println!("BatchRequest: {result:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    Uuid::parse_str(id).unwrap();
-
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
-    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
+    assert_eq!(result.batch_id, batch_id);
     // We can't check that the batch params are exactly the same because they vary per-provider
     // We will check that they are valid by using them instead.
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let status = result.get("status").unwrap().as_str().unwrap();
-    assert_eq!(status, expected_status);
-
-    let errors = result.get("errors").unwrap().as_array().unwrap();
-    assert_eq!(errors.len(), 0);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
+    assert_eq!(
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
+    assert_eq!(result.status, expected_status);
+    assert!(result.errors.is_empty());
 }
 
 pub fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
@@ -499,8 +483,10 @@ pub fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
     }
 }
 
+/// Find the latest batch inference matching the given criteria.
+/// This uses a direct ClickHouse query since there's no trait method for this kind of lookup.
 async fn get_latest_batch_inference(
-    clickhouse: &ClickHouseConnectionInfo,
+    conn: &DelegatingDatabaseConnection,
     function_name: &str,
     variant_name: &str,
     status: &str,
@@ -548,7 +534,8 @@ async fn get_latest_batch_inference(
             FORMAT JSONEachRow
         "
     );
-    let response = clickhouse
+    let response = conn
+        .clickhouse
         .run_query_synchronous_no_params(query)
         .await
         .unwrap();
@@ -557,27 +544,6 @@ async fn get_latest_batch_inference(
     }
     let batch_request = serde_json::from_str::<BatchRequestRow>(&response.response).unwrap();
     Some(batch_request)
-}
-
-async fn get_all_batch_inferences(
-    clickhouse: &ClickHouseConnectionInfo,
-    batch_id: Uuid,
-) -> Vec<BatchModelInferenceRow<'_>> {
-    let query = format!(
-        "SELECT * FROM BatchModelInference WHERE batch_id = '{batch_id}' FORMAT JSONEachRow",
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-
-    response
-        .response
-        .lines()
-        .filter(|line| !line.is_empty())
-        .map(serde_json::from_str::<BatchModelInferenceRow>)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap()
 }
 
 pub struct InsertedFakeDataIds {
@@ -593,21 +559,23 @@ pub struct InsertedFakeDataIds {
 /// The new `BatchRequest` will be written out with different tags, to ensure that it doesn't
 /// affect tests running in parallel that want to check the original batch inference.
 async fn insert_fake_pending_batch_inference_data(
-    clickhouse: &ClickHouseConnectionInfo,
+    conn: &DelegatingDatabaseConnection,
     function_name: &str,
     variant_name: &str,
     tags: Option<HashMap<String, String>>,
 ) -> Option<InsertedFakeDataIds> {
     let batch_request =
-        get_latest_batch_inference(clickhouse, function_name, variant_name, "completed", tags)
-            .await;
+        get_latest_batch_inference(conn, function_name, variant_name, "completed", tags).await;
     let mut batch_request = match batch_request {
         None => {
             return None;
         }
         Some(batch_request) => batch_request,
     };
-    let mut batch_inferences = get_all_batch_inferences(clickhouse, batch_request.batch_id).await;
+    let mut batch_inferences = conn
+        .get_batch_model_inferences(batch_request.batch_id, &[])
+        .await
+        .expect("Failed to get batch model inferences");
     if batch_inferences.is_empty() {
         return None;
     }
@@ -629,14 +597,12 @@ async fn insert_fake_pending_batch_inference_data(
         )]);
     }
 
-    clickhouse
-        .write_batched(batch_inferences.as_slice(), TableName::BatchModelInference)
+    conn.write_batch_model_inferences(batch_inferences.as_slice())
         .await
-        .unwrap();
-    clickhouse
-        .write_batched(&[batch_request], TableName::BatchRequest)
+        .expect("Failed to write batch model inferences");
+    conn.write_batch_request(&batch_request)
         .await
-        .unwrap();
+        .expect("Failed to write batch request");
 
     Some(InsertedFakeDataIds {
         batch_id: new_batch_id,
@@ -647,7 +613,6 @@ async fn insert_fake_pending_batch_inference_data(
 pub async fn test_start_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -706,37 +671,26 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let results = conn
+        .get_batch_model_inferences(batch_id, &[inference_id])
         .await
-        .unwrap();
+        .expect("Failed to get batch model inferences");
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
 
-    println!("ClickHouse - BatchModelInference: {result:#?}");
+    println!("BatchModelInference: {result:#?}");
 
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(result.inference_id, inference_id);
+    assert_eq!(result.batch_id, batch_id);
+    assert_eq!(result.function_name.as_ref(), "basic_test");
+    assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+    assert_eq!(result.episode_id, episode_id);
 
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
-
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -759,8 +713,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     });
     assert_eq!(input, correct_input);
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = result.input_messages.as_ref().unwrap();
     assert_eq!(input_messages.len(), 1);
     assert_eq!(input_messages[0].role, Role::User);
     assert_eq!(
@@ -775,50 +728,38 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     );
     assert_eq!(input_messages[0].content.len(), 2);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
+        result.system.as_deref().unwrap(),
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
 
-    let tool_params = result.get("tool_params");
-    assert_eq!(tool_params, Some(&Value::Null));
+    assert!(result.tool_params.is_none());
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").is_none());
-    assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+    let inference_params = result.inference_params.as_ref().unwrap();
+    assert!(inference_params.chat_completion.temperature.is_none());
+    assert!(inference_params.chat_completion.seed.is_none());
+    let expected_max_tokens: u32 = if provider.model_name.starts_with("o1") {
         1000
     } else {
         100
     };
     assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
+        inference_params.chat_completion.max_tokens.unwrap(),
         expected_max_tokens
     );
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
+    assert_eq!(
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
+    assert!(result.output_schema.is_none());
+    assert_eq!(result.tags.get("foo").unwrap(), "bar");
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let output_schema = result.get("output_schema");
-    assert_eq!(output_schema, Some(&Value::Null));
-
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
-
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = result.raw_request.as_ref().unwrap();
     assert!(!raw_request.is_empty());
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -829,11 +770,10 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
 pub async fn test_poll_existing_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -899,7 +839,7 @@ pub async fn test_poll_existing_simple_image_batch_inference_request_with_provid
     assert_eq!(inferences_json.len(), 1);
     check_simple_image_inference_response(inferences_json[0].clone(), None, &provider, true, false)
         .await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -913,11 +853,10 @@ pub async fn test_poll_existing_simple_image_batch_inference_request_with_provid
 pub async fn test_poll_completed_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -939,8 +878,7 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -993,13 +931,12 @@ pub async fn test_poll_completed_simple_image_batch_inference_request_with_provi
     check_simple_image_inference_response(inferences_json[0].clone(), None, &provider, true, false)
         .await;
 
-    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, ids.batch_id, &provider, BatchStatus::Completed).await;
 }
 
 pub async fn test_start_inference_params_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -1070,37 +1007,26 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let results = conn
+        .get_batch_model_inferences(batch_id, &[inference_id])
         .await
-        .unwrap();
+        .expect("Failed to get batch model inferences");
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
 
-    println!("ClickHouse - BatchModelInference: {result:#?}");
+    println!("BatchModelInference: {result:#?}");
 
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(result.inference_id, inference_id);
+    assert_eq!(result.batch_id, batch_id);
+    assert_eq!(result.function_name.as_ref(), "basic_test");
+    assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+    assert_eq!(result.episode_id, episode_id);
 
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
-
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -1112,8 +1038,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     });
     assert_eq!(input, correct_input);
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = result.input_messages.as_ref().unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -1122,62 +1047,40 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
+    assert_eq!(input_messages, &expected_input_messages);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
+        result.system.as_deref().unwrap(),
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
 
-    let tool_params = result.get("tool_params");
-    assert_eq!(tool_params, Some(&Value::Null));
+    assert!(result.tool_params.is_none());
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    let temperature = inference_params
-        .get("temperature")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(temperature, 0.9);
-    let seed = inference_params.get("seed").unwrap().as_u64().unwrap();
-    assert_eq!(seed, 1337);
-    let max_tokens = inference_params
-        .get("max_tokens")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    assert_eq!(max_tokens, 120);
-    let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
-    assert_eq!(top_p, 0.9);
-    let presence_penalty = inference_params
-        .get("presence_penalty")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(presence_penalty, 0.1);
-    let frequency_penalty = inference_params
-        .get("frequency_penalty")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(frequency_penalty, 0.2);
+    let inference_params = result.inference_params.as_ref().unwrap();
+    assert_eq!(inference_params.chat_completion.temperature.unwrap(), 0.9);
+    assert_eq!(inference_params.chat_completion.seed.unwrap(), 1337);
+    assert_eq!(inference_params.chat_completion.max_tokens.unwrap(), 120);
+    assert_eq!(inference_params.chat_completion.top_p.unwrap(), 0.9);
+    assert_eq!(
+        inference_params.chat_completion.presence_penalty.unwrap(),
+        0.1
+    );
+    assert_eq!(
+        inference_params.chat_completion.frequency_penalty.unwrap(),
+        0.2
+    );
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
+    assert_eq!(
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
+    assert!(result.output_schema.is_none());
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let output_schema = result.get("output_schema");
-    assert_eq!(output_schema, Some(&Value::Null));
-
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = result.raw_request.as_ref().unwrap();
     assert!(!raw_request.is_empty());
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -1188,11 +1091,10 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
 pub async fn test_poll_existing_inference_params_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -1256,7 +1158,7 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -1270,11 +1172,10 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
 pub async fn test_poll_completed_inference_params_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -1298,8 +1199,7 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -1349,13 +1249,12 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     assert_eq!(inferences_json.len(), 1);
 
     check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
-    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, ids.batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// Tests that the tool use works as expected in a batch inference request.
 /// Each element is a different test case from the e2e test suite for the synchronous API.
 pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let mut episode_ids = Vec::new();
     for _ in 0..5 {
         episode_ids.push(Uuid::now_v7());
@@ -1481,11 +1380,10 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         assert_eq!(episode_id_response, expected_episode_id);
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
     let correct_inputs = json!([
         {
             "system": {"assistant_name": "Dr. Mehta"},
@@ -1727,147 +1625,94 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         json!({"chat_completion": {"max_tokens": expected_max_tokens}}),
     ];
 
-    for inference_id in inference_ids {
-        let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
-            .await
-            .unwrap();
-        let id_str = result.get("inference_id").unwrap().as_str().unwrap();
-        let id = Uuid::parse_str(id_str).unwrap();
-        let i = inference_id_to_index.remove(&id).unwrap();
-        println!("ClickHouse - BatchModelInference (#{i}): {result:#?}");
+    let all_results = conn
+        .get_batch_model_inferences(batch_id, &inference_ids)
+        .await
+        .expect("Failed to get batch model inferences");
+    assert_eq!(all_results.len(), 5);
 
-        let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-        let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-        assert_eq!(retrieved_batch_id, batch_id);
+    for result in &all_results {
+        let i = inference_id_to_index.remove(&result.inference_id).unwrap();
+        println!("BatchModelInference (#{i}): {result:#?}");
 
-        let function_name = result.get("function_name").unwrap().as_str().unwrap();
-        assert_eq!(function_name, payload["function_name"]);
+        assert_eq!(result.batch_id, batch_id);
+        assert_eq!(result.function_name.as_ref(), "weather_helper");
+        assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+        assert_eq!(result.episode_id, episode_ids[i]);
 
-        let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-        assert_eq!(variant_name, provider.variant_name);
-
-        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-        assert_eq!(retrieved_episode_id, episode_ids[i]);
-
-        let input: Value =
-            serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
         assert_eq!(input, correct_inputs[i]);
 
-        let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-        let input_messages: Vec<StoredRequestMessage> =
-            serde_json::from_str(input_messages).unwrap();
-        assert_eq!(input_messages, expected_input_messages[i]);
+        let input_messages = result.input_messages.as_ref().unwrap();
+        assert_eq!(input_messages, &expected_input_messages[i]);
 
-        let system = result.get("system").unwrap().as_str().unwrap();
-        assert_eq!(system, expected_systems[i]);
+        assert_eq!(result.system.as_deref().unwrap(), expected_systems[i]);
 
-        let tool_params: Value =
-            serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
-        assert_eq!(tool_params, expected_tool_params[i]);
+        // Compare tool_params as JSON for complex structure comparison
+        let tool_params_value = serde_json::to_value(result.tool_params.as_ref().unwrap()).unwrap();
+        assert_eq!(tool_params_value, expected_tool_params[i]);
 
-        // Verify new Migration 0041 columns (decomposed tool call storage format)
-        // Verify dynamic_tools column (should be empty for static tools)
-        let dynamic_tools = result.get("dynamic_tools").unwrap().as_array().unwrap();
+        // Verify decomposed tool call storage format
+        let tool_params_ref = result.tool_params.as_ref().unwrap();
         if i < 4 {
-            assert!(dynamic_tools.is_empty());
+            assert!(tool_params_ref.dynamic_tools.is_empty());
         } else {
-            assert_eq!(dynamic_tools.len(), 1);
-            let tool: Tool =
-                serde_json::from_str(dynamic_tools.first().unwrap().as_str().unwrap()).unwrap();
-            let Tool::Function(tool) = tool else {
+            assert_eq!(tool_params_ref.dynamic_tools.len(), 1);
+            let Tool::Function(tool) = &tool_params_ref.dynamic_tools[0] else {
                 panic!("Expected Function tool");
             };
             assert_eq!(tool.name, "self_destruct");
         }
 
-        // Verify dynamic_provider_tools column (should be empty)
-        let dynamic_provider_tools = result
-            .get("dynamic_provider_tools")
-            .unwrap()
-            .as_array()
-            .unwrap();
         assert!(
-            dynamic_provider_tools.is_empty(),
+            tool_params_ref.dynamic_provider_tools.is_empty(),
             "dynamic_provider_tools should be empty"
         );
 
-        // Verify allowed_tools column
-        let allowed_tools_str = result.get("allowed_tools").unwrap().as_str().unwrap();
-        let _allowed_tools: Value = serde_json::from_str(allowed_tools_str).unwrap();
-
-        // Verify tool_choice column matches expected
-        let tool_choice_col = result.get("tool_choice").unwrap().as_str().unwrap();
-        let expected_tool_choice = match i {
-            0 | 1 => "auto",
-            2 => "required",
-            3 => "none",
-            4 => "{\"specific\":\"self_destruct\"}",
-            _ => panic!("Unexpected index: {i}"),
-        };
-        assert_eq!(
-            tool_choice_col, expected_tool_choice,
-            "tool_choice column mismatch for inference #{i}"
-        );
-
-        // Verify parallel_tool_calls column (should be null for this test)
-        let parallel_tool_calls = result.get("parallel_tool_calls");
         assert!(
-            parallel_tool_calls.is_none() || parallel_tool_calls.unwrap().is_null(),
-            "parallel_tool_calls should be null"
+            tool_params_ref.parallel_tool_calls.is_none(),
+            "parallel_tool_calls should be None"
         );
 
-        let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-        let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-        assert_eq!(inference_params, expected_inference_params[i]);
+        let inference_params_value =
+            serde_json::to_value(result.inference_params.as_ref().unwrap()).unwrap();
+        assert_eq!(inference_params_value, expected_inference_params[i]);
 
-        let model_name = result.get("model_name").unwrap().as_str().unwrap();
-        assert_eq!(model_name, provider.model_name);
-
-        let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-        assert_eq!(model_provider_name, provider.model_provider_name);
-
-        let output_schema = result.get("output_schema");
-        assert_eq!(output_schema, Some(&Value::Null));
-
-        let tags = result.get("tags").unwrap().as_object().unwrap();
+        assert_eq!(result.model_name.as_ref(), provider.model_name);
         assert_eq!(
-            tags.get("test_type").unwrap(),
-            &payload["tags"][i]["test_type"]
+            result.model_provider_name.as_ref(),
+            provider.model_provider_name
+        );
+        assert!(result.output_schema.is_none());
+
+        assert_eq!(
+            result.tags.get("test_type").unwrap(),
+            payload["tags"][i]["test_type"].as_str().unwrap()
         );
 
-        let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+        let raw_request = result.raw_request.as_ref().unwrap();
         assert!(!raw_request.is_empty());
     }
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 /// For a given batch id, get the tags for all inferences in the batch
 /// Returns a map from inference id to tags
 async fn get_tags_for_batch_inferences(
-    clickhouse: &ClickHouseConnectionInfo,
+    conn: &DelegatingDatabaseConnection,
     batch_id: Uuid,
 ) -> Option<HashMap<Uuid, HashMap<String, String>>> {
-    let batch_model_inferences =
-        select_batch_model_inferences_clickhouse(clickhouse, batch_id).await?;
+    let batch_model_inferences = conn
+        .get_batch_model_inferences(batch_id, &[])
+        .await
+        .expect("Failed to get batch model inferences");
+    if batch_model_inferences.is_empty() {
+        return None;
+    }
     let mut inference_tags = HashMap::new();
-    for batch_model_inference in batch_model_inferences {
-        let inference_id = batch_model_inference
-            .get("inference_id")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let inference_id = Uuid::parse_str(inference_id).unwrap();
-        let tags: HashMap<String, String> = batch_model_inference
-            .get("tags")
-            .unwrap()
-            .as_object()
-            .unwrap()
-            .iter()
-            .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string()))
-            .collect();
-        inference_tags.insert(inference_id, tags);
+    for bmi in batch_model_inferences {
+        inference_tags.insert(bmi.inference_id, bmi.tags);
     }
     Some(inference_tags)
 }
@@ -1880,11 +1725,10 @@ async fn get_tags_for_batch_inferences(
 pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -1900,7 +1744,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
         Some(batch_inference) => batch_inference,
     };
     let batch_id = batch_inference.batch_id;
-    let inference_tags = get_tags_for_batch_inferences(&clickhouse, batch_id)
+    let inference_tags = get_tags_for_batch_inferences(&conn, batch_id)
         .await
         .unwrap();
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -1986,7 +1830,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
     }
 
     assert_eq!(test_types_seen.len(), 5);
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -2000,11 +1844,10 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
 pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -2025,10 +1868,9 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider_
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let batch_id = ids.batch_id;
-    let inference_tags = get_tags_for_batch_inferences(&clickhouse, batch_id)
+    let inference_tags = get_tags_for_batch_inferences(&conn, batch_id)
         .await
         .unwrap();
     // Poll by `batch_id`
@@ -2122,11 +1964,10 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider_
     }
 
     assert_eq!(test_types_seen.len(), 5);
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2180,37 +2021,26 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let results = conn
+        .get_batch_model_inferences(batch_id, &[inference_id])
         .await
-        .unwrap();
+        .expect("Failed to get batch model inferences");
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
 
-    println!("ClickHouse - BatchModelInference: {result:#?}");
+    println!("BatchModelInference: {result:#?}");
 
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(result.inference_id, inference_id);
+    assert_eq!(result.batch_id, batch_id);
+    assert_eq!(result.function_name.as_ref(), "basic_test");
+    assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+    assert_eq!(result.episode_id, episode_id);
 
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
-
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -2222,25 +2052,22 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     });
     assert_eq!(input, correct_input);
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = result.input_messages.as_ref().unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec!["What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
             .to_string()
             .into()],
     }];
-    assert_eq!(input_messages, expected_input_messages);
+    assert_eq!(input_messages, &expected_input_messages);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
+        result.system.as_deref().unwrap(),
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
-    println!("Tool params: {tool_params:#?}");
+    let tool_params_value = serde_json::to_value(result.tool_params.as_ref().unwrap()).unwrap();
+    println!("Tool params: {tool_params_value:#?}");
     let expected_tool_params = json!({
         "tools_available": [{
             "description": "Get the current humidity in a given location",
@@ -2262,38 +2089,30 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
         "tool_choice": "required",
         "parallel_tool_calls": null
     });
-    assert_eq!(tool_params, expected_tool_params);
+    assert_eq!(tool_params_value, expected_tool_params);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+    let inference_params = result.inference_params.as_ref().unwrap();
+    let expected_max_tokens: u32 = if provider.model_name.starts_with("o1") {
         1000
     } else {
         100
     };
-    let max_tokens = inference_params
-        .get("max_tokens")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    assert_eq!(max_tokens, expected_max_tokens);
+    assert_eq!(
+        inference_params.chat_completion.max_tokens.unwrap(),
+        expected_max_tokens
+    );
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
+    assert_eq!(
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
+    assert!(result.output_schema.is_none());
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let output_schema = result.get("output_schema");
-    assert_eq!(output_schema, Some(&Value::Null));
-
-    result.get("tags").unwrap().as_object().unwrap();
-
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = result.raw_request.as_ref().unwrap();
     assert!(!raw_request.is_empty());
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -2304,11 +2123,10 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
 pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -2383,7 +2201,7 @@ pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provi
         true,
     )
     .await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -2397,11 +2215,10 @@ pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provi
 pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -2423,8 +2240,7 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -2487,13 +2303,12 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
     )
     .await;
 
-    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, ids.batch_id, &provider, BatchStatus::Completed).await;
 }
 
 pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!(
@@ -2584,37 +2399,29 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let results = conn
+        .get_batch_model_inferences(batch_id, &[inference_id])
         .await
-        .unwrap();
+        .expect("Failed to get batch model inferences");
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
 
-    println!("ClickHouse - BatchModelInference: {result:#?}");
+    println!("BatchModelInference: {result:#?}");
 
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(result.inference_id, inference_id);
+    assert_eq!(result.batch_id, batch_id);
+    assert_eq!(
+        result.function_name.as_ref(),
+        payload["function_name"].as_str().unwrap()
+    );
+    assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+    assert_eq!(result.episode_id, episode_id);
 
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
-
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -2660,8 +2467,7 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     });
     assert_eq!(input, correct_input);
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = result.input_messages.as_ref().unwrap();
     let expected_input_messages = vec![
         StoredRequestMessage {
             role: Role::User,
@@ -2696,16 +2502,14 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
             })],
         },
     ];
-    assert_eq!(input_messages, expected_input_messages);
+    assert_eq!(input_messages, &expected_input_messages);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
+        result.system.as_deref().unwrap(),
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let tool_params_value = serde_json::to_value(result.tool_params.as_ref().unwrap()).unwrap();
     let expected_tool_params = json!({
         "tools_available":[
             {"description":"Get the current temperature in a given location","parameters":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"location":{"type":"string","description":"The location to get the temperature for (e.g. \"New York\")"},"units":{"type":"string","description":"The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")","enum":["fahrenheit","celsius"]}},"required":["location"],"additionalProperties":false},"name":"get_temperature","strict":false},
@@ -2714,50 +2518,42 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
         "tool_choice":"auto",
         "parallel_tool_calls": true
     });
-    assert_eq!(tool_params, expected_tool_params);
+    assert_eq!(tool_params_value, expected_tool_params);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").is_none());
-    assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+    let inference_params = result.inference_params.as_ref().unwrap();
+    assert!(inference_params.chat_completion.temperature.is_none());
+    assert!(inference_params.chat_completion.seed.is_none());
+    let expected_max_tokens: u32 = if provider.model_name.starts_with("o1") {
         1000
     } else {
         100
     };
     assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
+        inference_params.chat_completion.max_tokens.unwrap(),
         expected_max_tokens
     );
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let output_schema = result.get("output_schema");
-    assert_eq!(output_schema, Some(&Value::Null));
-
-    let tags = result.get("tags").unwrap().as_object().unwrap();
     assert_eq!(
-        tags.get("test").unwrap().as_str().unwrap(),
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
+
+    assert!(result.output_schema.is_none());
+
+    assert_eq!(
+        result.tags.get("test").unwrap().as_str(),
         "multi_turn_parallel_tool_use"
     );
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = result.raw_request.as_ref().unwrap();
     assert!(!raw_request.is_empty());
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2831,37 +2627,29 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let results = conn
+        .get_batch_model_inferences(batch_id, &[inference_id])
         .await
-        .unwrap();
+        .expect("Failed to get batch model inferences");
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
 
-    println!("ClickHouse - BatchModelInference: {result:#?}");
+    println!("BatchModelInference: {result:#?}");
 
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(result.inference_id, inference_id);
+    assert_eq!(result.batch_id, batch_id);
+    assert_eq!(
+        result.function_name.as_ref(),
+        payload["function_name"].as_str().unwrap()
+    );
+    assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+    assert_eq!(result.episode_id, episode_id);
 
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
-
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -2881,8 +2669,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     });
     assert_eq!(input, correct_input);
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = result.input_messages.as_ref().unwrap();
     let expected_input_messages = vec![
         StoredRequestMessage {
             role: Role::User,
@@ -2909,54 +2696,45 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
             })],
         },
     ];
-    assert_eq!(input_messages, expected_input_messages);
+    assert_eq!(input_messages, &expected_input_messages);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
+        result.system.as_deref().unwrap(),
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let tool_params_value = serde_json::to_value(result.tool_params.as_ref().unwrap()).unwrap();
     let expected_tool_params = json!({"tools_available":[{"description":"Get the current temperature in a given location","parameters":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"location":{"type":"string","description":"The location to get the temperature for (e.g. \"New York\")"},"units":{"type":"string","description":"The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")","enum":["fahrenheit","celsius"]}},"required":["location"],"additionalProperties":false},"name":"get_temperature","strict":false}],"tool_choice":"auto","parallel_tool_calls":null});
-    assert_eq!(tool_params, expected_tool_params);
+    assert_eq!(tool_params_value, expected_tool_params);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").is_none());
-    assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+    let inference_params = result.inference_params.as_ref().unwrap();
+    assert!(inference_params.chat_completion.temperature.is_none());
+    assert!(inference_params.chat_completion.seed.is_none());
+    let expected_max_tokens: u32 = if provider.model_name.starts_with("o1") {
         1000
     } else {
         100
     };
     assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
+        inference_params.chat_completion.max_tokens.unwrap(),
         expected_max_tokens
     );
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
 
-    let output_schema = result.get("output_schema");
-    assert_eq!(output_schema, Some(&Value::Null));
+    assert!(result.output_schema.is_none());
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.get("test").unwrap().as_str().unwrap(), "multi_turn");
+    assert_eq!(result.tags.get("test").unwrap().as_str(), "multi_turn");
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = result.raw_request.as_ref().unwrap();
     assert!(!raw_request.is_empty());
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -2967,11 +2745,10 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
 pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -3036,17 +2813,16 @@ pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider
     assert_eq!(inferences_json.len(), 1);
     check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 pub async fn test_poll_existing_multi_turn_parallel_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "weather_helper_parallel";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -3121,17 +2897,16 @@ pub async fn test_poll_existing_multi_turn_parallel_batch_inference_request_with
         true,
     )
     .await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "weather_helper_parallel";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -3155,8 +2930,7 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3219,7 +2993,7 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
     )
     .await;
 
-    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, ids.batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -3233,11 +3007,10 @@ pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_wit
 pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -3259,8 +3032,7 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3313,13 +3085,12 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
     check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
 
-    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, ids.batch_id, &provider, BatchStatus::Completed).await;
 }
 
 pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3394,37 +3165,29 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let results = conn
+        .get_batch_model_inferences(batch_id, &[inference_id])
         .await
-        .unwrap();
+        .expect("Failed to get batch model inferences");
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
 
-    println!("ClickHouse - BatchModelInference: {result:#?}");
+    println!("BatchModelInference: {result:#?}");
 
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(result.inference_id, inference_id);
+    assert_eq!(result.batch_id, batch_id);
+    assert_eq!(
+        result.function_name.as_ref(),
+        payload["function_name"].as_str().unwrap()
+    );
+    assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+    assert_eq!(result.episode_id, episode_id);
 
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
-
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -3436,24 +3199,21 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     });
     assert_eq!(input, correct_input);
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = result.input_messages.as_ref().unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
+    assert_eq!(input_messages, &expected_input_messages);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
+        result.system.as_deref().unwrap(),
         "You are a helpful and friendly assistant named Dr. Mehta"
     );
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let tool_params_value = serde_json::to_value(result.tool_params.as_ref().unwrap()).unwrap();
     let expected_tool_params = json!({
         "tools_available": [{
             "description": "Get the current temperature in a given location",
@@ -3480,38 +3240,34 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
         "tool_choice": "auto",
         "parallel_tool_calls": null
     });
-    assert_eq!(tool_params, expected_tool_params);
+    assert_eq!(tool_params_value, expected_tool_params);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+    let inference_params = result.inference_params.as_ref().unwrap();
+    let expected_max_tokens: u32 = if provider.model_name.starts_with("o1") {
         1000
     } else {
         100
     };
-    let max_tokens = inference_params
-        .get("max_tokens")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    assert_eq!(max_tokens, expected_max_tokens);
+    assert_eq!(
+        inference_params.chat_completion.max_tokens.unwrap(),
+        expected_max_tokens
+    );
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
 
-    let output_schema = result.get("output_schema");
-    assert_eq!(output_schema, Some(&Value::Null));
+    assert!(result.output_schema.is_none());
 
-    result.get("tags").unwrap().as_object().unwrap();
+    assert!(!result.tags.is_empty());
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = result.raw_request.as_ref().unwrap();
     assert!(!raw_request.is_empty());
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -3522,11 +3278,10 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
 pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -3591,7 +3346,7 @@ pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_pr
     assert_eq!(inferences_json.len(), 1);
     check_dynamic_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -3605,11 +3360,10 @@ pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_pr
 pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "basic_test";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -3633,8 +3387,7 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -3687,13 +3440,12 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
     check_dynamic_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
 
-    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, ids.batch_id, &provider, BatchStatus::Completed).await;
 }
 
 pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3746,37 +3498,29 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let results = conn
+        .get_batch_model_inferences(batch_id, &[inference_id])
         .await
-        .unwrap();
+        .expect("Failed to get batch model inferences");
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
 
-    println!("ClickHouse - BatchModelInference: {result:#?}");
+    println!("BatchModelInference: {result:#?}");
 
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(result.inference_id, inference_id);
+    assert_eq!(result.batch_id, batch_id);
+    assert_eq!(
+        result.function_name.as_ref(),
+        payload["function_name"].as_str().unwrap()
+    );
+    assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+    assert_eq!(result.episode_id, episode_id);
 
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
-
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -3788,24 +3532,21 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     });
     assert_eq!(input, correct_input);
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = result.input_messages.as_ref().unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
+    assert_eq!(input_messages, &expected_input_messages);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
+        result.system.as_deref().unwrap(),
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let tool_params_value = serde_json::to_value(result.tool_params.as_ref().unwrap()).unwrap();
     let expected_tool_params = json!({
         "tools_available": [
             {
@@ -3851,33 +3592,26 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
         "tool_choice": "auto",
         "parallel_tool_calls": true
     });
-    assert_eq!(tool_params, expected_tool_params);
+    assert_eq!(tool_params_value, expected_tool_params);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    let max_tokens = inference_params
-        .get("max_tokens")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    assert_eq!(max_tokens, 100);
+    let inference_params = result.inference_params.as_ref().unwrap();
+    assert_eq!(inference_params.chat_completion.max_tokens.unwrap(), 100);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
 
-    let output_schema = result.get("output_schema");
-    assert_eq!(output_schema, Some(&Value::Null));
+    assert!(result.output_schema.is_none());
 
-    result.get("tags").unwrap().as_object().unwrap();
+    assert!(!result.tags.is_empty());
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = result.raw_request.as_ref().unwrap();
     assert!(!raw_request.is_empty());
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -3888,11 +3622,10 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
 pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "weather_helper_parallel";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -3970,7 +3703,7 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
         true.into(),
     )
     .await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -3984,11 +3717,10 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
 pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "weather_helper_parallel";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -4012,8 +3744,7 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -4078,11 +3809,10 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     )
     .await;
 
-    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, ids.batch_id, &provider, BatchStatus::Completed).await;
 }
 
 pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
@@ -4140,37 +3870,29 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let results = conn
+        .get_batch_model_inferences(batch_id, &[inference_id])
         .await
-        .unwrap();
+        .expect("Failed to get batch model inferences");
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
 
-    println!("ClickHouse - BatchModelInference: {result:#?}");
+    println!("BatchModelInference: {result:#?}");
 
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(result.inference_id, inference_id);
+    assert_eq!(result.batch_id, batch_id);
+    assert_eq!(
+        result.function_name.as_ref(),
+        payload["function_name"].as_str().unwrap()
+    );
+    assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+    assert_eq!(result.episode_id, episode_id);
 
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
-
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -4182,8 +3904,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     });
     assert_eq!(input, correct_input);
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = result.input_messages.as_ref().unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -4192,37 +3913,33 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
+    assert_eq!(input_messages, &expected_input_messages);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
+        result.system.as_deref().unwrap(),
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
     );
 
-    assert!(result.get("tool_params").unwrap().is_null());
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+    assert!(result.tool_params.is_none());
+    let inference_params = result.inference_params.as_ref().unwrap();
+    let expected_max_tokens: u32 = if provider.model_name.starts_with("o1") {
         1000
     } else {
         100
     };
-    let max_tokens = inference_params
-        .get("max_tokens")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    assert_eq!(max_tokens, expected_max_tokens);
+    assert_eq!(
+        inference_params.chat_completion.max_tokens.unwrap(),
+        expected_max_tokens
+    );
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
 
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
+    let output_schema = result.output_schema.as_ref().unwrap();
     let output_schema: Value = serde_json::from_str(output_schema).unwrap();
     let expected_output_schema = json!({
         "type": "object",
@@ -4234,12 +3951,12 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     });
     assert_eq!(output_schema, expected_output_schema);
 
-    result.get("tags").unwrap().as_object().unwrap();
+    assert!(!result.tags.is_empty());
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = result.raw_request.as_ref().unwrap();
     assert!(!raw_request.is_empty());
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -4250,16 +3967,15 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
 pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
     }
 
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "json_success";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -4322,7 +4038,7 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_json_mode_inference_response(inferences_json[0].clone(), &provider, None, true).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -4336,16 +4052,15 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
 pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
     }
 
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "json_success";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -4367,8 +4082,7 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -4418,13 +4132,12 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
     assert_eq!(inferences_json.len(), 1);
 
     check_json_mode_inference_response(inferences_json[0].clone(), &provider, None, true).await;
-    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, ids.batch_id, &provider, BatchStatus::Completed).await;
 }
 
 pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
@@ -4493,37 +4206,29 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
     assert_eq!(returned_episode_id, episode_id);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Check if ClickHouse is ok - BatchModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from the API to be visible
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let results = conn
+        .get_batch_model_inferences(batch_id, &[inference_id])
         .await
-        .unwrap();
+        .expect("Failed to get batch model inferences");
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
 
-    println!("ClickHouse - BatchModelInference: {result:#?}");
+    println!("BatchModelInference: {result:#?}");
 
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(result.inference_id, inference_id);
+    assert_eq!(result.batch_id, batch_id);
+    assert_eq!(
+        result.function_name.as_ref(),
+        payload["function_name"].as_str().unwrap()
+    );
+    assert_eq!(result.variant_name.as_ref(), provider.variant_name);
+    assert_eq!(result.episode_id, episode_id);
 
-    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
-    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
-    assert_eq!(retrieved_batch_id, batch_id);
-
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
-
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let input = serde_json::to_value(result.input.as_ref().unwrap()).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema},
         "messages": [
@@ -4535,8 +4240,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     });
     assert_eq!(input, correct_input);
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = result.input_messages.as_ref().unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -4545,37 +4249,33 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
+    assert_eq!(input_messages, &expected_input_messages);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
+        result.system.as_deref().unwrap(),
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nDo not include any other text than the JSON object.  Do not include \"```json\" or \"```\" or anything else.\n\nPlease answer the questions in a JSON with the following schema:\n\n{\"type\":\"object\",\"properties\":{\"response\":{\"type\":\"string\"}},\"required\":[\"response\"],\"additionalProperties\":false}"
     );
 
-    assert!(result.get("tool_params").unwrap().is_null());
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    let max_tokens = inference_params
-        .get("max_tokens")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+    assert!(result.tool_params.is_none());
+    let inference_params = result.inference_params.as_ref().unwrap();
+    let expected_max_tokens: u32 = if provider.model_name.starts_with("o1") {
         1000
     } else {
         100
     };
-    assert_eq!(max_tokens, expected_max_tokens);
+    assert_eq!(
+        inference_params.chat_completion.max_tokens.unwrap(),
+        expected_max_tokens
+    );
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(result.model_name.as_ref(), provider.model_name);
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(
+        result.model_provider_name.as_ref(),
+        provider.model_provider_name
+    );
 
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
+    let output_schema = result.output_schema.as_ref().unwrap();
     let output_schema: Value = serde_json::from_str(output_schema).unwrap();
     let expected_output_schema = json!({
         "type": "object",
@@ -4587,12 +4287,12 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     });
     assert_eq!(output_schema, expected_output_schema);
 
-    result.get("tags").unwrap().as_object().unwrap();
+    assert!(!result.tags.is_empty());
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = result.raw_request.as_ref().unwrap();
     assert!(!raw_request.is_empty());
 
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "pending").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Pending).await;
 }
 
 /// If there is a pending batch inference for the function, variant, and tags
@@ -4603,16 +4303,15 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
 pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
     }
 
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "json_success";
     let latest_pending_batch_inference = get_latest_batch_inference(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         "pending",
@@ -4689,7 +4388,7 @@ pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_p
         true,
     )
     .await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, batch_id, &provider, BatchStatus::Completed).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -4703,16 +4402,15 @@ pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_p
 pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     if provider.variant_name.ends_with("cot") {
         // Don't test chain of thought variants with batch mode
         return;
     }
 
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let function_name = "json_success";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
-        &clickhouse,
+        &conn,
         function_name,
         &provider.variant_name,
         Some(HashMap::from([(
@@ -4736,8 +4434,7 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
     provider: E2ETestProvider,
     ids: InsertedFakeDataIds,
 ) {
-    skip_for_postgres!();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     // Poll by inference_id
     let url = get_poll_batch_inference_url(PollPathParams {
         batch_id: ids.batch_id,
@@ -4801,5 +4498,5 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
         true,
     )
     .await;
-    check_clickhouse_batch_request_status(&clickhouse, ids.batch_id, &provider, "completed").await;
+    check_batch_request_status(&conn, ids.batch_id, &provider, BatchStatus::Completed).await;
 }

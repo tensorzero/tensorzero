@@ -15,12 +15,18 @@
 // using the 3-part pattern (test_start_*, test_poll_existing_*, test_poll_completed_*)
 // ============================================================================
 
+use googletest::prelude::{eq, expect_that, is_empty};
 use http::StatusCode;
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::time::Duration;
 use tensorzero_core::{
-    db::clickhouse::test_helpers::get_clickhouse, endpoints::batch_inference::PollPathParams,
+    db::{
+        batch_inference::BatchInferenceQueries,
+        delegating_connection::DelegatingDatabaseConnection, test_helpers::TestDatabaseHelpers,
+    },
+    endpoints::batch_inference::PollPathParams,
+    inference::types::batch::BatchStatus,
 };
 use tokio::time::sleep;
 use uuid::Uuid;
@@ -28,7 +34,7 @@ use uuid::Uuid;
 use crate::{
     common::get_gateway_endpoint,
     providers::{
-        batch::{check_clickhouse_batch_request_status, get_poll_batch_inference_url},
+        batch::get_poll_batch_inference_url,
         common::{
             E2ETestProvider, check_dynamic_json_mode_inference_response,
             check_dynamic_tool_use_inference_response, check_inference_params_response,
@@ -44,7 +50,6 @@ use crate::{
             check_tool_use_tool_choice_specific_inference_response,
         },
     },
-    utils::skip_for_postgres,
 };
 
 /// Poll for batch completion with retries
@@ -96,6 +101,31 @@ async fn poll_until_completed(
         max_attempts,
         (max_attempts as u64 * delay_ms) / 1000
     ))
+}
+
+/// Check batch request status in the database using the DelegatingDatabaseConnection trait.
+async fn check_batch_request_status(
+    conn: &DelegatingDatabaseConnection,
+    batch_id: Uuid,
+    provider: &E2ETestProvider,
+    expected_status: BatchStatus,
+) {
+    let result = conn
+        .get_batch_request(batch_id, None)
+        .await
+        .expect("Failed to get batch request")
+        .expect("Batch request not found");
+
+    println!("BatchRequest: {result:#?}");
+
+    expect_that!(result.batch_id, eq(batch_id));
+    expect_that!(result.model_name.as_ref(), eq(provider.model_name.as_str()));
+    expect_that!(
+        result.model_provider_name.as_ref(),
+        eq(provider.model_provider_name.as_str())
+    );
+    expect_that!(result.status, eq(&expected_status));
+    expect_that!(result.errors, is_empty());
 }
 
 /// Macro to generate unified mock batch tests for a provider
@@ -286,7 +316,6 @@ pub async fn test_simple_image_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     // Use unique episode_id for test isolation
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
@@ -355,10 +384,10 @@ pub async fn test_simple_image_unified_mock_batch_with_provider(
         .await;
 
     // Step 4: Verify ClickHouse storage
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for simple image ({}) completed successfully",
@@ -371,7 +400,6 @@ pub async fn test_json_mode_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -424,10 +452,10 @@ pub async fn test_json_mode_unified_mock_batch_with_provider(
 
     check_json_mode_inference_response(inferences_json[0].clone(), provider, None, true).await;
 
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for JSON mode ({}) completed successfully",
@@ -440,7 +468,6 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     let mut episode_ids = Vec::new();
     for _ in 0..5 {
         episode_ids.push(Uuid::now_v7());
@@ -596,10 +623,10 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
     )
     .await;
 
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for tool use ({}) completed successfully",
@@ -612,7 +639,6 @@ pub async fn test_parallel_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -681,10 +707,10 @@ pub async fn test_parallel_tool_use_unified_mock_batch_with_provider(
     )
     .await;
 
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for parallel tool use ({}) completed successfully",
@@ -697,7 +723,6 @@ pub async fn test_inference_params_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -762,10 +787,10 @@ pub async fn test_inference_params_unified_mock_batch_with_provider(
     check_inference_params_response(inferences_json[0].clone(), provider, None, true).await;
 
     // Step 4: Verify ClickHouse storage
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for inference params ({}) completed successfully",
@@ -778,7 +803,6 @@ pub async fn test_multi_turn_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -850,10 +874,10 @@ pub async fn test_multi_turn_tool_use_unified_mock_batch_with_provider(
         .await;
 
     // Step 4: Verify ClickHouse storage
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(1000)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for multi-turn tool use ({}) completed successfully",
@@ -866,7 +890,6 @@ pub async fn test_multi_turn_parallel_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -959,10 +982,10 @@ pub async fn test_multi_turn_parallel_tool_use_unified_mock_batch_with_provider(
     .await;
 
     // Step 4: Verify ClickHouse storage
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for multi-turn parallel tool use ({}) completed successfully",
@@ -975,7 +998,6 @@ pub async fn test_dynamic_tool_use_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -1048,10 +1070,10 @@ pub async fn test_dynamic_tool_use_unified_mock_batch_with_provider(
         .await;
 
     // Step 4: Verify ClickHouse storage
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for dynamic tool use ({}) completed successfully",
@@ -1064,7 +1086,6 @@ pub async fn test_dynamic_json_mode_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     // Skip chain of thought variants with batch mode
     if provider.variant_name.ends_with("cot") {
         println!(
@@ -1142,10 +1163,10 @@ pub async fn test_dynamic_json_mode_unified_mock_batch_with_provider(
     .await;
 
     // Step 4: Verify ClickHouse storage
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for dynamic JSON mode ({}) completed successfully",
@@ -1158,7 +1179,6 @@ pub async fn test_allowed_tools_unified_mock_batch_with_provider(
     provider: &E2ETestProvider,
     function_name: &str,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let test_id = Uuid::now_v7();
 
@@ -1215,10 +1235,10 @@ pub async fn test_allowed_tools_unified_mock_batch_with_provider(
     .await;
 
     // Step 4: Verify ClickHouse storage
-    let clickhouse = get_clickhouse().await;
-    // Sleep to allow ClickHouse async_insert to become visible
-    sleep(Duration::from_millis(200)).await;
-    check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    check_batch_request_status(&conn, batch_id, provider, BatchStatus::Completed).await;
 
     println!(
         "✓ Unified mock test for allowed tools ({}) completed successfully",

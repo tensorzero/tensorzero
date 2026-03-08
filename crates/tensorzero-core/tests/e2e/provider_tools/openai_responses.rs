@@ -10,16 +10,15 @@ use tensorzero::{
     InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role, ToolCallWrapper,
     test_helpers::make_embedded_gateway_with_config,
 };
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_model_inference_clickhouse,
+use tensorzero_core::db::{
+    delegating_connection::DelegatingDatabaseConnection, model_inferences::ModelInferenceQueries,
+    test_helpers::TestDatabaseHelpers,
 };
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, ContentBlockChunk, Text, UnknownChunk,
 };
 use tensorzero_core::tool::{ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider};
 use uuid::Uuid;
-
-use crate::utils::skip_for_postgres;
 
 // =============================================================================
 // Static Provider Tools Tests (configured in model config)
@@ -204,7 +203,6 @@ api_type = "responses"
 /// Test OpenAI provider tools with web_search (streaming)
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_openai_provider_tools_web_search_streaming() {
-    skip_for_postgres!();
     let config = r#"
 gateway.debug = true
 
@@ -338,22 +336,26 @@ api_type = "responses"
         full_text.len()
     );
 
-    // Sleep for 1 second to allow writing to ClickHouse
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    let clickhouse = get_clickhouse().await;
-
     let inference_id = inference_id.expect("Should have extracted inference_id from chunks");
 
-    // Fetch the model inference data from ClickHouse
-    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert!(
+        !model_inferences.is_empty(),
+        "Expected at least one model inference"
+    );
+    let model_inference = &model_inferences[0];
 
     let raw_response = model_inference
-        .get("raw_response")
-        .unwrap()
-        .as_str()
-        .unwrap();
+        .raw_response
+        .as_deref()
+        .expect("raw_response should be present");
 
     // Assert that raw_response contains web_search_call (confirms web search was used)
     assert!(
