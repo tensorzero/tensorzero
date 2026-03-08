@@ -172,18 +172,6 @@ async fn test_workflow_evaluation() {
             some(eq(&run_id.to_string())),
             "New tag name should be present for future migration"
         );
-        // Check for some git tags too
-        expect_that!(
-            tags.contains_key("tensorzero::git_commit_hash"),
-            eq(true),
-            "Missing git_commit_hash tag"
-        );
-        expect_that!(
-            tags.contains_key("tensorzero::git_branch"),
-            eq(true),
-            "Missing git_branch tag"
-        );
-
         let episodes = conn
             .get_workflow_evaluation_run_episodes_with_feedback(run_id, 100, 0)
             .await

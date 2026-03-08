@@ -114,17 +114,12 @@ pub use tensorzero_optimizers::endpoints::{
     LaunchOptimizationWorkflowParams, OptimizationDataSource,
 };
 
-// Keep git module for Git-related extension traits
-mod git;
-
 #[cfg(feature = "e2e_tests")]
 pub mod test_helpers;
 
 // Re-export observability for pyo3 feature
 #[cfg(feature = "pyo3")]
 pub use tensorzero_core::observability;
-
-use crate::git::GitInfo;
 
 // NOTE(shuyangli): For methods that delegate to APIs in the gateway, the arguments generally are flattened from the request type for
 // ease of use, except when the type contains more than 2-3 fields or multiple fields with the same type (e.g. `ListDatapointsRequest`).
@@ -585,11 +580,6 @@ impl ClientExt for Client {
         // We validate the tags here since we're going to add git information to the tags afterwards and set internal to true
         validate_tags(&params.tags, false)
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
-
-        // Apply the git information to the tags so it gets stored for our workflow evaluation run
-        if let Ok(git_info) = GitInfo::new() {
-            params.tags.extend(git_info.into_tags());
-        }
 
         // Set internal to true so we don't validate the tags again
         params.internal = true;
