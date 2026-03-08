@@ -42,7 +42,7 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is 34 * 57 + 21 / 3? Answer with just the number."
+                    "content": "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number."
                 }
             ]},
         "extra_headers": extra_headers,
@@ -143,7 +143,7 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "text": "What is 34 * 57 + 21 / 3? Answer with just the number."}]
+                "content": [{"type": "text", "text": "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number."}]
             }
         ]
     });
@@ -255,7 +255,7 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "What is 34 * 57 + 21 / 3? Answer with just the number.".to_string(),
+            text: "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number.".to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
@@ -321,7 +321,7 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is 34 * 57 + 21 / 3? Answer with just the number."
+                    "content": "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number."
                 }
             ]},
         "stream": true,
@@ -448,7 +448,7 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "text": "What is 34 * 57 + 21 / 3? Answer with just the number."}]
+                "content": [{"type": "text", "text": "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number."}]
             }
         ]
     });
@@ -576,7 +576,7 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "What is 34 * 57 + 21 / 3? Answer with just the number.".to_string(),
+            text: "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number.".to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
@@ -633,7 +633,7 @@ pub async fn test_reasoning_inference_request_json_mode_nonstreaming_with_provid
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is 34 * 57 + 21 / 3? Answer with just the number."
+                    "content": "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number."
                 }
             ]},
         "stream": false,
@@ -721,7 +721,7 @@ pub async fn test_reasoning_inference_request_json_mode_nonstreaming_with_provid
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "text": "What is 34 * 57 + 21 / 3? Answer with just the number."}]
+                "content": [{"type": "text", "text": "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number."}]
             }
         ]
     });
@@ -830,7 +830,7 @@ pub async fn test_reasoning_inference_request_json_mode_nonstreaming_with_provid
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "What is 34 * 57 + 21 / 3? Answer with just the number.".to_string(),
+            text: "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number.".to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
@@ -873,7 +873,7 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is 34 * 57 + 21 / 3? Answer with just the number."
+                    "content": "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number."
                 }
             ]},
         "stream": true,
@@ -991,7 +991,7 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "text": "What is 34 * 57 + 21 / 3? Answer with just the number."}]
+                "content": [{"type": "text", "text": "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number."}]
             }
         ]
     });
@@ -1122,7 +1122,7 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "What is 34 * 57 + 21 / 3? Answer with just the number.".to_string(),
+            text: "What is 34 * 57 + 21 / 3? Think before responding, then answer with just the number.".to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
