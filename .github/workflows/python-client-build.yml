@@ -50,10 +50,11 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: "crates -> target"
       - name: Build wheels
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
-          working-directory: ./clients/python
+          working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i python3.10
           #sccache: "true"
@@ -62,10 +63,10 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-linux-${{ matrix.platform.target }}
-          path: ./clients/python/dist
+          path: ./crates/tensorzero-python/dist
       - name: Check built wheel
         run: |
-          ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero*.whl
+          ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
 
   musllinux:
     runs-on: ${{ matrix.platform.runner }}
@@ -95,6 +96,7 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: "crates -> target"
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
         with:
           python-version: "3.10"
@@ -105,7 +107,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
-          working-directory: ./clients/python
+          working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i python3.10
           #sccache: "true"
@@ -114,10 +116,10 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-musllinux-${{ matrix.platform.target }}
-          path: ./clients/python/dist
+          path: ./crates/tensorzero-python/dist
       - name: Check built musl wheel
         run: |
-          ./ci/check-musl-wheel.sh ./clients/python/dist/tensorzero*.whl
+          ./ci/check-musl-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
@@ -145,6 +147,7 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: "crates -> target"
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
         with:
           python-version: "3.10"
@@ -156,7 +159,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
-          working-directory: ./clients/python
+          working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i python3.10
           #sccache: "true"
@@ -164,10 +167,10 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-windows-${{ matrix.platform.target }}
-          path: ./clients/python/dist
+          path: ./crates/tensorzero-python/dist
       - name: Check built wheel
         run: |
-          ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero*.whl
+          ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
         shell: bash
 
   macos:
@@ -200,6 +203,7 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: "crates -> target"
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
         with:
           python-version: "3.10"
@@ -212,7 +216,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
-          working-directory: ./clients/python
+          working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i python3.10
           #sccache: "true"
@@ -221,10 +225,10 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-macos-${{ matrix.platform.target }}
-          path: ./clients/python/dist
+          path: ./crates/tensorzero-python/dist
       - name: Check built wheel
         run: |
-          ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero*.whl
+          ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
 
   sdist:
     runs-on: ubuntu-latest
@@ -234,14 +238,14 @@ jobs:
       - name: Build sdist
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
         with:
-          working-directory: ./clients/python
+          working-directory: ./crates/tensorzero-python
           command: sdist
           args: --out dist
       - name: Upload sdist
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-sdist
-          path: ./clients/python/dist
+          path: ./crates/tensorzero-python/dist
       - name: Install uv
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
@@ -249,7 +253,7 @@ jobs:
       - name: Check local sdist
         run: |
           for attempt in 1 2 3; do
-            if ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero-*.tar.gz; then
+            if ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero-*.tar.gz; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -261,7 +265,7 @@ jobs:
       - name: Run twine on sdist
         run: |
           uv pip install twine
-          uv run twine check ./clients/python/dist/tensorzero-*.tar.gz
+          uv run twine check ./crates/tensorzero-python/dist/tensorzero-*.tar.gz
 
   check-artifacts:
     needs: [linux, musllinux, windows, macos, sdist]

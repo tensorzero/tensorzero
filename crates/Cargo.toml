@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "../clients/python",  # TODO: remove from workspace when we migrate to Stainless
     "autopilot-client",
     "autopilot-tools",
     "autopilot-worker",
@@ -24,6 +23,7 @@ members = [
     "tensorzero-derive",
     "tensorzero-node",
     "tensorzero-optimizers",
+    "tensorzero-python",  # TODO: remove from workspace when we migrate to Stainless
     "tensorzero-ts-types",
     "tensorzero-types",
     "tensorzero-types-providers",

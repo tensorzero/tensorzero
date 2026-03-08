@@ -269,12 +269,12 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
         sys.exit(1)
 
 
-def generate_rust_schemas(repo_root: Path, schema_dir: Path) -> None:
+def generate_rust_schemas(cargo_workspace: Path, schema_dir: Path) -> None:
     """
     Run cargo tests to generate JSON schemas from Rust types.
 
     Args:
-        repo_root: Path to the repository root
+        cargo_workspace: Path to the Cargo workspace root
         schema_dir: Path where schemas should be generated
     """
     print("=" * 70)
@@ -293,7 +293,7 @@ def generate_rust_schemas(repo_root: Path, schema_dir: Path) -> None:
                 "tensorzero-types",
                 "export_schema",
             ],
-            cwd=repo_root,
+            cwd=cargo_workspace,
             env={**os.environ, "SCHEMA_RS_EXPORT_DIR": str(schema_dir)},
             capture_output=True,
             text=True,
@@ -318,6 +318,7 @@ def main() -> None:
     # Determine paths
     script_dir = Path(__file__).parent
     repo_root = (script_dir / "../..").resolve()
+    cargo_workspace = repo_root / "crates"
     schema_dir = repo_root / "clients" / "schemas"
     output_file = script_dir / "tensorzero" / "generated_types.py"
     temp_dir = script_dir / ".temp_schemas"
@@ -330,7 +331,7 @@ def main() -> None:
     print()
 
     # Step 1: Generate Rust schemas
-    generate_rust_schemas(repo_root, schema_dir)
+    generate_rust_schemas(cargo_workspace, schema_dir)
 
     # Step 2: Generate Python dataclasses
     print("=" * 70)
