@@ -1,7 +1,7 @@
 services:
   postgres:
     build:
-      context: ../../tensorzero-core/tests/e2e
+      context: .
       dockerfile: Dockerfile.postgres
     image: tensorzero/postgres-dev:14-trixie-slim
     environment:
@@ -89,8 +89,8 @@ services:
   mock-provider-api:
     image: tensorzero/mock-provider-api:${TENSORZERO_MOCK_PROVIDER_API_TAG:-latest}
     build:
-      context: ../../../
-      dockerfile: tensorzero-core/tests/mock-provider-api/Dockerfile
+      context: ../../../../
+      dockerfile: crates/tensorzero-core/tests/mock-provider-api/Dockerfile
     environment:
       RUST_LOG: debug
     ports:
@@ -188,9 +188,9 @@ services:
     image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG:-latest}
     build:
       dockerfile: ui/fixtures/Dockerfile
-      context: ../../..
+      context: ../../../..
     volumes:
-      - ../../../ui/fixtures:/fixtures
+      - ../../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1

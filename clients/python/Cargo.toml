@@ -20,7 +20,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 evaluations = { path = "../../crates/evaluations" }
-tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-core = { path = "../../crates/tensorzero-core" }
 futures = { workspace = true }
 pyo3 = { workspace = true }
 pyo3-async-runtimes = { version = "0.26", features = ["tokio-runtime"] }

@@ -161,7 +161,7 @@ async fn count_table_rows(clickhouse: &ClickHouseConnectionInfo, table: &str) ->
 async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
     // Insert data so that we test the migration re-creates the tables properly.
     let large_fixtures_path = std::env::var("TENSORZERO_LARGE_FIXTURES_PATH")
-        .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/large-fixtures"));
+        .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../../ui/fixtures/large-fixtures"));
     let large_fixtures_path = &large_fixtures_path;
 
     let database_url = clickhouse.database_url();

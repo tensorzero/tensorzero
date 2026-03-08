@@ -26,7 +26,6 @@ pub use params::{BatchDynamicToolParams, BatchDynamicToolParamsWithSize, Dynamic
 pub use storage::{
     LegacyToolCallConfigDatabaseInsert, ToolCallConfigDatabaseInsert,
     apply_dynamic_tool_params_update_to_tool_call_config, deserialize_optional_tool_info,
-    deserialize_tool_info,
 };
 pub use tensorzero_types::InferenceResponseToolCall;
 pub use types::{

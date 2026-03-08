@@ -12,7 +12,7 @@ ts-bindings = ["durable-tools/ts-bindings", "autopilot-tools/ts-bindings", "dep:
 [dependencies]
 # Internal crates
 durable-tools = { path = "../durable-tools" }
-tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-core = { path = "../tensorzero-core" }
 autopilot-client = { path = "../autopilot-client" }
 autopilot-tools = { path = "../autopilot-tools" }
 

@@ -11,7 +11,7 @@ services:
       - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-lts}/users.xml:/etc/clickhouse-server/users.d/users.xml
       - clickhouse-data:/var/lib/clickhouse
       # For S3 fixtures using file
-      - ../../../ui/fixtures/large-fixtures:/var/lib/clickhouse/user_files
+      - ../../../../ui/fixtures/large-fixtures:/var/lib/clickhouse/user_files
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -28,8 +28,8 @@ services:
   gateway:
     image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG}
     build:
-      context: ../../..
-      dockerfile: tensorzero-core/tests/e2e/Dockerfile.gateway.e2e
+      context: ../../../..
+      dockerfile: crates/tensorzero-core/tests/e2e/Dockerfile.gateway.e2e
       target: gateway
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
@@ -61,10 +61,10 @@ services:
   fixtures:
     image: tensorzero/fixtures:${TENSORZERO_COMMIT_TAG}
     build:
-      context: ../../../
+      context: ../../../../
       dockerfile: ui/fixtures/Dockerfile
     volumes:
-      - ../../../ui/fixtures:/fixtures
+      - ../../../../ui/fixtures:/fixtures
       - ~/.aws:/root/.aws
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -91,8 +91,8 @@ services:
   clickhouse-tests:
     image: tensorzero/clickhouse-tests:${TENSORZERO_COMMIT_TAG}
     build:
-      context: ../../..
-      dockerfile: tensorzero-core/tests/e2e/Dockerfile.clickhouse
+      context: ../../../..
+      dockerfile: crates/tensorzero-core/tests/e2e/Dockerfile.clickhouse
     environment:
       # Test environment variables
       TENSORZERO_CI: 1
@@ -103,7 +103,7 @@ services:
       - ./config/:/app/tensorzero-core/tests/e2e/config/:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
-      - ../../../target:/app/target
+      - ../../../../target:/app/target
 
     depends_on:
       gateway:

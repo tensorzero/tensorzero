@@ -111,22 +111,22 @@ jobs:
           echo "GATEWAY_CONFIG_GLOB={tensorzero,postgres}.*.toml" >> $GITHUB_ENV
 
       - name: Pull images referenced by the compose file
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
 
       - name: Run live tests container via Docker Compose
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests
 
       - name: Print live tests logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
 
       - name: Check e2e logs for impossible error messages
         run: |
-          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs gateway)
+          LOGS=$(docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs gateway)
           if [ -z "$LOGS" ]; then
             echo "ERROR: Gateway logs are empty"
             exit 1
@@ -136,7 +136,7 @@ jobs:
       # TODO - re-enable this: https://github.com/tensorzero/tensorzero/issues/3989
       # - name: Check e2e logs for deprecation warnings (gateway e2e tests only)
       #   run: |
-      #     LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
+      #     LOGS=$(docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
       #     if [ -z "$LOGS" ]; then
       #       echo "ERROR: Gateway logs are empty"
       #       exit 1
@@ -207,7 +207,7 @@ jobs:
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Pull images referenced by the compose file
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
 
       - name: Set Postgres as primary datastore
         if: matrix.database == 'postgres'
@@ -216,7 +216,7 @@ jobs:
 
       - name: Run evaluation tests
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
@@ -224,4 +224,4 @@ jobs:
 
       - name: Print evaluation tests logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
