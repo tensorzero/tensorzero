@@ -198,7 +198,7 @@ def mixed_rendered_samples(
         tags={"test_key": "test_value"},
     )
     sample_list = [chat_inference] * 10 + [json_inference] * 10
-    return embedded_sync_client.experimental_render_samples(
+    return embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=sample_list,
         variants={"basic_test": "test", "json_success": "test"},
     )
@@ -233,7 +233,7 @@ def chat_function_rendered_samples(
     )
     # Create 20 samples from the same function
     sample_list = [chat_inference] * 20
-    return embedded_sync_client.experimental_render_samples(
+    return embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=sample_list,
         variants={"basic_test": "test"},
     )
@@ -273,7 +273,7 @@ def json_function_rendered_samples(
     )
     # Create 20 samples from the same function
     sample_list = [json_inference] * 20
-    return embedded_sync_client.experimental_render_samples(
+    return embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=sample_list,
         variants={"json_success": "test"},
     )
