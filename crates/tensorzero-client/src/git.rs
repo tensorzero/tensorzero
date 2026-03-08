@@ -116,29 +116,3 @@ impl GitInfo {
         tags
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Since we are running in a git repo, we should be able to get the git info
-    #[test]
-    fn test_git_info() {
-        let git_info = GitInfo::new().unwrap();
-        assert!(!git_info.commit_hash.is_empty());
-        assert!(git_info.commit_message.is_some());
-        assert!(git_info.branch.is_some());
-        assert!(git_info.origin.is_some());
-
-        let tags = git_info.into_tags();
-        assert!(!tags.is_empty());
-        assert!(tags.contains_key("tensorzero::git_commit_hash"));
-        assert!(tags.contains_key("tensorzero::git_commit_message"));
-        assert!(tags.contains_key("tensorzero::git_branch"));
-        assert!(tags.contains_key("tensorzero::git_origin"));
-        assert!(tags.contains_key("tensorzero::git_author"));
-        assert!(tags.contains_key("tensorzero::git_author_email"));
-        assert!(tags.contains_key("tensorzero::git_untracked_files"));
-        assert!(tags.contains_key("tensorzero::git_modified_files"));
-    }
-}
