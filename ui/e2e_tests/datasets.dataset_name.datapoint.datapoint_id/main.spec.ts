@@ -72,8 +72,8 @@ test("should be able to add, edit and save a json datapoint", async ({
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 
-  // Assert that both input and output are updated
-  await expect(page.getByText(input, { exact: true })).toBeVisible();
+  // Assert on only the content of the topic, because JSON formatting may differ.
+  await expect(page.getByText(topic, { exact: false })).toBeVisible();
   await expect(page.getByText("Garry Kasparov")).toBeVisible();
 
   // Should show "Custom" badge and link original inference

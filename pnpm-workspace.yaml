@@ -1,5 +1,6 @@
 packages:
-  - "ui"
   - "clients/*"
+  - "docs"
   - "examples/**/*"
-  - "internal/tensorzero-node"
+  - "crates/tensorzero-node"
+  - "ui"

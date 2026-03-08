@@ -1,15 +1,13 @@
 #!/bin/bash
 
-curl -X POST "http://localhost:3000/inference" \
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "openai::gpt-5-mini",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::openai::gpt-5-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a haiku about TensorZero."
+      }
+    ]
   }'

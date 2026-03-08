@@ -178,7 +178,7 @@ jobs:
       - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -190,7 +190,7 @@ jobs:
         shell: bash
 
       - name: Install dependencies
-        working-directory: internal/tensorzero-node
+        working-directory: crates/tensorzero-node
         run: |
           for attempt in 1 2 3; do
             if pnpm install --frozen-lockfile; then
@@ -204,7 +204,7 @@ jobs:
           done
 
       - name: Build Node.js bindings
-        working-directory: internal/tensorzero-node
+        working-directory: crates/tensorzero-node
         run: pnpm build-bindings
 
       - name: Check for git diff after building bindings
@@ -216,7 +216,7 @@ jobs:
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
         with:
           name: node-bindings
-          path: internal/tensorzero-node/lib/bindings
+          path: crates/tensorzero-node/lib/bindings
           retention-days: 7
 
       - name: Check tensorzero-node bindings are properly exported
@@ -238,7 +238,7 @@ jobs:
       - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -472,7 +472,7 @@ jobs:
       - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -623,7 +623,7 @@ jobs:
       - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -845,14 +845,14 @@ jobs:
           echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
 
       - name: Launch Postgres
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build postgres gateway-postgres-migrations fixtures-postgres -d --wait
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build postgres gateway-postgres-migrations fixtures-postgres -d --wait
 
       - name: Test (Rust)
         run: cargo nextest run --filterset 'test(db::) & test(postgres)'
 
       - name: Print docker compose logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
   # Run endpoint tests against both ClickHouse and Postgres backends
   endpoint-tests:
@@ -934,7 +934,7 @@ jobs:
           echo "TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres" >> $GITHUB_ENV
 
       - name: Launch dependency services
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Build the gateway for E2E tests
         run: cargo build-e2e
@@ -963,7 +963,7 @@ jobs:
 
       - name: Print docker compose logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print e2e logs
         if: always()
@@ -1035,7 +1035,7 @@ jobs:
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Make sure dependency services are up
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Launch the gateway for E2E tests
         run: |
@@ -1055,7 +1055,7 @@ jobs:
 
       - name: Print docker compose logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print e2e logs
         if: always()
@@ -1205,7 +1205,7 @@ jobs:
 
       - name: Launch ClickHouse container for E2E tests
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
 
       - name: Set up .env file for production deployment tests
         run: |
@@ -1227,7 +1227,7 @@ jobs:
       - name: Take down docker compose for production deployment tests
         run: |
           docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml down
 
   live-tests:
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
@@ -1316,14 +1316,27 @@ jobs:
         with:
           node-version: "24.13.0"
 
-      - name: Install Mintlify CLI
+      - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if npm install -g mint@4.2.390; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Mintlify CLI after 3 attempts"
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+
+      - name: Install dependencies
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile --filter tensorzero-docs; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install docs dependencies after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -1331,7 +1344,7 @@ jobs:
 
       - name: Check for broken links
         working-directory: docs
-        run: mint broken-links --check-anchors
+        run: pnpm exec mint broken-links --check-anchors
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:

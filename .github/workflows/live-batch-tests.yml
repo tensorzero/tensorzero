@@ -99,7 +99,7 @@ jobs:
 
       - name: Run batch tests
         run: |
-          cargo test-batch --no-fail-fast
+          cargo test-live-batch --no-fail-fast
 
       - name: Print batch logs
         if: always()
