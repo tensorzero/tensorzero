@@ -12,6 +12,7 @@ FROM chef AS planner
 WORKDIR /app
 COPY . .
 RUN git rev-parse HEAD
+WORKDIR /app/crates
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
@@ -20,12 +21,14 @@ ARG PROFILE
 WORKDIR /tensorzero
 ENV CARGO_INCREMENTAL=0
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
-COPY --from=planner /app/recipe.json recipe.json
+COPY --from=planner /app/crates/recipe.json /tensorzero/crates/recipe.json
+WORKDIR /tensorzero/crates
 RUN cargo chef cook --profile ${PROFILE} -p gateway ${CARGO_BUILD_FLAGS}
 COPY . /tensorzero
+WORKDIR /tensorzero/crates
 
 RUN cargo build --profile ${PROFILE} -p gateway ${CARGO_BUILD_FLAGS}
-RUN if [ "${PROFILE}" = "dev" ]; then cp -r /tensorzero/target/debug /release; else cp -r /tensorzero/target/${PROFILE} /release; fi
+RUN if [ "${PROFILE}" = "dev" ]; then cp -r /tensorzero/crates/target/debug /release; else cp -r /tensorzero/crates/target/${PROFILE} /release; fi
 
 # ========== base ==========
 

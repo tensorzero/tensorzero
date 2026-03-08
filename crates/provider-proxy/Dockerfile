@@ -12,8 +12,9 @@ RUN git rev-parse HEAD
 
 ARG CARGO_BUILD_FLAGS=""
 
+WORKDIR /src/crates
 RUN cargo build -p provider-proxy $CARGO_BUILD_FLAGS && \
-    mkdir -p /release && cp -r /src/target/debug/provider-proxy /release/provider-proxy
+    mkdir -p /release && cp -r /src/crates/target/debug/provider-proxy /release/provider-proxy
 
 # ========== provider-proxy ==========
 

@@ -51,6 +51,7 @@ jobs:
         run: bash ci/free-disk-space.sh
 
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -111,6 +112,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch the gateway for batch tests
+        working-directory: crates
         run: |
           cargo run-e2e > batch_logs.txt 2>&1 &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
@@ -120,6 +122,7 @@ jobs:
           done
 
       - name: Run mocked batch tests
+        working-directory: crates
         run: |
           cargo test-mock-batch --no-fail-fast
 
@@ -130,4 +133,5 @@ jobs:
 
       - name: Print batch logs
         if: always()
+        working-directory: crates
         run: cat batch_logs.txt

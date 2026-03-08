@@ -7,6 +7,9 @@ version.workspace = true
 rust-version.workspace = true
 edition.workspace = true
 license.workspace = true
+# The workspace root is not an ancestor of this crate, so we need to
+# explicitly specify its location for cargo to find it.
+workspace = "../../crates"
 
 [lints]
 workspace = true

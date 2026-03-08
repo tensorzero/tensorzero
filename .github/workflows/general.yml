@@ -281,6 +281,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -297,6 +298,7 @@ jobs:
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
+          workspaces: "crates -> target"
       - name: Install uv
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
         with:
@@ -320,6 +322,7 @@ jobs:
         run: echo "PYO3_PYTHON=$(uv python find python3.10)" >> $GITHUB_ENV
         shell: bash
       - name: Build Rust
+        working-directory: crates
         run: cargo build --workspace
 
   lint-rust:
@@ -351,6 +354,7 @@ jobs:
           cache-provider: "buildjet"
           shared-key: "lint-rust-cache"
           save-if: ${{ github.event_name == 'merge_group' }}
+          workspaces: "crates -> target"
 
       - name: Install cargo-hack
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
@@ -358,6 +362,7 @@ jobs:
           tool: cargo-hack
 
       - name: Lint (Rust)
+        working-directory: crates
         run: |
           cargo hack --partition '${{ matrix.partition }}/${{ matrix.total_partitions }}' clippy --all-targets --each-feature -- -D warnings
 
@@ -370,6 +375,7 @@ jobs:
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -448,6 +454,7 @@ jobs:
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -526,6 +533,7 @@ jobs:
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -545,9 +553,11 @@ jobs:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
       - name: Build (Rust)
+        working-directory: crates
         run: cargo build --workspace --verbose
 
       - name: Validate config
+        working-directory: crates
         run: |
           unset TENSORZERO_CLICKHOUSE_URL
           cargo run-e2e --validate-and-exit
@@ -561,6 +571,7 @@ jobs:
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -580,6 +591,7 @@ jobs:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
       - name: Test (Rust)
+        working-directory: crates
         env:
           # Write the exported bindings to somewhere we don't care about
           TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
@@ -599,6 +611,7 @@ jobs:
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -723,6 +736,7 @@ jobs:
         run: ./ci/check-durable-deps.sh
 
       - name: Run cargo fmt
+        working-directory: crates
         run: cargo fmt --all --check
 
       - name: "Node.js: Run oxfmt"
@@ -754,6 +768,7 @@ jobs:
           tool: cargo-deny
 
       - name: Run cargo-deny
+        working-directory: crates
         run: cargo deny check
 
   clickhouse-tests:
@@ -795,6 +810,7 @@ jobs:
         run: bash ci/free-disk-space.sh
 
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -813,6 +829,7 @@ jobs:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
+          workspaces: "crates -> target"
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
@@ -848,6 +865,7 @@ jobs:
         run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build postgres gateway-postgres-migrations fixtures-postgres -d --wait
 
       - name: Test (Rust)
+        working-directory: crates
         run: cargo nextest run --filterset 'test(db::) & test(postgres)'
 
       - name: Print docker compose logs
@@ -879,6 +897,7 @@ jobs:
         run: bash ci/free-disk-space.sh
 
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -897,6 +916,7 @@ jobs:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
+          workspaces: "crates -> target"
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
@@ -937,9 +957,11 @@ jobs:
         run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Build the gateway for E2E tests
+        working-directory: crates
         run: cargo build-e2e
 
       - name: Launch the gateway for E2E tests
+        working-directory: crates
         run: |
           if [ "${{ matrix.database }}" = "postgres" ]; then
             cargo run-e2e-postgres > e2e_logs.txt 2>&1 &
@@ -959,6 +981,7 @@ jobs:
           done
 
       - name: Run endpoint tests
+        working-directory: crates
         run: cargo test-endpoints
 
       - name: Print docker compose logs
@@ -967,6 +990,7 @@ jobs:
 
       - name: Print e2e logs
         if: always()
+        working-directory: crates
         run: cat e2e_logs.txt
 
   # Run 'cargo test-optimization' against mock-provider-api
@@ -990,6 +1014,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -1007,6 +1032,7 @@ jobs:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
+          workspaces: "crates -> target"
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
@@ -1038,6 +1064,7 @@ jobs:
         run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Launch the gateway for E2E tests
+        working-directory: crates
         run: |
           cargo run-e2e > e2e_logs.txt 2>&1 &
           GATEWAY_PID=$!
@@ -1051,6 +1078,7 @@ jobs:
           done
 
       - name: Test (Rust)
+        working-directory: crates
         run: cargo test-optimization-mock
 
       - name: Print docker compose logs
@@ -1059,6 +1087,7 @@ jobs:
 
       - name: Print e2e logs
         if: always()
+        working-directory: crates
         run: cat e2e_logs.txt
 
   build-gateway-e2e-container:

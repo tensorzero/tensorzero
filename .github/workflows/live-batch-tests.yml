@@ -50,6 +50,7 @@ jobs:
         run: bash ci/free-disk-space.sh
 
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -88,6 +89,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
 
       - name: Launch the gateway for batch tests
+        working-directory: crates
         run: |
           curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
           cargo run-e2e > batch_logs.txt 2>&1 &
@@ -98,9 +100,11 @@ jobs:
           done
 
       - name: Run batch tests
+        working-directory: crates
         run: |
           cargo test-live-batch --no-fail-fast
 
       - name: Print batch logs
         if: always()
+        working-directory: crates
         run: cat batch_logs.txt

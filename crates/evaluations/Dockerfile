@@ -14,9 +14,10 @@ ENV CARGO_INCREMENTAL=0
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
 COPY . .
+WORKDIR /src/crates
 
 RUN cargo build --profile ${PROFILE} -p evaluations $CARGO_BUILD_FLAGS
-RUN if [ "${PROFILE}" = "dev" ]; then cp -r /src/target/debug /release; else cp -r /src/target/${PROFILE} /release; fi
+RUN if [ "${PROFILE}" = "dev" ]; then cp -r /src/crates/target/debug /release; else cp -r /src/crates/target/${PROFILE} /release; fi
 
 # ========== base ==========
 

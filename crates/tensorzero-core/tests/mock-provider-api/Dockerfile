@@ -8,9 +8,10 @@ COPY . .
 
 ARG CARGO_BUILD_FLAGS=""
 
+WORKDIR /src/crates
 RUN cargo build -p mock-provider-api $CARGO_BUILD_FLAGS && \
     mkdir -p /release && \
-    cp -r /src/target/debug/mock-provider-api /release/mock-provider-api
+    cp -r /src/crates/target/debug/mock-provider-api /release/mock-provider-api
 
 # ========== mock-provider-api ==========
 

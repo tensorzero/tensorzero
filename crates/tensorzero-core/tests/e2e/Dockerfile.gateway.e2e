@@ -13,9 +13,10 @@ RUN git rev-parse HEAD
 # Enable the e2e_tests feature by default for the gateway build
 ARG CARGO_BUILD_FLAGS="--features e2e_tests"
 
+WORKDIR /src/crates
 RUN cargo build -p gateway $CARGO_BUILD_FLAGS && \
     mkdir -p /release && \
-    cp /src/target/debug/gateway /release/gateway
+    cp /src/crates/target/debug/gateway /release/gateway
 
 # ========== base ==========
 

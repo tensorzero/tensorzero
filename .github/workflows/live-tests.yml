@@ -220,7 +220,7 @@ jobs:
             -e TENSORZERO_CI=1 \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
-            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app --config-file /app/.config/nextest.toml --profile evaluations -j 4"
+            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile evaluations -j 4"
 
       - name: Print evaluation tests logs
         if: always()
