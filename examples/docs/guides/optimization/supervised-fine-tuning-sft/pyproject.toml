@@ -5,7 +5,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pandas>=2.3.3",
-    "tensorzero @ file:///Users/gabrielbianconi/Developer/tensorzero/tensorzero-2/clients/python",  # TODO: DO NOT MERGE UNTIL NEXT RELEASE, PIN TO 2026.3.1
+    "tensorzero>=2026.3.1",
 ]
 
 [dependency-groups]
