@@ -57,7 +57,7 @@ cleanup_database() {
             echo "Cleanup completed for database: $DB_NAME"
         fi
     fi
-    docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down -v || true
+    docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml down -v || true
     cat e2e_logs.txt || echo "e2e logs don't exist"
 }
 
@@ -109,7 +109,7 @@ uv run ./ui/fixtures/download-small-fixtures.py
 
 # Start postgres service for migrations
 # `cargo test-clickhouse` should not include any Postgres tests, but we're including it here to be safe.
-docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres
+docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres
 export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 

@@ -18,13 +18,17 @@
 - Annotate new tests with `#[gtest]` (googletest crate).
 - Include descriptive messages: use `.expect("why")` over `.unwrap()`, and add custom messages to key assertions.
 - Prefer `expect_that!` to collect all failure messages; use `assert_that!` when subsequent code depends on the assertion.
+- To check a string is non-empty, use `not(eq(""))`.
+- Prefer `matches_pattern!` to assert on multiple struct fields at once rather than separate assertions per field.
+- Use `matches_json!` and `matches_json_literal!` from the `googletest_matchers` crate for JSON assertions.
+- Never compare serialized JSON strings directly — Postgres JSONB does not preserve key order, so parse to `serde_json::Value` and use `matches_json_literal!` instead.
 
 ## For APIs
 
 - Use `_` instead of `-` in API routes.
 - Prefer using `#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]` for ts-rs exports.
 - For any `Option` types visible from the frontend, include `#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]` and `#[serde(skip_serializing_if = "Option::is_none")]` so `None` values are not returned over the wire. In very rare cases we may decide do return `null`s, but in general we want to omit them.
-- Some tests make HTTP requests to the gateway; to start the gateway, you can run `cargo run-e2e`. (This gateway has dependencies on some docker containers, and it's appropriate to ask the user to run `docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up`.)
+- Some tests make HTTP requests to the gateway; to start the gateway, you can run `cargo run-e2e`. (This gateway has dependencies on some docker containers, and it's appropriate to ask the user to run `docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up`.)
 - We use RFC 3339 as the standard format for datetime.
 
 ## The responsibility between API handlers and database interfaces
@@ -55,8 +59,8 @@ We use `uv` to manage Python dependencies.
 
 We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 
-- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`. Then, rebuild `tensorzero-node` with `pnpm -r build`. The generated type definitions will live in `internal/tensorzero-node/lib/bindings/`.
-- To generate implementations for `n-api` functions to be called in TypeScript, and package types in `internal/tensorzero-node` for UI, run `pnpm --filter=tensorzero-node run build`.
+- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`. Then, rebuild `tensorzero-node` with `pnpm -r build`. The generated type definitions will live in `crates/tensorzero-node/lib/bindings/`.
+- To generate implementations for `n-api` functions to be called in TypeScript, and package types in `crates/tensorzero-node` for UI, run `pnpm --filter=tensorzero-node run build`.
 - Remember to run `pnpm -r typecheck` to make sure TypeScript and Rust implementations agree on types. Prefer to maintain all types in Rust.
 
 # CI/CD

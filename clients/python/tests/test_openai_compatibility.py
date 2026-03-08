@@ -33,7 +33,7 @@ from uuid_utils.compat import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+    "../../../crates/tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
 
@@ -1423,7 +1423,7 @@ async def test_async_multi_block_image_url(async_openai_client):
 @pytest.mark.asyncio
 async def test_async_multi_block_image_base64(async_openai_client):
     basepath = os.path.dirname(__file__)
-    with open(f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb") as f:
+    with open(f"{basepath}/../../../crates/tensorzero-core/tests/e2e/providers/ferris.png", "rb") as f:
         ferris_png = base64.b64encode(f.read()).decode("ascii")
 
     messages = [
@@ -1454,7 +1454,7 @@ async def test_async_multi_block_image_base64(async_openai_client):
 async def test_async_multi_block_file_base64(async_openai_client):
     basepath = os.path.dirname(__file__)
     with open(
-        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/deepseek_paper.pdf",
+        f"{basepath}/../../../crates/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf",
         "rb",
     ) as f:
         deepseek_paper_pdf = base64.b64encode(f.read()).decode("ascii")
