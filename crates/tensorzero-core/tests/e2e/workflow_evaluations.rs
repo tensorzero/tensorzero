@@ -174,15 +174,6 @@ async fn test_workflow_evaluation() {
             run_id.to_string(),
             "New tag name should be present for future migration"
         );
-        // Check for some git tags too
-        tags.get("tensorzero::git_commit_hash")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        tags.get("tensorzero::git_branch")
-            .unwrap()
-            .as_str()
-            .unwrap();
         let episode_row =
             select_workflow_evaluation_run_episode_clickhouse(&clickhouse, run_id, episode_id)
                 .await

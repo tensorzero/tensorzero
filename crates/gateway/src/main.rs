@@ -134,8 +134,6 @@ async fn run() -> Result<(), ExitCode> {
         .await
         .log_err_pretty("Failed to set up logs")?;
 
-    let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
-
     if args.early_exit_commands.create_api_key {
         handle_create_api_key(args.early_exit_command_arguments.expiration)
             .await
@@ -177,7 +175,7 @@ async fn run() -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
+    tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION}");
 
     // Handle `--config-file` or `--default-config`
     let (unwritten_config, glob) = match (args.default_config, args.config_file) {
