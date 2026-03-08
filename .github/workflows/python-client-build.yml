@@ -33,8 +33,19 @@ jobs:
           version: "0.9.27"
 
       - name: Install Rust (from rust-toolchain.toml)
-        run: rustup show
         working-directory: crates
+        run: |
+          for attempt in 1 2 3; do
+            if rustup show; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -70,8 +81,19 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust (from rust-toolchain.toml)
-        run: rustup show
         working-directory: crates
+        run: |
+          for attempt in 1 2 3; do
+            if rustup show; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -111,8 +133,18 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust (from rust-toolchain.toml)
-        run: rustup show
         working-directory: crates
+        run: |
+          for attempt in 1 2 3; do
+            if rustup show; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
         shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -158,8 +190,19 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust (from rust-toolchain.toml)
-        run: rustup show
         working-directory: crates
+        run: |
+          for attempt in 1 2 3; do
+            if rustup show; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
