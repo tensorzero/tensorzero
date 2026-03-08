@@ -53,7 +53,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
 RUN npm install -g pnpm
 
 COPY . /build
-WORKDIR /build/internal/tensorzero-node
+WORKDIR /build/crates/tensorzero-node
 
 RUN pnpm install --frozen-lockfile && if [ "$DEBUG_BUILD" = "1" ]; then pnpm run build:debug; else pnpm run build; fi
 
@@ -67,9 +67,9 @@ WORKDIR /app
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 COPY --from=development-dependencies-env /app/ui/node_modules* /app/ui/node_modules
 # Copy tensorzero-node binding
-COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/dist /app/internal/tensorzero-node/dist
-COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/index.cjs /app/internal/tensorzero-node/index.cjs
-COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.node /app/internal/tensorzero-node/
+COPY --from=tensorzero-node-build-env /build/crates/tensorzero-node/dist /app/crates/tensorzero-node/dist
+COPY --from=tensorzero-node-build-env /build/crates/tensorzero-node/index.cjs /app/crates/tensorzero-node/index.cjs
+COPY --from=tensorzero-node-build-env /build/crates/tensorzero-node/*linux*.node /app/crates/tensorzero-node/
 
 COPY . .
 
@@ -97,8 +97,8 @@ COPY --from=production-dependencies-env /app/ui/node_modules /app/ui/node_module
 COPY --from=build-env /app/ui/build /app/ui/build
 
 # Copy tensorzero-node bindings for runtime (from build-env which has complete node modules)
-COPY --from=build-env /app/internal/tensorzero-node/index.cjs /app/ui/build/index.cjs
-COPY --from=build-env /app/internal/tensorzero-node/*.node /app/ui/build/
+COPY --from=build-env /app/crates/tensorzero-node/index.cjs /app/ui/build/index.cjs
+COPY --from=build-env /app/crates/tensorzero-node/*.node /app/ui/build/
 
 # Copy entrypoint script
 # This script calls into the /app/ui directory using `pnpm --filter=tensorzero-ui run start`

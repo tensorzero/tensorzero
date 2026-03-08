@@ -43,7 +43,7 @@ jobs:
 
       - name: Build `gateway` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 --build-arg PROFILE=dev -f gateway/Dockerfile . -t tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 --build-arg PROFILE=dev -f crates/gateway/Dockerfile . -t tensorzero/gateway-dev:sha-${{ github.sha }}
 
       - name: Push `gateway` container to DockerHub
         run: docker push tensorzero/gateway-dev:sha-${{ github.sha }}

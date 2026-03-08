@@ -38,7 +38,7 @@ DOCKER_BUILDKIT=1 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -t tensorzero/gateway:latest \
   -t tensorzero/gateway:XXXX.XX.X \
-  -f gateway/Dockerfile \
+  -f crates/gateway/Dockerfile \
   --attest type=provenance,mode=max \
   --attest type=sbom \
   --push \
@@ -96,7 +96,7 @@ DOCKER_BUILDKIT=1 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -t tensorzero/evaluations:latest \
   -t tensorzero/evaluations:XXXX.XX.X \
-  -f evaluations/Dockerfile \
+  -f crates/evaluations/Dockerfile \
   --attest type=provenance,mode=max \
   --attest type=sbom \
   --push \
