@@ -97,10 +97,12 @@ function GatewayAuthContent() {
     <ErrorContentCard className="w-[22rem]">
       <div className="flex flex-col items-center px-6 pt-9 pb-6 text-center">
         <KeyRound className="mb-5 h-8 w-8 text-orange-500 dark:text-orange-400" />
-        <h2 className="text-foreground text-balance text-lg font-medium">
-          TensorZero Gateway requires an API key
+        <h2 className="text-foreground text-lg font-medium">
+          TensorZero Gateway requires
+          <br />
+          an API key
         </h2>
-        <ol className="text-muted-foreground mt-4 space-y-2 text-left text-sm text-pretty">
+        <ol className="text-muted-foreground mt-4 space-y-2 text-left text-sm">
           <li className="flex items-start gap-2">
             <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
               1
