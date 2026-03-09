@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists
 RUN npm install -g pnpm
 
 COPY . /build
-WORKDIR /build/internal/tensorzero-node
+WORKDIR /build/crates/tensorzero-node
 
 RUN pnpm install --frozen-lockfile && pnpm run build
 
@@ -42,9 +42,9 @@ RUN tar -vxf /tmp/packages.tar -C .
 RUN pnpm install --frozen-lockfile
 
 # Copy tensorzero-node binding
-COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/dist /app/internal/tensorzero-node/dist
-COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/index.cjs /app/internal/tensorzero-node/index.cjs
-COPY --from=tensorzero-node-build-env /build/internal/tensorzero-node/*linux*.node /app/internal/tensorzero-node/
+COPY --from=tensorzero-node-build-env /build/crates/tensorzero-node/dist /app/crates/tensorzero-node/dist
+COPY --from=tensorzero-node-build-env /build/crates/tensorzero-node/index.cjs /app/crates/tensorzero-node/index.cjs
+COPY --from=tensorzero-node-build-env /build/crates/tensorzero-node/*linux*.node /app/crates/tensorzero-node/
 
 # Copy the rest of the code
 COPY . .

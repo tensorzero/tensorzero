@@ -43,6 +43,7 @@ jobs:
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -61,6 +62,7 @@ jobs:
         with:
           cache-provider: "buildjet"
           shared-key: "optimization-test-cache"
+          workspaces: "crates -> target"
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
@@ -68,20 +70,22 @@ jobs:
           tool: cargo-nextest
 
       - name: Launch ClickHouse container for optimization tests
-        run: docker compose -f tensorzero-optimizers/tests/docker-compose.yml up --wait
+        run: docker compose -f crates/tensorzero-optimizers/tests/docker-compose.yml up --wait
 
       - name: Run daily optimization tests
+        working-directory: crates
         if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
         run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast -- --skip ${{ env.WEEKLY_TESTS }}
 
       - name: Run weekly optimization tests
+        working-directory: crates
         if: github.event.schedule == '0 2 * * 0'
         run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast ${{ env.WEEKLY_TESTS }}
 
       - name: Print ClickHouse container logs
         if: always()
         continue-on-error: true
-        run: docker compose -f tensorzero-optimizers/tests/docker-compose.yml logs -t
+        run: docker compose -f crates/tensorzero-optimizers/tests/docker-compose.yml logs -t
 
       - name: Log test completion
         if: always()

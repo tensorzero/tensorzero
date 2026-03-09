@@ -21,6 +21,13 @@ import type {
  * A client for calling TensorZero Autopilot API endpoints.
  */
 export class AutopilotClient extends BaseTensorZeroClient {
+  private betaTools: string | null;
+
+  constructor(baseUrl: string, apiKey?: string, betaTools?: string) {
+    super(baseUrl, apiKey);
+    this.betaTools = betaTools ?? null;
+  }
+
   /**
    * Lists autopilot sessions with optional pagination.
    */
@@ -83,9 +90,14 @@ export class AutopilotClient extends BaseTensorZeroClient {
     request: CreateEventGatewayRequest,
   ): Promise<CreateEventResponse> {
     const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events`;
+    const headers: Record<string, string> = {};
+    if (this.betaTools) {
+      headers["tensorzero-beta-tools"] = this.betaTools;
+    }
     const response = await this.fetch(endpoint, {
       method: "POST",
       body: JSON.stringify(request),
+      headers,
     });
     if (!response.ok) {
       const message = await this.getErrorText(response);

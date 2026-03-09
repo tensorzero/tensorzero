@@ -20,9 +20,9 @@ repos:
       - id: detect-private-key
         exclude: |
           (?x)^(
-              tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
+              crates/tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
               ci/dummy-gcp-credentials\.json|
-              tensorzero-core/tests/e2e/self-signed-certs/.*
+              crates/tensorzero-core/tests/e2e/self-signed-certs/.*
           )$
       - id: end-of-file-fixer
         exclude: \.minijinja$
@@ -32,21 +32,21 @@ repos:
     hooks:
       - id: cargo-deny
         name: cargo deny
-        entry: cargo deny check
+        entry: bash -c 'cd crates && cargo deny check'
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-fmt
         name: cargo fmt
-        entry: cargo fmt
+        entry: bash -c 'cd crates && cargo fmt'
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --all-targets --all-features -- -D warnings
+        entry: bash -c 'cd crates && cargo clippy --all-targets --all-features -- -D warnings'
         language: system
         types: [rust]
         pass_filenames: false
