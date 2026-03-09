@@ -68,6 +68,7 @@ export function ExpandableElement({
           <Button
             variant="outline"
             size="sm"
+            // Prevent click from reaching parent row (e.g. table row navigation)
             onClick={(e) => {
               e.stopPropagation();
               setExpanded(true);
@@ -85,6 +86,7 @@ export function ExpandableElement({
           <Button
             variant="outline"
             size="sm"
+            // Prevent click from reaching parent row (e.g. table row navigation)
             onClick={(e) => {
               e.stopPropagation();
               setExpanded(false);

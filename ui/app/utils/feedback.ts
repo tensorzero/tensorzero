@@ -17,12 +17,21 @@ export function groupFeedbackByType(feedback: FeedbackRow[]): GroupedFeedback {
   const comments: Extract<FeedbackRow, { type: "comment" }>[] = [];
   const demonstrations: Extract<FeedbackRow, { type: "demonstration" }>[] = [];
   for (const f of feedback) {
-    if (f.type === "boolean" || f.type === "float") {
-      metrics.push(f);
-    } else if (f.type === "comment") {
-      comments.push(f);
-    } else if (f.type === "demonstration") {
-      demonstrations.push(f);
+    switch (f.type) {
+      case "boolean":
+      case "float":
+        metrics.push(f);
+        break;
+      case "comment":
+        comments.push(f);
+        break;
+      case "demonstration":
+        demonstrations.push(f);
+        break;
+      default: {
+        const _exhaustiveCheck: never = f;
+        return _exhaustiveCheck;
+      }
     }
   }
   return { metrics, comments, demonstrations };

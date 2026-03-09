@@ -47,7 +47,11 @@ function TagCell({
   tooltipSide,
 }: TagCellProps) {
   if (displayText === fullText) {
-    return <span className={className}>{displayText}</span>;
+    return (
+      <span className={className} title={fullText}>
+        {displayText}
+      </span>
+    );
   }
 
   return (
