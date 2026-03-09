@@ -40,6 +40,18 @@ function ValueItem({ iconType, children, onClick }: ValueItemProps) {
 
   return (
     <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick(e as unknown as React.MouseEvent);
+              }
+            }
+          : undefined
+      }
       className={
         onClick
           ? "flex cursor-pointer items-center gap-2 transition-colors duration-300 hover:text-gray-500"

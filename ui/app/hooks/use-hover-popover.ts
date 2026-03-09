@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 
 const CLOSE_DELAY_MS = 150;
 
@@ -45,18 +45,22 @@ export function useHoverPopover(): HoverPopoverState {
     setOpen(true);
   }, [cancelClose]);
 
+  const triggerProps = useMemo(
+    () => ({ onPointerEnter, onPointerLeave: scheduleClose }),
+    [onPointerEnter, scheduleClose],
+  );
+
+  const contentProps = useMemo(
+    () => ({ onPointerEnter: cancelClose, onPointerLeave: scheduleClose }),
+    [cancelClose, scheduleClose],
+  );
+
   return {
     open,
     setOpen,
     scheduleClose,
     cancelClose,
-    triggerProps: {
-      onPointerEnter,
-      onPointerLeave: scheduleClose,
-    },
-    contentProps: {
-      onPointerEnter: cancelClose,
-      onPointerLeave: scheduleClose,
-    },
+    triggerProps,
+    contentProps,
   };
 }
