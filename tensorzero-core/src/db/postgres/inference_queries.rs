@@ -16,7 +16,6 @@ use crate::config::snapshot::SnapshotHash;
 use crate::config::{
     Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
 };
-use crate::db::TimeWindow;
 use crate::db::clickhouse::query_builder::{OrderByTerm, OrderDirection};
 use crate::db::inferences::{
     CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
@@ -27,6 +26,7 @@ use crate::db::inferences::{
 };
 use crate::db::postgres::inference_filter_helpers::{MetricJoinRegistry, apply_inference_filter};
 use crate::db::query_helpers::{json_double_escape_string_without_quotes, uuid_to_datetime};
+use crate::db::{TagFilter, TimeWindow};
 use crate::endpoints::inference::InferenceParams;
 use crate::endpoints::stored_inferences::v1::types::{
     FloatComparisonOperator, TimeComparisonOperator,
@@ -1861,7 +1861,7 @@ async fn count_by_variant_impl(
     function_type: FunctionConfigType,
     function_name: &str,
     variant_name: Option<&str>,
-    tag: Option<&super::super::TagFilter>,
+    tag: Option<&TagFilter>,
 ) -> Result<Vec<CountByVariant>, sqlx::Error> {
     let mut qb: QueryBuilder<sqlx::Postgres> = if tag.is_some() {
         let table_name = match function_type {
@@ -1931,7 +1931,7 @@ async fn throughput_by_variant_impl(
     function_name: &str,
     time_window: TimeWindow,
     max_periods: u32,
-    tag: Option<&super::super::TagFilter>,
+    tag: Option<&TagFilter>,
 ) -> Result<Vec<VariantThroughput>, Error> {
     let rows = if time_window == TimeWindow::Cumulative {
         let mut qb: QueryBuilder<sqlx::Postgres> = if tag.is_some() {

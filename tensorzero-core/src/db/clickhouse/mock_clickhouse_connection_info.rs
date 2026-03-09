@@ -26,7 +26,8 @@ use crate::db::model_inferences::{MockModelInferenceQueries, ModelInferenceQueri
 use crate::db::resolve_uuid::{ResolveUuidQueries, ResolvedObject};
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::{
-    ConfigQueries, MockConfigQueries, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow,
+    ConfigQueries, MockConfigQueries, ModelLatencyDatapoint, ModelUsageTimePoint, TagFilter,
+    TimeWindow,
 };
 use crate::error::Error;
 use crate::function::FunctionConfig;
@@ -331,7 +332,7 @@ impl FeedbackQueries for MockClickHouseConnectionInfo {
         variant_names: Option<Vec<String>>,
         time_window: TimeWindow,
         max_periods: u32,
-        tag: Option<super::super::TagFilter>,
+        tag: Option<TagFilter>,
     ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error> {
         self.feedback_queries
             .get_cumulative_feedback_timeseries(
@@ -389,7 +390,7 @@ impl FeedbackQueries for MockClickHouseConnectionInfo {
         function_name: &str,
         function_config: &FunctionConfig,
         variant_name: Option<&str>,
-        tag: Option<&super::super::TagFilter>,
+        tag: Option<&TagFilter>,
     ) -> Result<Vec<MetricWithFeedback>, Error> {
         self.feedback_queries
             .query_metrics_with_feedback(function_name, function_config, variant_name, tag)

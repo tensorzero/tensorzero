@@ -11,6 +11,7 @@ use sqlx::{PgPool, QueryBuilder, Row};
 use uuid::Uuid;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
+use crate::db::TagFilter;
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, BooleanMetricFeedbackRow, CommentFeedbackInsert,
     CommentFeedbackRow, CommentTargetType, CumulativeFeedbackTimeSeriesPoint,
@@ -217,7 +218,7 @@ fn push_optional_namespace_filter(qb: &mut QueryBuilder<sqlx::Postgres>, namespa
 
 pub(super) fn push_optional_tag_filter(
     qb: &mut QueryBuilder<sqlx::Postgres>,
-    tag: Option<&super::super::TagFilter>,
+    tag: Option<&TagFilter>,
 ) {
     if let Some(tag) = tag {
         qb.push(r" AND tags @> jsonb_build_object(");
@@ -329,7 +330,7 @@ fn build_metrics_with_feedback_query(
     function_name: &str,
     table: &str,
     variant_name: Option<&str>,
-    tag: Option<&super::super::TagFilter>,
+    tag: Option<&TagFilter>,
 ) -> QueryBuilder<sqlx::Postgres> {
     let mut qb = QueryBuilder::new("WITH inference_ids AS (SELECT id FROM ");
     qb.push(table);
@@ -377,7 +378,7 @@ struct VariantPerformancesQueryParams<'a> {
     time_bucket_expr: &'a str,
     metric_level: MetricConfigLevel,
     variant_name: Option<&'a str>,
-    tag: Option<&'a super::super::TagFilter>,
+    tag: Option<&'a TagFilter>,
 }
 
 /// Builds a query for variant performances.
@@ -560,7 +561,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         variant_names: Option<Vec<String>>,
         time_window: TimeWindow,
         max_periods: u32,
-        _tag: Option<super::super::TagFilter>,
+        _tag: Option<TagFilter>,
     ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error> {
         // TODO(#6674): Implement tag filtering for cumulative feedback timeseries.
         let pool = self.get_pool_result()?;
@@ -743,7 +744,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         function_name: &str,
         function_config: &FunctionConfig,
         variant_name: Option<&str>,
-        tag: Option<&super::super::TagFilter>,
+        tag: Option<&TagFilter>,
     ) -> Result<Vec<MetricWithFeedback>, Error> {
         let pool = self.get_pool_result()?;
         let table = function_config.postgres_table_name();

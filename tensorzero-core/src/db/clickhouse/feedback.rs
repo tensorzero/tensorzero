@@ -406,7 +406,7 @@ fn build_metrics_with_feedback_query(
     function_name: &str,
     inference_table: &str,
     variant_name: Option<&str>,
-    tag: Option<&super::super::TagFilter>,
+    tag: Option<&TagFilter>,
 ) -> (String, HashMap<String, String>) {
     let mut query_params = HashMap::new();
     query_params.insert("function_name".to_string(), function_name.to_string());
