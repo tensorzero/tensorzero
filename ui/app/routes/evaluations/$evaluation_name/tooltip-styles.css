@@ -16,7 +16,7 @@
 }
 
 .tooltip-scrollable::-webkit-scrollbar-track {
-  background: hsl(var(--background));
+  background: hsl(var(--background-primary));
   border-radius: 3px;
 }
 
