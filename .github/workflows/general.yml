@@ -805,15 +805,21 @@ jobs:
         working-directory: crates
         run: cargo fmt --all --check
 
+      - name: "Node.js: Install openai-node dependencies"
+        working-directory: clients/openai-node
+        run: pnpm install --frozen-lockfile
+
       - name: "Node.js: Run oxfmt"
-        run: pnpm --filter=openai-node run format
+        working-directory: clients/openai-node
+        run: pnpm run format
 
       - name: "Node.js: OpenAI Client: typecheck"
-        run: pnpm --filter=openai-node run typecheck
+        working-directory: clients/openai-node
+        run: pnpm run typecheck
 
       - name: "Node.js: OpenAI Client: lint"
         working-directory: clients/openai-node
-        run: pnpm --filter=openai-node run lint
+        run: pnpm run lint
 
       - name: Lint Helm charts
         run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
@@ -1438,9 +1444,10 @@ jobs:
           done
 
       - name: Install dependencies
+        working-directory: docs
         run: |
           for attempt in 1 2 3; do
-            if pnpm install --frozen-lockfile --filter tensorzero-docs; then
+            if pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then

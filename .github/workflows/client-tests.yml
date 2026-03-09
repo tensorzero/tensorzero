@@ -151,7 +151,8 @@ jobs:
           done
         shell: bash
 
-      - name: Install JS dependencies
+      - name: Install openai-node dependencies
+        working-directory: clients/openai-node
         run: |
           for attempt in 1 2 3; do
             if pnpm install --frozen-lockfile; then
