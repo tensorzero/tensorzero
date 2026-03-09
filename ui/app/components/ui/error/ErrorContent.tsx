@@ -15,7 +15,6 @@ import {
   getPageErrorInfo,
 } from "~/utils/tensorzero/errors";
 import { Button } from "~/components/ui/button";
-import { HelpTooltip, docsUrl } from "~/components/ui/HelpTooltip";
 import { Input } from "~/components/ui/input";
 import {
   ErrorContentCard,
@@ -98,12 +97,10 @@ function GatewayAuthContent() {
     <ErrorContentCard className="w-[22rem]">
       <div className="flex flex-col items-center px-6 pt-9 pb-6 text-center">
         <KeyRound className="mb-5 h-8 w-8 text-orange-500 dark:text-orange-400" />
-        <h2 className="text-foreground text-lg font-medium">
-          TensorZero Gateway requires
-          <br />
-          an API key
+        <h2 className="text-foreground text-balance text-lg font-medium">
+          TensorZero Gateway requires an API key
         </h2>
-        <ol className="text-muted-foreground mt-4 space-y-2 text-left text-sm">
+        <ol className="text-muted-foreground mt-4 space-y-2 text-left text-sm text-pretty">
           <li className="flex items-start gap-2">
             <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
               1
@@ -139,28 +136,17 @@ function GatewayAuthContent() {
         </div>
       </div>
       <div className="px-6 pt-4 pb-6">
-        <div className="flex items-center gap-1.5">
-          <label
-            htmlFor="gateway-api-key"
-            className="text-foreground text-sm font-medium"
-          >
-            Authenticate this browser
-          </label>
-          <HelpTooltip
-            link={{
-              href: docsUrl("operations/set-up-auth-for-tensorzero"),
-              label: "Auth docs",
-            }}
-          >
-            Your API key looks like{" "}
-            <code className="text-xs">sk-t0-xxx...-yyy...</code>
-          </HelpTooltip>
-        </div>
+        <label
+          htmlFor="gateway-api-key"
+          className="text-foreground text-sm font-medium"
+        >
+          Authenticate this browser
+        </label>
         <div className="mt-2">
           <Input
             id="gateway-api-key"
             type="password"
-            placeholder="API key"
+            placeholder="sk-t0-..."
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             disabled={isBusy}
