@@ -152,6 +152,7 @@ function GatewayAuthContent() {
               if (e.key === "Enter") handleSubmit();
             }}
           />
+          {/* Animate height to prevent layout jump when error appears */}
           <div
             className="grid transition-[grid-template-rows] duration-200 ease-out"
             style={{ gridTemplateRows: error ? "1fr" : "0fr" }}

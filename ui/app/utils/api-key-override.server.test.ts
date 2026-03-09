@@ -46,6 +46,13 @@ describe("isSecureRequest", () => {
     });
     expect(isSecureRequest(request)).toBe(true);
   });
+
+  it("handles comma-separated x-forwarded-proto (multi-proxy)", () => {
+    const request = new Request("http://localhost:3000", {
+      headers: { "x-forwarded-proto": "https, http" },
+    });
+    expect(isSecureRequest(request)).toBe(true);
+  });
 });
 
 describe("getApiKeyFromRequest", () => {

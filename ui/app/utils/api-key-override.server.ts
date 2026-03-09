@@ -24,9 +24,10 @@ export const apiKeyCookie = createCookie("t0_gateway_key", {
 
 /** Secure flag should only be set when served over HTTPS, not plain HTTP. */
 export function isSecureRequest(request: Request): boolean {
-  // X-Forwarded-Proto is set by reverse proxies (nginx, cloud load balancers)
+  // X-Forwarded-Proto is set by reverse proxies; may be comma-separated
+  // (e.g. "https, http") in multi-proxy setups — check the first value.
   const forwarded = request.headers.get("x-forwarded-proto");
-  if (forwarded) return forwarded === "https";
+  if (forwarded) return forwarded.split(",")[0].trim() === "https";
   return new URL(request.url).protocol === "https:";
 }
 
