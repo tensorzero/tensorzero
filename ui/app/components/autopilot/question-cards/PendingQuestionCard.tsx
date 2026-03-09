@@ -160,7 +160,7 @@ export function PendingQuestionCard({
                 size="xs"
                 disabled={!state.isStepComplete(state.activeStep) || isLoading}
                 onClick={state.handleSubmit}
-                className="gap-1 bg-purple-600 text-white hover:bg-purple-700"
+                className="gap-1 bg-purple-600 text-neutral-50 hover:bg-purple-700"
               >
                 {isLoading ? "Submitting..." : "Submit"}
                 <Check className="h-3.5 w-3.5" />
@@ -170,7 +170,7 @@ export function PendingQuestionCard({
                 size="xs"
                 disabled={!state.isStepComplete(state.activeStep) || isLoading}
                 onClick={() => state.setActiveStep((s) => s + 1)}
-                className="gap-0.5 bg-purple-600 pr-1 text-white hover:bg-purple-700"
+                className="gap-0.5 bg-purple-600 pr-1 text-neutral-50 hover:bg-purple-700"
               >
                 Next
                 <ChevronRight className="h-3.5 w-3.5" />

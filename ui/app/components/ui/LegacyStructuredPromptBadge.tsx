@@ -20,7 +20,7 @@ export function LegacyStructuredPromptBadge({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-white">
+        <Badge className="bg-yellow-600 px-1 py-0 text-[10px] text-neutral-50">
           Legacy
         </Badge>
       </TooltipTrigger>

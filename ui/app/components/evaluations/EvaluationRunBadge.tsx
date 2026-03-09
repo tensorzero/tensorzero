@@ -56,7 +56,7 @@ export default function EvaluationRunBadge({
           )}
         >
           <span>{runInfo.variant_name}</span>
-          <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">
+          <span className="border-l border-neutral-50/30 pl-1.5 text-xs opacity-80">
             {runIdSegment}
           </span>
           {onRemove && (

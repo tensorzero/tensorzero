@@ -92,6 +92,30 @@ export default [
           message:
             "Do not use crypto.randomUUID(). Use `import { v7 as uuid } from 'uuid'` and call `uuid()` instead for UUIDv7.",
         },
+        {
+          selector:
+            "Literal[value=/\\b(bg|text|border|ring|shadow|divide|from|via|to)-white\\b/]",
+          message:
+            "`white` is not available — it does not adapt to dark mode. Use `neutral-50` for spectrum-aware near-white, `bg-background` for surfaces, or `bg-overlay` for scrims.",
+        },
+        {
+          selector:
+            "TemplateElement[value.raw=/\\b(bg|text|border|ring|shadow|divide|from|via|to)-white\\b/]",
+          message:
+            "`white` is not available — it does not adapt to dark mode. Use `neutral-50` for spectrum-aware near-white, `bg-background` for surfaces, or `bg-overlay` for scrims.",
+        },
+        {
+          selector:
+            "Literal[value=/\\b(bg|text|border|ring|shadow|divide|from|via|to)-black\\b/]",
+          message:
+            "`black` is not available — it does not adapt to dark mode. Use `neutral-900` for spectrum-aware near-black, `text-foreground` for text, or `bg-overlay` for scrims.",
+        },
+        {
+          selector:
+            "TemplateElement[value.raw=/\\b(bg|text|border|ring|shadow|divide|from|via|to)-black\\b/]",
+          message:
+            "`black` is not available — it does not adapt to dark mode. Use `neutral-900` for spectrum-aware near-black, `text-foreground` for text, or `bg-overlay` for scrims.",
+        },
       ],
     },
   },

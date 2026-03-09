@@ -5,6 +5,16 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
+  /* Remove all default Tailwind color utilities. Only colors explicitly
+     defined below will generate classes. This prevents contributors from
+     using undefined palettes (slate, zinc, gray, stone, lime, violet, rose)
+     that have no dark mode inversions and would silently break dark mode. */
+  --color-*: initial;
+
+  /* Overlay scrim — the only absolute color in the system.
+     Must darken content behind modals regardless of theme. */
+  --color-overlay: hsl(0 0% 0% / 80%);
+
   --font-sans:
     Geist, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
   --font-mono:

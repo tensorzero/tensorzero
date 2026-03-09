@@ -45,7 +45,7 @@ export function StepTab({
         <span
           className={cn(
             "flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
-            state === "active" && "bg-purple-600 text-white",
+            state === "active" && "bg-purple-600 text-neutral-50",
             state === "upcoming" && "border-fg-muted border bg-transparent",
           )}
         >

@@ -60,7 +60,7 @@ export function ErrorDialog({
           onClick={onReopen}
           variant="destructive"
           className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-full shadow-lg"
-          slotLeft={<span className="h-2 w-2 rounded-full bg-white" />}
+          slotLeft={<span className="h-2 w-2 rounded-full bg-neutral-50" />}
         >
           {label}
         </Button>

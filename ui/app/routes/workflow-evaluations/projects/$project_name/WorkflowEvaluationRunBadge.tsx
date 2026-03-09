@@ -33,7 +33,7 @@ export default function WorkflowEvaluationRunBadge({
           className={`${variantColor} flex cursor-help items-center gap-1.5 px-2 py-1 font-mono`}
         >
           <span>{runInfo.name}</span>
-          <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">
+          <span className="border-l border-neutral-50/30 pl-1.5 text-xs opacity-80">
             {runIdSegment}
           </span>
           {onRemove && (

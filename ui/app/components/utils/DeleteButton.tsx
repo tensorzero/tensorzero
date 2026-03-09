@@ -53,7 +53,7 @@ export function DeleteButton({
         <Button
           variant="destructive"
           size="sm"
-          className="group bg-red-600 text-white hover:bg-red-700"
+          className="group bg-red-600 text-neutral-50 hover:bg-red-700"
           disabled={isLoading}
           onClick={handleConfirm}
           aria-label="Confirm deletion"

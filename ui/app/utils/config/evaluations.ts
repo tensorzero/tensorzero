@@ -24,5 +24,7 @@ export const getMetricType = (
       return "boolean";
     case "llm_judge":
       return evaluatorConfig.output_type;
+    default:
+      return "boolean";
   }
 };
