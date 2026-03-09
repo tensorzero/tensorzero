@@ -3,11 +3,13 @@ import { v7 } from "uuid";
 import { insertEvent } from "./helpers/db";
 import { createSession } from "./helpers/session";
 
-function buildFeedbackByVariantToolEvents() {
+function buildFeedbackByVariantToolEvents(sessionId: string) {
   const toolCallEventId = v7();
+  const toolCallId = `call_test_${toolCallEventId.replace(/-/g, "").slice(0, 24)}`;
 
   const toolCallPayload = {
     type: "tool_call" as const,
+    tool_call_id: toolCallId,
     name: "get_feedback_by_variant",
     arguments: {
       metric_name: "exact_match",
@@ -16,7 +18,7 @@ function buildFeedbackByVariantToolEvents() {
     },
     side_info: {
       tool_call_event_id: toolCallEventId,
-      session_id: "placeholder",
+      session_id: sessionId,
       config_snapshot_hash: "abc123",
       optimization: {
         poll_interval_secs: 60,
@@ -48,6 +50,7 @@ function buildFeedbackByVariantToolEvents() {
 
   const toolResultPayload = {
     type: "tool_result" as const,
+    tool_call_id: toolCallId,
     tool_call_event_id: toolCallEventId,
     outcome: {
       type: "success" as const,
@@ -67,7 +70,7 @@ test.describe("Variant Performance Visualization", () => {
     const sessionId = await createSession(page);
 
     const { toolCallPayload, toolResultPayload } =
-      buildFeedbackByVariantToolEvents();
+      buildFeedbackByVariantToolEvents(sessionId);
 
     insertEvent(v7(), sessionId, toolCallPayload);
     insertEvent(v7(), sessionId, toolResultPayload);
