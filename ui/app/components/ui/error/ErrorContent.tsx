@@ -98,7 +98,7 @@ function GatewayAuthContent() {
       <div className="flex flex-col items-center px-6 pt-9 pb-6 text-center">
         <KeyRound className="mb-5 h-8 w-8 text-orange-500 dark:text-orange-400" />
         <h2 className="text-foreground text-lg font-medium">
-          TensorZero Gateway requires API key
+          TensorZero Gateway requires an API key
         </h2>
         <ol className="text-muted-foreground mt-4 space-y-2 text-left text-sm">
           <li className="flex items-start gap-2">
@@ -107,20 +107,22 @@ function GatewayAuthContent() {
             </span>
             <span>
               Verify <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode> is
-              set on UI server
+              set on the UI server
             </span>
           </li>
           <li className="flex items-start gap-2">
             <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
               2
             </span>
-            <span>Ensure the key has not expired or been revoked</span>
+            <span>Ensure gateway key has not expired or been revoked</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
               3
             </span>
-            <span>Check Gateway logs for authentication details</span>
+            <span>
+              Check gateway logs for authentication details
+            </span>
           </li>
         </ol>
       </div>
@@ -144,7 +146,7 @@ function GatewayAuthContent() {
           <Input
             id="gateway-api-key"
             type="password"
-            placeholder="API Key"
+            placeholder="sk-t0-xxxxxxxxxxxx-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             disabled={isBusy}
