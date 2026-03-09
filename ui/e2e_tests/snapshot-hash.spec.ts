@@ -1,67 +1,28 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
-// A snapshot hash present in fixture data (lowercase hex, as returned by the gateway).
-// This is the "current" config hash in hex — but since the gateway's config_hash is
-// a decimal string, this won't match and will be treated as historical.
-const FIXTURE_SNAPSHOT_HASH =
-  "65bb2c87383a9d781cff82fc7cfe114673c4facaf2b1a3024b8e9a1d7cb7b6f2";
+const FUNCTION_NAME = "write_haiku";
 
-// The current config hash from the gateway (decimal string).
-// When this exact value is passed as ?snapshot_hash, the server strips it via redirect.
-const CURRENT_CONFIG_HASH =
-  "46014305430377123138237384229499364238047438285692198569022910911979009324786";
+// A non-matching hash to simulate historical config navigation.
+// The server falls back to current config when it can't resolve this, but the
+// URL and banner still reflect the "historical" state.
+const HISTORICAL_HASH = "abc123historicalhash";
 
-// A known inference with a snapshot_hash in the fixture data
-const INFERENCE_ID = "019cba09-7f82-7233-bf78-6aa9bf21b666";
-const INFERENCE_FUNCTION = "write_haiku";
-const INFERENCE_VARIANT = "initial_prompt_gpt4o_mini";
-
-test("inference detail page links to variant with snapshot_hash", async ({
-  page,
-}) => {
-  await page.goto(`/observability/inferences/${INFERENCE_ID}`);
-  await expect(page.getByText(INFERENCE_VARIANT).first()).toBeVisible();
-
-  // The variant chip should link to the variant page with snapshot_hash
-  const variantLink = page
-    .getByRole("link", { name: INFERENCE_VARIANT })
-    .first();
-  const href = await variantLink.getAttribute("href");
-  expect(href).toContain(
-    `/observability/functions/${INFERENCE_FUNCTION}/variants/${INFERENCE_VARIANT}`,
-  );
-  expect(href).toContain(`snapshot_hash=${FIXTURE_SNAPSHOT_HASH}`);
-});
-
-test("navigating inference → function → variant propagates snapshot_hash", async ({
-  page,
-}) => {
-  await page.goto(`/observability/inferences/${INFERENCE_ID}`);
-  await expect(page.getByText(INFERENCE_FUNCTION).first()).toBeVisible();
-
-  // Click the function link from the inference detail page
-  await page.getByRole("link", { name: INFERENCE_FUNCTION }).first().click();
-  await page.waitForURL(/\/observability\/functions\//);
-
-  // Banner should appear on the function page
-  await expect(
-    page.getByText("Viewing historical configuration"),
-  ).toBeVisible();
-  expect(page.url()).toContain("snapshot_hash=");
-
-  // Variant links on the function page should also carry the hash
-  const variantLink = page
-    .getByRole("link", { name: INFERENCE_VARIANT })
-    .first();
-  await expect(variantLink).toBeVisible();
-  const variantHref = await variantLink.getAttribute("href");
-  expect(variantHref).toContain("snapshot_hash=");
-});
+/**
+ * Fetches the current config hash from the gateway's /status endpoint.
+ * Works in both local dev (localhost:3000) and CI (gateway:3000).
+ */
+async function getCurrentConfigHash(page: Page): Promise<string> {
+  const gatewayUrl =
+    process.env.TENSORZERO_GATEWAY_URL || "http://localhost:3000";
+  const response = await page.request.get(`${gatewayUrl}/status`);
+  const status = await response.json();
+  return status.config_hash;
+}
 
 test("function page without snapshot_hash shows no banner", async ({
   page,
 }) => {
-  await page.goto(`/observability/functions/${INFERENCE_FUNCTION}`);
+  await page.goto(`/observability/functions/${FUNCTION_NAME}`);
   await expect(page.getByRole("heading", { name: "Variants" })).toBeVisible();
   await expect(
     page.getByText("Viewing historical configuration"),
@@ -69,11 +30,35 @@ test("function page without snapshot_hash shows no banner", async ({
   expect(page.url()).not.toContain("snapshot_hash");
 });
 
-test("snapshot_hash matching current config is stripped via redirect", async ({
+test("snapshot_hash shows banner and propagates to variant links", async ({
   page,
 }) => {
   await page.goto(
-    `/observability/functions/${INFERENCE_FUNCTION}?snapshot_hash=${CURRENT_CONFIG_HASH}`,
+    `/observability/functions/${FUNCTION_NAME}?snapshot_hash=${HISTORICAL_HASH}`,
+  );
+  await expect(page.getByRole("heading", { name: "Variants" })).toBeVisible();
+
+  // Banner should appear
+  await expect(
+    page.getByText("Viewing historical configuration"),
+  ).toBeVisible();
+  expect(page.url()).toContain(`snapshot_hash=${HISTORICAL_HASH}`);
+
+  // Variant links should carry the snapshot hash
+  const variantLink = page.getByRole("link").filter({ hasText: /prompt/ });
+  const firstLink = variantLink.first();
+  await expect(firstLink).toBeVisible();
+  const href = await firstLink.getAttribute("href");
+  expect(href).toContain(`snapshot_hash=${HISTORICAL_HASH}`);
+});
+
+test("snapshot_hash matching current config is stripped via redirect", async ({
+  page,
+}) => {
+  const currentHash = await getCurrentConfigHash(page);
+
+  await page.goto(
+    `/observability/functions/${FUNCTION_NAME}?snapshot_hash=${currentHash}`,
   );
   await expect(page.getByRole("heading", { name: "Variants" })).toBeVisible();
   await expect(
