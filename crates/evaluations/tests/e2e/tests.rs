@@ -198,7 +198,9 @@ async fn run_evaluations_json() {
     let args = || Args {
         config_file: config_path.clone(),
         gateway_url: None,
-        evaluation_name: "entity_extraction".to_string(),
+        evaluation_name: Some("entity_extraction".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -451,7 +453,9 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
     let args_both = Args {
         config_file: config_path.clone(),
         gateway_url: None,
-        evaluation_name: "entity_extraction".to_string(),
+        evaluation_name: Some("entity_extraction".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![Uuid::now_v7()]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -480,7 +484,9 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
     let args_neither = Args {
         config_file: config_path.clone(),
         gateway_url: None,
-        evaluation_name: "entity_extraction".to_string(),
+        evaluation_name: Some("entity_extraction".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: None,
         datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -517,7 +523,9 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "entity_extraction".to_string(),
+        evaluation_name: Some("entity_extraction".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: None,
         datapoint_ids: Some(vec![Uuid::now_v7()]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -641,7 +649,9 @@ async fn run_evaluation_with_specific_datapoint_ids() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "haiku_with_outputs".to_string(),
+        evaluation_name: Some("haiku_with_outputs".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: None,
         datapoint_ids: Some(selected_ids.clone()),
         variant_name: "gpt_4o_mini".to_string(),
@@ -735,7 +745,9 @@ async fn run_exact_match_evaluation_chat() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "haiku_with_outputs".to_string(),
+        evaluation_name: Some("haiku_with_outputs".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: None,
         datapoint_ids: Some(datapoint_ids.clone()),
         variant_name: "gpt_4o_mini".to_string(),
@@ -881,7 +893,9 @@ async fn run_llm_judge_evaluation_chat() {
         gateway_url: None,
         dataset_name: None,
         datapoint_ids: Some(datapoint_ids.clone()),
-        evaluation_name: "haiku_without_outputs".to_string(),
+        evaluation_name: Some("haiku_without_outputs".to_string()),
+        function_name: None,
+        evaluator_names: None,
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1101,7 +1115,9 @@ async fn run_image_evaluation() {
         gateway_url: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        evaluation_name: "images".to_string(),
+        evaluation_name: Some("images".to_string()),
+        function_name: None,
+        evaluator_names: None,
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1314,7 +1330,9 @@ async fn check_invalid_image_evaluation() {
         gateway_url: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
-        evaluation_name: "bad_images".to_string(),
+        evaluation_name: Some("bad_images".to_string()),
+        function_name: None,
+        evaluator_names: None,
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1425,7 +1443,9 @@ async fn run_llm_judge_evaluation_chat_pretty() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "haiku_without_outputs".to_string(),
+        evaluation_name: Some("haiku_without_outputs".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -1471,7 +1491,9 @@ async fn run_llm_judge_evaluation_json_pretty() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "entity_extraction".to_string(),
+        evaluation_name: Some("entity_extraction".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -1513,11 +1535,61 @@ async fn test_parse_args() {
         args.to_string()
             .contains("the following required arguments were not provided:")
     );
-    assert!(
-        args.to_string()
-            .contains("--evaluation-name <EVALUATION_NAME>")
-    );
     assert!(args.to_string().contains("--variant-name <VARIANT_NAME>"));
+
+    // Test --evaluation-name and --function-name are mutually exclusive
+    let err = Args::try_parse_from([
+        "test",
+        "--evaluation-name",
+        "my-eval",
+        "--function-name",
+        "my-func",
+        "--evaluator-names",
+        "em",
+        "--variant-name",
+        "v1",
+    ])
+    .unwrap_err();
+    assert!(
+        err.to_string().contains("cannot be used with"),
+        "expected conflict error, got: {err}"
+    );
+
+    // Test --function-name requires --evaluator-names
+    let err = Args::try_parse_from(["test", "--function-name", "my-func", "--variant-name", "v1"])
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("--evaluator-names"),
+        "expected requires error, got: {err}"
+    );
+
+    // Test --evaluator-names requires --function-name
+    let err = Args::try_parse_from(["test", "--evaluator-names", "em", "--variant-name", "v1"])
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("--function-name"),
+        "expected requires error, got: {err}"
+    );
+
+    // Test --function-name / --evaluator-names mode
+    let args = Args::try_parse_from([
+        "test",
+        "--function-name",
+        "my-func",
+        "--evaluator-names",
+        "em,judge",
+        "--variant-name",
+        "v1",
+        "--dataset-name",
+        "ds",
+    ])
+    .unwrap();
+    assert_eq!(args.evaluation_name, None);
+    assert_eq!(args.function_name, Some("my-func".to_string()));
+    assert_eq!(
+        args.evaluator_names,
+        Some(vec!["em".to_string(), "judge".to_string()])
+    );
 
     // Test required arguments plus dataset-name (x-or with datapoint-ids)
     let args = Args::try_parse_from([
@@ -1530,7 +1602,7 @@ async fn test_parse_args() {
         "my-dataset",
     ])
     .unwrap();
-    assert_eq!(args.evaluation_name, "my-evaluation");
+    assert_eq!(args.evaluation_name, Some("my-evaluation".to_string()));
     assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.dataset_name.unwrap(), "my-dataset".to_string());
     assert!(args.datapoint_ids.unwrap_or_default().is_empty());
@@ -1552,7 +1624,7 @@ async fn test_parse_args() {
     ])
     .unwrap();
     let datapoint_ids: Vec<Uuid> = args.datapoint_ids.unwrap_or_default();
-    assert_eq!(args.evaluation_name, "my-evaluation");
+    assert_eq!(args.evaluation_name, Some("my-evaluation".to_string()));
     assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.dataset_name, None);
     assert_eq!(datapoint_ids.len(), 2);
@@ -1592,7 +1664,9 @@ async fn test_parse_args() {
         "exact_match=0.95,count_sports=0.50",
     ])
     .unwrap();
-    assert_eq!(args.evaluation_name, "my-evaluation");
+    assert_eq!(args.evaluation_name, Some("my-evaluation".to_string()));
+    assert_eq!(args.function_name, None);
+    assert_eq!(args.evaluator_names, None);
     assert_eq!(args.dataset_name.unwrap(), "my-dataset".to_string());
     assert!(args.datapoint_ids.unwrap_or_default().is_empty());
     assert_eq!(args.variant_name, "my-variant");
@@ -1700,7 +1774,9 @@ async fn run_evaluations_errors() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "entity_extraction".to_string(),
+        evaluation_name: Some("entity_extraction".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant_name: "dummy_error".to_string(),
@@ -2145,7 +2221,9 @@ async fn run_evaluations_best_of_3() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "best_of_3".to_string(),
+        evaluation_name: Some("best_of_3".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -2333,7 +2411,9 @@ async fn run_evaluations_mixture_of_3() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "mixture_of_3".to_string(),
+        evaluation_name: Some("mixture_of_3".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -2521,7 +2601,9 @@ async fn run_evaluations_dicl() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "dicl".to_string(),
+        evaluation_name: Some("dicl".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -3165,7 +3247,9 @@ async fn test_cli_args_max_datapoints() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "haiku_with_outputs".to_string(),
+        evaluation_name: Some("haiku_with_outputs".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
@@ -3225,7 +3309,9 @@ async fn test_cli_args_precision_targets() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        evaluation_name: "haiku_with_outputs".to_string(),
+        evaluation_name: Some("haiku_with_outputs".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),

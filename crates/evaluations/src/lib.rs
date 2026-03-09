@@ -161,7 +161,7 @@ fn build_run_metrics_metadata(
 ///
 /// - `Ok(())` if the evaluation completes successfully and meets all cutoffs
 /// - `Err` if setup fails, evaluation fails, or results don't meet cutoffs
-#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = ?args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = ?args.evaluation_name, function_name = ?args.function_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
@@ -233,19 +233,54 @@ pub async fn run_evaluation(
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
 
-    // Look up evaluation config from the loaded config
-    let evaluation_config = config
-        .evaluations
-        .get(&args.evaluation_name)
-        .ok_or_else(|| anyhow!("evaluation '{}' not found", args.evaluation_name))?;
-    let EvaluationConfig::Inference(ref inference_eval_config) = **evaluation_config;
-    let function_name = inference_eval_config.function_name.clone();
-    let evaluators = inference_eval_config.evaluators.clone();
-    let function_config = config
-        .functions
-        .get(&function_name)
-        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
-        .ok_or_else(|| anyhow!("function `{function_name}` not found"))?;
+    // Resolve evaluation config from CLI args
+    let (function_name, evaluators, function_config, evaluation_name) = match (
+        args.evaluation_name,
+        args.function_name,
+        args.evaluator_names,
+    ) {
+        (Some(evaluation_name), None, None) => {
+            // Legacy mode: look up named evaluation from config
+            let evaluation_config = config
+                .evaluations
+                .get(&evaluation_name)
+                .ok_or_else(|| anyhow!("evaluation `{evaluation_name}` not found"))?;
+            let EvaluationConfig::Inference(ref inference_eval_config) = **evaluation_config;
+            let function_name = inference_eval_config.function_name.clone();
+            let evaluators = inference_eval_config.evaluators.clone();
+            let function_config = config
+                .functions
+                .get(&function_name)
+                .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+                .ok_or_else(|| anyhow!("function `{function_name}` not found"))?;
+            (
+                function_name,
+                evaluators,
+                function_config,
+                Some(evaluation_name),
+            )
+        }
+        (None, Some(function_name), Some(evaluator_names)) => {
+            // New mode: resolve top-level evaluators by name
+            let function_config = config
+                .functions
+                .get(&function_name)
+                .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+                .ok_or_else(|| anyhow!("function `{function_name}` not found"))?;
+            let mut evaluators = HashMap::new();
+            for name in &evaluator_names {
+                let evaluator = config
+                    .evaluators
+                    .get(name)
+                    .ok_or_else(|| anyhow!("top-level evaluator `{name}` not found in config"))?;
+                evaluators.insert(name.clone(), (**evaluator).clone());
+            }
+            (function_name, evaluators, function_config, None)
+        }
+        _ => bail!(
+            "Exactly one of --evaluation-name or --function-name/--evaluator-names must be provided"
+        ),
+    };
 
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
@@ -279,7 +314,7 @@ pub async fn run_evaluation(
         dataset_name: args.dataset_name,
         datapoint_ids: Some(datapoint_ids),
         variant: EvaluationVariant::Name(args.variant_name),
-        evaluation_name: Some(args.evaluation_name),
+        evaluation_name,
         evaluation_run_id,
         inference_cache: args.inference_cache,
         concurrency: args.concurrency,

@@ -32,9 +32,20 @@ pub struct Args {
     #[arg(long)]
     pub gateway_url: Option<Url>,
 
-    /// Name of the evaluation to run.
-    #[arg(short, long)]
-    pub evaluation_name: String,
+    /// Name of the evaluation to run (legacy mode: evaluators configured in the evaluation).
+    /// Mutually exclusive with --function-name / --evaluator-names.
+    #[arg(short, long, group = "eval_source")]
+    pub evaluation_name: Option<String>,
+
+    /// Name of the function to evaluate. Used with --evaluator-names to run
+    /// top-level evaluators without a named evaluation config.
+    #[arg(long, requires = "evaluator_names", group = "eval_source")]
+    pub function_name: Option<String>,
+
+    /// Comma-separated list of top-level evaluator names to run.
+    /// Must be used with --function-name.
+    #[arg(long, requires = "function_name", value_delimiter = ',')]
+    pub evaluator_names: Option<Vec<String>>,
 
     /// Name of the dataset to run on.
     /// Either dataset_name or datapoint_ids must be provided, but not both.
