@@ -32,7 +32,6 @@ interface ParsedMetricName {
   displayName: string;
   fullName: string;
   isEvaluator: boolean;
-  evaluationName?: string;
 }
 
 function parseMetricName(metricName: string): ParsedMetricName {
@@ -44,7 +43,6 @@ function parseMetricName(metricName: string): ParsedMetricName {
         displayName: rest.slice(sepIndex + EVALUATOR_SEPARATOR.length),
         fullName: metricName,
         isEvaluator: true,
-        evaluationName: rest.slice(0, sepIndex),
       };
     }
   }
@@ -181,11 +179,6 @@ function MetricNamePopover({
       <div className="space-y-1.5 font-mono text-xs">
         <div className="text-fg-tertiary break-all">ID: {id}</div>
         <div className="text-fg-primary break-all">{parsed.fullName}</div>
-        {parsed.evaluationName && (
-          <div className="text-fg-tertiary">
-            evaluation: {parsed.evaluationName}
-          </div>
-        )}
         {configLine && <div className="text-fg-tertiary">{configLine}</div>}
       </div>
     </HoverPopover>
