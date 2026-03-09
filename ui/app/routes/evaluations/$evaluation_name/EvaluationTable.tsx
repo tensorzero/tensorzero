@@ -30,13 +30,13 @@ import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
-import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import {
   formatMetricSummaryValue,
   formatConfidenceInterval,
 } from "~/utils/config/feedback";
 import type {
+  InferenceEvaluationConfig,
   MetricConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
@@ -217,6 +217,8 @@ interface EvaluationTableProps {
   evaluation_statistics: EvaluationStatistics[];
   evaluator_names: string[];
   evaluation_name: string;
+  evaluationConfig: InferenceEvaluationConfig;
+  metricsConfig: Record<string, MetricConfig>;
   selectedRows: Map<string, SelectedRowData>;
   setSelectedRows: React.Dispatch<
     React.SetStateAction<Map<string, SelectedRowData>>
@@ -245,13 +247,14 @@ export function EvaluationTable({
   evaluation_statistics,
   evaluator_names,
   evaluation_name,
+  evaluationConfig,
+  metricsConfig,
   selectedRows,
   setSelectedRows,
 }: EvaluationTableProps) {
   const selectedRunIds = selected_evaluation_run_infos.map(
     (info) => info.evaluation_run_id,
   );
-  const config = useConfig();
   const navigate = useNavigate();
 
   // Get all unique datapoints from the results
@@ -369,13 +372,6 @@ export function EvaluationTable({
     });
   };
 
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
-    throw new Error(
-      `Evaluation config not found for evaluation ${evaluation_name}`,
-    );
-  }
-
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <div>
@@ -433,6 +429,8 @@ export function EvaluationTable({
                             evaluation_name={evaluation_name}
                             evaluator_name={evaluator_name}
                             summaryStats={filteredStats}
+                            evaluationConfig={evaluationConfig}
+                            metricsConfig={metricsConfig}
                           />
                         </TableHead>
                       );
@@ -584,10 +582,9 @@ export function EvaluationTable({
                                 const metricValue =
                                   data.metrics.get(metric_name);
                                 const metricType =
-                                  config.metrics[metric_name]?.type;
+                                  metricsConfig[metric_name]?.type;
                                 const evaluatorConfig =
-                                  config.evaluations[evaluation_name]
-                                    ?.evaluators[evaluator_name];
+                                  evaluationConfig.evaluators[evaluator_name];
 
                                 return (
                                   <TableCell
@@ -680,14 +677,16 @@ const EvaluatorHeader = ({
   evaluation_name,
   evaluator_name,
   summaryStats,
+  evaluationConfig,
+  metricsConfig,
 }: {
   evaluation_name: string;
   evaluator_name: string;
   summaryStats: EvaluationStatistics[];
+  evaluationConfig: InferenceEvaluationConfig;
+  metricsConfig: Record<string, MetricConfig>;
 }) => {
-  const config = useConfig();
-  const evaluationConfig = config.evaluations[evaluation_name];
-  const evaluatorConfig = evaluationConfig?.evaluators[evaluator_name];
+  const evaluatorConfig = evaluationConfig.evaluators[evaluator_name];
   if (!evaluatorConfig) {
     logger.warn(
       `Evaluator config not found for evaluation ${evaluation_name} and evaluator ${evaluator_name}`,
@@ -695,7 +694,7 @@ const EvaluatorHeader = ({
     return null;
   }
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluator_name);
-  const metricProperties = config.metrics[metric_name];
+  const metricProperties = metricsConfig[metric_name];
   if (!metricProperties) {
     logger.warn(
       `Metric config not found for evaluation ${evaluation_name} and metric ${metric_name}`,

@@ -268,7 +268,7 @@ export function EvalRunSelector({
             key={info.evaluation_run_id}
             runInfo={info}
             getColor={getColor}
-            lastUpdateDate={new Date(info.most_recent_inference_date)}
+            createdAt={new Date(info.created_at)}
             onRemove={(e) => removeRun(info.evaluation_run_id, e)}
           />
         ))}

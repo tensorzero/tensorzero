@@ -1,0 +1,80 @@
+//! Simple echo tool for testing the autopilot worker infrastructure.
+
+use std::borrow::Cow;
+
+use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
+use durable_tools::{TaskTool, ToolContext, ToolMetadata, ToolResult};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+/// Parameters for the echo tool (visible to LLM).
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct EchoParams {
+    /// The message to echo back.
+    pub message: String,
+}
+
+/// Output from the echo tool.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EchoOutput {
+    /// The echoed message.
+    pub echoed: String,
+    /// The task ID that processed this request.
+    pub task_id: String,
+}
+
+/// Simple echo tool for testing infrastructure.
+#[derive(Default)]
+pub struct EchoTool;
+
+impl ToolMetadata for EchoTool {
+    type SideInfo = AutopilotSideInfo;
+    type Output = EchoOutput;
+    type LlmParams = EchoParams;
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("echo")
+    }
+
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed("Echoes back the input message. Used for testing the autopilot worker.")
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn llm_params_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+        tensorzero_ts_types::UNIT
+    }
+
+    #[cfg(feature = "ts-bindings")]
+    fn output_ts_bundle_type_name() -> String {
+        "void".to_string()
+    }
+}
+
+#[async_trait]
+impl TaskTool for EchoTool {
+    type ExtraState = ();
+    async fn execute(
+        &self,
+        llm_params: Self::LlmParams,
+        _side_info: Self::SideInfo,
+        ctx: &mut ToolContext,
+    ) -> ToolResult<Self::Output> {
+        Ok(EchoOutput {
+            echoed: llm_params.message,
+            task_id: ctx.task_id().to_string(),
+        })
+    }
+}

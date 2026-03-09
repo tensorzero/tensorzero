@@ -66,6 +66,7 @@ export function TemplateContentBlock({
         allowedLanguages={["json"]}
         value={formattedJson}
         readOnly={!isEditing}
+        dataTestId="template-arguments-editor"
         ariaLabel={
           block.name === "system" ? "System template editor" : undefined
         }

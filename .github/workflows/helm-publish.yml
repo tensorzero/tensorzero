@@ -33,11 +33,11 @@ jobs:
           echo "=== Extracting version from Cargo.toml ==="
           echo "Current directory: $(pwd)"
           echo "Cargo.toml contents (first 30 lines):"
-          head -30 Cargo.toml
+          head -30 crates/Cargo.toml
           echo ""
           echo "Looking for version line..."
           # Extract version from Cargo.toml workspace.package section
-          VERSION=$(grep -E '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          VERSION=$(grep -E '^version = ' crates/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "Extracted version: ${VERSION}"
           echo "========================="

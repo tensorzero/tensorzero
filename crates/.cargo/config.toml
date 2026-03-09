@@ -1,0 +1,149 @@
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"] # for NAPI
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"] # for NAPI
+
+[alias]
+check-all = "check --all-targets --all-features"
+test-unit = "nextest run --lib --bins"
+test-unit-fast = "nextest run --lib --bins --retries 0 --no-fail-fast"
+test-all = "nextest run --features e2e_tests"
+# Note - 'test-batch', 'test-e2e', and 'test-clickhouse' must be kept in sync
+# Running all of them should cover all of our tests, and not miss any
+test-live-batch = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "live-batch",
+]
+test-mock-batch = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "mock-batch",
+]
+test-e2e = ["nextest", "run", "--features", "e2e_tests", "--profile", "e2e"]
+test-e2e-fast = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "e2e",
+    "--retries",
+    "0",
+    "--no-fail-fast",
+]
+test-optimization = [
+    "nextest",
+    "run",
+    "--package",
+    "tensorzero-optimizers",
+    "--features",
+    "optimization_tests,e2e_tests",
+    "--profile",
+    "optimization",
+]
+test-optimization-mock = [
+    "nextest",
+    "run",
+    "--package",
+    "tensorzero-optimizers",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "optimization-mock",
+]
+# Runs Clickhouse-related e2e tests that don't require any inference credentials available.
+# This is useful for both running on PR CI (where we don't have creds at all),
+# and for testing against several different ClickHouse versions (to avoid spending lots of money on inference).
+test-clickhouse = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "clickhouse",
+]
+test-clickhouse-fast = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "clickhouse",
+    "--retries",
+    "0",
+    "--no-fail-fast",
+]
+test-endpoints = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "endpoints",
+]
+test-rate-limit-load = [
+    "run",
+    "--release",
+    "--package",
+    "rate-limit-load-test",
+    "--",
+]
+test-feedback-load = [
+    "run",
+    "--release",
+    "--package",
+    "feedback-load-test",
+    "--",
+]
+test-postgres-inference-load = [
+    "run",
+    "--release",
+    "--package",
+    "postgres-inference-load-test",
+    "--",
+]
+
+
+build-e2e = "build --bin gateway --features e2e_tests"
+run-e2e = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/config/tensorzero.*.toml"
+run-e2e-postgres = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/config/{tensorzero,postgres}.*.toml"
+migrate-postgres = "run --bin gateway --features e2e_tests -- --run-postgres-migrations"
+watch-e2e = "watch -x run-e2e"
+
+tsbuild = [
+    "test",
+    "export_bindings",
+    "--features",
+    "ts-bindings",
+    "-p",
+    "tensorzero-core",
+    "-p",
+    "tensorzero",
+    "-p",
+    "tensorzero-node",
+    "-p",
+    "tensorzero-auth",
+    "-p",
+    "tensorzero-optimizers",
+    "-p",
+    "autopilot-client",
+    "-p",
+    "tensorzero-types",
+    "-p",
+    "config-applier",
+    "-p",
+    "autopilot-tools",
+    "-p",
+    "durable-tools",
+    # TODO(shuyangli): Remove `gateway` when we redesign evaluations crate.
+    "-p",
+    "gateway",
+] # Export Typescript bindings for TensorZero

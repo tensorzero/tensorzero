@@ -168,6 +168,7 @@ export function JsonOutputElement({
               value={isEditing ? displayValue : (output.raw ?? undefined)}
               readOnly={!isEditing}
               onChange={isEditing ? handleRawChange : undefined}
+              dataTestId="json-output-raw-editor"
             />
             {isEditing && jsonError && (
               <div className="text-xs text-red-600">{jsonError}</div>
@@ -187,6 +188,7 @@ export function JsonOutputElement({
               }
               readOnly={!isEditing}
               onChange={isEditing ? handleSchemaChange : undefined}
+              dataTestId="json-output-schema-editor"
             />
             {isEditing && schemaJsonError && (
               <div className="text-xs text-red-600">{schemaJsonError}</div>
@@ -200,7 +202,10 @@ export function JsonOutputElement({
   };
 
   return (
-    <div className="bg-bg-primary border-border flex w-full flex-col gap-1 rounded-lg border p-4">
+    <div
+      className="bg-bg-primary border-border flex w-full flex-col gap-1 rounded-lg border p-4"
+      data-testid="json-output-element"
+    >
       <MessageWrapper
         role="assistant"
         actionBar={

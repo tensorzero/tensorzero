@@ -1,8 +1,6 @@
 from openai import OpenAI
-from tensorzero import patch_openai_client
 
-client = OpenAI()
-patch_openai_client(client, async_setup=False)
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 response = client.chat.completions.create(
     model="tensorzero::model_name::openai::gpt-5-mini",

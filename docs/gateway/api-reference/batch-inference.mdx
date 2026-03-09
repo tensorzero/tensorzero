@@ -51,7 +51,7 @@ Only use this field if dynamic tool use is necessary for your use case.
 Each tool is an object with the following fields: `description`, `name`, `parameters`, and `strict`.
 
 The fields are identical to those in the configuration file, except that the `parameters` field should contain the JSON schema itself rather than a path to it.
-See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) for more details.
+See [Configuration Reference](/gateway/configuration-reference/#tools-tool_name) for more details.
 
 #### `allowed_tools`
 
@@ -75,7 +75,7 @@ For providers that do not natively support this feature, we filter the tool list
 - **Required:** no (default: no credentials)
 
 Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
-See the [configuration reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See the [configuration reference](/gateway/configuration-reference/#models-model_name-providers-provider_name) for more details.
 The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
 The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
 
@@ -374,7 +374,7 @@ Currently, we support the following:
   - `top_p`
   - `verbosity`
 
-See [Configuration Reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for more details on the parameters, and Examples below for usage.
+See [Configuration Reference](/gateway/configuration-reference/#functions-function_name-variants-variant_name) for more details on the parameters, and Examples below for usage.
 
 <Accordion title="Example">
 
