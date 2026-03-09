@@ -15,6 +15,7 @@ import {
   getPageErrorInfo,
 } from "~/utils/tensorzero/errors";
 import { Button } from "~/components/ui/button";
+import { HelpTooltip, docsUrl } from "~/components/ui/HelpTooltip";
 import { Input } from "~/components/ui/input";
 import {
   ErrorContentCard,
@@ -94,11 +95,13 @@ function GatewayAuthContent() {
   };
 
   return (
-    <ErrorContentCard className="w-[22rem]">
+    <ErrorContentCard className="w-[20rem]">
       <div className="flex flex-col items-center px-6 pt-9 pb-6 text-center">
         <KeyRound className="mb-5 h-8 w-8 text-orange-500 dark:text-orange-400" />
         <h2 className="text-foreground text-lg font-medium">
-          TensorZero Gateway requires an API key
+          TensorZero Gateway requires
+          <br />
+          an API key
         </h2>
         <ol className="text-muted-foreground mt-4 space-y-2 text-left text-sm">
           <li className="flex items-start gap-2">
@@ -136,17 +139,28 @@ function GatewayAuthContent() {
         </div>
       </div>
       <div className="px-6 pt-4 pb-6">
-        <label
-          htmlFor="gateway-api-key"
-          className="text-foreground block text-sm font-medium"
-        >
-          Authenticate this browser
-        </label>
+        <div className="flex items-center gap-1.5">
+          <label
+            htmlFor="gateway-api-key"
+            className="text-foreground text-sm font-medium"
+          >
+            Authenticate this browser
+          </label>
+          <HelpTooltip
+            link={{
+              href: docsUrl("operations/set-up-auth-for-tensorzero"),
+              label: "Auth docs",
+            }}
+          >
+            Your API key looks like{" "}
+            <code className="text-xs">sk-t0-xxx...-yyy...</code>
+          </HelpTooltip>
+        </div>
         <div className="mt-2">
           <Input
             id="gateway-api-key"
             type="password"
-            placeholder="sk-t0-xxxxxxxxxxxx-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+            placeholder="API Key"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             disabled={isBusy}
