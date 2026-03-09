@@ -23,7 +23,6 @@ COPY --from=planner /app/crates/recipe.json /tensorzero/crates/recipe.json
 COPY crates/rust-toolchain.toml /tensorzero/crates/rust-toolchain.toml
 WORKDIR /tensorzero/crates
 RUN cargo chef cook --profile ${PROFILE} -p gateway ${CARGO_BUILD_FLAGS}
-COPY .git /tensorzero/.git
 COPY crates/ /tensorzero/crates/
 RUN cargo build --profile ${PROFILE} -p gateway ${CARGO_BUILD_FLAGS}
 RUN if [ "${PROFILE}" = "dev" ]; then cp -r /tensorzero/crates/target/debug /release; else cp -r /tensorzero/crates/target/${PROFILE} /release; fi
