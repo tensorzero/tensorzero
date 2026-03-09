@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::db::TagFilter;
 use crate::db::inferences::{
     DEFAULT_INFERENCE_QUERY_LIMIT, InferenceMetadata, InferenceQueries,
     ListInferenceMetadataParams, PaginationParams,
@@ -28,6 +29,8 @@ pub struct InferenceMetadataQueryParams {
     pub variant_name: Option<String>,
     /// Filter by episode ID
     pub episode_id: Option<Uuid>,
+    /// Optional tag filter in `name::value` format (e.g. `tensorzero::namespace::mobile`).
+    pub tag: Option<String>,
 }
 
 /// Response containing a list of inference metadata
@@ -56,12 +59,15 @@ pub async fn get_inference_metadata_handler(
         }
     };
 
+    let tag = params.tag.as_deref().map(TagFilter::parse).transpose()?;
+
     let list_params = ListInferenceMetadataParams {
         pagination,
         limit: params.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
         function_name: params.function_name,
         variant_name: params.variant_name,
         episode_id: params.episode_id,
+        tag,
     };
 
     let database = app_state.get_delegating_database();

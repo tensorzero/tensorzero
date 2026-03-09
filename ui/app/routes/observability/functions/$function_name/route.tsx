@@ -114,12 +114,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
 
-  const inferenceCountPromise = countInferences(function_name);
+  const inferenceCountPromise = countInferences(function_name, namespace);
 
   return {
     function_name,
     namespace,
-    variantsData: fetchVariantsSectionData({ function_name, function_config }),
+    variantsData: fetchVariantsSectionData({
+      function_name,
+      function_config,
+      namespace,
+    }),
     experimentationData:
       function_name !== DEFAULT_FUNCTION
         ? fetchExperimentationSectionData({
@@ -132,12 +136,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throughputData: fetchThroughputSectionData({
       function_name,
       time_granularity: throughput_time_granularity,
+      namespace,
     }),
     metricsData: fetchMetricsSectionData({
       function_name,
       metric_name,
       time_granularity,
       config,
+      namespace,
     }),
     inferenceCountPromise,
     inferencesData: fetchInferencesSectionData({
@@ -145,6 +151,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       beforeInference,
       afterInference,
       limit,
+      namespace,
     }),
   };
 }

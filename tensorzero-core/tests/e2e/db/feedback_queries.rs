@@ -237,7 +237,14 @@ async fn test_get_cumulative_feedback_timeseries_basic(conn: impl FeedbackQuerie
     let metric_name = "task_success".to_string();
 
     let timeseries = conn
-        .get_cumulative_feedback_timeseries(function_name, metric_name, None, TimeWindow::Day, 30)
+        .get_cumulative_feedback_timeseries(
+            function_name,
+            metric_name,
+            None,
+            TimeWindow::Day,
+            30,
+            None,
+        )
         .await
         .unwrap();
 
@@ -302,6 +309,7 @@ async fn test_get_cumulative_feedback_timeseries_with_variant_filter(conn: impl 
             None,
             TimeWindow::Day,
             30,
+            None,
         )
         .await
         .unwrap();
@@ -317,6 +325,7 @@ async fn test_get_cumulative_feedback_timeseries_with_variant_filter(conn: impl 
                 Some(variant_filter),
                 TimeWindow::Day,
                 30,
+                None,
             )
             .await
             .unwrap();
@@ -357,6 +366,7 @@ async fn test_get_cumulative_feedback_timeseries_different_time_windows(
                 None,
                 time_window,
                 10,
+                None,
             )
             .await
             .unwrap();
@@ -385,6 +395,7 @@ async fn test_get_cumulative_feedback_timeseries_cumulative_window_not_supported
             None,
             TimeWindow::Cumulative,
             10,
+            None,
         )
         .await;
 
@@ -401,7 +412,14 @@ async fn test_get_cumulative_feedback_timeseries_empty_result(conn: impl Feedbac
     let metric_name = "nonexistent_metric_xyz".to_string();
 
     let timeseries = conn
-        .get_cumulative_feedback_timeseries(function_name, metric_name, None, TimeWindow::Day, 30)
+        .get_cumulative_feedback_timeseries(
+            function_name,
+            metric_name,
+            None,
+            TimeWindow::Day,
+            30,
+            None,
+        )
         .await
         .unwrap();
 
@@ -424,6 +442,7 @@ async fn test_get_cumulative_feedback_timeseries_max_periods(conn: impl Feedback
             None,
             TimeWindow::Day,
             1,
+            None,
         )
         .await
         .unwrap();
@@ -440,7 +459,14 @@ async fn test_get_cumulative_feedback_timeseries_max_periods(conn: impl Feedback
 
     // Request more periods
     let timeseries_more = conn
-        .get_cumulative_feedback_timeseries(function_name, metric_name, None, TimeWindow::Day, 30)
+        .get_cumulative_feedback_timeseries(
+            function_name,
+            metric_name,
+            None,
+            TimeWindow::Day,
+            30,
+            None,
+        )
         .await
         .unwrap();
 
@@ -479,6 +505,7 @@ async fn test_get_variant_performances_inference_level_cumulative(conn: impl Fee
         metric_config: &metric_config,
         time_window: TimeWindow::Cumulative,
         variant_name: None,
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();
@@ -515,6 +542,7 @@ async fn test_get_variant_performances_inference_level_week(conn: impl FeedbackQ
         metric_config: &metric_config,
         time_window: TimeWindow::Week,
         variant_name: None,
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();
@@ -552,6 +580,7 @@ async fn test_get_variant_performances_episode_level_cumulative(conn: impl Feedb
         metric_config: &metric_config,
         time_window: TimeWindow::Cumulative,
         variant_name: None,
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();
@@ -589,6 +618,7 @@ async fn test_get_variant_performances_episode_level_week(conn: impl FeedbackQue
         metric_config: &metric_config,
         time_window: TimeWindow::Week,
         variant_name: None,
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();
@@ -629,6 +659,7 @@ async fn test_get_variant_performances_with_variant_filter(conn: impl FeedbackQu
         metric_config: &metric_config,
         time_window: TimeWindow::Cumulative,
         variant_name: None,
+        tag: None,
     };
 
     let all_results = conn.get_variant_performances(params_all).await.unwrap();
@@ -644,6 +675,7 @@ async fn test_get_variant_performances_with_variant_filter(conn: impl FeedbackQu
         metric_config: &metric_config,
         time_window: TimeWindow::Cumulative,
         variant_name: Some(target_variant.as_str()),
+        tag: None,
     };
 
     let filtered_results = conn
@@ -678,6 +710,7 @@ async fn test_get_variant_performances_empty_for_nonexistent_function(conn: impl
         metric_config: &metric_config,
         time_window: TimeWindow::Cumulative,
         variant_name: None,
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();
@@ -714,6 +747,7 @@ async fn test_get_variant_performances_different_time_windows(conn: impl Feedbac
             metric_config: &metric_config,
             time_window: time_window.clone(),
             variant_name: None,
+            tag: None,
         };
 
         let results = conn.get_variant_performances(params).await;
@@ -746,6 +780,7 @@ async fn test_get_variant_performances_boolean_metric(conn: impl FeedbackQueries
         metric_config: &metric_config,
         time_window: TimeWindow::Cumulative,
         variant_name: None,
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();
@@ -778,6 +813,7 @@ async fn test_get_variant_performances_empty_for_nonexistent_metric(conn: impl F
         metric_config: &metric_config,
         time_window: TimeWindow::Week,
         variant_name: Some("gpt4o_initial_prompt"),
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();
@@ -806,6 +842,7 @@ async fn test_get_variant_performances_ask_question_solved_with_variant(
         metric_config: &metric_config,
         time_window: TimeWindow::Week,
         variant_name: Some("baseline"),
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();
@@ -898,6 +935,7 @@ async fn test_get_variant_performances_ask_question_num_questions_with_variant(
         metric_config: &metric_config,
         time_window: TimeWindow::Week,
         variant_name: Some("baseline"),
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();
@@ -1296,6 +1334,7 @@ async fn test_get_variant_performances_distinct_on_semantics(
         metric_config: &metric_config,
         time_window: TimeWindow::Cumulative,
         variant_name: Some("initial_prompt_gpt4o_mini"),
+        tag: None,
     };
 
     let results = conn.get_variant_performances(params).await.unwrap();

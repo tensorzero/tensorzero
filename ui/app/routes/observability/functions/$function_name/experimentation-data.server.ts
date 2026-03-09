@@ -44,6 +44,8 @@ export async function fetchExperimentationSectionData(params: {
         }
       : null;
 
+  const tag = namespace ? `tensorzero::namespace::${namespace}` : undefined;
+
   const [feedback_timeseries, variant_sampling_probabilities] =
     await Promise.all([
       feedbackParams
@@ -52,6 +54,7 @@ export async function fetchExperimentationSectionData(params: {
             ...feedbackParams,
             time_window: time_granularity,
             max_periods: 10,
+            tag,
           })
         : Promise.resolve(undefined),
       client

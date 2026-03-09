@@ -467,6 +467,7 @@ impl InferenceQueries for PostgresConnectionInfo {
             params.function_type,
             params.function_name,
             params.variant_name,
+            params.tag,
         )
         .await
         .map_err(Error::from)
@@ -498,6 +499,7 @@ impl InferenceQueries for PostgresConnectionInfo {
             params.function_name,
             params.time_window,
             params.max_periods,
+            params.tag,
         )
         .await
     }
@@ -1595,6 +1597,8 @@ fn apply_metadata_filters(
         query_builder.push_bind(episode_id);
     }
 
+    super::feedback::push_optional_tag_filter(query_builder, params.tag.as_ref());
+
     // Handle pagination cursor
     match &params.pagination {
         Some(PaginationParams::Before { id }) => {
@@ -1848,29 +1852,51 @@ fn apply_count_filters(
 
 // ===== Inference count helper functions (merged from inference_count module) =====
 
-/// Builds and executes a count-by-variant query using the rollup table.
+/// Builds and executes a count-by-variant query.
+/// Uses the rollup table when no tag filter is present;
+/// falls back to the raw inference table when filtering by tag
+/// (since the rollup table doesn't store per-inference tags).
 async fn count_by_variant_impl(
     pool: &PgPool,
     function_type: FunctionConfigType,
     function_name: &str,
     variant_name: Option<&str>,
+    tag: Option<&super::super::TagFilter>,
 ) -> Result<Vec<CountByVariant>, sqlx::Error> {
-    let function_type_str = match function_type {
-        FunctionConfigType::Chat => "chat",
-        FunctionConfigType::Json => "json",
+    let mut qb: QueryBuilder<sqlx::Postgres> = if tag.is_some() {
+        let table_name = match function_type {
+            FunctionConfigType::Chat => "tensorzero.chat_inferences",
+            FunctionConfigType::Json => "tensorzero.json_inferences",
+        };
+        let mut qb = QueryBuilder::new(format!(
+            r#"SELECT
+                variant_name,
+                COUNT(*)::BIGINT AS inference_count,
+                to_char(MAX(created_at), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS last_used_at
+            FROM {table_name}
+            WHERE function_name = "#,
+        ));
+        qb.push_bind(function_name);
+        super::feedback::push_optional_tag_filter(&mut qb, tag);
+        qb
+    } else {
+        let function_type_str = match function_type {
+            FunctionConfigType::Chat => "chat",
+            FunctionConfigType::Json => "json",
+        };
+        let mut qb = QueryBuilder::new(
+            r#"SELECT
+                variant_name,
+                SUM(inference_count)::BIGINT AS inference_count,
+                to_char(MAX(minute), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS last_used_at
+            FROM tensorzero.inference_by_function_statistics
+            WHERE function_name = "#,
+        );
+        qb.push_bind(function_name);
+        qb.push(" AND function_type = ");
+        qb.push_bind(function_type_str);
+        qb
     };
-
-    let mut qb = QueryBuilder::new(
-        r#"SELECT
-            variant_name,
-            SUM(inference_count)::BIGINT AS inference_count,
-            to_char(MAX(minute), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS last_used_at
-        FROM tensorzero.inference_by_function_statistics
-        WHERE function_name = "#,
-    );
-    qb.push_bind(function_name);
-    qb.push(" AND function_type = ");
-    qb.push_bind(function_type_str);
 
     if let Some(variant) = variant_name {
         qb.push(" AND variant_name = ");
@@ -1896,60 +1922,120 @@ async fn count_by_variant_impl(
         .collect())
 }
 
-/// Builds and executes a throughput-by-variant query using the rollup table.
+/// Builds and executes a throughput-by-variant query.
+/// Uses the rollup table when no tag filter is present;
+/// falls back to querying both raw inference tables (UNION ALL) when filtering by tag
+/// (since the rollup table doesn't store per-inference tags).
 async fn throughput_by_variant_impl(
     pool: &PgPool,
     function_name: &str,
     time_window: TimeWindow,
     max_periods: u32,
+    tag: Option<&super::super::TagFilter>,
 ) -> Result<Vec<VariantThroughput>, Error> {
     let rows = if time_window == TimeWindow::Cumulative {
-        // For cumulative, return all-time data grouped by variant with fixed epoch start
-        let mut qb = QueryBuilder::new(
-            r"SELECT
-                '1970-01-01T00:00:00.000Z'::text AS period_start,
-                variant_name,
-                SUM(inference_count)::INT AS count
-            FROM tensorzero.inference_by_function_statistics
-            WHERE function_name = ",
-        );
-        qb.push_bind(function_name);
+        let mut qb: QueryBuilder<sqlx::Postgres> = if tag.is_some() {
+            let mut qb = QueryBuilder::new(
+                r"SELECT
+                    '1970-01-01T00:00:00.000Z'::text AS period_start,
+                    variant_name,
+                    COUNT(*)::INT AS count
+                FROM (
+                    SELECT variant_name FROM tensorzero.chat_inferences WHERE function_name = ",
+            );
+            qb.push_bind(function_name);
+            super::feedback::push_optional_tag_filter(&mut qb, tag);
+            qb.push(
+                " UNION ALL SELECT variant_name FROM tensorzero.json_inferences WHERE function_name = ",
+            );
+            qb.push_bind(function_name);
+            super::feedback::push_optional_tag_filter(&mut qb, tag);
+            qb.push(") AS combined");
+            qb
+        } else {
+            let mut qb = QueryBuilder::new(
+                r"SELECT
+                    '1970-01-01T00:00:00.000Z'::text AS period_start,
+                    variant_name,
+                    SUM(inference_count)::INT AS count
+                FROM tensorzero.inference_by_function_statistics
+                WHERE function_name = ",
+            );
+            qb.push_bind(function_name);
+            qb
+        };
         qb.push(" GROUP BY variant_name ORDER BY variant_name DESC");
-
         qb.build().fetch_all(pool).await?
     } else {
         let unit = time_window.to_postgres_time_unit();
 
-        let mut qb = QueryBuilder::new(
-            "WITH max_time AS (
-                SELECT MAX(minute) AS max_ts
-                FROM tensorzero.inference_by_function_statistics
-                WHERE function_name = ",
-        );
-        qb.push_bind(function_name);
-        qb.push(
-            ")
-            SELECT
-                to_char(date_trunc('",
-        );
-        qb.push(unit);
-        qb.push(
-            r#"', s.minute), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS period_start,
-                s.variant_name,
-                SUM(s.inference_count)::INT AS count
-            FROM tensorzero.inference_by_function_statistics s, max_time m
-            WHERE s.function_name = "#,
-        );
-        qb.push_bind(function_name);
-        qb.push(" AND s.minute >= m.max_ts - INTERVAL '1 ");
-        qb.push(unit);
-        qb.push("' * (");
-        qb.push_bind(max_periods as i32);
-        qb.push(" + 1) GROUP BY date_trunc('");
-        qb.push(unit);
-        qb.push("', s.minute), s.variant_name ORDER BY period_start DESC, variant_name DESC");
-
-        qb.build().fetch_all(pool).await?
+        if tag.is_some() {
+            let mut qb = QueryBuilder::new(
+                "WITH raw_inferences AS (
+                    SELECT variant_name, created_at FROM tensorzero.chat_inferences WHERE function_name = ",
+            );
+            qb.push_bind(function_name);
+            super::feedback::push_optional_tag_filter(&mut qb, tag);
+            qb.push(
+                " UNION ALL SELECT variant_name, created_at FROM tensorzero.json_inferences WHERE function_name = ",
+            );
+            qb.push_bind(function_name);
+            super::feedback::push_optional_tag_filter(&mut qb, tag);
+            qb.push(
+                "), max_time AS (
+                    SELECT MAX(created_at) AS max_ts FROM raw_inferences
+                )
+                SELECT
+                    to_char(date_trunc('",
+            );
+            qb.push(unit);
+            qb.push(
+                r#"', s.created_at), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS period_start,
+                    s.variant_name,
+                    COUNT(*)::INT AS count
+                FROM raw_inferences s, max_time m
+                WHERE s.created_at >= m.max_ts - INTERVAL '1 "#,
+            );
+            qb.push(unit);
+            qb.push("' * (");
+            qb.push_bind(max_periods as i32);
+            qb.push(" + 1) GROUP BY date_trunc('");
+            qb.push(unit);
+            qb.push(
+                "', s.created_at), s.variant_name ORDER BY period_start DESC, variant_name DESC",
+            );
+            qb.build().fetch_all(pool).await?
+        } else {
+            let mut qb = QueryBuilder::new(
+                "WITH max_time AS (
+                    SELECT MAX(minute) AS max_ts
+                    FROM tensorzero.inference_by_function_statistics
+                    WHERE function_name = ",
+            );
+            qb.push_bind(function_name);
+            qb.push(
+                ")
+                SELECT
+                    to_char(date_trunc('",
+            );
+            qb.push(unit);
+            qb.push(
+                r#"', s.minute), 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') AS period_start,
+                    s.variant_name,
+                    SUM(s.inference_count)::INT AS count
+                FROM tensorzero.inference_by_function_statistics s, max_time m
+                WHERE s.function_name = "#,
+            );
+            qb.push_bind(function_name);
+            qb.push(" AND s.minute >= m.max_ts - INTERVAL '1 ");
+            qb.push(unit);
+            qb.push("' * (");
+            qb.push_bind(max_periods as i32);
+            qb.push(" + 1) GROUP BY date_trunc('");
+            qb.push(unit);
+            qb.push("', s.minute), s.variant_name ORDER BY period_start DESC, variant_name DESC");
+            qb.build().fetch_all(pool).await?
+        }
     };
 
     let variant_throughputs = rows
@@ -2634,6 +2720,7 @@ mod tests {
             episode_id: None,
             pagination: None,
             limit: 100,
+            tag: None,
         };
 
         let qb = build_inference_metadata_query(&params, "DESC");
@@ -2677,6 +2764,7 @@ mod tests {
             episode_id: None,
             pagination: None,
             limit: 50,
+            tag: None,
         };
 
         let qb = build_inference_metadata_query(&params, "DESC");
@@ -2720,6 +2808,7 @@ mod tests {
             episode_id: None,
             pagination: None,
             limit: 50,
+            tag: None,
         };
 
         let qb = build_inference_metadata_query(&params, "DESC");
@@ -2764,6 +2853,7 @@ mod tests {
             episode_id: Some(episode_id),
             pagination: None,
             limit: 50,
+            tag: None,
         };
 
         let qb = build_inference_metadata_query(&params, "DESC");
@@ -2808,6 +2898,7 @@ mod tests {
             episode_id: None,
             pagination: Some(PaginationParams::Before { id: before_id }),
             limit: 50,
+            tag: None,
         };
 
         let qb = build_inference_metadata_query(&params, "DESC");
@@ -2852,6 +2943,7 @@ mod tests {
             episode_id: None,
             pagination: Some(PaginationParams::After { id: after_id }),
             limit: 50,
+            tag: None,
         };
 
         let qb = build_inference_metadata_query(&params, "ASC");
@@ -2897,6 +2989,7 @@ mod tests {
             episode_id: Some(episode_id),
             pagination: Some(PaginationParams::Before { id: before_id }),
             limit: 25,
+            tag: None,
         };
 
         let qb = build_inference_metadata_query(&params, "DESC");

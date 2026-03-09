@@ -329,6 +329,30 @@ pub fn escape_string_for_clickhouse_literal(s: &str) -> String {
     s.replace(r#"\"#, r#"\\"#).replace(r#"'"#, r#"\'"#)
 }
 
+/// Build an optional ClickHouse SQL filter clause for tag filtering via the `InferenceTag` table.
+/// Returns an empty string if `tag` is None, or a SQL `AND id_uint IN (...)` subquery fragment.
+/// The `id_column` specifies which column to filter (e.g. `"id_uint"` or `"target_id_uint"`).
+/// The `function_name_param` is the ClickHouse parameter reference for the function name
+/// (e.g. `"{function_name:String}"`).
+pub fn build_optional_tag_filter_clause(
+    tag: Option<&super::TagFilter>,
+    id_column: &str,
+    function_name_param: &str,
+) -> String {
+    let Some(tag) = tag else {
+        return String::new();
+    };
+    let escaped_key = escape_string_for_clickhouse_literal(&tag.tag_name);
+    let escaped_value = escape_string_for_clickhouse_literal(&tag.tag_value);
+    format!(
+        " AND {id_column} IN (\
+            SELECT toUInt128(inference_id) FROM InferenceTag \
+            WHERE function_name = {function_name_param} \
+            AND key = '{escaped_key}' AND value = '{escaped_value}'\
+        )"
+    )
+}
+
 /// A wrapper type used with `write_non_batched`
 pub enum Rows<'a, T: Serialize + Send + Sync> {
     /// The rows will be serialized to JSON before being sent to ClickHouse

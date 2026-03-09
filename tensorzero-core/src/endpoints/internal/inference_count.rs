@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::config::Config;
-use crate::db::TimeWindow;
 use crate::db::clickhouse::query_builder::InferenceFilter;
 use crate::db::inferences::{
     CountByVariant, CountInferencesForFunctionParams, CountInferencesParams,
     CountInferencesWithFeedbackParams, FunctionInferenceCount,
     GetFunctionThroughputByVariantParams, InferenceQueries, VariantThroughput,
 };
+use crate::db::{TagFilter, TimeWindow};
 use crate::endpoints::stored_inferences::v1::types::DemonstrationFeedbackFilter;
 use crate::error::{Error, ErrorDetails};
 use crate::function::DEFAULT_FUNCTION_NAME;
@@ -26,6 +26,8 @@ pub struct InferenceCountQueryParams {
     pub variant_name: Option<String>,
     /// Optional grouping for the results
     pub group_by: Option<InferenceCountGroupBy>,
+    /// Optional tag filter in `name::value` format (e.g. `tensorzero::namespace::mobile`).
+    pub tag: Option<String>,
 }
 
 /// Grouping options for inference count
@@ -100,6 +102,8 @@ pub struct FunctionThroughputByVariantQueryParams {
     /// Maximum number of time periods to return (default: 10)
     #[serde(default = "default_max_periods")]
     pub max_periods: u32,
+    /// Optional tag filter in `name::value` format (e.g. `tensorzero::namespace::mobile`).
+    pub tag: Option<String>,
 }
 
 fn default_max_periods() -> u32 {
@@ -139,8 +143,15 @@ pub async fn get_inference_count_handler(
     Query(params): Query<InferenceCountQueryParams>,
 ) -> Result<Json<InferenceCountResponse>, Error> {
     let database = app_state.get_delegating_database();
-    let response =
-        get_inference_count(&app_state.config, &database, &function_name, params).await?;
+    let tag = params.tag.as_deref().map(TagFilter::parse).transpose()?;
+    let response = get_inference_count(
+        &app_state.config,
+        &database,
+        &function_name,
+        &params,
+        tag.as_ref(),
+    )
+    .await?;
     Ok(Json(response))
 }
 
@@ -177,7 +188,8 @@ async fn get_inference_count(
     config: &Config,
     database: &(dyn InferenceQueries + Sync),
     function_name: &str,
-    params: InferenceCountQueryParams,
+    params: &InferenceCountQueryParams,
+    tag: Option<&TagFilter>,
 ) -> Result<InferenceCountResponse, Error> {
     // Get the function config to determine the function type
     let function = config.get_function(function_name)?;
@@ -200,6 +212,7 @@ async fn get_inference_count(
             function_name,
             function_type: function.config_type(),
             variant_name: params.variant_name.as_deref(),
+            tag,
         };
         let variant_rows = database.count_inferences_by_variant(count_params).await?;
 
@@ -300,10 +313,17 @@ pub async fn get_function_throughput_by_variant_handler(
     Query(params): Query<FunctionThroughputByVariantQueryParams>,
 ) -> Result<Json<GetFunctionThroughputByVariantResponse>, Error> {
     let database = state.get_delegating_database();
+    let tag = params.tag.as_deref().map(TagFilter::parse).transpose()?;
 
-    let response =
-        get_function_throughput_by_variant(&state.config, &database, &function_name, params)
-            .await?;
+    let response = get_function_throughput_by_variant(
+        &state.config,
+        &database,
+        &function_name,
+        params.time_window,
+        params.max_periods,
+        tag.as_ref(),
+    )
+    .await?;
 
     Ok(Json(response))
 }
@@ -314,7 +334,9 @@ pub async fn get_function_throughput_by_variant(
     config: &Config,
     database: &(dyn InferenceQueries + Sync),
     function_name: &str,
-    params: FunctionThroughputByVariantQueryParams,
+    time_window: TimeWindow,
+    max_periods: u32,
+    tag: Option<&TagFilter>,
 ) -> Result<GetFunctionThroughputByVariantResponse, Error> {
     // Validate function exists
     config.get_function(function_name)?;
@@ -322,8 +344,9 @@ pub async fn get_function_throughput_by_variant(
     let throughput = database
         .get_function_throughput_by_variant(GetFunctionThroughputByVariantParams {
             function_name,
-            time_window: params.time_window,
-            max_periods: params.max_periods,
+            time_window,
+            max_periods,
+            tag,
         })
         .await?;
 
@@ -367,10 +390,17 @@ mod tests {
         let params = InferenceCountQueryParams {
             variant_name: None,
             group_by: None,
+            tag: None,
         };
 
-        let result =
-            get_inference_count(&config, &mock_clickhouse, "nonexistent_function", params).await;
+        let result = get_inference_count(
+            &config,
+            &mock_clickhouse,
+            "nonexistent_function",
+            &params,
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -405,9 +435,11 @@ mod tests {
         let params = InferenceCountQueryParams {
             variant_name: Some("nonexistent_variant".to_string()),
             group_by: None,
+            tag: None,
         };
 
-        let result = get_inference_count(&config, &mock_clickhouse, "test_function", params).await;
+        let result =
+            get_inference_count(&config, &mock_clickhouse, "test_function", &params, None).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -517,9 +549,10 @@ mod tests {
         let params = InferenceCountQueryParams {
             variant_name: None,
             group_by: None,
+            tag: None,
         };
 
-        let result = get_inference_count(&config, &mock_clickhouse, "test_function", params)
+        let result = get_inference_count(&config, &mock_clickhouse, "test_function", &params, None)
             .await
             .unwrap();
 
@@ -601,12 +634,19 @@ mod tests {
         let params = InferenceCountQueryParams {
             variant_name: Some("openai::gpt-5-mini".to_string()),
             group_by: None,
+            tag: None,
         };
 
         // This should NOT return UnknownVariant error
-        let result = get_inference_count(&config, &mock_clickhouse, DEFAULT_FUNCTION_NAME, params)
-            .await
-            .unwrap();
+        let result = get_inference_count(
+            &config,
+            &mock_clickhouse,
+            DEFAULT_FUNCTION_NAME,
+            &params,
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.inference_count, 10);
     }
@@ -644,9 +684,10 @@ mod tests {
         let params = InferenceCountQueryParams {
             variant_name: None,
             group_by: None,
+            tag: None,
         };
 
-        let result = get_inference_count(&config, &postgres, "test_function", params).await;
+        let result = get_inference_count(&config, &postgres, "test_function", &params, None).await;
 
         assert!(
             result.is_err(),

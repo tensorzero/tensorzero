@@ -312,6 +312,7 @@ impl FeedbackQueries for DelegatingDatabaseConnection {
         variant_names: Option<Vec<String>>,
         time_window: TimeWindow,
         max_periods: u32,
+        tag: Option<super::TagFilter>,
     ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error> {
         self.get_database()
             .get_cumulative_feedback_timeseries(
@@ -320,6 +321,7 @@ impl FeedbackQueries for DelegatingDatabaseConnection {
                 variant_names,
                 time_window,
                 max_periods,
+                tag,
             )
             .await
     }
@@ -368,9 +370,10 @@ impl FeedbackQueries for DelegatingDatabaseConnection {
         function_name: &str,
         function_config: &FunctionConfig,
         variant_name: Option<&str>,
+        tag: Option<&super::TagFilter>,
     ) -> Result<Vec<MetricWithFeedback>, Error> {
         self.get_database()
-            .query_metrics_with_feedback(function_name, function_config, variant_name)
+            .query_metrics_with_feedback(function_name, function_config, variant_name, tag)
             .await
     }
 

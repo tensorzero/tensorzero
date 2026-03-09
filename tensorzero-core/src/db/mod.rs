@@ -15,7 +15,7 @@ use crate::config::Config;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 use rust_decimal::Decimal;
 
@@ -69,6 +69,42 @@ pub trait EpisodeQueries: Send + Sync {
     ) -> Result<Vec<EpisodeByIdRow>, Error>;
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
+}
+
+/// A generic tag filter for inference queries.
+/// Parsed from a `::` delimited string like `tensorzero::namespace::mobile`,
+/// where the last `::` separates the tag name from the tag value.
+#[derive(Debug, Clone)]
+pub struct TagFilter {
+    pub tag_name: String,
+    pub tag_value: String,
+}
+
+impl TagFilter {
+    /// Parse a tag string like `tensorzero::namespace::mobile` into a `TagFilter`.
+    /// Splits on the last `::` to separate tag name from tag value.
+    pub fn parse(tag: &str) -> Result<Self, Error> {
+        let Some(pos) = tag.rfind("::") else {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "Invalid tag format `{tag}`: expected `::` separator between tag name and value (e.g. `tensorzero::namespace::mobile`)"
+                ),
+            }));
+        };
+        let tag_name = &tag[..pos];
+        let tag_value = &tag[pos + 2..];
+        if tag_name.is_empty() || tag_value.is_empty() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "Invalid tag format `{tag}`: tag name and value must not be empty"
+                ),
+            }));
+        }
+        Ok(Self {
+            tag_name: tag_name.to_string(),
+            tag_value: tag_value.to_string(),
+        })
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

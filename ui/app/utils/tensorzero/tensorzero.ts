@@ -648,7 +648,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    */
   async getInferenceCount(
     functionName: string,
-    options?: { variantName?: string; groupBy?: "variant" },
+    options?: { variantName?: string; groupBy?: "variant"; tag?: string },
   ): Promise<InferenceCountResponse> {
     const searchParams = new URLSearchParams();
     if (options?.variantName) {
@@ -656,6 +656,9 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     }
     if (options?.groupBy) {
       searchParams.append("group_by", options.groupBy);
+    }
+    if (options?.tag) {
+      searchParams.append("tag", options.tag);
     }
     const queryString = searchParams.toString();
     const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/inference_count${queryString ? `?${queryString}` : ""}`;
@@ -742,11 +745,15 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     functionName: string,
     timeWindow: TimeWindow,
     maxPeriods: number,
+    tag?: string,
   ): Promise<GetFunctionThroughputByVariantResponse> {
     const searchParams = new URLSearchParams({
       time_window: timeWindow,
       max_periods: maxPeriods.toString(),
     });
+    if (tag) {
+      searchParams.append("tag", tag);
+    }
     const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/throughput_by_variant?${searchParams.toString()}`;
 
     const response = await this.fetch(endpoint, { method: "GET" });
@@ -767,10 +774,14 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   async getFunctionMetricsWithFeedback(
     functionName: string,
     variantName?: string,
+    tag?: string,
   ): Promise<MetricsWithFeedbackResponse> {
     const searchParams = new URLSearchParams();
     if (variantName) {
       searchParams.append("variant_name", variantName);
+    }
+    if (tag) {
+      searchParams.append("tag", tag);
     }
     const queryString = searchParams.toString();
     const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/metrics${queryString ? `?${queryString}` : ""}`;
@@ -822,12 +833,16 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     metricName: string,
     timeWindow: TimeWindow,
     variantName?: string,
+    tag?: string,
   ): Promise<VariantPerformancesResponse> {
     const searchParams = new URLSearchParams();
     searchParams.append("metric_name", metricName);
     searchParams.append("time_window", timeWindow);
     if (variantName) {
       searchParams.append("variant_name", variantName);
+    }
+    if (tag) {
+      searchParams.append("tag", tag);
     }
     const queryString = searchParams.toString();
     const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_performances?${queryString}`;
@@ -1285,6 +1300,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     function_name?: string | null;
     variant_name?: string | null;
     episode_id?: string | null;
+    tag?: string;
   }): Promise<ListInferenceMetadataResponse> {
     const searchParams = new URLSearchParams();
     if (params?.before) {
@@ -1304,6 +1320,9 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     }
     if (params?.episode_id) {
       searchParams.append("episode_id", params.episode_id);
+    }
+    if (params?.tag) {
+      searchParams.append("tag", params.tag);
     }
     const queryString = searchParams.toString();
     const endpoint = `/internal/inference_metadata${queryString ? `?${queryString}` : ""}`;
@@ -1514,6 +1533,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     time_window: TimeWindow;
     max_periods: number;
     variant_names?: string[];
+    tag?: string;
   }): Promise<CumulativeFeedbackTimeSeriesPoint[]> {
     const searchParams = new URLSearchParams({
       function_name: params.function_name,
@@ -1523,6 +1543,9 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     });
     if (params.variant_names && params.variant_names.length > 0) {
       searchParams.append("variant_names", params.variant_names.join(","));
+    }
+    if (params.tag) {
+      searchParams.append("tag", params.tag);
     }
     const endpoint = `/internal/feedback/timeseries?${searchParams.toString()}`;
     const response = await this.fetch(endpoint, { method: "GET" });

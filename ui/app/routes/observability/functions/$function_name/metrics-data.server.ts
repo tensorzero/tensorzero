@@ -22,16 +22,25 @@ export async function fetchMetricsSectionData(params: {
   metric_name: string | undefined;
   time_granularity: TimeWindow;
   config: Awaited<ReturnType<typeof getConfig>>;
+  namespace: string | undefined;
 }): Promise<MetricsSectionData> {
-  const { function_name, metric_name, time_granularity, config } = params;
+  const { function_name, metric_name, time_granularity, config, namespace } =
+    params;
+  const tag = namespace ? `tensorzero::namespace::${namespace}` : undefined;
 
   const client = getTensorZeroClient();
 
   const [metricsWithFeedback, variant_performances] = await Promise.all([
-    client.getFunctionMetricsWithFeedback(function_name),
+    client.getFunctionMetricsWithFeedback(function_name, undefined, tag),
     metric_name && config.metrics[metric_name]
       ? client
-          .getVariantPerformances(function_name, metric_name, time_granularity)
+          .getVariantPerformances(
+            function_name,
+            metric_name,
+            time_granularity,
+            undefined,
+            tag,
+          )
           .then((response) =>
             response.performances.length > 0
               ? response.performances

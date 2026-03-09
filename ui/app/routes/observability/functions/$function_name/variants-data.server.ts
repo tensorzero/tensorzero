@@ -21,12 +21,15 @@ export interface VariantsSectionData {
 export async function fetchVariantsSectionData(params: {
   function_name: string;
   function_config: FunctionConfig;
+  namespace: string | undefined;
 }): Promise<VariantsSectionData> {
-  const { function_name, function_config } = params;
+  const { function_name, function_config, namespace } = params;
+  const tag = namespace ? `tensorzero::namespace::${namespace}` : undefined;
 
   const client = getTensorZeroClient();
   const variant_counts = await client.getInferenceCount(function_name, {
     groupBy: "variant",
+    tag,
   });
 
   const observedVariants = new Set<string>();

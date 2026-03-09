@@ -6,8 +6,12 @@ export type InferencesSectionData = Awaited<
   ReturnType<typeof fetchInferencesSectionData>
 >;
 
-export function countInferences(function_name: string) {
-  return countInferencesForFunction(function_name);
+export function countInferences(
+  function_name: string,
+  namespace: string | undefined,
+) {
+  const tag = namespace ? `tensorzero::namespace::${namespace}` : undefined;
+  return countInferencesForFunction(function_name, tag);
 }
 
 export async function fetchInferencesSectionData(params: {
@@ -15,8 +19,11 @@ export async function fetchInferencesSectionData(params: {
   beforeInference: string | null;
   afterInference: string | null;
   limit: number;
+  namespace: string | undefined;
 }) {
-  const { function_name, beforeInference, afterInference, limit } = params;
+  const { function_name, beforeInference, afterInference, limit, namespace } =
+    params;
+  const tag = namespace ? `tensorzero::namespace::${namespace}` : undefined;
 
   const client = getTensorZeroClient();
   const inferenceResult = await client.listInferenceMetadata({
@@ -24,6 +31,7 @@ export async function fetchInferencesSectionData(params: {
     before: beforeInference || undefined,
     after: afterInference || undefined,
     limit: limit + 1, // Fetch one extra to determine pagination
+    tag,
   });
 
   const {

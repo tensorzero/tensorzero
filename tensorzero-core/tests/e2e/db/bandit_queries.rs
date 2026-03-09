@@ -152,6 +152,7 @@ async fn test_get_cumulative_feedback_timeseries_minute_level(conn: impl Feedbac
             None,
             TimeWindow::Minute,
             525600, // Look back a year for data (365 days * 24 hours * 60 minutes)
+            None,
         )
         .await
         .unwrap();
@@ -242,6 +243,7 @@ async fn test_get_cumulative_feedback_timeseries_hourly(conn: impl FeedbackQueri
             None,
             TimeWindow::Hour,
             8760, // Look back a year (365 days * 24 hours)
+            None,
         )
         .await
         .unwrap();
@@ -331,6 +333,7 @@ async fn test_get_cumulative_feedback_timeseries_daily(conn: impl FeedbackQuerie
             None,
             TimeWindow::Day,
             365, // Look back a year
+            None,
         )
         .await
         .unwrap();
@@ -419,6 +422,7 @@ async fn test_get_cumulative_feedback_timeseries_weekly(conn: impl FeedbackQueri
             None,
             TimeWindow::Week,
             52, // Look back a year (52 weeks)
+            None,
         )
         .await
         .unwrap();
@@ -504,6 +508,7 @@ async fn test_get_cumulative_feedback_timeseries_monthly(conn: impl FeedbackQuer
             None,
             TimeWindow::Month,
             12, // Look back a year (12 months)
+            None,
         )
         .await
         .unwrap();
@@ -591,6 +596,7 @@ async fn test_get_cumulative_feedback_timeseries_cumulative_returns_error(
             None,
             TimeWindow::Cumulative,
             1, // max_periods doesn't matter for this test
+            None,
         )
         .await;
 
@@ -620,6 +626,7 @@ async fn test_get_cumulative_feedback_timeseries_with_variant_filter(conn: impl 
             Some(vec!["gpt4o_mini_initial_prompt".to_string()]),
             TimeWindow::Hour,
             87600, // Look back 10 years (10 years * 365 days * 24 hours)
+            None,
         )
         .await
         .unwrap();
@@ -671,6 +678,7 @@ async fn test_get_cumulative_feedback_timeseries_with_variant_filter(conn: impl 
             Some(vec![]),
             TimeWindow::Hour,
             87600, // Look back 10 years
+            None,
         )
         .await
         .unwrap();
@@ -700,6 +708,7 @@ async fn test_get_cumulative_feedback_timeseries_includes_baseline_values(
             None,
             TimeWindow::Day,
             2, // Only last 2 days
+            None,
         )
         .await
         .unwrap();
@@ -782,6 +791,7 @@ async fn test_get_cumulative_feedback_timeseries_includes_silent_variants(
             None,
             TimeWindow::Day,
             1, // Only last 1 day (2025-04-16)
+            None,
         )
         .await
         .unwrap();
@@ -863,6 +873,7 @@ async fn test_get_cumulative_feedback_timeseries_baseline_continuity(conn: impl 
             None,
             TimeWindow::Hour,
             3, // Only last 3 hours
+            None,
         )
         .await
         .unwrap();

@@ -350,6 +350,8 @@ pub struct ListInferenceMetadataParams {
     pub variant_name: Option<String>,
     /// Optional episode ID to filter by.
     pub episode_id: Option<Uuid>,
+    /// Optional tag filter (e.g. filter by `tensorzero::namespace` tag).
+    pub tag: Option<super::TagFilter>,
 }
 
 /// Parameters for a CountInferences query.
@@ -386,6 +388,8 @@ pub struct CountInferencesForFunctionParams<'a> {
     pub function_name: &'a str,
     pub function_type: FunctionConfigType,
     pub variant_name: Option<&'a str>,
+    /// Optional tag filter (e.g. filter by `tensorzero::namespace` tag).
+    pub tag: Option<&'a super::TagFilter>,
 }
 
 /// Row returned from the count_inferences_by_variant query.
@@ -416,6 +420,8 @@ pub struct GetFunctionThroughputByVariantParams<'a> {
     pub function_name: &'a str,
     pub time_window: TimeWindow,
     pub max_periods: u32,
+    /// Optional tag filter (e.g. filter by `tensorzero::namespace` tag).
+    pub tag: Option<&'a super::TagFilter>,
 }
 
 /// Row returned from the get_function_throughput_by_variant query.

@@ -136,6 +136,7 @@ async fn test_count_inferences_by_variant_for_chat_function(conn: impl Inference
         function_name: "write_haiku",
         function_type: FunctionConfigType::Chat,
         variant_name: None,
+        tag: None,
     };
 
     let rows = conn.count_inferences_by_variant(params).await.unwrap();
@@ -188,6 +189,7 @@ async fn test_count_inferences_by_variant_for_json_function(conn: impl Inference
         function_name: "extract_entities",
         function_type: FunctionConfigType::Json,
         variant_name: None,
+        tag: None,
     };
 
     let rows = conn.count_inferences_by_variant(params).await.unwrap();
@@ -213,6 +215,7 @@ async fn test_count_inferences_by_variant_for_nonexistent_function(conn: impl In
         function_name: "nonexistent_function",
         function_type: FunctionConfigType::Chat,
         variant_name: None,
+        tag: None,
     };
 
     let rows = conn.count_inferences_by_variant(params).await.unwrap();

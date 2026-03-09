@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::config::{Config, MetricConfigType};
-use crate::db::TimeWindow;
 use crate::db::feedback::{
     FeedbackQueries, GetVariantPerformanceParams, MetricType, MetricWithFeedback,
     VariantPerformanceRow,
 };
+use crate::db::{TagFilter, TimeWindow};
 use crate::error::{Error, ErrorDetails};
 use crate::function::get_function;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -20,6 +20,8 @@ use crate::utils::gateway::{AppState, AppStateData};
 pub struct MetricsQueryParams {
     /// Optional variant name to filter by
     pub variant_name: Option<String>,
+    /// Optional tag filter in `name::value` format (e.g. `tensorzero::namespace::mobile`).
+    pub tag: Option<String>,
 }
 
 /// Response containing metrics with feedback statistics
@@ -46,11 +48,13 @@ pub async fn get_function_metrics_handler(
     Query(params): Query<MetricsQueryParams>,
 ) -> Result<Json<MetricsWithFeedbackResponse>, Error> {
     let database = app_state.get_delegating_database();
+    let tag = params.tag.as_deref().map(TagFilter::parse).transpose()?;
     let response = get_function_metrics(
         &app_state.config,
         &database,
         &function_name,
         params.variant_name.as_deref(),
+        tag.as_ref(),
     )
     .await?;
     Ok(Json(response))
@@ -62,13 +66,14 @@ pub async fn get_function_metrics(
     clickhouse: &impl FeedbackQueries,
     function_name: &str,
     variant_name: Option<&str>,
+    tag: Option<&TagFilter>,
 ) -> Result<MetricsWithFeedbackResponse, Error> {
     // Get function config to determine the inference table
     let function_config = get_function(&config.functions, function_name)?;
 
     // Query metrics with feedback
     let metrics = clickhouse
-        .query_metrics_with_feedback(function_name, &function_config, variant_name)
+        .query_metrics_with_feedback(function_name, &function_config, variant_name, tag)
         .await?;
 
     // Enrich metric_type from config for metrics that don't have it set
@@ -101,6 +106,8 @@ pub struct VariantPerformancesQueryParams {
     pub time_window: TimeWindow,
     /// Optional variant name to filter by
     pub variant_name: Option<String>,
+    /// Optional tag filter in `name::value` format (e.g. `tensorzero::namespace::mobile`).
+    pub tag: Option<String>,
 }
 
 /// Response containing variant performance statistics
@@ -128,6 +135,7 @@ pub async fn get_variant_performances_handler(
     Query(params): Query<VariantPerformancesQueryParams>,
 ) -> Result<Json<VariantPerformancesResponse>, Error> {
     let database = app_state.get_delegating_database();
+    let tag = params.tag.as_deref().map(TagFilter::parse).transpose()?;
     let response = get_variant_performances(
         &app_state.config,
         &database,
@@ -135,6 +143,7 @@ pub async fn get_variant_performances_handler(
         &params.metric_name,
         params.time_window,
         params.variant_name.as_deref(),
+        tag.as_ref(),
     )
     .await?;
     Ok(Json(response))
@@ -151,6 +160,7 @@ pub async fn get_variant_performances(
     metric_name: &str,
     time_window: TimeWindow,
     variant_name: Option<&str>,
+    tag: Option<&TagFilter>,
 ) -> Result<VariantPerformancesResponse, Error> {
     // Get function config to determine the function type
     let function_config = get_function(&config.functions, function_name)?;
@@ -180,6 +190,7 @@ pub async fn get_variant_performances(
         metric_config,
         time_window,
         variant_name,
+        tag,
     };
 
     let performances = clickhouse.get_variant_performances(params).await?;
@@ -304,6 +315,7 @@ mod tests {
             "accuracy",
             TimeWindow::Cumulative,
             None,
+            None,
         )
         .await;
 
@@ -335,6 +347,7 @@ mod tests {
             "test_function",
             "nonexistent_metric",
             TimeWindow::Cumulative,
+            None,
             None,
         )
         .await;
@@ -371,6 +384,7 @@ mod tests {
             "accuracy",
             TimeWindow::Cumulative,
             Some("nonexistent_variant"),
+            None,
         )
         .await;
 
@@ -443,6 +457,7 @@ mod tests {
             "accuracy",
             TimeWindow::Cumulative,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -496,6 +511,7 @@ mod tests {
             "accuracy",
             TimeWindow::Week,
             Some("variant_a"),
+            None,
         )
         .await
         .unwrap();

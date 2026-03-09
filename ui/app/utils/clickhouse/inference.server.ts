@@ -87,9 +87,10 @@ export async function listInferencesWithPagination(params: {
 
 export async function countInferencesForFunction(
   function_name: string,
+  tag?: string,
 ): Promise<number> {
   const client = getTensorZeroClient();
-  const result = await client.getInferenceCount(function_name);
+  const result = await client.getInferenceCount(function_name, { tag });
   return Number(result.inference_count);
 }
 

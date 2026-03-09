@@ -131,6 +131,7 @@ pub trait FeedbackQueries {
         variant_names: Option<Vec<String>>,
         time_window: super::TimeWindow,
         max_periods: u32,
+        tag: Option<super::TagFilter>,
     ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error>;
 
     /// Queries all feedback (boolean metrics, float metrics, comments, demonstrations) for a given target ID
@@ -165,6 +166,7 @@ pub trait FeedbackQueries {
         function_name: &str,
         function_config: &FunctionConfig,
         variant_name: Option<&str>,
+        tag: Option<&super::TagFilter>,
     ) -> Result<Vec<MetricWithFeedback>, Error>;
 
     /// Query the latest feedback ID for each metric for a given target
@@ -400,6 +402,8 @@ pub struct GetVariantPerformanceParams<'a> {
     pub time_window: TimeWindow,
     /// Optional variant name filter. If provided, only returns data for this variant.
     pub variant_name: Option<&'a str>,
+    /// Optional tag filter (e.g. filter by `tensorzero::namespace` tag).
+    pub tag: Option<&'a super::TagFilter>,
 }
 
 /// Row returned from the variant performance query.

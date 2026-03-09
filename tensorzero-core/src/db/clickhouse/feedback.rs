@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     config::MetricConfigLevel,
     db::{
-        FeedbackQueries, TableBounds, TimeWindow,
+        FeedbackQueries, TableBounds, TagFilter, TimeWindow,
         feedback::{
             BooleanMetricFeedbackInsert, BooleanMetricFeedbackRow, CommentFeedbackInsert,
             CommentFeedbackRow, CumulativeFeedbackTimeSeriesPoint, DemonstrationFeedbackInsert,
@@ -406,6 +406,7 @@ fn build_metrics_with_feedback_query(
     function_name: &str,
     inference_table: &str,
     variant_name: Option<&str>,
+    tag: Option<&super::super::TagFilter>,
 ) -> (String, HashMap<String, String>) {
     let mut query_params = HashMap::new();
     query_params.insert("function_name".to_string(), function_name.to_string());
@@ -416,6 +417,71 @@ fn build_metrics_with_feedback_query(
     } else {
         ""
     };
+
+    // When tag is set, we can't use the pre-aggregated FeedbackByVariantStatistics table
+    // because it doesn't have tag information. Instead, query the raw feedback tables filtered
+    // by inference IDs that match the tag.
+    if let Some(tag) = tag {
+        let escaped_key = super::escape_string_for_clickhouse_literal(&tag.tag_name);
+        let escaped_value = super::escape_string_for_clickhouse_literal(&tag.tag_value);
+        let tag_subquery = format!(
+            "SELECT toUInt128(inference_id) FROM InferenceTag \
+             WHERE function_name = {{function_name:String}} \
+             AND key = '{escaped_key}' AND value = '{escaped_value}'"
+        );
+
+        let query = format!(
+            r"
+            SELECT
+              function_name,
+              metric_name,
+              feedback_count
+            FROM (
+              -- Boolean metrics filtered by tag
+              SELECT
+                function_name,
+                metric_name,
+                toUInt32(count()) as feedback_count
+              FROM BooleanMetricFeedbackByVariant
+              WHERE function_name = {{function_name:String}} {variant_clause}
+                AND target_id_uint IN ({tag_subquery})
+              GROUP BY function_name, metric_name
+              HAVING feedback_count > 0
+
+              UNION ALL
+
+              -- Float metrics filtered by tag
+              SELECT
+                function_name,
+                metric_name,
+                toUInt32(count()) as feedback_count
+              FROM FloatMetricFeedbackByVariant
+              WHERE function_name = {{function_name:String}} {variant_clause}
+                AND target_id_uint IN ({tag_subquery})
+              GROUP BY function_name, metric_name
+              HAVING feedback_count > 0
+
+              UNION ALL
+
+              -- Demonstration metrics filtered by tag
+              SELECT
+                {{function_name:String}} as function_name,
+                'demonstration' as metric_name,
+                toUInt32(COUNT(*)) as feedback_count
+              FROM DemonstrationFeedback
+              WHERE inference_id IN (
+                SELECT id FROM {inference_table}
+                WHERE function_name = {{function_name:String}} {variant_clause}
+                  AND id_uint IN ({tag_subquery})
+              )
+              HAVING feedback_count > 0
+            )
+            ORDER BY metric_name
+            FORMAT JSONEachRow"
+        );
+
+        return (query, query_params);
+    }
 
     // Use FeedbackByVariantStatistics for boolean/float metrics (pre-aggregated, fast)
     // and a simple query for demonstrations
@@ -508,6 +574,9 @@ fn build_variant_performance_query(
         None => "",
     };
 
+    let tag_filter =
+        super::build_optional_tag_filter_clause(params.tag, "i.id_uint", "{function_name:String}");
+
     let query = match (params.metric_level(), &params.time_window) {
         // Episode-level metric with cumulative time window
         (MetricConfigLevel::Episode, TimeWindow::Cumulative) => format!(
@@ -529,6 +598,7 @@ fn build_variant_performance_query(
                 WHERE
                     i.function_name = {{function_name:String}}
                     {variant_filter}
+                    {tag_filter}
                 GROUP BY
                     variant_name,
                     episode_id
@@ -615,7 +685,7 @@ fn build_variant_performance_query(
                 WHERE metric_name = {{metric_name:String}}
             ) f ON i.id = f.target_id AND f.rn = 1
             WHERE
-                i.function_name = {{function_name:String}}{variant_filter}
+                i.function_name = {{function_name:String}}{variant_filter}{tag_filter}
             GROUP BY
                 variant_name
             ORDER BY
@@ -646,7 +716,7 @@ fn build_variant_performance_query(
                     WHERE metric_name = {{metric_name:String}}
                 ) f ON i.id = f.target_id AND f.rn = 1
                 WHERE
-                    i.function_name = {{function_name:String}}{variant_filter}
+                    i.function_name = {{function_name:String}}{variant_filter}{tag_filter}
                 GROUP BY
                     period_start,
                     variant_name
@@ -793,7 +863,10 @@ FORMAT JSONEachRow"
         variant_names: Option<Vec<String>>,
         time_window: TimeWindow,
         max_periods: u32,
+        _tag: Option<TagFilter>,
     ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error> {
+        // TODO(#6674): Implement tag filtering for cumulative feedback timeseries.
+        // This requires querying raw feedback tables instead of FeedbackByVariantStatistics.
         // Convert TimeWindow to ClickHouse INTERVAL syntax and interval functions
         let (interval_str, interval_function) = match time_window {
             TimeWindow::Minute => ("INTERVAL 1 MINUTE", "toIntervalMinute"),
@@ -1165,10 +1238,11 @@ FORMAT JSONEachRow"
         function_name: &str,
         function_config: &FunctionConfig,
         variant_name: Option<&str>,
+        tag: Option<&TagFilter>,
     ) -> Result<Vec<MetricWithFeedback>, Error> {
         let inference_table = function_config.table_name();
         let (query, params_owned) =
-            build_metrics_with_feedback_query(function_name, inference_table, variant_name);
+            build_metrics_with_feedback_query(function_name, inference_table, variant_name, tag);
 
         let query_params: HashMap<&str, &str> = params_owned
             .iter()
@@ -2220,7 +2294,7 @@ mod tests {
     #[test]
     fn test_build_metrics_with_feedback_query_no_variant() {
         let (query, params) =
-            build_metrics_with_feedback_query("test_function", "ChatInference", None);
+            build_metrics_with_feedback_query("test_function", "ChatInference", None, None);
 
         // Check that we query from FeedbackByVariantStatistics for boolean/float metrics
         assert_query_contains(&query, "FROM FeedbackByVariantStatistics");
@@ -2257,6 +2331,7 @@ mod tests {
             "test_function",
             "JsonInference",
             Some("test_variant"),
+            None,
         );
 
         // Check variant filter is present
@@ -2340,6 +2415,7 @@ mod tests {
             metric_config: &metric_config,
             time_window: TimeWindow::Cumulative,
             variant_name: None,
+            tag: None,
         };
 
         let (query, query_params) = build_variant_performance_query(&params);
@@ -2383,6 +2459,7 @@ mod tests {
             metric_config: &metric_config,
             time_window: TimeWindow::Week,
             variant_name: None,
+            tag: None,
         };
 
         let (query, query_params) = build_variant_performance_query(&params);
@@ -2415,6 +2492,7 @@ mod tests {
             metric_config: &metric_config,
             time_window: TimeWindow::Cumulative,
             variant_name: None,
+            tag: None,
         };
 
         let (query, query_params) = build_variant_performance_query(&params);
@@ -2443,6 +2521,7 @@ mod tests {
             metric_config: &metric_config,
             time_window: TimeWindow::Day,
             variant_name: None,
+            tag: None,
         };
 
         let (query, query_params) = build_variant_performance_query(&params);
@@ -2477,6 +2556,7 @@ mod tests {
             metric_config: &metric_config,
             time_window: TimeWindow::Cumulative,
             variant_name: Some("specific_variant"),
+            tag: None,
         };
 
         let (query, query_params) = build_variant_performance_query(&params);
@@ -2501,6 +2581,7 @@ mod tests {
             metric_config: &metric_config,
             time_window: TimeWindow::Month,
             variant_name: None,
+            tag: None,
         };
 
         let (query, query_params) = build_variant_performance_query(&params);
@@ -2554,6 +2635,7 @@ mod tests {
             metric_config: &metric_config,
             time_window: TimeWindow::Cumulative,
             variant_name: None,
+            tag: None,
         };
 
         let result = conn.get_variant_performances(params).await.unwrap();
@@ -2592,6 +2674,7 @@ mod tests {
             metric_config: &metric_config,
             time_window: TimeWindow::Cumulative,
             variant_name: None,
+            tag: None,
         };
 
         let result = conn.get_variant_performances(params).await.unwrap();
@@ -2624,6 +2707,7 @@ mod tests {
             metric_config: &metric_config,
             time_window: TimeWindow::Week,
             variant_name: None,
+            tag: None,
         };
 
         let result = conn.get_variant_performances(params).await.unwrap();

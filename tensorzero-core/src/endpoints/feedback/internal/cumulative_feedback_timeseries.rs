@@ -5,8 +5,8 @@ use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::db::TimeWindow;
 use crate::db::feedback::{CumulativeFeedbackTimeSeriesPoint, FeedbackQueries};
+use crate::db::{TagFilter, TimeWindow};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
 
@@ -18,6 +18,8 @@ pub struct GetCumulativeFeedbackTimeseriesParams {
     pub variant_names: Option<String>,
     pub time_window: TimeWindow,
     pub max_periods: u32,
+    /// Optional tag filter in `name::value` format (e.g. `tensorzero::namespace::mobile`).
+    pub tag: Option<String>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -52,6 +54,8 @@ pub async fn get_cumulative_feedback_timeseries_handler(
             .collect::<Vec<_>>()
     });
 
+    let tag = params.tag.map(|t| TagFilter::parse(&t)).transpose()?;
+
     let response = get_cumulative_feedback_timeseries(
         &database,
         params.function_name,
@@ -59,6 +63,7 @@ pub async fn get_cumulative_feedback_timeseries_handler(
         variant_names,
         params.time_window,
         params.max_periods,
+        tag,
     )
     .await?;
     Ok(Json(response))
@@ -72,6 +77,7 @@ pub async fn get_cumulative_feedback_timeseries(
     variant_names: Option<Vec<String>>,
     time_window: TimeWindow,
     max_periods: u32,
+    tag: Option<TagFilter>,
 ) -> Result<GetCumulativeFeedbackTimeseriesResponse, Error> {
     let timeseries = database
         .get_cumulative_feedback_timeseries(
@@ -80,6 +86,7 @@ pub async fn get_cumulative_feedback_timeseries(
             variant_names,
             time_window,
             max_periods,
+            tag,
         )
         .await?;
 
@@ -98,7 +105,7 @@ mod tests {
 
         mock_db
             .expect_get_cumulative_feedback_timeseries()
-            .withf(|function, metric, variants, window, periods| {
+            .withf(|function, metric, variants, window, periods, _tag| {
                 function == "my_function"
                     && metric == "accuracy"
                     && *variants == Some(vec!["variant_a".to_string()])
@@ -106,7 +113,7 @@ mod tests {
                     && *periods == 24
             })
             .times(1)
-            .returning(|_, _, _, _, _| {
+            .returning(|_, _, _, _, _, _| {
                 let rows = vec![
                     CumulativeFeedbackTimeSeriesPoint {
                         period_end: Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap(),
@@ -139,6 +146,7 @@ mod tests {
             Some(vec!["variant_a".to_string()]),
             TimeWindow::Hour,
             24,
+            None,
         )
         .await
         .unwrap();
@@ -155,7 +163,7 @@ mod tests {
 
         mock_db
             .expect_get_cumulative_feedback_timeseries()
-            .withf(|function, metric, variants, window, periods| {
+            .withf(|function, metric, variants, window, periods, _tag| {
                 function == "test_function"
                     && metric == "task_success"
                     && variants.is_none()
@@ -163,7 +171,7 @@ mod tests {
                     && *periods == 7
             })
             .times(1)
-            .returning(|_, _, _, _, _| {
+            .returning(|_, _, _, _, _, _| {
                 let rows = vec![CumulativeFeedbackTimeSeriesPoint {
                     period_end: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
                     variant_name: "default".to_string(),
@@ -184,6 +192,7 @@ mod tests {
             None,
             TimeWindow::Day,
             7,
+            None,
         )
         .await
         .unwrap();
@@ -200,7 +209,7 @@ mod tests {
         mock_db
             .expect_get_cumulative_feedback_timeseries()
             .times(1)
-            .returning(|_, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
+            .returning(|_, _, _, _, _, _| Box::pin(async move { Ok(vec![]) }));
 
         let result = get_cumulative_feedback_timeseries(
             &mock_db,
@@ -209,6 +218,7 @@ mod tests {
             None,
             TimeWindow::Week,
             4,
+            None,
         )
         .await
         .unwrap();
@@ -225,9 +235,9 @@ mod tests {
         // The ClickHouse implementation returns an error for Cumulative time window
         mock_db
             .expect_get_cumulative_feedback_timeseries()
-            .withf(|_, _, _, window, _| matches!(window, TimeWindow::Cumulative))
+            .withf(|_, _, _, window, _, _tag| matches!(window, TimeWindow::Cumulative))
             .times(1)
-            .returning(|_, _, _, _, _| {
+            .returning(|_, _, _, _, _, _| {
                 Box::pin(async move {
                     Err(Error::new(ErrorDetails::InvalidRequest {
                         message: "Cumulative time window is not supported for feedback timeseries"
@@ -243,6 +253,7 @@ mod tests {
             None,
             TimeWindow::Cumulative,
             1,
+            None,
         )
         .await;
 

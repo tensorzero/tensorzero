@@ -215,6 +215,19 @@ fn push_optional_namespace_filter(qb: &mut QueryBuilder<sqlx::Postgres>, namespa
     }
 }
 
+pub(super) fn push_optional_tag_filter(
+    qb: &mut QueryBuilder<sqlx::Postgres>,
+    tag: Option<&super::super::TagFilter>,
+) {
+    if let Some(tag) = tag {
+        qb.push(r" AND tags @> jsonb_build_object(");
+        qb.push_bind(tag.tag_name.clone());
+        qb.push(", ");
+        qb.push_bind(tag.tag_value.clone());
+        qb.push(")");
+    }
+}
+
 fn push_optional_variant_filter(qb: &mut QueryBuilder<sqlx::Postgres>, variant_names: &[String]) {
     if !variant_names.is_empty() {
         qb.push(" AND variant_name = ANY(");
@@ -316,6 +329,7 @@ fn build_metrics_with_feedback_query(
     function_name: &str,
     table: &str,
     variant_name: Option<&str>,
+    tag: Option<&super::super::TagFilter>,
 ) -> QueryBuilder<sqlx::Postgres> {
     let mut qb = QueryBuilder::new("WITH inference_ids AS (SELECT id FROM ");
     qb.push(table);
@@ -326,6 +340,8 @@ fn build_metrics_with_feedback_query(
         qb.push(" AND variant_name = ");
         qb.push_bind(vn);
     }
+
+    push_optional_tag_filter(&mut qb, tag);
 
     qb.push(
         r")
@@ -361,6 +377,7 @@ struct VariantPerformancesQueryParams<'a> {
     time_bucket_expr: &'a str,
     metric_level: MetricConfigLevel,
     variant_name: Option<&'a str>,
+    tag: Option<&'a super::super::TagFilter>,
 }
 
 /// Builds a query for variant performances.
@@ -414,6 +431,8 @@ fn build_variant_performances_episode_query(
         qb.push(" AND i.variant_name = ");
         qb.push_bind(vn);
     }
+
+    push_optional_tag_filter(&mut qb, params.tag);
 
     qb.push(
         " GROUP BY period_start, i.variant_name, i.episode_id, f.value
@@ -475,6 +494,8 @@ fn build_variant_performances_inference_query(
         qb.push(" AND i.variant_name = ");
         qb.push_bind(vn);
     }
+
+    push_optional_tag_filter(&mut qb, params.tag);
 
     qb.push(" GROUP BY period_start, i.variant_name ORDER BY period_start ASC, i.variant_name ASC");
 
@@ -539,7 +560,9 @@ impl FeedbackQueries for PostgresConnectionInfo {
         variant_names: Option<Vec<String>>,
         time_window: TimeWindow,
         max_periods: u32,
+        _tag: Option<super::super::TagFilter>,
     ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error> {
+        // TODO(#6674): Implement tag filtering for cumulative feedback timeseries.
         let pool = self.get_pool_result()?;
         // Handle empty variant_names
         if let Some(ref names) = variant_names
@@ -720,11 +743,12 @@ impl FeedbackQueries for PostgresConnectionInfo {
         function_name: &str,
         function_config: &FunctionConfig,
         variant_name: Option<&str>,
+        tag: Option<&super::super::TagFilter>,
     ) -> Result<Vec<MetricWithFeedback>, Error> {
         let pool = self.get_pool_result()?;
         let table = function_config.postgres_table_name();
 
-        let mut qb = build_metrics_with_feedback_query(function_name, table, variant_name);
+        let mut qb = build_metrics_with_feedback_query(function_name, table, variant_name, tag);
 
         let rows = qb.build().fetch_all(pool).await.map_err(Error::from)?;
 
@@ -813,6 +837,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
             time_bucket_expr,
             metric_level,
             variant_name: params.variant_name,
+            tag: params.tag,
         };
 
         let mut qb = build_variant_performances_query(&query_params);
@@ -1913,8 +1938,12 @@ mod tests {
 
     #[test]
     fn test_build_metrics_with_feedback_query_chat_no_variant() {
-        let qb =
-            build_metrics_with_feedback_query("my_function", "tensorzero.chat_inferences", None);
+        let qb = build_metrics_with_feedback_query(
+            "my_function",
+            "tensorzero.chat_inferences",
+            None,
+            None,
+        );
         let sql_str = qb.sql();
         let sql = sql_str.as_str();
 
@@ -1949,6 +1978,7 @@ mod tests {
             "my_function",
             "tensorzero.chat_inferences",
             Some("my_variant"),
+            None,
         );
         let sql_str = qb.sql();
         let sql = sql_str.as_str();
@@ -1981,8 +2011,12 @@ mod tests {
 
     #[test]
     fn test_build_metrics_with_feedback_query_json_table() {
-        let qb =
-            build_metrics_with_feedback_query("my_function", "tensorzero.json_inferences", None);
+        let qb = build_metrics_with_feedback_query(
+            "my_function",
+            "tensorzero.json_inferences",
+            None,
+            None,
+        );
         let sql_str = qb.sql();
         let sql = sql_str.as_str();
 
@@ -2199,6 +2233,7 @@ mod tests {
             time_bucket_expr: "date_trunc('day', i.created_at)",
             metric_level: MetricConfigLevel::Inference,
             variant_name: None,
+            tag: None,
         };
         let qb = build_variant_performances_query(&params);
         let sql_str = qb.sql();
@@ -2235,6 +2270,7 @@ mod tests {
             time_bucket_expr: "date_trunc('hour', i.created_at)",
             metric_level: MetricConfigLevel::Inference,
             variant_name: None,
+            tag: None,
         };
         let qb = build_variant_performances_query(&params);
         let sql_str = qb.sql();
@@ -2271,6 +2307,7 @@ mod tests {
             time_bucket_expr: "date_trunc('day', i.created_at)",
             metric_level: MetricConfigLevel::Inference,
             variant_name: Some("my_variant"),
+            tag: None,
         };
         let qb = build_variant_performances_query(&params);
         let sql_str = qb.sql();
@@ -2307,6 +2344,7 @@ mod tests {
             time_bucket_expr: "date_trunc('day', i.created_at)",
             metric_level: MetricConfigLevel::Episode,
             variant_name: None,
+            tag: None,
         };
         let qb = build_variant_performances_query(&params);
         let sql_str = qb.sql();
@@ -2353,6 +2391,7 @@ mod tests {
             time_bucket_expr: "date_trunc('day', i.created_at)",
             metric_level: MetricConfigLevel::Episode,
             variant_name: Some("my_variant"),
+            tag: None,
         };
         let qb = build_variant_performances_query(&params);
         let sql_str = qb.sql();
@@ -2399,6 +2438,7 @@ mod tests {
             time_bucket_expr: "'1970-01-01 00:00:00'::TIMESTAMPTZ",
             metric_level: MetricConfigLevel::Inference,
             variant_name: None,
+            tag: None,
         };
         let qb = build_variant_performances_query(&params);
         let sql_str = qb.sql();

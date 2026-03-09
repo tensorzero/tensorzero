@@ -356,7 +356,11 @@ impl InferenceQueries for ClickHouseConnectionInfo {
         &self,
         params: CountInferencesForFunctionParams<'_>,
     ) -> Result<Vec<CountByVariant>, Error> {
-        let (query, query_params) = build_count_inferences_by_variant_query(&params);
+        let (query, params_owned) = build_count_inferences_by_variant_query(&params);
+        let query_params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
         let response = self.run_query_synchronous(query, &query_params).await?;
 
         let result: Vec<CountByVariant> = response
@@ -661,6 +665,20 @@ fn generate_list_inference_metadata_sql(
     if let Some(episode_id) = &params.episode_id {
         query_params.insert("episode_id".to_string(), episode_id.to_string());
         where_clauses.push("episode_id = {episode_id:UUID}".to_string());
+    }
+
+    // Handle tag filter
+    if let Some(tag) = &params.tag {
+        let escaped_key = super::escape_string_for_clickhouse_literal(&tag.tag_name);
+        let escaped_value = super::escape_string_for_clickhouse_literal(&tag.tag_value);
+        let function_name_clause = if params.function_name.is_some() {
+            "function_name = {function_name:String} AND "
+        } else {
+            ""
+        };
+        where_clauses.push(format!(
+            "id_uint IN (SELECT toUInt128(inference_id) FROM InferenceTag WHERE {function_name_clause}key = '{escaped_key}' AND value = '{escaped_value}')"
+        ));
     }
 
     query_params.insert("limit".to_string(), limit.to_string());
@@ -1171,19 +1189,25 @@ fn generate_single_table_query_for_type(
 // ===== Inference count helper functions (merged from inference_count module) =====
 
 /// Builds the SQL query for counting inferences grouped by variant.
-fn build_count_inferences_by_variant_query<'a>(
-    params: &'a CountInferencesForFunctionParams<'a>,
-) -> (String, HashMap<&'a str, &'a str>) {
+fn build_count_inferences_by_variant_query(
+    params: &CountInferencesForFunctionParams<'_>,
+) -> (String, HashMap<String, String>) {
     let mut query_params = HashMap::new();
-    query_params.insert("function_name", params.function_name);
+    query_params.insert(
+        "function_name".to_string(),
+        params.function_name.to_string(),
+    );
 
     let variant_clause = match params.variant_name {
         Some(variant_name) => {
-            query_params.insert("variant_name", variant_name);
+            query_params.insert("variant_name".to_string(), variant_name.to_string());
             "AND variant_name = {variant_name:String}"
         }
         None => "",
     };
+
+    let tag_filter =
+        super::build_optional_tag_filter_clause(params.tag, "id_uint", "{function_name:String}");
 
     let table_name = params.function_type.table_name();
 
@@ -1195,6 +1219,7 @@ fn build_count_inferences_by_variant_query<'a>(
         FROM {table_name}
         WHERE function_name = {{function_name:String}}
             {variant_clause}
+            {tag_filter}
         GROUP BY variant_name
         ORDER BY inference_count DESC
         FORMAT JSONEachRow"
@@ -1280,19 +1305,24 @@ fn build_function_throughput_by_variant_query(
         params.function_name.to_string(),
     );
 
+    let tag_filter =
+        super::build_optional_tag_filter_clause(params.tag, "i.id_uint", "{function_name:String}");
+
     let query = match params.time_window {
         TimeWindow::Cumulative => {
             // For cumulative, return all-time data grouped by variant with fixed epoch start
-            r"SELECT
+            format!(
+                r"SELECT
                 '1970-01-01T00:00:00.000Z' AS period_start,
                 i.variant_name AS variant_name,
                 toUInt32(count()) AS count
             FROM InferenceById i
-            WHERE i.function_name = {function_name:String}
+            WHERE i.function_name = {{function_name:String}}
+            {tag_filter}
             GROUP BY variant_name
             ORDER BY variant_name DESC
             FORMAT JSONEachRow"
-                .to_string()
+            )
         }
         TimeWindow::Minute
         | TimeWindow::Hour
@@ -1319,20 +1349,23 @@ fn build_function_throughput_by_variant_query(
 
             // Use UUIDv7ToDateTime for timestamp-based filtering.
             // This preserves the original semantics of filtering relative to the max timestamp.
-            r"SELECT
-                formatDateTime(dateTrunc({time_window:String}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
+            format!(
+                r"SELECT
+                formatDateTime(dateTrunc({{time_window:String}}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
                 i.variant_name AS variant_name,
                 toUInt32(count()) AS count
             FROM InferenceById i
-            WHERE i.function_name = {function_name:String}
+            WHERE i.function_name = {{function_name:String}}
             AND UUIDv7ToDateTime(uint_to_uuid(i.id_uint)) >= (
-                SELECT max(UUIDv7ToDateTime(uint_to_uuid(id_uint))) - INTERVAL {time_delta_secs:UInt64} SECOND
+                SELECT max(UUIDv7ToDateTime(uint_to_uuid(id_uint))) - INTERVAL {{time_delta_secs:UInt64}} SECOND
                 FROM InferenceById
-                WHERE function_name = {function_name:String}
+                WHERE function_name = {{function_name:String}}
             )
+            {tag_filter}
             GROUP BY period_start, variant_name
             ORDER BY period_start DESC, variant_name DESC
-            FORMAT JSONEachRow".to_string()
+            FORMAT JSONEachRow"
+            )
         }
     };
 
@@ -2715,6 +2748,7 @@ mod tests {
                 function_name: "write_haiku",
                 function_type: FunctionConfigType::Chat,
                 variant_name: None,
+                tag: None,
             };
 
             let result = conn.count_inferences_by_variant(params).await.unwrap();
@@ -2758,6 +2792,7 @@ mod tests {
                 function_name: "extract_entities",
                 function_type: FunctionConfigType::Json,
                 variant_name: None,
+                tag: None,
             };
 
             let result = conn.count_inferences_by_variant(params).await.unwrap();
@@ -3074,6 +3109,7 @@ mod tests {
                 function_name: "test_function",
                 time_window: TimeWindow::Cumulative,
                 max_periods: 10,
+                tag: None,
             };
 
             let result = conn
@@ -3127,6 +3163,7 @@ mod tests {
                 function_name: "test_function",
                 time_window: TimeWindow::Week,
                 max_periods: 5,
+                tag: None,
             };
 
             let result = conn
@@ -3158,6 +3195,7 @@ mod tests {
                 function_name: "nonexistent_function",
                 time_window: TimeWindow::Week,
                 max_periods: 10,
+                tag: None,
             };
 
             let result = conn
