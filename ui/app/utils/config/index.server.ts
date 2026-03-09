@@ -180,16 +180,16 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
 // ============================================================================
 
 /**
- * Normalizes a snapshot hash to decimal format for comparison with the
+ * Converts a hex snapshot hash to decimal format for comparison with the
  * gateway's config_hash (which is always decimal).
  *
  * ClickHouse returns snapshot_hash as lowercase hex (via `lower(hex(UInt256))`),
  * but the gateway /status and /internal/ui_config endpoints use decimal.
- * This converts hex to decimal so the equality check and endpoint call work.
  *
- * Always assumes hex input since all callers pass ClickHouse-sourced hashes.
+ * NOT idempotent — input must be hex. Passing a decimal string will
+ * produce incorrect results.
  */
-function normalizeHashToDecimal(hash: string): string {
+function hexToDecimal(hash: string): string {
   try {
     return BigInt("0x" + hash).toString();
   } catch {
@@ -201,7 +201,7 @@ function normalizeHashToDecimal(hash: string): string {
  * Reads `?snapshot_hash` from the request URL and resolves the appropriate
  * config — either the historical snapshot or the current config.
  *
- * If the snapshot hash matches the current config hash (after normalizing
+ * If the snapshot hash matches the current config hash (after converting
  * hex→decimal), strips the param via redirect so the URL stays clean.
  * Otherwise resolves the historical snapshot config (falling back to
  * current on error).
@@ -214,7 +214,7 @@ export async function getConfigFromRequest(
   if (!snapshotHash) return getConfig();
 
   const currentConfig = await getConfig();
-  const normalizedHash = normalizeHashToDecimal(snapshotHash);
+  const normalizedHash = hexToDecimal(snapshotHash);
 
   // Fast path: if the URL hash matches current config, strip it.
   if (currentConfig.config_hash === normalizedHash) {
@@ -242,7 +242,7 @@ export async function getConfigForSnapshot(
 ): Promise<UiConfig> {
   if (!snapshotHash) return getConfig();
 
-  const normalizedHash = normalizeHashToDecimal(snapshotHash);
+  const normalizedHash = hexToDecimal(snapshotHash);
 
   const currentConfig = await getConfig();
   if (currentConfig.config_hash === normalizedHash) return currentConfig;
