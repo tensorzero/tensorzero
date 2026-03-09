@@ -62,10 +62,6 @@ export type GepaToolParams = {
    */
   include_inference_for_mutation?: boolean;
   /**
-   * Maximum number of tokens for analysis and mutation model calls.
-   */
-  max_tokens?: number;
-  /**
    * Maximum number of concurrent inference calls.
    */
   max_concurrency?: number;

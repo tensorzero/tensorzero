@@ -356,6 +356,18 @@ pub async fn gepa_launch_handler(
         })
     })?;
 
+    // Validate mutually exclusive fields before spawning
+    req.dataset().map_err(|msg| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message: msg.to_string(),
+        })
+    })?;
+    req.evaluation().map_err(|msg| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message: msg.to_string(),
+        })
+    })?;
+
     // Convert GepaLaunchRequest → GepaToolParams
     let tool_params = GepaToolParams {
         function_name: req.function_name,
@@ -372,8 +384,7 @@ pub async fn gepa_launch_handler(
         batch_size: req.batch_size,
         seed: req.seed,
         include_inference_for_mutation: req.include_inference_for_mutation,
-        max_tokens: None,
-        max_concurrency: None,
+        max_concurrency: req.max_concurrency,
     };
 
     let llm_params = serde_json::to_value(&tool_params).map_err(|e| {

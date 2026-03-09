@@ -391,6 +391,8 @@ pub struct GepaLaunchRequest {
     pub seed: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_inference_for_mutation: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrency: Option<u32>,
 }
 
 impl GepaLaunchRequest {

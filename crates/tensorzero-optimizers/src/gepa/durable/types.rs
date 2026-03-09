@@ -62,9 +62,6 @@ pub struct GepaToolParams {
     /// Whether to include inference input and output in Analysis for mutation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_inference_for_mutation: Option<bool>,
-    /// Maximum number of tokens for analysis and mutation model calls.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_tokens: Option<u32>,
     /// Maximum number of concurrent inference calls.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrency: Option<u32>,
@@ -116,7 +113,6 @@ pub struct ResolvedGEPAConfig {
     pub mutation_model: String,
     pub seed: Option<u32>,
     pub include_inference_for_mutation: bool,
-    pub max_tokens: Option<u32>,
 }
 
 // ── Lightweight step params (avoid cloning full SetupResult) ────────────

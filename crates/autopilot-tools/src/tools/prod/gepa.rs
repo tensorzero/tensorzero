@@ -474,8 +474,9 @@ async fn execute_gepa(
     );
     tracing::debug!("New variants: {:#?}", new_variants);
 
-    // Build statistics from the Pareto frontier
-    let statistics = build_statistics(&pareto_frontier, evaluator_configs);
+    // Build statistics from the Pareto frontier, filtered to new variants only
+    let mut statistics = build_statistics(&pareto_frontier, evaluator_configs);
+    statistics.retain(|name, _| !original_variant_names.contains(name));
 
     Ok(GepaToolOutput {
         variants: new_variants,
@@ -520,7 +521,7 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
         timeout: 300,
         include_inference_for_mutation: params.include_inference_for_mutation.unwrap_or(true),
         retries: Default::default(),
-        max_tokens: params.max_tokens,
+        max_tokens: None,
     };
 
     // Validate config using the uninitialized config path
@@ -577,7 +578,7 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
                 .list_datapoints(
                     train_name.clone(),
                     ListDatapointsRequest {
-                        limit: None,
+                        limit: Some(u32::MAX),
                         ..Default::default()
                     },
                 )
@@ -595,7 +596,7 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
                 .list_datapoints(
                     val_name.clone(),
                     ListDatapointsRequest {
-                        limit: None,
+                        limit: Some(u32::MAX),
                         ..Default::default()
                     },
                 )
@@ -622,7 +623,7 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
                 .list_datapoints(
                     dataset_name.clone(),
                     ListDatapointsRequest {
-                        limit: None,
+                        limit: Some(u32::MAX),
                         ..Default::default()
                     },
                 )
@@ -675,7 +676,6 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
         mutation_model: gepa_config.mutation_model,
         seed: gepa_config.seed,
         include_inference_for_mutation: gepa_config.include_inference_for_mutation,
-        max_tokens: gepa_config.max_tokens,
     };
 
     Ok(SetupResult {
@@ -1185,7 +1185,7 @@ fn reconstruct_gepa_config(resolved: &ResolvedGEPAConfig) -> GEPAConfig {
         timeout: 300,
         include_inference_for_mutation: resolved.include_inference_for_mutation,
         retries: Default::default(),
-        max_tokens: resolved.max_tokens,
+        max_tokens: None,
     }
 }
 
