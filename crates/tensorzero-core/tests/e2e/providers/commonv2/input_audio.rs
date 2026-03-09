@@ -1,6 +1,6 @@
 use crate::providers::common::E2ETestProvider;
-use crate::utils::skip_for_postgres;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
+use googletest::prelude::*;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
@@ -8,7 +8,10 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheEnabledMode,
-    db::clickhouse::test_helpers::{get_clickhouse, select_model_inference_clickhouse},
+    db::{
+        delegating_connection::DelegatingDatabaseConnection,
+        model_inferences::ModelInferenceQueries, test_helpers::TestDatabaseHelpers,
+    },
     inference::types::{
         ContentBlockChatOutput, File, Role, Text,
         file::Base64File,
@@ -57,7 +60,6 @@ static AUDIO_FILE: &[u8] = include_bytes!("input_audio_barks.mp3");
 const AUDIO_FILE_HASH: &str = "4e497dd5ba1f3761a3d8bdf21da18632d4b919e66cba20af3bb1d07301fc7192";
 
 pub async fn test_audio_inference_with_provider_filesystem(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     let (_client, _storage_path) = Box::pin(test_base64_audio_inference_with_provider_and_store(
         provider,
@@ -203,18 +205,21 @@ pub async fn check_base64_audio_response(
     assert_eq!(variant_name, &provider.variant_name);
 
     // Check cache status in ModelInference table
-    let clickhouse = get_clickhouse().await;
-    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let model_inference = &model_inferences[0];
 
-    assert_eq!(
-        model_inference.get("cached").unwrap().as_bool().unwrap(),
-        should_be_cached,
-        "Expected cached={} but got cached={} for inference_id={}",
-        should_be_cached,
-        model_inference.get("cached").unwrap(),
-        inference_id
+    expect_that!(
+        model_inference.cached,
+        eq(should_be_cached),
+        "Expected cached={should_be_cached} for inference_id={inference_id}"
     );
 
     // Return the storage path for the audio file

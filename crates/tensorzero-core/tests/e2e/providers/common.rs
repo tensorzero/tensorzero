@@ -14,7 +14,7 @@ use tensorzero_core::config::provider_types::{
     VLLMDefaults, XAIDefaults,
 };
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::tool::Tool;
+use tensorzero_core::tool::storage::ToolCallConfigDatabaseInsert;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
@@ -55,13 +55,17 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use crate::utils::skip_for_postgres;
-// use tensorzero_core::config::provider_types::*;
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse,
+
+use googletest::prelude::*;
+use tensorzero_core::db::{
+    delegating_connection::DelegatingDatabaseConnection,
+    inferences::{InferenceQueries, ListInferencesParams},
+    model_inferences::ModelInferenceQueries,
+    test_helpers::TestDatabaseHelpers,
 };
 use tensorzero_core::model::CredentialLocation;
+use tensorzero_core::stored_inference::StoredInferenceDatabase;
+use tensorzero_core::test_helpers::get_e2e_config;
 
 use super::helpers::{get_modal_extra_headers, get_test_model_extra_headers};
 
@@ -1011,7 +1015,6 @@ fn uses_credential_location(provider_type: &str) -> bool {
 /// 4. Configures the gateway to use the custom location via provider_types config
 /// 5. Verifies inference works
 pub async fn test_provider_type_default_credentials_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.model_provider_name);
 
@@ -1128,7 +1131,6 @@ model = "test-model"
 pub async fn test_provider_type_default_credentials_shorthand_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.model_provider_name);
 
@@ -1236,7 +1238,6 @@ pub async fn test_provider_type_fallback_credentials_with_provider(
     supports_dynamic_credentials_test: bool,
     logs_contain: &impl Fn(&str) -> bool,
 ) {
-    skip_for_postgres!();
     reset_capture_logs();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.provider_type);
@@ -1396,7 +1397,6 @@ model = "test-model"
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
     Box::pin(test_url_image_inference_with_provider_and_store(
@@ -1480,7 +1480,6 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_dat
 /// so there's no need to re-test them with PDF inputs.
 /// All of our PDF-capable providers are tested against the filesystem object store.
 pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary pdf dir: {}", temp_dir.path().to_string_lossy());
     let (client, storage_path) = Box::pin(test_base64_pdf_inference_with_provider_and_store(
@@ -1521,7 +1520,6 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
 }
 
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
     let (client, storage_path) = Box::pin(test_base64_image_inference_with_provider_and_store(
@@ -1562,7 +1560,7 @@ fn create_s3_object_store(
     region: Option<String>,
     endpoint: Option<String>,
     allow_http: Option<bool>,
-) -> Result<Arc<dyn ObjectStore>, Box<dyn std::error::Error>> {
+) -> std::result::Result<Arc<dyn ObjectStore>, Box<dyn std::error::Error>> {
     let mut builder = AmazonS3Builder::from_env();
 
     if let Some(bucket) = bucket_name {
@@ -1585,7 +1583,6 @@ fn create_s3_object_store(
 }
 
 pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let test_bucket = "tensorzero-e2e-test-images";
     let test_bucket_region = "us-east-1";
     let client = create_s3_object_store(
@@ -1960,18 +1957,22 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let inference_id = response.inference_id();
 
-    let clickhouse = get_clickhouse().await;
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    assert_eq!(result["cached"], false);
+    assert!(!mi.cached);
     // Should be a cache miss since the image data was changed
     (client, storage_path.unwrap())
 }
 
 pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     test_extra_body_with_provider_and_stream(&provider, false).await;
     test_extra_body_with_provider_and_stream(&provider, true).await;
 }
@@ -2052,33 +2053,32 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
         Uuid::parse_str(inference_id).unwrap()
     };
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
 
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-
-    // Check the ModelInference Table. We don't check the ChatInference table, since we only care about the contents
+    // Check ModelInference. We don't check the ChatInference table, since we only care about the contents
     // of the raw request sent to the model provider.
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     let raw_request_val: serde_json::Value = serde_json::from_str::<Value>(raw_request).unwrap();
     let temp = if provider.variant_name.contains("aws-bedrock") {
         raw_request_val
@@ -2112,7 +2112,6 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
 }
 
 pub async fn test_inference_extra_body_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     test_inference_extra_body_with_provider_and_stream(&provider, false).await;
     test_inference_extra_body_with_provider_and_stream(&provider, true).await;
 }
@@ -2278,49 +2277,63 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         Uuid::parse_str(inference_id).unwrap()
     };
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let chat_result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {chat_result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = chat_result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let clickhouse_extra_body = chat_result.get("extra_body").unwrap().as_str().unwrap();
-    let clickhouse_extra_body: serde_json::Value =
-        serde_json::from_str(clickhouse_extra_body).unwrap();
-    // We store the *original* inference-level extra_body in clickhouse, without any filtering
+    let db_extra_body: serde_json::Value = serde_json::to_value(
+        chat_inf
+            .extra_body
+            .as_ref()
+            .expect("extra_body should be present"),
+    )
+    .unwrap();
+    // We store the *original* inference-level extra_body in the database, without any filtering
     // This allows us to later re-run the inference with a different variant.
-    assert_eq!(extra_body, clickhouse_extra_body);
+    assert_eq!(extra_body, db_extra_body);
 
-    // Check the ModelInference Table. We don't check the ChatInference table, since we only care about the contents
+    // Check ModelInference. We don't check the ChatInference table, since we only care about the contents
     // of the raw request sent to the model provider.
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     let raw_request_val: serde_json::Value = serde_json::from_str::<Value>(raw_request).unwrap();
     let is_azure_reasoning = provider.variant_name.contains("azure");
     let temp = if provider.variant_name.contains("aws-bedrock") {
@@ -2371,7 +2384,6 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
 }
 
 pub async fn test_bad_auth_extra_headers_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     test_bad_auth_extra_headers_with_provider_and_stream(&provider, false).await;
     test_bad_auth_extra_headers_with_provider_and_stream(&provider, true).await;
 }
@@ -2572,7 +2584,6 @@ pub async fn test_warn_ignored_thought_block_with_provider(
     provider: E2ETestProvider,
     logs_contain: &impl Fn(&str) -> bool,
 ) {
-    skip_for_postgres!();
     reset_capture_logs();
     // Bedrock rejects input thoughts for these models
     if provider.model_name == "claude-haiku-4-5-aws-bedrock"
@@ -2670,7 +2681,6 @@ pub async fn test_warn_ignored_thought_block_with_provider(
 }
 
 pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     // * Mistral doesn't support assistant prefill
     // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
     // * Some AWS Bedrock models error when the last message is an assistant message
@@ -2743,11 +2753,10 @@ pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2
         "Content should contain 'tokyo': {content}"
     );
 
-    // We don't check clickhouse, since we do this in lots of places
+    // We don't check the database, since we do this in lots of places
 }
 
 pub async fn test_empty_message_content_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -2793,7 +2802,6 @@ pub async fn test_empty_message_content_with_provider(provider: E2ETestProvider)
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -2914,32 +2922,38 @@ pub async fn check_base64_pdf_response(
         assert!(output_tokens.unwrap() > 0);
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "pdf_test");
+    assert_eq!(chat_inf.function_name, "pdf_test");
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     if let Some(episode_id) = episode_id {
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
 
     let kind_json = serde_json::to_value(kind).unwrap();
 
@@ -2964,25 +2978,29 @@ pub async fn check_base64_pdf_response(
     });
     assert_eq!(input, correct_input);
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
     let expected_storage_path = StoragePath {
         kind: kind.clone(),
         path: Path::parse(format!("{prefix}observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf")).unwrap(),
     };
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     assert_eq!(
-        input_messages,
+        *input_messages,
         vec![StoredRequestMessage {
             role: Role::User,
             content: vec![
@@ -3000,16 +3018,15 @@ pub async fn check_base64_pdf_response(
         },]
     );
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(
         raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
@@ -3018,10 +3035,7 @@ pub async fn check_base64_pdf_response(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
-    assert_eq!(
-        result.get("cached").unwrap().as_bool().unwrap(),
-        should_be_cached
-    );
+    assert_eq!(mi.cached, should_be_cached);
     expected_storage_path
 }
 
@@ -3067,32 +3081,38 @@ pub async fn check_base64_image_response(
         assert!(output_tokens.unwrap() > 0);
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "image_test");
+    assert_eq!(chat_inf.function_name, "image_test");
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     if let Some(episode_id) = episode_id {
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
 
     let kind_json = serde_json::to_value(kind).unwrap();
 
@@ -3118,25 +3138,29 @@ pub async fn check_base64_image_response(
     });
     assert_eq!(input, correct_input);
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
     let expected_storage_path = StoragePath {
         kind: kind.clone(),
         path: Path::parse(format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
     };
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     assert_eq!(
-        input_messages,
+        *input_messages,
         vec![StoredRequestMessage {
             role: Role::User,
             content: vec![
@@ -3154,16 +3178,15 @@ pub async fn check_base64_image_response(
         },]
     );
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(
         raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
@@ -3172,10 +3195,7 @@ pub async fn check_base64_image_response(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
-    assert_eq!(
-        result.get("cached").unwrap().as_bool().unwrap(),
-        should_be_cached
-    );
+    assert_eq!(mi.cached, should_be_cached);
     expected_storage_path
 }
 
@@ -3221,32 +3241,38 @@ pub async fn check_url_image_response(
         assert!(output_tokens.unwrap() > 0);
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "tensorzero::default");
+    assert_eq!(chat_inf.function_name, "tensorzero::default");
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     if let Some(episode_id) = episode_id {
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
 
     let kind_json = serde_json::to_value(kind).unwrap();
 
@@ -3272,20 +3298,24 @@ pub async fn check_url_image_response(
     });
     assert_eq!(input, correct_input);
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     assert_eq!(
-        input_messages,
+        *input_messages,
         vec![
             StoredRequestMessage {
                 role: Role::User,
@@ -3307,16 +3337,15 @@ pub async fn check_url_image_response(
         ]
     );
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(
         raw_request.contains("<TENSORZERO_FILE_0>"),
         "Unexpected raw_request: {raw_request}"
@@ -3325,10 +3354,7 @@ pub async fn check_url_image_response(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
-    assert_eq!(
-        result.get("cached").unwrap().as_bool().unwrap(),
-        should_be_cached
-    );
+    assert_eq!(mi.cached, should_be_cached);
 }
 
 pub async fn check_simple_inference_response(
@@ -3386,35 +3412,40 @@ pub async fn check_simple_inference_response(
         assert!(finish_reason == "stop" || finish_reason == "length");
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(chat_inf.function_name, hardcoded_function_name);
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     if let Some(episode_id) = episode_id {
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -3426,122 +3457,118 @@ pub async fn check_simple_inference_response(
     });
     assert_eq!(input, correct_input);
 
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let mut content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    let mut content_blocks: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
     // Some providers always produce thought blocks - we don't care about them in this test
     content_blocks.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let db_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(db_content, content);
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
     if !is_batch {
-        assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
+        assert_eq!(chat_inf.tags.get("foo").map(String::as_str), Some("bar"));
     }
     // Since the variant was pinned, the variant_pinned tag should be present
     assert_eq!(
-        tags.get("tensorzero::variant_pinned")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        provider.variant_name
+        chat_inf
+            .tags
+            .get("tensorzero::variant_pinned")
+            .map(String::as_str),
+        Some(provider.variant_name.as_str())
     );
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
+    assert!(chat_inf.tool_params.is_none());
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params: Value = serde_json::to_value(
+        chat_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
     if !is_batch {
-        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-        assert!(processing_time_ms > 0);
+        assert!(chat_inf.processing_time_ms.unwrap() > 0);
     }
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
-    assert!(input_tokens.as_u64().unwrap() > 0);
-    assert!(output_tokens.as_u64().unwrap() > 0);
+    assert!(mi.input_tokens.unwrap() > 0);
+    assert!(mi.output_tokens.unwrap() > 0);
     if !is_batch && !should_be_cached {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        mi.system.as_deref(),
+        Some("You are a helpful and friendly assistant named Dr. Mehta")
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the name of the capital city of Japan?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let mut output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     // Some providers always produce thought blocks - we don't care about them in this test
     output.retain(|c| !matches!(c, StoredContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
     if !is_batch {
-        // Check the InferenceTag Table
-        let result = select_inference_tags_clickhouse(
-            &clickhouse,
-            hardcoded_function_name,
-            "foo",
-            "bar",
-            inference_id,
-        )
-        .await
-        .unwrap();
-        let id = result.get("inference_id").unwrap().as_str().unwrap();
-        let id = Uuid::parse_str(id).unwrap();
-        assert_eq!(id, inference_id);
+        // Check tags
+        assert_eq!(chat_inf.tags.get("foo").map(String::as_str), Some("bar"));
     }
-    assert_eq!(
-        result.get("cached").unwrap().as_bool().unwrap(),
-        should_be_cached
-    );
+    assert_eq!(mi.cached, should_be_cached);
 }
 
 pub async fn check_simple_image_inference_response(
@@ -3589,38 +3616,42 @@ pub async fn check_simple_image_inference_response(
     // Some providers return "stop" and others return "length"
     assert!(finish_reason == "stop" || finish_reason == "length");
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(chat_inf.function_name, "basic_test");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     if let Some(episode_id) = episode_id {
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
-    let tags = result.get("tags").unwrap();
     // All callers set this tag so this tests that tags are propagated to the ultimate sink of the inference data
-    tags.get("test_type").unwrap();
+    assert!(chat_inf.tags.contains_key("test_type"));
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -3643,101 +3674,99 @@ pub async fn check_simple_image_inference_response(
     });
     assert_eq!(input, correct_input);
 
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    let content_blocks: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
     // Filter out thought blocks from reasoning models
     let text_blocks: Vec<&Value> = content_blocks
         .iter()
         .filter(|b| b.get("type").unwrap().as_str().unwrap() == "text")
         .collect();
     assert_eq!(text_blocks.len(), 1);
-    let clickhouse_content = text_blocks[0].get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let db_content = text_blocks[0].get("text").unwrap().as_str().unwrap();
+    assert_eq!(db_content, content);
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
+    assert!(chat_inf.tool_params.is_none());
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params: Value = serde_json::to_value(
+        chat_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
     if !is_batch {
-        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-        assert!(processing_time_ms > 0);
+        assert!(chat_inf.processing_time_ms.unwrap() > 0);
     }
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("animal"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("crab"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
-    assert!(input_tokens.as_u64().unwrap() > 0);
-    assert!(output_tokens.as_u64().unwrap() > 0);
+    assert!(mi.input_tokens.unwrap() > 0);
+    assert!(mi.output_tokens.unwrap() > 0);
     if !is_batch && !should_be_cached {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        mi.system.as_deref(),
+        Some("You are a helpful and friendly assistant named Dr. Mehta")
     );
-    let output = result.get("output").unwrap().as_str().unwrap();
+    let output_val: Value =
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap();
     assert!(
-        output.to_lowercase().contains("crab"),
-        "Unexpected output: {output}",
+        output_val.to_string().to_lowercase().contains("crab"),
+        "Unexpected output: {output_val}",
     );
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_value(output_val).unwrap();
     assert_eq!(output.len(), 1);
 
     if !is_batch {
-        // Check the InferenceTag Table
-        let result =
-            select_inference_tags_clickhouse(&clickhouse, "basic_test", "foo", "bar", inference_id)
-                .await
-                .unwrap();
-        let id = result.get("inference_id").unwrap().as_str().unwrap();
-        let id = Uuid::parse_str(id).unwrap();
-        assert_eq!(id, inference_id);
+        // Check tags
+        assert_eq!(chat_inf.tags.get("foo").map(String::as_str), Some("bar"));
     }
-    assert_eq!(
-        result.get("cached").unwrap().as_bool().unwrap(),
-        should_be_cached
-    );
+    assert_eq!(mi.cached, should_be_cached);
 }
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     // This test is very flaky on Fireworks for some reason
     if provider.model_provider_name == "fireworks" || provider.model_provider_name == "together" {
         return;
@@ -3814,7 +3843,6 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     // We use a serverless Sagemaker endpoint, which doesn't support streaming
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
@@ -3845,7 +3873,6 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
 }
 
 pub async fn test_streaming_include_original_response_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     // We use a serverless Sagemaker endpoint, which doesn't support streaming
     if provider.variant_name == "aws-sagemaker-tgi" {
         return;
@@ -4022,33 +4049,38 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         );
     }
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(chat_inf.function_name, payload["function_name"]);
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": format!("Dr. Mehta {test_id}")},
         "messages": [
@@ -4060,57 +4092,68 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     });
     assert_eq!(input, correct_input);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert!(chat_inf.tool_params.is_none());
+
+    let inference_params: Value = serde_json::to_value(
+        chat_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
+    assert!(chat_inf.processing_time_ms.unwrap() > 0);
+
+    let tags = &chat_inf.tags;
+    assert_eq!(tags.get("key").map(String::as_str).unwrap(), tag_value);
+
+    // Check database - ModelInference Table
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
+        .await
+        .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
+
+    println!("ModelInference: {mi:#?}");
+
+    // model inference id is already a Uuid
+
+    assert_eq!(mi.inference_id, inference_id);
+
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
+
+    let mut output: Vec<Value> =
+        serde_json::to_value(mi.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
     // Some providers always produce thought blocks - we don't care about them in this test
     output.retain(|c| c.get("type").unwrap().as_str().unwrap() != "thought");
     let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
+    let db_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(db_content, full_content);
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
-
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").is_none());
-    assert!(inference_params.get("seed").is_none());
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
-
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
-
-    // Check ClickHouse - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - ModelInference: {result:#?}");
-
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
-
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
 
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
@@ -4120,51 +4163,52 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     // This is flaky on Fireworks - it seems like they sometimes don't send us usage information,
     // so TensorZero reports 0 for input/output token usage.
     if provider.model_provider_name != "fireworks" && !assert_response_is_cached {
-        let input_tokens = result.get("input_tokens").unwrap();
-        let output_tokens = result.get("output_tokens").unwrap();
+        let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+        let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
         assert!(input_tokens.as_u64().unwrap() > 0);
         assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     if assert_response_is_cached {
         assert_eq!(response_time_ms, 0);
     }
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     if assert_response_is_cached {
         assert_eq!(ttft_ms, 0);
     }
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         format!("You are a helpful and friendly assistant named Dr. Mehta {test_id}")
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the name of the capital city of Japan?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let mut output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     // Some providers always produce thought blocks - we don't care about them in this test
     output.retain(|c| !matches!(c, StoredContentBlock::Thought(_)));
     assert_eq!(output.len(), 1);
 
-    // Check the InferenceTag Table
-    let result =
-        select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", tag_value, inference_id)
-            .await
-            .unwrap();
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    // Check tags
+    assert_eq!(
+        chat_inf.tags.get("key").map(String::as_str),
+        Some(tag_value)
+    );
 
     full_content
 }
@@ -4172,7 +4216,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 pub async fn test_inference_params_dynamic_credentials_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Gemini 2.5 models don't support penalty parameters
     if provider.model_name.contains("gemini-2.5") {
         return;
@@ -4302,35 +4345,40 @@ pub async fn check_inference_params_response(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(chat_inf.function_name, hardcoded_function_name);
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -4342,22 +4390,30 @@ pub async fn check_inference_params_response(
     });
     assert_eq!(input, correct_input);
 
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    let content_blocks: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
     // Filter out thought blocks from reasoning models
     let text_blocks: Vec<&Value> = content_blocks
         .iter()
         .filter(|b| b.get("type").unwrap().as_str().unwrap() == "text")
         .collect();
     assert_eq!(text_blocks.len(), 1);
-    let clickhouse_content = text_blocks[0].get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let db_content = text_blocks[0].get("text").unwrap().as_str().unwrap();
+    assert_eq!(db_content, content);
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
+    assert!(chat_inf.tool_params.is_none());
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params: Value = serde_json::to_value(
+        chat_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     let is_azure_reasoning = provider.variant_name.contains("azure");
     let seed = inference_params.get("seed").unwrap().as_u64().unwrap();
@@ -4404,70 +4460,83 @@ pub async fn check_inference_params_response(
     }
 
     if is_batch {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
+        assert!(
+            serde_json::to_value(chat_inf.processing_time_ms)
+                .unwrap()
+                .is_null()
+        );
     } else {
-        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        let processing_time_ms = serde_json::to_value(chat_inf.processing_time_ms)
+            .unwrap()
+            .as_u64()
+            .unwrap();
         assert!(processing_time_ms > 0);
     }
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if is_batch {
-        assert!(result.get("response_time_ms").unwrap().is_null());
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(serde_json::to_value(mi.response_time_ms).unwrap().is_null());
+        assert!(mi.ttft_ms.is_none());
     } else {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        mi.system.as_deref(),
+        Some("You are a helpful and friendly assistant named Dr. Mehta")
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the name of the capital city of Japan?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let text_count = output
         .iter()
         .filter(|b| matches!(b, StoredContentBlock::Text(_)))
@@ -4478,7 +4547,6 @@ pub async fn check_inference_params_response(
 pub async fn test_inference_params_dynamic_credentials_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Gemini 2.5 models don't support penalty parameters
     if provider.model_name.contains("gemini-2.5") {
         return;
@@ -4613,33 +4681,38 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(chat_inf.function_name, payload["function_name"]);
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -4651,22 +4724,15 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
     });
     assert_eq!(input, correct_input);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    // Filter to only text blocks (ignore thought blocks from reasoning models)
-    let clickhouse_content: String = output
-        .iter()
-        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "text")
-        .map(|block| block.get("text").unwrap().as_str().unwrap())
-        .collect::<Vec<_>>()
-        .join("");
-    assert_eq!(clickhouse_content, full_content);
+    assert!(chat_inf.tool_params.is_none());
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
-
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params: Value = serde_json::to_value(
+        chat_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     let seed = inference_params.get("seed").unwrap().as_u64().unwrap();
     assert_eq!(seed, 1337);
@@ -4711,70 +4777,89 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
         assert_eq!(frequency_penalty, 0.2);
     }
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    assert!(chat_inf.processing_time_ms.unwrap() > 0);
 
-    // Check ClickHouse - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check database - ModelInference Table
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let output: Vec<Value> =
+        serde_json::to_value(mi.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    // Filter to only text blocks (ignore thought blocks from reasoning models)
+    let db_content: String = output
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "text")
+        .map(|block| block.get("text").unwrap().as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join("");
+    assert_eq!(db_content, full_content);
+
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
 
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
-    assert!(input_tokens.as_u64().unwrap() > 0);
-    assert!(output_tokens.as_u64().unwrap() > 0);
+    assert!(mi.input_tokens.unwrap() > 0);
+    assert!(mi.output_tokens.unwrap() > 0);
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        mi.system.as_deref(),
+        Some("You are a helpful and friendly assistant named Dr. Mehta")
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the name of the capital city of Japan?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     // Filter to only text blocks (ignore thought blocks from reasoning models)
     let text_blocks: Vec<_> = output
         .iter()
@@ -4789,7 +4874,6 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -4836,7 +4920,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
 
 // Helper function to verify new Migration 0041 tool call storage columns
 fn verify_tool_call_storage_columns(
-    result: &Value,
+    tp: &ToolCallConfigDatabaseInsert,
     expected_tool_choice: &str,
     expected_parallel_tool_calls: Option<bool>,
     expected_allowed_tools_choice: &str,
@@ -4845,8 +4929,7 @@ fn verify_tool_call_storage_columns(
     expected_provider_tool_count: usize,
 ) {
     // Verify allowed_tools column
-    let allowed_tools_str = result.get("allowed_tools").unwrap().as_str().unwrap();
-    let allowed_tools: Value = serde_json::from_str(allowed_tools_str).unwrap();
+    let allowed_tools: Value = serde_json::to_value(&tp.allowed_tools).unwrap();
     assert_eq!(
         allowed_tools["choice"], expected_allowed_tools_choice,
         "allowed_tools.choice mismatch"
@@ -4866,52 +4949,38 @@ fn verify_tool_call_storage_columns(
     }
 
     // Verify dynamic_tools column
-    let dynamic_tools_unparsed = result.get("dynamic_tools").unwrap().as_array().unwrap();
-    let dynamic_tools: Result<Vec<Tool>, _> = dynamic_tools_unparsed
-        .iter()
-        .map(|x| serde_json::from_str::<Tool>(x.as_str().unwrap()))
-        .collect();
-    let dynamic_tools = dynamic_tools.unwrap();
     assert_eq!(
-        dynamic_tools.len(),
+        tp.dynamic_tools.len(),
         expected_dynamic_tool_count,
         "dynamic_tools length mismatch"
     );
 
     // Verify dynamic_provider_tools column
-    let dynamic_provider_tools_unparsed = result
-        .get("dynamic_provider_tools")
-        .unwrap()
-        .as_array()
-        .unwrap();
-    let dynamic_provider_tools: Result<Vec<Tool>, _> = dynamic_provider_tools_unparsed
-        .iter()
-        .map(|x| serde_json::from_str::<Tool>(x.as_str().unwrap()))
-        .collect();
-    let dynamic_provider_tools = dynamic_provider_tools.unwrap();
     assert_eq!(
-        dynamic_provider_tools.len(),
+        tp.dynamic_provider_tools.len(),
         expected_provider_tool_count,
         "dynamic_provider_tools length mismatch"
     );
 
     // Verify tool_choice column
-    let tool_choice = result.get("tool_choice").unwrap().as_str().unwrap();
-    assert_eq!(tool_choice, expected_tool_choice, "tool_choice mismatch");
+    let tool_choice_val: Value = serde_json::to_value(&tp.tool_choice).unwrap();
+    let tool_choice_str = tool_choice_val.as_str().unwrap();
+    assert_eq!(
+        tool_choice_str, expected_tool_choice,
+        "tool_choice mismatch"
+    );
 
     // Verify parallel_tool_calls column
-    let parallel_tool_calls = result.get("parallel_tool_calls");
+    let parallel_tool_calls = tp.parallel_tool_calls;
     match expected_parallel_tool_calls {
         Some(expected) => {
-            let actual = parallel_tool_calls
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            let actual = parallel_tool_calls.unwrap_or(false);
             assert_eq!(actual, expected, "parallel_tool_calls mismatch");
         }
         None => {
             // Should be null or not present
             assert!(
-                parallel_tool_calls.is_none() || parallel_tool_calls.unwrap().is_null(),
+                parallel_tool_calls.is_none(),
                 "parallel_tool_calls should be null"
             );
         }
@@ -4980,35 +5049,40 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-        assert_eq!(episode_id_result, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -5024,12 +5098,21 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *content);
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert_eq!(output_db, *content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -5076,7 +5159,10 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 
     // Verify new Migration 0041 columns (decomposed tool call storage format)
     verify_tool_call_storage_columns(
-        &result,
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
         "auto",               // expected_tool_choice
         None,                 // expected_parallel_tool_calls (null/none)
         "function_default",   // expected_allowed_tools_choice (tools from function config)
@@ -5086,25 +5172,26 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     );
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(raw_request.to_lowercase().contains("celsius"));
     assert!(
@@ -5112,27 +5199,31 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(raw_response.contains("get_temperature"));
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -5141,9 +5232,11 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -5171,7 +5264,6 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
         return;
@@ -5312,33 +5404,39 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let tool_id = tool_id.unwrap();
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -5354,14 +5452,15 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert!(!output_db.is_empty()); // could be > 1 if the model returns text as well
     // Ignore other content blocks
-    let content_block = output_clickhouse
-        .iter()
-        .find(|b| b["type"] == "tool_call")
-        .unwrap();
+    let content_block = output_db.iter().find(|b| b["type"] == "tool_call").unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -5386,8 +5485,13 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         arguments
     );
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -5433,25 +5537,26 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(
@@ -5459,15 +5564,18 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.contains("get_temperature"));
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
@@ -5476,20 +5584,22 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -5498,9 +5608,11 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -5530,7 +5642,6 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -5601,35 +5712,40 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-        assert_eq!(episode_id_result, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -5645,12 +5761,21 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *content);
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert_eq!(output_db, *content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -5681,9 +5806,16 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         "The location to get the temperature for (e.g. \"New York\")"
     );
     if is_batch {
-        assert!(result.get("processing_time_ms").unwrap().is_null());
+        assert!(
+            serde_json::to_value(chat_inf.processing_time_ms)
+                .unwrap()
+                .is_null()
+        );
     } else {
-        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        let processing_time_ms = serde_json::to_value(chat_inf.processing_time_ms)
+            .unwrap()
+            .as_u64()
+            .unwrap();
         assert!(processing_time_ms > 0);
     }
 
@@ -5702,71 +5834,77 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("what is your name"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
     if is_batch {
-        assert!(result.get("response_time_ms").unwrap().is_null());
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(serde_json::to_value(mi.response_time_ms).unwrap().is_null());
+        assert!(mi.ttft_ms.is_none());
     } else {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("mehta"));
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if is_batch {
-        assert!(result.get("response_time_ms").unwrap().is_null());
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(serde_json::to_value(mi.response_time_ms).unwrap().is_null());
+        assert!(mi.ttft_ms.is_none());
     } else {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is your name?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let mut output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     // We don't care about thoughts in this test
     output.retain(|block| !matches!(block, StoredContentBlock::Thought(_)));
 
@@ -5792,7 +5930,6 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
         return;
@@ -5899,33 +6036,39 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 
     assert!(full_text.to_lowercase().contains("mehta"));
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -5941,19 +6084,19 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     );
     assert_eq!(input, correct_input);
 
-    let mut output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+    let mut output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
 
     // We don't care about thoughts in this test
-    output_clickhouse.retain(|block| block["type"] != "thought");
+    output_db.retain(|block| block["type"] != "thought");
 
-    assert!(
-        !output_clickhouse
-            .iter()
-            .any(|block| block["type"] == "tool_call")
-    );
+    assert!(!output_db.iter().any(|block| block["type"] == "tool_call"));
 
-    let content_block = output_clickhouse.first().unwrap();
+    let content_block = output_db.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     assert!(
@@ -5966,8 +6109,13 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
             .contains("mehta")
     );
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -6013,66 +6161,74 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("what is your name"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     assert!(input_tokens.as_u64().unwrap() > 0);
     assert!(output_tokens.as_u64().unwrap() > 0);
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is your name?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let mut output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     // We don't care about thoughts in this test
     output.retain(|block| !matches!(block, StoredContentBlock::Thought(_)));
 
@@ -6088,7 +6244,6 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
     // Groq says they support it, but it doesn't return the required tool as expected
     if provider.model_provider_name == "azure"
@@ -6213,35 +6368,40 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-        assert_eq!(episode_id_result, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -6257,12 +6417,21 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *content);
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert_eq!(output_db, *content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "required");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -6308,63 +6477,70 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("what is your name"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.contains("get_temperature"));
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if is_batch {
-        assert!(result.get("response_time_ms").unwrap().is_null());
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(serde_json::to_value(mi.response_time_ms).unwrap().is_null());
+        assert!(mi.ttft_ms.is_none());
     } else {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is your name?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -6390,7 +6566,6 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Azure, Together, and SGLang don't support `tool_choice: "required"`
     // Groq says they support it, but it doesn't return the required tool as expected
     // Fireworks returns trash.
@@ -6533,33 +6708,39 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let tool_id = tool_id.unwrap();
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -6575,14 +6756,15 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert!(!output_db.is_empty()); // could be > 1 if the model returns text as well
     // Ignore other content blocks
-    let content_block = output_clickhouse
-        .iter()
-        .find(|b| b["type"] == "tool_call")
-        .unwrap();
+    let content_block = output_db.iter().find(|b| b["type"] == "tool_call").unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -6607,8 +6789,13 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         &serde_json::from_str::<serde_json::Map<String, Value>>(&arguments).unwrap()
     );
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "required");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -6654,67 +6841,75 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("what is your name"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.contains("get_temperature"));
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
+    let output_tokens = mi.output_tokens.unwrap() as u64;
 
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is your name?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -6740,7 +6935,6 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // NOTE: The xAI API occasionally returns mangled output most of the time when this test runs.
     // The bug has been reported to the xAI team.
     //
@@ -6845,35 +7039,40 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-        assert_eq!(episode_id_result, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -6889,12 +7088,21 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *content);
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert_eq!(output_db, *content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "none");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -6940,25 +7148,26 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(raw_request.to_lowercase().contains("celsius"));
     assert!(
@@ -6966,25 +7175,26 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
         "raw_request is not a valid JSON"
     );
 
-    assert!(result.get("raw_response").unwrap().as_str().is_some());
+    assert!(mi.raw_response.is_some());
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -6993,9 +7203,11 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let has_text_or_unknown = output.iter().any(|block| {
         matches!(
             block,
@@ -7011,7 +7223,6 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Gemini 2.5 produces unexpected behavior for this test (empty content or 'executableCode' blocks)
     // We don't support 'executableCode' in streaming mode (since we don't have "unknown" streaming chunks)
     if provider.model_name.contains("gemini-2.5") {
@@ -7133,33 +7344,39 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 
     let inference_id = inference_id.unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -7175,23 +7392,28 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
 
-    assert!(
-        !output_clickhouse
-            .iter()
-            .any(|block| block["type"] == "tool_call")
-    );
+    assert!(!output_db.iter().any(|block| block["type"] == "tool_call"));
 
-    let text_block = output_clickhouse
+    let text_block = output_db
         .iter()
         .find(|block| block["type"] == "text")
         .expect("Expected at least one text block in output");
     assert!(text_block.get("text").unwrap().as_str().is_some());
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "none");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -7240,25 +7462,26 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(
         raw_request
             .to_lowercase()
@@ -7269,32 +7492,37 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     assert!(input_tokens.as_u64().unwrap() > 0);
     assert!(output_tokens.as_u64().unwrap() > 0);
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -7303,9 +7531,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let has_text_block = output
         .iter()
         .any(|block| matches!(block, StoredContentBlock::Text(_)));
@@ -7318,7 +7548,6 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // GCP Vertex AI, Groq, Mistral, Together, and Fireworks don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
@@ -7450,35 +7679,40 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-        assert_eq!(episode_id_result, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -7494,12 +7728,21 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *content);
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert_eq!(output_db, *content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(
         tool_params["tool_choice"],
         json!({"specific": "self_destruct"})
@@ -7578,25 +7821,26 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert!(properties.get("fast").is_some());
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("self_destruct"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(
@@ -7607,23 +7851,24 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     // We explicitly do *not* check `raw_response`, as model providers differ in whether or
     //not they actually call `self_destruct` (OpenAI will, but xAI does not).
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -7632,9 +7877,11 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -7664,7 +7911,6 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // - GCP Vertex AI, Mistral, Together, Groq, and Fireworks don't support ToolChoice::Specific.
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
@@ -7832,33 +8078,39 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "Arguments: {arguments}"
     );
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
 
     let correct_input: Value = json!(
         {
@@ -7876,10 +8128,14 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert!(!output_db.is_empty()); // could be > 1 if the model returns text as well
+    let content_block = output_db
         .iter()
         .find(|block| block.get("type").and_then(Value::as_str) == Some("tool_call"))
         .expect("No tool_call content block found in ClickHouse output");
@@ -7908,8 +8164,13 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         arguments
     );
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(
         tool_params["tool_choice"],
         json!({"specific": "self_destruct"})
@@ -7988,25 +8249,26 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     assert!(properties.contains_key("fast"));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("self_destruct"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(
@@ -8014,7 +8276,10 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     // We explicitly do *not* check the content of `raw_response`, as model providers differ in whether or
     // not they actually call `self_destruct` (OpenAI will, but xAI does not).
 
@@ -8022,33 +8287,37 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     assert!(input_tokens.as_u64().unwrap() > 0);
     assert!(output_tokens.as_u64().unwrap() > 0);
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![prompt.into()],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -8078,7 +8347,6 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Groq isn't respecting allowed_tools and will call brave_search instead of get_humidity, for example
     if provider.model_provider_name == "groq" {
         return;
@@ -8186,35 +8454,40 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(chat_inf.function_name, "basic_test");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-        assert_eq!(episode_id_result, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -8230,12 +8503,21 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *content);
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert_eq!(output_db, *content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "required");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -8270,51 +8552,55 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert!(properties.get("location").is_some());
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("get_humidity"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.contains("get_humidity"));
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        mi.system.as_deref(),
+        Some("You are a helpful and friendly assistant named Dr. Mehta")
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -8323,9 +8609,11 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -8356,7 +8644,6 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
         return;
@@ -8517,33 +8804,39 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let tool_id = tool_id.unwrap();
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(chat_inf.function_name, "basic_test");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -8559,15 +8852,16 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert!(!output_db.is_empty()); // could be > 1 if the model returns text as well
 
     // Ignore other content blocks
-    let content_block = output_clickhouse
-        .iter()
-        .find(|b| b["type"] == "tool_call")
-        .unwrap();
+    let content_block = output_db.iter().find(|b| b["type"] == "tool_call").unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -8592,8 +8886,13 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         &serde_json::from_str::<serde_json::Map<String, Value>>(&arguments).unwrap()
     );
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "required");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -8627,25 +8926,26 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("get_humidity"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(
@@ -8653,15 +8953,18 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.contains("get_humidity"));
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
@@ -8670,20 +8973,21 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        mi.system.as_deref(),
+        Some("You are a helpful and friendly assistant named Dr. Mehta")
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![
@@ -8692,9 +8996,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                 .into(),
         ],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -8723,7 +9029,6 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
 }
 
 pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     // NOTE: The xAI API returns an error for multi-turn tool use when the assistant message only has tool_calls but no content.
     // The xAI team has acknowledged the issue and is working on a fix.
     // We skip this test for xAI until the fix is deployed.
@@ -8832,35 +9137,40 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -8880,8 +9190,12 @@ pub async fn check_tool_use_multi_turn_inference_response(
     });
     assert_eq!(input, correct_input);
 
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    let content_blocks: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
     // Filter out thought blocks since this test doesn't care about them
     let content_blocks: Vec<_> = content_blocks
         .into_iter()
@@ -8895,11 +9209,16 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let db_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(db_content, content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -8913,37 +9232,42 @@ pub async fn check_tool_use_multi_turn_inference_response(
     );
     assert_eq!(tool["strict"], false);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params: Value = serde_json::to_value(
+        chat_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
     if !is_batch {
-        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-        assert!(processing_time_ms > 0);
+        assert!(chat_inf.processing_time_ms.unwrap() > 0);
     }
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(
@@ -8951,27 +9275,31 @@ pub async fn check_tool_use_multi_turn_inference_response(
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![
         StoredRequestMessage {
             role: Role::User,
@@ -8998,9 +9326,11 @@ pub async fn check_tool_use_multi_turn_inference_response(
             })],
         },
     ];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     // Filter out thought blocks since this test doesn't care about them
     let output: Vec<_> = output
         .into_iter()
@@ -9025,7 +9355,6 @@ pub async fn check_tool_use_multi_turn_inference_response(
 pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     if provider.model_provider_name == "together" {
         return;
@@ -9149,33 +9478,38 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(chat_inf.function_name, "weather_helper");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -9209,8 +9543,43 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     });
     assert_eq!(input, correct_input);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<Value> = serde_json::from_str(output).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
+    assert_eq!(tool_params["tool_choice"], "auto");
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
+
+    let inference_params: Value = serde_json::to_value(
+        chat_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
+
+    assert!(chat_inf.processing_time_ms.unwrap() > 0);
+
+    // Check database - ModelInference Table
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
+        .await
+        .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
+
+    let output: Vec<Value> =
+        serde_json::to_value(mi.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
     // Filter out thought blocks since this test doesn't care about them
     let output: Vec<_> = output
         .into_iter()
@@ -9224,43 +9593,22 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
+    let db_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(db_content, full_content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
+    println!("ModelInference: {mi:#?}");
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").is_none());
-    assert!(inference_params.get("seed").is_none());
+    // model inference id is already a Uuid
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    assert_eq!(mi.inference_id, inference_id);
 
-    // Check ClickHouse - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    println!("ClickHouse - ModelInference: {result:#?}");
-
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
-
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(
@@ -9268,33 +9616,38 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
 
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     assert!(input_tokens.as_u64().unwrap() > 0);
     assert!(output_tokens.as_u64().unwrap() > 0);
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![
         StoredRequestMessage {
             role: Role::User,
@@ -9321,9 +9674,11 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             })],
         },
     ];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     // Filter out thought blocks since this test doesn't care about them
     let output: Vec<_> = output
         .into_iter()
@@ -9349,7 +9704,6 @@ pub async fn test_stop_sequences_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
-    skip_for_postgres!();
     // OpenAI Responses doesn't support stop sequences
     // Azure reasoning models don't support stop sequences
     if provider.variant_name == "openai-responses" || provider.variant_name.contains("azure") {
@@ -9401,33 +9755,46 @@ pub async fn test_stop_sequences_inference_request_with_provider(
                 panic!("Expected a chat response");
             };
 
-            // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-            // Check ClickHouse - ChatInference Table
-            let clickhouse = get_clickhouse().await;
+            let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+            conn.flush_pending_writes().await;
+            conn.sleep_for_writes_to_be_visible().await;
+            let config = get_e2e_config().await;
 
             println!("Response: {response:#?}");
 
-            let model_inference =
-                select_model_inference_clickhouse(&clickhouse, response.inference_id)
-                    .await
-                    .unwrap();
-            println!("Model inference: {model_inference:#?}");
+            let model_inferences = conn
+                .get_model_inferences_by_inference_id(response.inference_id)
+                .await
+                .unwrap();
+            assert_that!(model_inferences, len(eq(1)));
+            let mi = &model_inferences[0];
+            println!("Model inference: {mi:#?}");
 
-            let chat_inference =
-                select_chat_inference_clickhouse(&clickhouse, response.inference_id)
-                    .await
-                    .unwrap();
-            println!("Chat inference: {chat_inference:#?}");
+            let inferences = conn
+                .list_inferences(
+                    &config,
+                    &ListInferencesParams {
+                        ids: Some(&[response.inference_id]),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap();
+            assert_that!(inferences, len(eq(1)));
+            let chat_inf = match &inferences[0] {
+                StoredInferenceDatabase::Chat(c) => c,
+                StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+            };
+            println!("Chat inference: {chat_inf:#?}");
 
             // Just check 'stop_sequences', as we check ModelInference and ChatInference in lots of other tests
-            let inference_params = chat_inference
-                .get("inference_params")
-                .unwrap()
-                .as_str()
-                .unwrap();
-            let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+            let inference_params: Value = serde_json::to_value(
+                chat_inf
+                    .inference_params
+                    .as_ref()
+                    .expect("inference_params should be present"),
+            )
+            .unwrap();
             let inference_params = inference_params.get("chat_completion").unwrap();
             let stop_sequences = inference_params
                 .get("stop_sequences")
@@ -9490,7 +9857,6 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let response = client.inference(tensorzero::ClientInferenceParams {
@@ -9635,35 +10001,40 @@ pub async fn check_dynamic_tool_use_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(chat_inf.function_name, hardcoded_function_name);
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-        assert_eq!(episode_id_result, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -9679,12 +10050,21 @@ pub async fn check_dynamic_tool_use_inference_response(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *content);
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert_eq!(output_db, *content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -9729,25 +10109,26 @@ pub async fn check_dynamic_tool_use_inference_response(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(
@@ -9755,35 +10136,40 @@ pub async fn check_dynamic_tool_use_inference_response(
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(raw_response.contains("get_temperature"));
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        mi.system.as_deref(),
+        Some("You are a helpful and friendly assistant named Dr. Mehta")
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
             .to_string() })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -9806,7 +10192,6 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let input_function_name = "basic_test";
@@ -9961,33 +10346,39 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     println!("Collected arguments: {arguments}");
     serde_json::from_str::<Value>(&arguments).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, input_function_name);
+    assert_eq!(chat_inf.function_name, input_function_name);
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -10003,15 +10394,16 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert!(!output_db.is_empty()); // could be > 1 if the model returns text as well
 
     // Ignore other content blocks
-    let content_block = output_clickhouse
-        .iter()
-        .find(|b| b["type"] == "tool_call")
-        .unwrap();
+    let content_block = output_db.iter().find(|b| b["type"] == "tool_call").unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
@@ -10036,8 +10428,13 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         &serde_json::from_str::<serde_json::Map<String, Value>>(&arguments).unwrap()
     );
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
@@ -10082,25 +10479,26 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(
@@ -10108,15 +10506,18 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.contains("get_temperature"));
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
@@ -10125,28 +10526,31 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-        system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        mi.system.as_deref(),
+        Some("You are a helpful and friendly assistant named Dr. Mehta")
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
             .to_string() })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -10166,7 +10570,6 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
 }
 
 pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -10302,35 +10705,40 @@ pub async fn check_parallel_tool_use_inference_response(
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper_parallel");
+    assert_eq!(chat_inf.function_name, "weather_helper_parallel");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-        assert_eq!(episode_id_result, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -10349,12 +10757,21 @@ pub async fn check_parallel_tool_use_inference_response(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *content);
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert_eq!(output_db, *content);
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], parallel_param);
 
@@ -10432,25 +10849,26 @@ pub async fn check_parallel_tool_use_inference_response(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(
@@ -10458,35 +10876,41 @@ pub async fn check_parallel_tool_use_inference_response(
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.contains("get_temperature"));
     assert!(raw_response.to_lowercase().contains("tokyo"));
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
             .to_string() })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     let is_groq = provider.model_provider_name == "groq";
@@ -10538,7 +10962,6 @@ pub async fn check_parallel_tool_use_inference_response(
 pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Together doesn't correctly produce streaming tool call chunks (it produces text chunks with the raw tool call).
     // Groq also doesn't seem to produce the correct tool call chunks, but not sure what's happening there yet.
     if provider.model_provider_name == "together" || provider.model_provider_name == "groq" {
@@ -10689,33 +11112,39 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(serde_json::from_str::<Value>(&get_temperature_arguments).is_ok());
     assert!(serde_json::from_str::<Value>(&get_humidity_arguments).is_ok());
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse - Inference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper_parallel");
+    assert_eq!(chat_inf.function_name, "weather_helper_parallel");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input: Value = json!(
         {
             "system": {
@@ -10731,12 +11160,16 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     );
     assert_eq!(input, correct_input);
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    assert!(!output_db.is_empty()); // could be > 1 if the model returns text as well
 
     // Validate the `get_temperature` tool call
-    let content_block = output_clickhouse
+    let content_block = output_db
         .iter()
         .find(|block| block["name"] == "get_temperature")
         .unwrap();
@@ -10765,7 +11198,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     );
 
     // Validate the `get_humidity` tool call
-    let content_block = output_clickhouse
+    let content_block = output_db
         .iter()
         .find(|block| block["name"] == "get_humidity")
         .unwrap();
@@ -10792,8 +11225,13 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         "get_humidity"
     );
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], true);
 
@@ -10871,25 +11309,26 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("get_humidity"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
@@ -10899,15 +11338,18 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.contains("get_temperature"));
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
@@ -10916,28 +11358,32 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text { text: "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
             .to_string() })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     assert!(output.len() >= 2);
     let mut tool_call_names = vec![];
     for block in output {
@@ -10960,7 +11406,6 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
 }
 
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -11039,35 +11484,40 @@ pub async fn check_json_mode_inference_response(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - JsonInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let json_inf = match &inferences[0] {
+        StoredInferenceDatabase::Json(j) => j,
+        StoredInferenceDatabase::Chat(_) => panic!("Expected JSON inference"),
+    };
 
-    println!("ClickHouse - JsonInference: {result:#?}");
+    println!("JsonInference: {json_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(json_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "json_success");
+    assert_eq!(json_inf.function_name, "json_success");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(json_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(json_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(json_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -11079,23 +11529,32 @@ pub async fn check_json_mode_inference_response(
     });
     assert_eq!(input, correct_input);
 
-    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
-    let output_clickhouse = output_clickhouse.as_object().unwrap();
-    assert_eq!(output_clickhouse, output);
+    let output_db: Value =
+        serde_json::to_value(json_inf.output.as_ref().expect("output should be present")).unwrap();
+    let output_db = output_db.as_object().unwrap();
+    assert_eq!(output_db, output);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params: Value = serde_json::to_value(
+        json_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
     if !is_batch {
-        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-        assert!(processing_time_ms > 0);
+        assert!(json_inf.processing_time_ms.unwrap() > 0);
     }
-    let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    let retrieved_output_schema: Value = serde_json::from_str(retrieved_output_schema).unwrap();
+    let retrieved_output_schema: Value = serde_json::to_value(
+        json_inf
+            .output_schema
+            .as_ref()
+            .expect("output_schema should be present"),
+    )
+    .unwrap();
     let expected_output_schema = json!({
         "type": "object",
         "properties": {
@@ -11109,62 +11568,69 @@ pub async fn check_json_mode_inference_response(
     );
     assert_eq!(retrieved_output_schema, expected_output_schema);
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the name of the capital city of Japan?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let mut output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     // We don't care about thoughts in this test
     output.retain(|block| !matches!(block, StoredContentBlock::Thought(_)));
 
@@ -11213,7 +11679,6 @@ pub async fn check_json_mode_inference_response(
 }
 
 pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -11313,37 +11778,43 @@ pub async fn check_dynamic_json_mode_inference_response(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - JsonInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let json_inf = match &inferences[0] {
+        StoredInferenceDatabase::Json(j) => j,
+        StoredInferenceDatabase::Chat(_) => panic!("Expected JSON inference"),
+    };
 
-    println!("ClickHouse - JsonInference: {result:#?}");
+    println!("JsonInference: {json_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(json_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "dynamic_json");
+    assert_eq!(json_inf.function_name, "dynamic_json");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(json_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(json_inf.episode_id, episode_id);
     }
 
     if let Some(output_schema) = &output_schema {
         let serialized_output_schema = serde_json::to_string(&output_schema).unwrap();
         let input: Value =
-            serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+            serde_json::to_value(json_inf.input.as_ref().expect("input should be present"))
+                .unwrap();
         let correct_input = json!({
             "system": {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema},
             "messages": [
@@ -11356,84 +11827,100 @@ pub async fn check_dynamic_json_mode_inference_response(
         assert_eq!(input, correct_input);
     }
 
-    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
-    let output_clickhouse = output_clickhouse.as_object().unwrap();
-    assert_eq!(output_clickhouse, output);
+    let output_db: Value =
+        serde_json::to_value(json_inf.output.as_ref().expect("output should be present")).unwrap();
+    let output_db = output_db.as_object().unwrap();
+    assert_eq!(output_db, output);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params: Value = serde_json::to_value(
+        json_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
     if !is_batch {
-        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-        assert!(processing_time_ms > 0);
+        assert!(json_inf.processing_time_ms.unwrap() > 0);
     }
 
     if let Some(output_schema) = &output_schema {
-        let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-        let retrieved_output_schema: Value = serde_json::from_str(retrieved_output_schema).unwrap();
+        let retrieved_output_schema: Value = serde_json::to_value(
+            json_inf
+                .output_schema
+                .as_ref()
+                .expect("output_schema should be present"),
+        )
+        .unwrap();
         assert_eq!(retrieved_output_schema, *output_schema);
     }
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nDo not include any other text than the JSON object.  Do not include \"```json\" or \"```\" or anything else.\n\nPlease answer the questions in a JSON with the following schema:\n\n{\"type\":\"object\",\"properties\":{\"response\":{\"type\":\"string\"}},\"required\":[\"response\"],\"additionalProperties\":false}"
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the name of the capital city of Japan?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let mut output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(*input_messages, expected_input_messages);
+    let mut output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     // We don't care about thoughts in this test
     output.retain(|block| !matches!(block, StoredContentBlock::Thought(_)));
 
@@ -11483,7 +11970,6 @@ pub async fn check_dynamic_json_mode_inference_response(
 }
 
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     if provider.variant_name.contains("tgi")
         || provider.variant_name.contains("cot")
         || provider.model_provider_name == "groq"
@@ -11581,33 +12067,38 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check ClickHouse - JsonInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let json_inf = match &inferences[0] {
+        StoredInferenceDatabase::Json(j) => j,
+        StoredInferenceDatabase::Chat(_) => panic!("Expected JSON inference"),
+    };
 
-    println!("ClickHouse - JsonInference: {result:#?}");
+    println!("JsonInference: {json_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(json_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "json_success");
+    assert_eq!(json_inf.function_name, "json_success");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(json_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(json_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(json_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -11619,19 +12110,24 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     });
     assert_eq!(input, correct_input);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Value = serde_json::from_str(output).unwrap();
-    let output = output.as_object().unwrap();
-    assert_eq!(output.keys().len(), 2);
-    let clickhouse_parsed = output.get("parsed").unwrap().as_object().unwrap();
-    let clickhouse_raw = output.get("parsed").unwrap().as_object().unwrap();
-    assert_eq!(clickhouse_parsed, clickhouse_raw);
+    let output_val: Value =
+        serde_json::to_value(json_inf.output.as_ref().expect("output should be present")).unwrap();
+    let output_obj = output_val.as_object().unwrap();
+    assert_eq!(output_obj.keys().len(), 2);
+    let db_parsed = output_obj.get("parsed").unwrap().as_object().unwrap();
+    let db_raw = output_obj.get("parsed").unwrap().as_object().unwrap();
+    assert_eq!(db_parsed, db_raw);
     let full_content_parsed: Value = serde_json::from_str(&full_content).unwrap();
     let full_content_parsed = full_content_parsed.as_object().unwrap();
-    assert_eq!(clickhouse_parsed, full_content_parsed);
+    assert_eq!(db_parsed, full_content_parsed);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params: Value = serde_json::to_value(
+        json_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
@@ -11656,11 +12152,15 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         max_tokens
     );
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    assert!(json_inf.processing_time_ms.unwrap() > 0);
 
-    let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    let retrieved_output_schema: Value = serde_json::from_str(retrieved_output_schema).unwrap();
+    let retrieved_output_schema: Value = serde_json::to_value(
+        json_inf
+            .output_schema
+            .as_ref()
+            .expect("output_schema should be present"),
+    )
+    .unwrap();
     let expected_output_schema = json!({
         "type": "object",
         "properties": {
@@ -11673,26 +12173,27 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     });
     assert_eq!(retrieved_output_schema, expected_output_schema);
 
-    // Check ClickHouse - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check database - ModelInference Table
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(raw_request.to_lowercase().contains("mehta"));
     assert!(
@@ -11700,46 +12201,52 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
 
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     assert!(input_tokens.as_u64().unwrap() > 0);
     assert!(output_tokens.as_u64().unwrap() > 0);
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the name of the capital city of Japan?".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str::<Vec<StoredContentBlock>>(output)
-        .unwrap()
-        .into_iter()
-        .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
-        .collect();
+    assert_eq!(*input_messages, expected_input_messages);
+    let output = mi.output.as_ref().expect("output should be present");
+    let output: Vec<StoredContentBlock> =
+        serde_json::from_value::<Vec<StoredContentBlock>>(serde_json::to_value(output).unwrap())
+            .unwrap()
+            .into_iter()
+            .filter(|c| !matches!(c, StoredContentBlock::Thought(_)))
+            .collect();
 
     match &output[0] {
         StoredContentBlock::Text(text) => {
@@ -11762,7 +12269,6 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
 
 /// Test the behavior of model providers when the model tries to output a lot more than `max_tokens`.
 pub async fn test_short_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     // We currently host ollama on sagemaker, and use a wrapped 'openai' provider
     // in our tensorzero.toml. ollama doesn't support 'max_completion_tokens', so this test
     // currently fails. It's fine to skip it, since we really care about testing the sagemaker
@@ -11874,35 +12380,40 @@ async fn check_short_inference_response(
         .unwrap();
     assert_eq!(finish_reason, "length");
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(chat_inf.function_name, hardcoded_function_name);
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     if let Some(episode_id) = episode_id {
-        assert_eq!(retrieved_episode_id, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": format!("Dr. Mehta")},
         "messages": [
@@ -11914,14 +12425,18 @@ async fn check_short_inference_response(
     });
     assert_eq!(input, correct_input);
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
+    let tags = &chat_inf.tags;
+    assert_eq!(tags.get("foo").map(String::as_str).unwrap(), "bar");
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
+    assert!(chat_inf.tool_params.is_none());
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params: Value = serde_json::to_value(
+        chat_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
@@ -11934,87 +12449,77 @@ async fn check_short_inference_response(
         16
     );
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    assert!(chat_inf.processing_time_ms.unwrap() > 0);
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(model_inference_id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
-    assert!(input_tokens.as_u64().unwrap() > 0);
-    assert!(output_tokens.as_u64().unwrap() > 0);
+    assert!(mi.input_tokens.unwrap() > 0);
+    assert!(mi.output_tokens.unwrap() > 0);
     if !should_be_cached {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         format!("You are a helpful and friendly assistant named Dr. Mehta")
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
             text: "What is the name of the capital city of Japan? Explain your answer.".to_string(),
         })],
     }];
-    assert_eq!(input_messages, expected_input_messages);
-    let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
-    assert_eq!(finish_reason, "length");
+    assert_eq!(*input_messages, expected_input_messages);
+    let finish_reason = mi
+        .finish_reason
+        .as_ref()
+        .expect("finish_reason should be present");
+    assert_eq!(*finish_reason, FinishReason::Length);
 
-    // Check the InferenceTag Table
-    select_inference_tags_clickhouse(
-        &clickhouse,
-        hardcoded_function_name,
-        "foo",
-        "bar",
-        inference_id,
-    )
-    .await
-    .unwrap();
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
-    assert_eq!(
-        result.get("cached").unwrap().as_bool().unwrap(),
-        should_be_cached
-    );
+    // Check tags
+    assert_eq!(chat_inf.tags.get("foo").map(String::as_str), Some("bar"));
+    assert_eq!(mi.cached, should_be_cached);
 }
 
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Together's model is too dumb to figure out multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
     if provider.model_provider_name == "together" {
         return;
@@ -12188,35 +12693,40 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
     assert!(content_text.to_lowercase().contains("70"));
     assert!(content_text.to_lowercase().contains("30"));
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is correct - ChatInference table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(chat_inf.function_name, hardcoded_function_name);
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
     if let Some(episode_id) = episode_id {
-        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-        assert_eq!(episode_id_result, episode_id);
+        assert_eq!(chat_inf.episode_id, episode_id);
     }
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
 
     let last_input_message = input["messages"].as_array().unwrap().last().unwrap();
     assert_eq!(last_input_message["role"], "user");
@@ -12226,64 +12736,78 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
         assert_eq!(tool_result["type"], "tool_result");
     }
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
     let output_content = serde_json::to_value(content).unwrap();
-    println!("Output clickhouse: {output_clickhouse:#?}");
+    println!("Output db: {output_db:#?}");
     println!("Output content: {output_content:#?}");
-    assert_eq!(output_clickhouse, *output_content.as_array().unwrap());
+    assert_eq!(output_db, *output_content.as_array().unwrap());
 
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    let tool_params: Value = serde_json::to_value(
+        chat_inf
+            .tool_params
+            .as_ref()
+            .expect("tool_params should be present"),
+    )
+    .unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
     assert_eq!(tool_params["parallel_tool_calls"], true);
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     assert!(raw_response.to_lowercase().contains("70"));
     assert!(raw_response.to_lowercase().contains("30"));
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 0);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
     if !is_batch {
-        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-        assert!(response_time_ms > 0);
-        assert!(result.get("ttft_ms").unwrap().is_null());
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let last_input_message = input_messages.last().unwrap();
     assert_eq!(last_input_message.role, Role::User);
     let last_input_message_content = &last_input_message.content;
@@ -12300,8 +12824,10 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
             }
         }
     }
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     assert_eq!(output.len(), 1);
     let output_content = output.first().unwrap();
     match output_content {
@@ -12318,7 +12844,6 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
 pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     // Together's model is too dumb to figure out multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
     if provider.model_provider_name == "together" {
         return;
@@ -12527,33 +13052,39 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     // Check inference_id
     let inference_id = inference_id.unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse - Inference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    println!("ClickHouse - ChatInference: {result:#?}");
+    println!("ChatInference: {chat_inf:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(chat_inf.inference_id, inference_id);
 
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper_parallel");
+    assert_eq!(chat_inf.function_name, "weather_helper_parallel");
 
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(chat_inf.variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    assert_eq!(chat_inf.episode_id, episode_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(chat_inf.input.as_ref().expect("input should be present")).unwrap();
 
     let last_input_message = input["messages"].as_array().unwrap().last().unwrap();
     assert_eq!(last_input_message["role"], "user");
@@ -12563,32 +13094,37 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         assert_eq!(tool_result["type"], "tool_result");
     }
 
-    let output_clickhouse: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    println!("Output clickhouse: {output_clickhouse:#?}");
+    let output_db: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
+    println!("Output db: {output_db:#?}");
     println!("Output content: {output_content:#?}");
-    assert_eq!(output_clickhouse[0]["text"], output_content);
+    assert_eq!(output_db[0]["text"], output_content);
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    println!("ClickHouse - ModelInference: {result:#?}");
+    println!("ModelInference: {mi:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    assert!(Uuid::parse_str(id).is_ok());
+    // model inference id is already a Uuid
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
+    assert_eq!(mi.model_name, provider.model_name);
+    assert_eq!(mi.model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("get_humidity"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
@@ -12598,14 +13134,17 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         "raw_request is not a valid JSON"
     );
 
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = mi
+        .raw_response
+        .as_ref()
+        .expect("raw_response should be present");
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap();
-    let output_tokens = result.get("output_tokens").unwrap();
+    let input_tokens = serde_json::to_value(mi.input_tokens).unwrap();
+    let output_tokens = serde_json::to_value(mi.output_tokens).unwrap();
 
     if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
@@ -12614,20 +13153,22 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    let ttft_ms = mi.ttft_ms.unwrap() as u64;
     assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
-    let system = result.get("system").unwrap().as_str().unwrap();
+    let system = mi.system.as_deref().expect("system should be present");
     assert_eq!(
         system,
         "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
     );
-    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let input_messages = mi
+        .input_messages
+        .as_ref()
+        .expect("input_messages should be present");
     let last_input_message = input_messages.last().unwrap();
     assert_eq!(last_input_message.role, Role::User);
     let last_input_message_content = &last_input_message.content;
@@ -12644,8 +13185,10 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             }
         }
     }
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
+    let output: Vec<StoredContentBlock> = serde_json::from_value(
+        serde_json::to_value(mi.output.as_ref().expect("output should be present")).unwrap(),
+    )
+    .unwrap();
     assert_eq!(output.len(), 1);
     let output_content = output.first().unwrap();
     match output_content {
@@ -12660,7 +13203,6 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 }
 
 pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -12721,23 +13263,32 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
     // First, check Inference table
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let json_inf = match &inferences[0] {
+        StoredInferenceDatabase::Json(j) => j,
+        StoredInferenceDatabase::Chat(_) => panic!("Expected JSON inference"),
+    };
 
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    assert_eq!(json_inf.inference_id, inference_id);
 
     let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        serde_json::to_value(json_inf.input.as_ref().expect("input should be present")).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "AskJeeves"},
         "messages": [
@@ -12749,53 +13300,52 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     });
     assert_eq!(input, correct_input);
 
-    // Check that correctly parsed output is present
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Value = serde_json::from_str(output).unwrap();
-    let raw = output.get("raw").unwrap().as_str().unwrap();
-    assert!(raw.to_lowercase().contains("tokyo"));
-
     // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    assert_eq!(json_inf.episode_id, episode_id);
 
     // Check the variant name
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(json_inf.variant_name, provider.variant_name);
 
     // Check the processing time
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    assert!(json_inf.processing_time_ms.unwrap() > 0);
 
-    // Check that we saved the correct json mode to ClickHouse
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let clickhouse_json_mode = inference_params
+    // Check that we saved the correct json mode to the database
+    let inference_params: Value = serde_json::to_value(
+        json_inf
+            .inference_params
+            .as_ref()
+            .expect("inference_params should be present"),
+    )
+    .unwrap();
+    let db_json_mode = inference_params
         .get("chat_completion")
         .unwrap()
         .get("json_mode")
         .unwrap()
         .as_str()
         .unwrap();
-    assert_eq!("off", clickhouse_json_mode);
+    assert_eq!("off", db_json_mode);
 
-    // Check the ModelInference Table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+    // Check ModelInference
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
+    assert_that!(model_inferences, len(eq(1)));
+    let mi = &model_inferences[0];
 
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(mi.inference_id, inference_id);
 
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    let model_name = mi.model_name.as_str();
     assert_eq!(model_name, provider.model_name);
 
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    let model_provider_name = mi.model_provider_name.as_str();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = mi
+        .raw_request
+        .as_ref()
+        .expect("raw_request should be present");
     assert!(raw_request.to_lowercase().contains("japan"));
 
     // Check that raw_request is valid JSON
@@ -12815,20 +13365,19 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
         assert!(raw_request_val.get("response_format").is_none());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = mi.input_tokens.unwrap() as u64;
     assert!(input_tokens > 5);
 
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = mi.output_tokens.unwrap() as u64;
     assert!(output_tokens > 0);
 
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    let response_time_ms = mi.response_time_ms.unwrap() as u64;
     assert!(response_time_ms > 0);
 
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    assert!(mi.ttft_ms.is_none());
 }
 
 pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
         get_modal_extra_headers()
@@ -12901,7 +13450,6 @@ pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETes
 pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
-    skip_for_postgres!();
     if provider.variant_name == "together-deepseek-r1" {
         // This produces invalid tool calls within text blocks (e.g 🛠\u{fe0f}\n\n```json\n{\n  \"too)
         return;
@@ -13070,7 +13618,6 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
 }
 
 pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
     if provider.variant_name == "fireworks-kimi-k2p5-reasoning" {
         // This either times out or returns "Internal Server Error"
         return;
@@ -13148,39 +13695,53 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
     }
     let inference_id = inference_id.unwrap().parse::<Uuid>().unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
 
-    // Check ClickHouse for the collected chunks from the first request
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let _id_uuid = Uuid::parse_str(id).unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    // inference_id is already verified above
 
-    let clickhouse_content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let clickhouse_content_blocks: Vec<Value> =
-        serde_json::from_str(clickhouse_content_blocks).unwrap();
+    let db_content_blocks: Vec<Value> =
+        serde_json::to_value(chat_inf.output.as_ref().expect("output should be present"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .clone();
     // Check that we have a thought block
     assert!(
-        clickhouse_content_blocks
+        db_content_blocks
             .iter()
             .any(|block| block["type"] == "thought"),
-        "Expected a thought block in the content blocks: {clickhouse_content_blocks:?}"
+        "Expected a thought block in the content blocks: {db_content_blocks:?}"
     );
 
     // Check that we have a tool call block
     assert!(
-        clickhouse_content_blocks
+        db_content_blocks
             .iter()
             .any(|block| block["type"] == "tool_call"),
-        "Expected a tool call block in the content blocks: {clickhouse_content_blocks:?}"
+        "Expected a tool call block in the content blocks: {db_content_blocks:?}"
     );
 
     // Now make a second streaming request with tool results (multi-turn)
     // Collect ALL tool call IDs - Anthropic requires a tool_result for every tool_use
-    let tool_ids: Vec<&str> = clickhouse_content_blocks
+    let tool_ids: Vec<&str> = db_content_blocks
         .iter()
         .filter(|block| block["type"] == "tool_call")
         .map(|block| block["id"].as_str().unwrap())
@@ -13193,7 +13754,7 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
         }),
         serde_json::json!({
             "role": "assistant",
-            "content": clickhouse_content_blocks,
+            "content": db_content_blocks,
         }),
     ];
 
@@ -13260,15 +13821,33 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
         }
         let current_inference_id = current_inference_id.unwrap().parse::<Uuid>().unwrap();
 
-        // Sleep for 1 second to allow time for data to be inserted into ClickHouse
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        conn.flush_pending_writes().await;
+        conn.sleep_for_writes_to_be_visible().await;
 
-        // Check ClickHouse for the collected chunks
-        let result = select_chat_inference_clickhouse(&clickhouse, current_inference_id)
+        let inferences = conn
+            .list_inferences(
+                &config,
+                &ListInferencesParams {
+                    ids: Some(&[current_inference_id]),
+                    ..Default::default()
+                },
+            )
             .await
             .unwrap();
-        let content_blocks_str = result.get("output").unwrap().as_str().unwrap();
-        let content_blocks: Vec<Value> = serde_json::from_str(content_blocks_str).unwrap();
+        assert_that!(inferences, len(eq(1)));
+        let _chat_inf = match &inferences[0] {
+            StoredInferenceDatabase::Chat(c) => c,
+            StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+        };
+        let model_inferences = conn
+            .get_model_inferences_by_inference_id(current_inference_id)
+            .await
+            .unwrap();
+        assert_that!(model_inferences, len(eq(1)));
+        let mi = &model_inferences[0];
+        let content_blocks_str =
+            serde_json::to_string(mi.output.as_ref().expect("output should be present")).unwrap();
+        let content_blocks: Vec<Value> = serde_json::from_str(&content_blocks_str).unwrap();
 
         // Check if we got a text response
         if content_blocks.iter().any(|block| block["type"] == "text") {

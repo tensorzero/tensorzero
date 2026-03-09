@@ -1,8 +1,16 @@
 use std::collections::HashMap;
 
+use googletest::prelude::*;
 use http::StatusCode;
 use reqwest::Client;
 use serde_json::{Value, json};
+use tensorzero_core::db::{
+    delegating_connection::DelegatingDatabaseConnection,
+    inferences::{InferenceQueries, ListInferencesParams},
+    test_helpers::TestDatabaseHelpers,
+};
+use tensorzero_core::stored_inference::StoredInferenceDatabase;
+use tensorzero_core::test_helpers::get_e2e_config;
 use uuid::Uuid;
 
 use crate::{
@@ -11,8 +19,6 @@ use crate::{
 };
 
 use super::common::ModelTestProvider;
-
-use crate::utils::skip_for_postgres;
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -388,11 +394,6 @@ async fn test_gcp_vertex_multi_turn_thought_non_streaming() {
 /// the model is forced to use tools (because internally we set mode to Any).
 #[tokio::test]
 async fn test_gcp_vertex_gemini_tool_choice_auto_with_allowed_tools() {
-    skip_for_postgres!();
-    use tensorzero_core::db::clickhouse::test_helpers::{
-        get_clickhouse, select_chat_inference_clickhouse,
-    };
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -442,29 +443,40 @@ async fn test_gcp_vertex_gemini_tool_choice_auto_with_allowed_tools() {
         "get_humidity"
     );
 
-    // Check ClickHouse ChatInference
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Check ChatInference
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+    let config = get_e2e_config().await;
+
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
+    assert_that!(inferences, len(eq(1)));
+    let chat_inf = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
 
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
-    assert_eq!(tool_params.get("tool_choice").unwrap(), "auto");
-
-    // tools_available should only contain get_humidity since we specified allowed_tools
-    let tools_available = tool_params
-        .get("tools_available")
-        .unwrap()
-        .as_array()
-        .unwrap();
-    assert_eq!(
-        tools_available.len(),
-        1,
-        "Should only have one tool available"
+    let tool_params = chat_inf
+        .tool_params
+        .as_ref()
+        .expect("tool_params should be present");
+    expect_that!(
+        tool_params.tool_choice,
+        eq(&tensorzero_core::tool::ToolChoice::Auto)
     );
-    assert_eq!(tools_available[0].get("name").unwrap(), "get_humidity");
+    expect_that!(
+        tool_params.allowed_tools.tools,
+        elements_are![eq("get_humidity")]
+    );
 }
 
 /// Test cross-model inference: replaying tool calls from other providers (without thought blocks).
