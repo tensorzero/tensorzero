@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useHoverPopover } from "~/hooks/use-hover-popover";
 import {
   Tooltip,
   TooltipContent,
@@ -21,7 +21,7 @@ function formatTagKey(key: string): string {
 
 function InternalBadge() {
   return (
-    <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1 py-0.5 font-sans text-[10px] font-medium leading-none">
+    <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none">
       T0
     </span>
   );
@@ -76,38 +76,14 @@ interface TagsPopoverProps {
 }
 
 export function TagsPopover({ tags }: TagsPopoverProps) {
-  const [open, setOpen] = useState(false);
-  const closeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const scheduleClose = useCallback(() => {
-    closeTimeout.current = setTimeout(() => setOpen(false), 150);
-  }, []);
-
-  const cancelClose = useCallback(() => {
-    if (closeTimeout.current) {
-      clearTimeout(closeTimeout.current);
-      closeTimeout.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (closeTimeout.current) {
-        clearTimeout(closeTimeout.current);
-      }
-    };
-  }, []);
+  const { open, setOpen, triggerProps, contentProps } = useHoverPopover();
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <span
           className="text-fg-tertiary cursor-default text-xs underline decoration-dotted decoration-border underline-offset-4"
-          onPointerEnter={() => {
-            cancelClose();
-            setOpen(true);
-          }}
-          onPointerLeave={scheduleClose}
+          {...triggerProps}
         >
           {tags.length} tag{tags.length !== 1 ? "s" : ""}
         </span>
@@ -118,8 +94,7 @@ export function TagsPopover({ tags }: TagsPopoverProps) {
         className="w-auto max-w-md p-3"
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
-        onPointerEnter={cancelClose}
-        onPointerLeave={scheduleClose}
+        {...contentProps}
       >
         <div className="space-y-1.5">
           {tags.map(([key, val]) => {

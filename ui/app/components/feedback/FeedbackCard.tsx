@@ -1,4 +1,11 @@
+import { useHoverPopover } from "~/hooks/use-hover-popover";
 import { TableItemTime } from "~/components/ui/TableItems";
+import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import {
   parseInferenceOutput,
   isJsonOutput,
@@ -35,9 +42,9 @@ function FeedbackCard({
   return (
     <div
       data-testid={testId}
-      className="bg-bg-primary border-border overflow-hidden rounded-lg border [&_[data-testid=chat-output]]:!rounded-none [&_[data-testid=chat-output]]:!border-0 [&_[data-testid=chat-output]]:!p-0"
+      className="bg-bg-primary border-border overflow-hidden rounded-md border [&_[data-testid=chat-output]]:!rounded-none [&_[data-testid=chat-output]]:!border-0 [&_[data-testid=chat-output]]:!p-0"
     >
-      <div className="bg-bg-secondary text-fg-tertiary flex h-10 items-center border-b px-3 text-sm font-medium">
+      <div className="bg-bg-secondary text-fg-tertiary flex h-12 items-center border-b px-3 text-sm font-medium">
         {label}
       </div>
       {children}
@@ -46,11 +53,7 @@ function FeedbackCard({
           <span>
             {allTags.length > 0 ? <TagsPopover tags={allTags} /> : null}
           </span>
-          {timestamp && (
-            <span>
-              Updated <TableItemTime timestamp={timestamp} />
-            </span>
-          )}
+          {timestamp && <CardTimestamp timestamp={timestamp} />}
         </div>
       )}
     </div>
@@ -104,6 +107,33 @@ export function DemonstrationCard({ demonstration }: DemonstrationCardProps) {
         )}
       </div>
     </FeedbackCard>
+  );
+}
+
+function CardTimestamp({ timestamp }: { timestamp: string }) {
+  const { open, setOpen, triggerProps, contentProps } = useHoverPopover();
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <span className="cursor-default" {...triggerProps}>
+          <TableItemTime timestamp={timestamp} />
+        </span>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="end"
+        className="w-auto p-3 text-xs"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        {...contentProps}
+      >
+        <div className="flex flex-col gap-1">
+          <div className="text-fg-tertiary">Last updated</div>
+          <TimestampTooltip timestamp={timestamp} />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

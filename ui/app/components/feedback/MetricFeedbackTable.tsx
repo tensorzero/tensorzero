@@ -1,3 +1,4 @@
+import { useHoverPopover } from "~/hooks/use-hover-popover";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow, MetricConfig } from "~/types/tensorzero";
@@ -17,10 +18,10 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import {
   TagsPopover,
   filterStringTags,
@@ -121,31 +122,11 @@ function MetricRowItem({
   return (
     <TableRow data-testid={`feedback-row-${item.id}`}>
       <TableCell>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className="flex cursor-default items-center gap-1.5 font-mono text-sm"
-              tabIndex={0}
-            >
-              <span className="truncate underline decoration-dotted decoration-border underline-offset-4">
-                {parsed.displayName}
-              </span>
-              {parsed.isEvaluator && (
-                <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1 py-0.5 font-sans text-[10px] font-medium leading-none">
-                  eval
-                </span>
-              )}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent sideOffset={5}>
-            <MetricTooltipContent
-              id={item.id}
-              fullName={parsed.fullName}
-              evaluationName={parsed.evaluationName}
-              feedbackConfig={feedbackConfig}
-            />
-          </TooltipContent>
-        </Tooltip>
+        <MetricNamePopover
+          parsed={parsed}
+          id={item.id}
+          feedbackConfig={feedbackConfig}
+        />
       </TableCell>
       <TableCell className="max-w-0 truncate">
         <FeedbackValue feedback={item} metric={metricConfig} />
@@ -166,34 +147,62 @@ function MetricRowItem({
   );
 }
 
-interface MetricTooltipContentProps {
+interface MetricNamePopoverProps {
+  parsed: ParsedMetricName;
   id: string;
-  fullName: string;
-  evaluationName?: string;
   feedbackConfig: FeedbackConfig | undefined;
 }
 
-function MetricTooltipContent({
+function MetricNamePopover({
+  parsed,
   id,
-  fullName,
-  evaluationName,
   feedbackConfig,
-}: MetricTooltipContentProps) {
-  const configParts =
+}: MetricNamePopoverProps) {
+  const { open, setOpen, triggerProps, contentProps } = useHoverPopover();
+
+  const configLine =
     feedbackConfig &&
     feedbackConfig.type !== "comment" &&
     feedbackConfig.type !== "demonstration"
-      ? [feedbackConfig.type, feedbackConfig.optimize, feedbackConfig.level]
+      ? `type: ${feedbackConfig.type} · optimize: ${feedbackConfig.optimize} · level: ${feedbackConfig.level}`
       : null;
 
   return (
-    <div className="max-w-xs space-y-1.5 font-mono text-xs">
-      <div className="break-all">{fullName}</div>
-      {evaluationName && (
-        <div className="text-fg-tertiary">evaluation: {evaluationName}</div>
-      )}
-      <div className="break-all">ID: {id}</div>
-      {configParts && <div>{configParts.join(" · ")}</div>}
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <span
+          className="inline-flex cursor-default items-center gap-1.5 font-mono text-sm"
+          {...triggerProps}
+        >
+          <span className="truncate underline decoration-dotted decoration-border underline-offset-4">
+            {parsed.displayName}
+          </span>
+          {parsed.isEvaluator && (
+            <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1 py-0.5 font-mono text-[10px] font-medium leading-none">
+              eval
+            </span>
+          )}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        className="w-auto max-w-md p-3"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        {...contentProps}
+      >
+        <div className="space-y-1.5 font-mono text-xs">
+          <div className="text-fg-tertiary break-all">ID: {id}</div>
+          <div className="text-fg-primary break-all">{parsed.fullName}</div>
+          {parsed.evaluationName && (
+            <div className="text-fg-tertiary">
+              evaluation: {parsed.evaluationName}
+            </div>
+          )}
+          {configLine && <div className="text-fg-tertiary">{configLine}</div>}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

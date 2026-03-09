@@ -23,8 +23,8 @@ import {
 
 function CardSkeleton({ label }: { label: string }) {
   return (
-    <div className="bg-bg-primary border-border overflow-hidden rounded-lg border">
-      <div className="bg-bg-secondary text-fg-tertiary flex h-10 items-center border-b px-3 text-sm font-medium">
+    <div className="bg-bg-primary border-border overflow-hidden rounded-md border">
+      <div className="bg-bg-secondary text-fg-tertiary flex h-12 items-center border-b px-3 text-sm font-medium">
         {label}
       </div>
       <div className="p-4">
