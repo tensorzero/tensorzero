@@ -2,9 +2,9 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
- * A block of rich content displayed alongside a question.
+ * A block of rich content displayed alongside an autoeval example.
  */
-export type ContentBlock =
+export type AutoevalContentBlock =
   | { type: "markdown"; text: string }
   | { type: "json"; data: JsonValue; label?: string }
   | { type: "collapsible"; label: string; text: string };

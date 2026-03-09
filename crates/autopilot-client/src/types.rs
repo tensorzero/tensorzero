@@ -216,6 +216,7 @@ pub enum EventPayload {
     Visualization(EventPayloadVisualization),
     UserQuestions(EventPayloadUserQuestions),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
+    AutoevalExampleLabeling(EventPayloadAutoevalExampleLabeling),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -255,6 +256,7 @@ pub enum GatewayEventPayload {
     Visualization(EventPayloadVisualization),
     UserQuestions(EventPayloadUserQuestions),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
+    AutoevalExampleLabeling(EventPayloadAutoevalExampleLabeling),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -277,6 +279,9 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             EventPayload::UserQuestions(q) => Ok(GatewayEventPayload::UserQuestions(q)),
             EventPayload::UserQuestionsAnswers(r) => {
                 Ok(GatewayEventPayload::UserQuestionsAnswers(r))
+            }
+            EventPayload::AutoevalExampleLabeling(l) => {
+                Ok(GatewayEventPayload::AutoevalExampleLabeling(l))
             }
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
@@ -639,34 +644,8 @@ pub struct EventPayloadUserQuestion {
     pub header: String,
     /// The complete question to ask the user. Should be clear, specific, and end with a question mark.
     pub question: String,
-    /// Optional rich content displayed above the question to provide context.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub context: Option<Vec<ContentBlock>>,
     #[serde(flatten)]
     pub inner: EventPayloadUserQuestionInner,
-}
-
-/// A block of rich content displayed alongside a question.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export, tag = "type", rename_all = "snake_case")
-)]
-pub enum ContentBlock {
-    /// Rendered as formatted markdown.
-    Markdown { text: String },
-    /// Rendered as a labeled, formatted JSON viewer.
-    Json {
-        data: serde_json::Value,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        label: Option<String>,
-    },
-    /// Rendered as a collapsible section with a label and markdown body.
-    Collapsible { label: String, text: String },
 }
 
 /// The format of a user question.
@@ -738,6 +717,54 @@ pub struct MultipleChoiceAnswer {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FreeResponseAnswer {
     pub text: String,
+}
+
+// =============================================================================
+// Autoeval Example Labeling Types
+// =============================================================================
+
+/// Payload for an autoeval example labeling event.
+///
+/// Groups labeled examples together, each with rich context blocks
+/// (e.g. prompt/response) and associated labeling questions.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadAutoevalExampleLabeling {
+    pub examples: Vec<AutoevalLabelingExample>,
+}
+
+/// A single example to label, with context and questions.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutoevalLabelingExample {
+    /// Rich content blocks providing context (e.g. the prompt and response).
+    pub context: Vec<AutoevalContentBlock>,
+    /// Questions about this example (e.g. a label choice and optional explanation).
+    pub questions: Vec<EventPayloadUserQuestion>,
+}
+
+/// A block of rich content displayed alongside an autoeval example.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
+pub enum AutoevalContentBlock {
+    /// Rendered as formatted markdown.
+    Markdown { text: String },
+    /// Rendered as a labeled, formatted JSON viewer.
+    Json {
+        data: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
+        label: Option<String>,
+    },
+    /// Rendered as a collapsible section with a label and markdown body.
+    Collapsible { label: String, text: String },
 }
 
 // =============================================================================

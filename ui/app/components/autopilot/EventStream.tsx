@@ -285,6 +285,7 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       };
     case "user_questions":
     case "user_questions_answers":
+    case "autoeval_example_labeling":
     case "visualization":
     case "unknown":
       return {};
@@ -465,6 +466,8 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     }
+    case "autoeval_example_labeling":
+      return "Example Labeling";
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -618,6 +621,7 @@ function EventItem({
     event.payload.type === "visualization" ||
     event.payload.type === "user_questions" ||
     event.payload.type === "user_questions_answers" ||
+    event.payload.type === "autoeval_example_labeling" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
