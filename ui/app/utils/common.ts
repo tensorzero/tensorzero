@@ -187,6 +187,31 @@ export function isErrorLike(error: unknown): error is ErrorLike {
   );
 }
 
+/**
+ * Converts a hex string to its decimal string representation.
+ *
+ * NOT idempotent — input must be hex. Passing a decimal string will
+ * produce incorrect results.
+ */
+export function hexToDecimal(hex: string): string {
+  try {
+    return BigInt("0x" + hex).toString();
+  } catch {
+    return hex;
+  }
+}
+
+/**
+ * Converts a decimal string to its hex string representation.
+ */
+export function decimalToHex(decimal: string): string {
+  try {
+    return BigInt(decimal).toString(16);
+  } catch {
+    return decimal;
+  }
+}
+
 export class JSONParseError extends SyntaxError {
   constructor(
     public message: string,

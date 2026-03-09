@@ -10,7 +10,7 @@ const HISTORICAL_HASH = "abc123historicalhash";
 /**
  * Fetches the current config hash as hex from the gateway's /status endpoint.
  * Returns hex format (matching ClickHouse `lower(hex(UInt256))`) because that's
- * what real URLs contain — normalizeHashToDecimal expects hex input.
+ * what real URLs contain — hexToDecimal expects hex input.
  *
  * Always uses localhost:3000 because the Playwright test runner runs on the
  * host (not inside Docker), and the gateway container maps port 3000 to the host.

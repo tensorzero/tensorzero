@@ -12,6 +12,7 @@ import { redirect } from "react-router";
 import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { DEFAULT_FUNCTION } from "../constants";
+import { hexToDecimal } from "../common";
 import { logger } from "../logger";
 
 // Poll interval in milliseconds (5 seconds)
@@ -178,24 +179,6 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
 // ============================================================================
 // Snapshot-aware config resolution from request
 // ============================================================================
-
-/**
- * Converts a hex snapshot hash to decimal format for comparison with the
- * gateway's config_hash (which is always decimal).
- *
- * ClickHouse returns snapshot_hash as lowercase hex (via `lower(hex(UInt256))`),
- * but the gateway /status and /internal/ui_config endpoints use decimal.
- *
- * NOT idempotent — input must be hex. Passing a decimal string will
- * produce incorrect results.
- */
-function hexToDecimal(hash: string): string {
-  try {
-    return BigInt("0x" + hash).toString();
-  } catch {
-    return hash;
-  }
-}
 
 /**
  * Reads `?snapshot_hash` from the request URL and resolves the appropriate
