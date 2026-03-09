@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
-use durable::{Durable, SpawnOptions, TaskContext, TaskHandle};
+use durable::{
+    Durable, HeartbeatHandle, Heartbeater, SpawnOptions, StepState, TaskContext, TaskHandle,
+};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
@@ -109,6 +111,15 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         }
     }
 
+    /// Get the heartbeat handle for extending the task lease.
+    ///
+    /// This returns the real `HeartbeatHandle` from the durable task context.
+    /// Use this in `TaskTool::execute()` when you need to pass a heartbeater
+    /// to non-durable code (e.g., `TensorZeroClient::action()`).
+    pub fn heartbeater(&self) -> HeartbeatHandle {
+        self.task_ctx.heartbeat_handle()
+    }
+
     /// Get the next tool call ID (increments counter).
     fn next_tool_call_id(&mut self) -> u32 {
         self.tool_call_counter += 1;
@@ -139,8 +150,8 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
     ///
     /// ```ignore
     /// // Send a tool result to autopilot (checkpointed)
-    /// ctx.step("send_result", params, |params, state| async move {
-    ///     state.t0_client()
+    /// ctx.step("send_result", params, |params, step_state| async move {
+    ///     step_state.state.t0_client()
     ///         .create_autopilot_event(session_id, request)
     ///         .await
     ///         .map_err(|e| anyhow::anyhow!("{e}"))
@@ -192,7 +203,7 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         &mut self,
         base_name: &str,
         params: P,
-        f: fn(P, ToolAppState<S>) -> Fut,
+        f: fn(P, StepState<ToolAppState<S>>) -> Fut,
     ) -> ToolResult<T>
     where
         P: Serialize,
@@ -359,9 +370,13 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         self.step(
             &step_name,
             (tool_name, task_id, call_id, llm_params, side_info),
-            |(tool_name, task_id, call_id, llm_params, side_info), state| async move {
+            |(tool_name, task_id, call_id, llm_params, side_info), step_state| async move {
+                let heartbeater = step_state.heartbeater.clone();
+                let state = &step_state.state;
+
                 // Create SimpleToolContext
-                let simple_ctx = SimpleToolContext::new(&state.pool, &state.t0_client);
+                let simple_ctx =
+                    SimpleToolContext::new(&state.pool, &state.t0_client, &heartbeater);
 
                 // Generate idempotency key using task_id and call_id
                 let idempotency_key = format!("{task_id}:{tool_name}:{call_id}");
@@ -503,8 +518,9 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         self.step(
             &step_name,
             (params, step_name.clone()),
-            |(params, step_name), state| async move {
-                let response = state
+            |(params, step_name), step_state| async move {
+                let response = step_state
+                    .state
                     .t0_client
                     .inference(params)
                     .await
@@ -558,15 +574,27 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
 /// `SimpleTools` run inside a `TaskTool`'s `step()` checkpoint, so they don't
 /// have access to checkpointing operations themselves. They can access the
 /// database pool for queries and the TensorZero client for inference calls.
+///
+/// A heartbeater is available for long-running operations (e.g., evaluations)
+/// that need to extend the task lease to prevent timeout.
 pub struct SimpleToolContext<'a> {
     pool: &'a PgPool,
     t0_client: &'a Arc<dyn TensorZeroClient>,
+    heartbeater: &'a Arc<dyn Heartbeater>,
 }
 
 impl<'a> SimpleToolContext<'a> {
     /// Create a new simple tool context.
-    pub fn new(pool: &'a PgPool, t0_client: &'a Arc<dyn TensorZeroClient>) -> Self {
-        Self { pool, t0_client }
+    pub fn new(
+        pool: &'a PgPool,
+        t0_client: &'a Arc<dyn TensorZeroClient>,
+        heartbeater: &'a Arc<dyn Heartbeater>,
+    ) -> Self {
+        Self {
+            pool,
+            t0_client,
+            heartbeater,
+        }
     }
 
     /// Get a reference to the database pool.
@@ -581,6 +609,11 @@ impl<'a> SimpleToolContext<'a> {
     /// are already checkpointed by the outer step.
     pub fn client(&self) -> &Arc<dyn TensorZeroClient> {
         self.t0_client
+    }
+
+    /// Get the heartbeater for extending the task lease during long-running operations.
+    pub fn heartbeater(&self) -> &Arc<dyn Heartbeater> {
+        self.heartbeater
     }
 
     /// Call TensorZero inference.
@@ -635,7 +668,7 @@ struct SerializableEmbeddingsParams {
 
 async fn embeddings_step<S: Send + Sync + 'static>(
     serializable: SerializableEmbeddingsParams,
-    state: ToolAppState<S>,
+    step_state: StepState<ToolAppState<S>>,
 ) -> anyhow::Result<EmbeddingResponse> {
     let params = EmbeddingsParams {
         input: serializable.input,
@@ -647,7 +680,8 @@ async fn embeddings_step<S: Send + Sync + 'static>(
         cache_options: serializable.cache_options,
         include_raw_response: serializable.include_raw_response,
     };
-    state
+    step_state
+        .state
         .t0_client
         .embeddings(params)
         .await
