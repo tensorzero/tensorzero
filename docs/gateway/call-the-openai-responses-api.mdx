@@ -20,335 +20,9 @@ You can find a [complete runnable example](https://github.com/tensorzero/tensorz
 
 <Tabs>
 
-<Tab title="Python (TensorZero SDK)">
+<Tab title="Python">
 
-The TensorZero Python SDK provides a unified API for calling OpenAI's Responses API.
-
-<Steps>
-
-<Step title="Set up your OpenAI API key">
-
-You can set the `OPENAI_API_KEY` environment variable with your API key.
-
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-
-</Step>
-
-<Step title="Install the TensorZero Python SDK">
-
-You can install the TensorZero SDK with a Python package manager like `pip`.
-
-```bash
-pip install tensorzero
-```
-
-</Step>
-
-<Step title="Configure a model for the OpenAI Responses API">
-
-Create a configuration file with a model using `api_type = "responses"` and provider tools:
-
-```toml title="tensorzero.toml"
-[models.gpt-5-mini-responses-web-search]
-routing = ["openai"]
-
-[models.gpt-5-mini-responses-web-search.providers.openai]
-type = "openai"
-model_name = "gpt-5-mini"
-api_type = "responses"
-include_encrypted_reasoning = true
-provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
-# Enable plain-text summaries of encrypted reasoning
-extra_body = [
-    { pointer = "/reasoning", value = { effort = "low", summary = "auto" } }
-]
-```
-
-<Tip>
-
-If you don't need to customize the model configuration (e.g. `include_encrypted_reasoning`, `provider_tools`), you can use the short-hand model name `openai::responses::gpt-5-codex` to call it directly.
-
-</Tip>
-
-</Step>
-
-<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
-
-Let's deploy a standalone TensorZero Gateway using Docker.
-For simplicity, we'll use the gateway with the configuration above.
-
-```bash
-docker run \
-  -e OPENAI_API_KEY \
-  -v $(pwd)/tensorzero.toml:/app/config/tensorzero.toml:ro \
-  -p 3000:3000 \
-  tensorzero/gateway \
-  --config-file /app/config/tensorzero.toml
-```
-
-<Tip>
-
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
-
-</Tip>
-
-</Step>
-
-<Step title="Initialize the TensorZero Gateway client">
-
-Let's initialize the TensorZero Gateway client and point it to the gateway we just launched.
-
-```python
-from tensorzero import TensorZeroGateway
-
-t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
-```
-
-<Tip>
-
-The TensorZero Python SDK includes a synchronous `TensorZeroGateway` client and an asynchronous `AsyncTensorZeroGateway` client.
-Both options support running the gateway embedded in your application with `build_embedded` or connecting to a standalone gateway with `build_http`.
-See [Clients](/gateway/clients/) for more details.
-
-</Tip>
-
-</Step>
-
-<Step title="Call the LLM">
-
-<Note>OpenAI web search can take up to a minute to complete.</Note>
-
-```python
-response = t0.inference(
-    model_name="gpt-5-mini-responses-web-search",
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": "What is the current population of Japan?",
-            }
-        ]
-    },
-    # Thought summaries are enabled in tensorzero.toml via extra_body
-)
-```
-
-<Accordion title="Sample Response">
-
-```python
-ChatInferenceResponse(
-    inference_id=UUID('0199ff78-6246-7c12-b4b0-6e3a881cc6b9'),
-    episode_id=UUID('0199ff78-6246-7c12-b4b0-6e4367f949b8'),
-    variant_name='gpt-5-mini-responses-web-search',
-    content=[
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo9...',
-            summary=[
-                ThoughtSummaryBlock(
-                    text="I need to search for Japan's current population data.",
-                    type='summary_text'
-                )
-            ],
-            provider_type='openai'
-        ),
-        UnknownContentBlock(
-            data={
-                'id': 'ws_05489a0b57dc84980168f59fda57d481969c3603df0d675348',
-                'type': 'web_search_call',
-                'status': 'completed',
-                'action': {
-                    'type': 'search',
-                    'query': 'Japan population 2025 October 2025 population estimate Statistics Bureau of Japan'
-                }
-            },
-            model_name='gpt-5-mini-responses-web-search',
-            provider_name='openai',
-            type='unknown'
-        ),
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo...',
-            provider_type=None
-        ),
-        UnknownContentBlock(
-            data={
-                'id': 'ws_05489a0b57dc84980168f59fdf9b988196b36756d639e2b015',
-                'type': 'web_search_call',
-                'status': 'completed',
-                'action': {
-                    'type': 'search',
-                    'query': "Ministry of Internal Affairs and Communications Japan population Oct 1 2024 'total population' 'Japan' 'population estimates' '2024' 'Oct. 1' '総人口' '令和6年' "
-                }
-            },
-            model_name='gpt-5-mini-responses-web-search',
-            provider_name='openai',
-            type='unknown'
-        ),
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo...',
-            provider_type=None
-        ),
-        UnknownContentBlock(
-            data={
-                'id': 'ws_05489a0b57dc84980168f59fe1a388819684971acfdaf4cd44',
-                'type': 'web_search_call',
-                'status': 'completed',
-                'action': {
-                    'type': 'search',
-                    'query': "Ministry of Internal Affairs and Communications population Japan Oct 1 2024 total population 'Oct. 1, 2024' 'population' 'Japan' 'MIC' 'population estimates' '2024' '総人口' "
-                }
-            },
-            model_name='gpt-5-mini-responses-web-search',
-            provider_name='openai',
-            type='unknown'
-        ),
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo...',
-            provider_type=None
-        ),
-        UnknownContentBlock(
-            data={
-                'id': 'ws_05489a0b57dc84980168f59fe439788196911a195c70cc8ca9',
-                'type': 'web_search_call',
-                'status': 'completed',
-                'action': {'type': 'search'}
-            },
-            model_name='gpt-5-mini-responses-web-search',
-            provider_name='openai',
-            type='unknown'
-        ),
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo...',
-            provider_type=None
-        ),
-        UnknownContentBlock(
-            data={
-                'id': 'ws_05489a0b57dc84980168f59fe6b140819690a4468d3304fece',
-                'type': 'web_search_call',
-                'status': 'completed',
-                'action': {'type': 'search'}
-            },
-            model_name='gpt-5-mini-responses-web-search',
-            provider_name='openai',
-            type='unknown'
-        ),
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo...',
-            provider_type=None
-        ),
-        UnknownContentBlock(
-            data={
-                'id': 'ws_05489a0b57dc84980168f59fe81e408196921b69174f6abaf7',
-                'type': 'web_search_call',
-                'status': 'completed',
-                'action': {'type': 'search'}
-            },
-            model_name='gpt-5-mini-responses-web-search',
-            provider_name='openai',
-            type='unknown'
-        ),
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo...',
-            provider_type=None
-        ),
-        UnknownContentBlock(
-            data={
-                'id': 'ws_05489a0b57dc84980168f59feda6188196827a0b5aa01e96a1',
-                'type': 'web_search_call',
-                'status': 'completed',
-                'action': {
-                    'type': 'search',
-                    'query': "United Nations World Population Prospects 2024 Japan 2025 population 'Japan population 2025' 'World Population Prospects 2024' 'Japan' "
-                }
-            },
-            model_name='gpt-5-mini-responses-web-search',
-            provider_name='openai',
-            type='unknown'
-        ),
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo...',
-            provider_type=None
-        ),
-        UnknownContentBlock(
-            data={
-                'id': 'ws_05489a0b57dc84980168f59ff3cc8881968d1c5c9c1bbe4ecc',
-                'type': 'web_search_call',
-                'status': 'completed',
-                'action': {
-                    'type': 'search',
-                    'query': "UN World Population Prospects 2024 Japan population 2025 '123,103,479' 'Japan 2025' 'World Population Prospects' 'Japan' '2025' "
-                }
-            },
-            model_name='gpt-5-mini-responses-web-search',
-            provider_name='openai',
-            type='unknown'
-        ),
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo...',
-            provider_type=None
-        ),
-        UnknownContentBlock(
-            data={
-                'id': 'ws_05489a0b57dc84980168f59ff67ed48196a0054a38e96f8e0c',
-                'type': 'web_search_call',
-                'status': 'completed',
-                'action': {
-                    'type': 'search',
-                    'query': "United Nations population Japan 2025 'World Population Prospects 2024' 'Japan population 2025' site:un.org"
-                }
-            },
-            model_name='gpt-5-mini-responses-web-search',
-            provider_name='openai',
-            type='unknown'
-        ),
-        Thought(
-            text=None,
-            type='thought',
-            signature='gAAAAABo...',
-            provider_type=None
-        ),
-        Text(
-            text="Short answer: about 123–124 million people.\n\nMore precisely:\n- Japan's official estimate (Ministry of Internal Affairs and Communications / e‑Stat) reported a total population of 123,802,000 (including foreign residents) as of October 1, 2024 (release published Apr 14, 2025). ([e-stat.go.jp](https://www.e-stat.go.jp/en/stat-search/files?layout=dataset&page=1&query=Population+Estimates%2C+natural))  \n- The United Nations (WPP 2024, used by sources such as Worldometer) gives a mid‑2025 estimate of about 123.1 million. ([srv1.worldometers.info](https://srv1.worldometers.info/world-population/japan-population/?utm_source=openai))\n\nDo you want a live "right now" estimate for today (Oct 20, 2025) or a breakdown by Japanese nationals vs. foreign residents? I can fetch the latest live or official figures for the exact date you want.",
-            arguments=None,
-            type='text'
-        )
-    ],
-    usage=Usage(input_tokens=29904, output_tokens=1921),
-    finish_reason=None,
-    raw_response=None
-)
-```
-
-</Accordion>
-
-</Step>
-
-</Steps>
-
-</Tab>
-
-<Tab title="Python (OpenAI SDK)">
-
-The TensorZero Python SDK integrates with the OpenAI Python SDK to provide access to the Responses API.
+You can point the OpenAI Python SDK to a TensorZero Gateway to access the Responses API.
 
 <Steps>
 
@@ -362,12 +36,12 @@ export OPENAI_API_KEY="sk-..."
 
 </Step>
 
-<Step title="Install the OpenAI and TensorZero Python SDKs">
+<Step title="Install the OpenAI Python SDK">
 
-You can install the OpenAI and TensorZero SDKs with a Python package manager like `pip`.
+You can install the OpenAI SDK with a Python package manager like `pip`.
 
 ```bash
-pip install openai tensorzero
+pip install openai
 ```
 
 </Step>
@@ -394,9 +68,9 @@ extra_body = [
 
 </Step>
 
-<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+<Step title="Deploy the TensorZero Gateway">
 
-Let's deploy a standalone TensorZero Gateway using Docker.
+Let's deploy the TensorZero Gateway using Docker.
 For simplicity, we'll use the gateway with the configuration above.
 
 ```bash
@@ -410,7 +84,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
 
 </Tip>
 
@@ -423,16 +97,8 @@ Let's initialize the OpenAI SDK and point it to the gateway we just launched.
 ```python
 from openai import OpenAI
 
-oai = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 ```
-
-<Tip>
-
-The TensorZero Python SDK supports both the synchronous `OpenAI` client and the asynchronous `AsyncOpenAI` client.
-Both options support running the gateway embedded in your application with `patch_openai_client` or connecting to a standalone gateway with `base_url`.
-See [Clients](/gateway/clients/) for more details.
-
-</Tip>
 
 </Step>
 
@@ -441,7 +107,7 @@ See [Clients](/gateway/clients/) for more details.
 <Note>OpenAI web search can take up to a minute to complete.</Note>
 
 ```python
-response = oai.chat.completions.create(
+response = client.chat.completions.create(
     model="tensorzero::model_name::gpt-5-mini-responses-web-search",
     messages=[
         {
@@ -453,13 +119,6 @@ response = oai.chat.completions.create(
 ```
 
 <Accordion title="Sample Response">
-
-<Note>
-
-The OpenAI SDK does not support additional content blocks (e.g. thoughts) in the chat completions API, so they are omitted.
-Please use the TensorZero SDK if you want access to these auxiliary content blocks.
-
-</Note>
 
 ```python
 ChatCompletion(
@@ -504,7 +163,7 @@ ChatCompletion(
 
 </Tab>
 
-<Tab title="Node (OpenAI SDK)">
+<Tab title="Node">
 
 You can point the OpenAI Node SDK to a TensorZero Gateway to access the Responses API.
 
@@ -552,9 +211,9 @@ extra_body = [
 
 </Step>
 
-<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+<Step title="Deploy the TensorZero Gateway">
 
-Let's deploy a standalone TensorZero Gateway using Docker.
+Let's deploy the TensorZero Gateway using Docker.
 For simplicity, we'll use the gateway with the configuration above.
 
 ```bash
@@ -568,7 +227,7 @@ docker run \
 
 <Tip>
 
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+See the [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway) page for more details.
 
 </Tip>
 
@@ -581,9 +240,9 @@ Let's initialize the OpenAI SDK and point it to the gateway we just launched.
 ```ts
 import OpenAI from "openai";
 
-const oai = new OpenAI({
-  apiKey: "not-used",
+const client = new OpenAI({
   baseURL: "http://localhost:3000/openai/v1",
+  apiKey: "not-used",
 });
 ```
 
@@ -594,7 +253,7 @@ const oai = new OpenAI({
 <Note>OpenAI web search can take up to a minute to complete.</Note>
 
 ```ts
-const response = await oai.chat.completions.create({
+const response = await client.chat.completions.create({
   model: "tensorzero::model_name::gpt-5-mini-responses-web-search",
   messages: [
     {
@@ -606,13 +265,6 @@ const response = await oai.chat.completions.create({
 ```
 
 <Accordion title="Sample Response">
-
-<Note>
-
-The OpenAI SDK does not support additional content blocks (e.g. thoughts) in the chat completions API, so they are omitted.
-Please use the TensorZero SDK if you want access to these auxiliary content blocks.
-
-</Note>
 
 ```json
 {
@@ -640,279 +292,6 @@ Please use the TensorZero SDK if you want access to these auxiliary content bloc
     prompt_tokens: 32210,
     completion_tokens: 2253,
     total_tokens: 34463
-  }
-}
-```
-
-</Accordion>
-
-</Step>
-
-</Steps>
-
-</Tab>
-
-<Tab title="HTTP">
-
-You can call the TensorZero Gateway directly over HTTP to access the OpenAI Responses API.
-
-<Steps>
-
-<Step title="Set up your OpenAI API key">
-
-You can set the `OPENAI_API_KEY` environment variable with your API key.
-
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-
-</Step>
-
-<Step title="Configure a model for the OpenAI Responses API">
-
-Create a configuration file with a model using `api_type = "responses"` and provider tools:
-
-```toml title="tensorzero.toml"
-[models.gpt-5-mini-responses-web-search]
-routing = ["openai"]
-
-[models.gpt-5-mini-responses-web-search.providers.openai]
-type = "openai"
-model_name = "gpt-5-mini"
-api_type = "responses"
-include_encrypted_reasoning = true
-provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
-# Enable plain-text summaries of encrypted reasoning
-extra_body = [
-    { pointer = "/reasoning", value = { effort = "low", summary = "auto" } }
-]
-```
-
-</Step>
-
-<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
-
-Let's deploy a standalone TensorZero Gateway using Docker.
-For simplicity, we'll use the gateway with the configuration above.
-
-```bash
-docker run \
-  -e OPENAI_API_KEY \
-  -v $(pwd)/tensorzero.toml:/app/config/tensorzero.toml:ro \
-  -p 3000:3000 \
-  tensorzero/gateway \
-  --config-file /app/config/tensorzero.toml
-```
-
-<Tip>
-
-See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
-
-</Tip>
-
-</Step>
-
-<Step title="Call the LLM">
-
-You can call the LLM by sending a `POST` request to the `/inference` endpoint of the TensorZero Gateway.
-
-<Note>OpenAI web search can take up to a minute to complete.</Note>
-
-```bash
-curl -X POST "http://localhost:3000/inference" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model_name": "gpt-5-mini-responses-web-search",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the current population of Japan?"
-        }
-      ]
-    }
-  }'
-```
-
-<Note>
-
-Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model configuration.
-
-</Note>
-
-<Accordion title="Sample Response">
-
-```json
-{
-  "inference_id": "0199ff71-33e2-7700-9d5f-43caeb1125ed",
-  "episode_id": "0199ff71-33e2-7700-9d5f-43d703c41609",
-  "variant_name": "gpt-5-mini-responses-web-search",
-  "content": [
-    {
-      "type": "thought",
-      "text": null,
-      "signature": "gAAAAABo...",
-      "summary": [
-        {
-          "type": "summary_text",
-          "text": "I need to search for Japan's current population data."
-        }
-      ],
-      "provider_type": "openai"
-    },
-    {
-      "type": "unknown",
-      "data": {
-        "id": "ws_0dd147cea07b72510168f59e0496608194a85c1b0ff33c6203",
-        "type": "web_search_call",
-        "status": "completed",
-        "action": {
-          "type": "search",
-          "query": "Japan population 2025 estimated population October 2025 Japan population"
-        }
-      },
-      "model_name": "gpt-5-mini-responses-web-search",
-      "provider_name": "openai"
-    },
-    {
-      "type": "thought",
-      "text": null,
-      "signature": "gAAAAABo...",
-      "summary": [],
-      "provider_type": "openai"
-    },
-    {
-      "type": "unknown",
-      "data": {
-        "id": "ws_0dd147cea07b72510168f59e08f80881948b4ad8dbd8003a36",
-        "type": "web_search_call",
-        "status": "completed",
-        "action": {
-          "type": "search",
-          "query": "UN World Population Prospects 2024 Japan population 2025 mid-year 'Japan population 2025' 'World Population Prospects 2024' 'Japan' "
-        }
-      },
-      "model_name": "gpt-5-mini-responses-web-search",
-      "provider_name": "openai"
-    },
-    {
-      "type": "thought",
-      "text": null,
-      "signature": "gAAAAABo...",
-      "summary": [],
-      "provider_type": "openai"
-    },
-    {
-      "type": "unknown",
-      "data": {
-        "id": "ws_0dd147cea07b72510168f59e0c90f88194b1f0cf35f706c756",
-        "type": "web_search_call",
-        "status": "completed",
-        "action": {
-          "type": "search"
-        }
-      },
-      "model_name": "gpt-5-mini-responses-web-search",
-      "provider_name": "openai"
-    },
-    {
-      "type": "thought",
-      "text": null,
-      "signature": "gAAAAABo...",
-      "summary": [],
-      "provider_type": "openai"
-    },
-    {
-      "type": "unknown",
-      "data": {
-        "id": "ws_0dd147cea07b72510168f59e0f26a88194aa6a8e82fad8fc7f",
-        "type": "web_search_call",
-        "status": "completed",
-        "action": {
-          "type": "search",
-          "query": "Statistics Bureau of Japan population October 1 2025 \"Population Estimates\" \"Japan\" site:stat.go.jp"
-        }
-      },
-      "model_name": "gpt-5-mini-responses-web-search",
-      "provider_name": "openai"
-    },
-    {
-      "type": "thought",
-      "text": null,
-      "signature": "gAAAAABo...",
-      "summary": [],
-      "provider_type": "openai"
-    },
-    {
-      "type": "unknown",
-      "data": {
-        "id": "ws_0dd147cea07b72510168f59e166aac8194a8913647411512b4",
-        "type": "web_search_call",
-        "status": "completed",
-        "action": {
-          "type": "search",
-          "query": "UN World Population Prospects 2024 Japan population 2025 'Japan population 2025 UN WPP' 'United Nations Department of Economic and Social Affairs' 'Japan 2025 population' "
-        }
-      },
-      "model_name": "gpt-5-mini-responses-web-search",
-      "provider_name": "openai"
-    },
-    {
-      "type": "thought",
-      "text": null,
-      "signature": "gAAAAABo...",
-      "summary": [],
-      "provider_type": "openai"
-    },
-    {
-      "type": "unknown",
-      "data": {
-        "id": "ws_0dd147cea07b72510168f59e1925088194bb9a8f934b1e6bf1",
-        "type": "web_search_call",
-        "status": "completed",
-        "action": {
-          "type": "search",
-          "query": "World Population Prospects 2024 Japan population 2025 site:un.org"
-        }
-      },
-      "model_name": "gpt-5-mini-responses-web-search",
-      "provider_name": "openai"
-    },
-    {
-      "type": "thought",
-      "text": null,
-      "signature": "gAAAAABo...",
-      "summary": [],
-      "provider_type": "openai"
-    },
-    {
-      "type": "unknown",
-      "data": {
-        "id": "ws_0dd147cea07b72510168f59e1ea20081948eb2d81de67d12bb",
-        "type": "web_search_call",
-        "status": "completed",
-        "action": {
-          "type": "search"
-        }
-      },
-      "model_name": "gpt-5-mini-responses-web-search",
-      "provider_name": "openai"
-    },
-    {
-      "type": "thought",
-      "text": null,
-      "signature": "gAAAAABo...",
-      "summary": [],
-      "provider_type": "openai"
-    },
-    {
-      "type": "text",
-      "text": "Short answer: The most recent official estimate: 123,802,000 people (123.802 million) — this is the Statistics Bureau of Japan’s estimate for the total population as of October 1, 2024. ([stat.go.jp](https://www.stat.go.jp/english/data/jinsui/2024np/index.html?utm_source=openai))\n\nNotes / other common estimates\n- The United Nations' World Population Prospects (mid‑year 2025 estimate, medium variant) and datasets yield a mid‑2025 figure of about 123.1 million (different sources interpolate mid‑year values slightly differently). ([statisticstimes.com](https://statisticstimes.com/demographics/country/japan-population.php?utm_source=openai))  \n- Real‑time aggregators that produce daily \"live\" counters (e.g., Worldometer) show a slightly different number because they extrapolate from different baseline data and update continuously (Worldometer showed ~122.9 million on Oct 19, 2025). ([srv1.worldometers.info](https://srv1.worldometers.info/world-population/japan-population/?utm_source=openai))\n\nWhy numbers differ: sources use different reference dates (e.g., Oct 1 of each year, mid‑year July 1) and methods (census/register‑based counts vs. demographic projections), so small discrepancies are normal.\n\nWould you like me to fetch the very latest live estimate (timestamped to today, Oct 20, 2025) and show the source?"
-    }
-  ],
-  "usage": {
-    "input_tokens": 21229,
-    "output_tokens": 1889
   }
 }
 ```

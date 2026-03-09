@@ -51,6 +51,7 @@ jobs:
         run: bash ci/free-disk-space.sh
 
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -104,13 +105,14 @@ jobs:
 
       - name: Start Docker services (mock-provider-api + dependencies)
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-provider-api
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-provider-api
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch the gateway for batch tests
+        working-directory: crates
         run: |
           cargo run-e2e > batch_logs.txt 2>&1 &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
@@ -120,14 +122,16 @@ jobs:
           done
 
       - name: Run mocked batch tests
+        working-directory: crates
         run: |
           cargo test-mock-batch --no-fail-fast
 
       - name: Print docker compose logs
         if: always()
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print batch logs
         if: always()
+        working-directory: crates
         run: cat batch_logs.txt

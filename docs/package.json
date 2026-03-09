@@ -1,0 +1,7 @@
+{
+  "name": "tensorzero-docs",
+  "private": true,
+  "dependencies": {
+    "mint": "4.2.390"
+  }
+}

@@ -1,0 +1,13 @@
+[package]
+name = "googletest-matchers"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+googletest = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

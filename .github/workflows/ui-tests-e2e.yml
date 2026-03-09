@@ -106,7 +106,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -117,7 +117,17 @@ jobs:
           done
 
       - name: Install `pnpm` dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Setup Playwright
         run: |
@@ -223,7 +233,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -234,7 +244,17 @@ jobs:
           done
 
       - name: Install `pnpm` dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Setup Playwright
         run: |
@@ -347,7 +367,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@latest; then
+            if npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -358,7 +378,17 @@ jobs:
           done
 
       - name: Install `pnpm` dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
 
       - name: Setup Playwright
         run: |
@@ -506,16 +536,6 @@ jobs:
         if: always()
         working-directory: ui
         run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml ps -q ui) | jq
-
-      - name: Make sure the current commit short hash is in the Docker Compose gateway logs
-        if: always()
-        working-directory: ui
-        run: |
-          SHORT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.proxy.yml logs gateway | grep "(commit: ${SHORT_HASH})" || {
-            echo "ERROR: Commit hash ${SHORT_HASH} not found in gateway logs"
-            exit 1
-          }
 
       - name: Print ClickHouse error logs
         if: always()

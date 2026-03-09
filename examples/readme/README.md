@@ -19,7 +19,5 @@ uv sync
 3. Run the examples:
 
 ```bash
-uv run tensorzero_sync_client.py
-uv run tensorzero_async_client.py
-uv run openai_client.py
+uv run openai_sdk.py
 ```

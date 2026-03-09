@@ -3,6 +3,6 @@ routing = ["ollama"]
 
 [embedding_models.nomic-embed-text.providers.ollama]
 type = "openai"
-api_base = "http://localhost:11434/v1"
+api_base = "http://host.docker.internal:11434/v1" # for Ollama running locally on the host
 model_name = "nomic-embed-text"
 api_key_location = "none"

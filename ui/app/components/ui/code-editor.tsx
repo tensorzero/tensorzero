@@ -75,6 +75,7 @@ export interface CodeEditorProps {
   maxHeight?: string;
   /** Aria label for accessibility */
   ariaLabel?: string;
+  dataTestId?: string;
 }
 
 const LANGUAGE_EXTENSIONS = {
@@ -218,6 +219,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   className,
   maxHeight = "400px",
   ariaLabel,
+  dataTestId,
 }) => {
   // Internal state for semi-uncontrolled mode
   const [internalValue, setInternalValue] = useState(value);
@@ -320,7 +322,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
-    <div className={cn("group relative isolate min-w-0 rounded-sm", className)}>
+    <div
+      className={cn("group relative isolate min-w-0 rounded-sm", className)}
+      data-testid={dataTestId}
+    >
       <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         <Button
           variant="secondary"

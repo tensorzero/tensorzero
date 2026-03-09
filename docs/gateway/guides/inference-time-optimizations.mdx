@@ -54,7 +54,7 @@ model = "gpt-4o-mini"
 user_template = "functions/draft_email/best_of_n/user.minijinja"
 
 [functions.draft_email.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["best_of_n"]  # so we don't sample `promptA` or `promptB` directly
 ```
 
@@ -71,7 +71,7 @@ TensorZero will automatically make the necessary prompt modifications to evaluat
 
 </Tip>
 
-Read more about the `experimental_best_of_n` variant type in [Configuration Reference](/gateway/configuration-reference/#type-experimental_best_of_n).
+Read more about the `experimental_best_of_n` variant type in [Configuration Reference](/gateway/configuration-reference).
 
 <Tip>
 
@@ -135,7 +135,7 @@ model = "gpt-4o-mini"
 user_template = "functions/draft_email/mixture_of_n/user.minijinja"
 
 [functions.draft_email.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["mixture_of_n"]  # so we don't sample `promptA` or `promptB` directly
 ```
 
@@ -152,7 +152,7 @@ TensorZero will automatically make the necessary prompt modifications to combine
 
 </Tip>
 
-Read more about the `experimental_mixture_of_n` variant type in [Configuration Reference](/gateway/configuration-reference/#type-experimental_mixture_of_n).
+Read more about the `experimental_mixture_of_n` variant type in [Configuration Reference](/gateway/configuration-reference).
 
 <Tip>
 

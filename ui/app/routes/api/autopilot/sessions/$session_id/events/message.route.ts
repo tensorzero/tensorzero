@@ -59,6 +59,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
             text: body.text,
           },
         ],
+        metadata: {},
       },
       previous_user_message_event_id: body.previous_user_message_event_id,
     });

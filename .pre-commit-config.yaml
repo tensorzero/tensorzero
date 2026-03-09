@@ -20,9 +20,9 @@ repos:
       - id: detect-private-key
         exclude: |
           (?x)^(
-              tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
+              crates/tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
               ci/dummy-gcp-credentials\.json|
-              tensorzero-core/tests/e2e/self-signed-certs/.*
+              crates/tensorzero-core/tests/e2e/self-signed-certs/.*
           )$
       - id: end-of-file-fixer
         exclude: \.minijinja$
@@ -32,21 +32,21 @@ repos:
     hooks:
       - id: cargo-deny
         name: cargo deny
-        entry: cargo deny check
+        entry: bash -c 'cd crates && cargo deny check'
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-fmt
         name: cargo fmt
-        entry: cargo fmt
+        entry: bash -c 'cd crates && cargo fmt'
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --all-targets --all-features -- -D warnings
+        entry: bash -c 'cd crates && cargo clippy --all-targets --all-features -- -D warnings'
         language: system
         types: [rust]
         pass_filenames: false
@@ -65,7 +65,7 @@ repos:
 
       - id: "oxfmt: openai-node"
         name: "oxfmt: openai-node"
-        entry: bash -c 'pnpm --filter=openai-node run format'
+        entry: bash -c 'cd clients/openai-node && pnpm run format'
         language: node
         language_version: "24.13.0"
         types_or:
@@ -97,13 +97,14 @@ repos:
           - oxfmt
         pass_filenames: false
 
-      - id: "eslint: ui"
-        name: "eslint: ui"
+      - id: "lint: ui"
+        name: "lint: ui (oxlint + eslint)"
         entry: bash -c 'pnpm --filter=tensorzero-ui run lint'
         language: node
         language_version: "24.13.0"
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
+          - oxlint
           - eslint
           - "@typescript-eslint/parser"
           - "@typescript-eslint/eslint-plugin"
@@ -111,7 +112,7 @@ repos:
 
       - id: "eslint: openai-node"
         name: "eslint: openai-node"
-        entry: bash -c 'pnpm --filter=openai-node run lint'
+        entry: bash -c 'cd clients/openai-node && pnpm run lint'
         language: node
         language_version: "24.13.0"
         types_or: [javascript, jsx, ts, tsx]
@@ -145,7 +146,7 @@ repos:
 
       - id: "tsc: openai-node"
         name: "tsc: openai-node"
-        entry: bash -c 'pnpm --filter=openai-node run typecheck'
+        entry: bash -c 'cd clients/openai-node && pnpm run typecheck'
         language: node
         language_version: "24.13.0"
         types_or: [ts, tsx]
