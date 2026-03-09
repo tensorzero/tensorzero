@@ -180,12 +180,33 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
 // ============================================================================
 
 /**
+ * Normalizes a snapshot hash to decimal format for comparison with the
+ * gateway's config_hash (which is always decimal).
+ *
+ * ClickHouse returns snapshot_hash as lowercase hex (via `lower(hex(UInt256))`),
+ * but the gateway /status and /internal/ui_config endpoints use decimal.
+ * This converts hex to decimal so the equality check and endpoint call work.
+ */
+function normalizeHashToDecimal(hash: string): string {
+  // If it contains any a-f characters, it's hex — convert to decimal
+  if (/[a-f]/i.test(hash)) {
+    try {
+      return BigInt("0x" + hash).toString();
+    } catch {
+      return hash;
+    }
+  }
+  return hash;
+}
+
+/**
  * Reads `?snapshot_hash` from the request URL and resolves the appropriate
  * config — either the historical snapshot or the current config.
  *
- * If the snapshot hash exactly matches the current config hash, strips the
- * param via redirect so the URL stays clean. Otherwise resolves the
- * historical snapshot config (falling back to current on error).
+ * If the snapshot hash matches the current config hash (after normalizing
+ * hex→decimal), strips the param via redirect so the URL stays clean.
+ * Otherwise resolves the historical snapshot config (falling back to
+ * current on error).
  */
 export async function getConfigFromRequest(
   request: Request,
@@ -195,14 +216,15 @@ export async function getConfigFromRequest(
   if (!snapshotHash) return getConfig();
 
   const currentConfig = await getConfig();
+  const normalizedHash = normalizeHashToDecimal(snapshotHash);
 
-  // Fast path: if the URL hash exactly matches current config, strip it.
-  if (currentConfig.config_hash === snapshotHash) {
+  // Fast path: if the URL hash matches current config, strip it.
+  if (currentConfig.config_hash === normalizedHash) {
     url.searchParams.delete("snapshot_hash");
     throw redirect(url.pathname + url.search);
   }
 
-  return getConfigForSnapshot(snapshotHash);
+  return getConfigForSnapshot(normalizedHash);
 }
 
 // ============================================================================
@@ -222,15 +244,17 @@ export async function getConfigForSnapshot(
 ): Promise<UiConfig> {
   if (!snapshotHash) return getConfig();
 
-  const currentConfig = await getConfig();
-  if (currentConfig.config_hash === snapshotHash) return currentConfig;
+  const normalizedHash = normalizeHashToDecimal(snapshotHash);
 
-  const cached = snapshotConfigCache.get(snapshotHash);
+  const currentConfig = await getConfig();
+  if (currentConfig.config_hash === normalizedHash) return currentConfig;
+
+  const cached = snapshotConfigCache.get(normalizedHash);
   if (cached) return cached;
 
   try {
     const client = getTensorZeroClient();
-    const snapshotConfig = await client.getUiConfigByHash(snapshotHash);
+    const snapshotConfig = await client.getUiConfigByHash(normalizedHash);
     // eslint-disable-next-line no-restricted-syntax
     snapshotConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
 
@@ -238,7 +262,7 @@ export async function getConfigForSnapshot(
       const firstKey = snapshotConfigCache.keys().next().value;
       if (firstKey) snapshotConfigCache.delete(firstKey);
     }
-    snapshotConfigCache.set(snapshotHash, snapshotConfig);
+    snapshotConfigCache.set(normalizedHash, snapshotConfig);
     return snapshotConfig;
   } catch (error) {
     logger.warn(`Failed to fetch config for snapshot ${snapshotHash}:`, error);
