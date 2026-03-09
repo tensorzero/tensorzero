@@ -186,17 +186,15 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
  * ClickHouse returns snapshot_hash as lowercase hex (via `lower(hex(UInt256))`),
  * but the gateway /status and /internal/ui_config endpoints use decimal.
  * This converts hex to decimal so the equality check and endpoint call work.
+ *
+ * Always assumes hex input since all callers pass ClickHouse-sourced hashes.
  */
 function normalizeHashToDecimal(hash: string): string {
-  // If it contains any a-f characters, it's hex — convert to decimal
-  if (/[a-f]/i.test(hash)) {
-    try {
-      return BigInt("0x" + hash).toString();
-    } catch {
-      return hash;
-    }
+  try {
+    return BigInt("0x" + hash).toString();
+  } catch {
+    return hash;
   }
-  return hash;
 }
 
 /**
