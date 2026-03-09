@@ -32,21 +32,21 @@ repos:
     hooks:
       - id: cargo-deny
         name: cargo deny
-        entry: cargo deny check
+        entry: bash -c 'cd crates && cargo deny check'
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-fmt
         name: cargo fmt
-        entry: cargo fmt
+        entry: bash -c 'cd crates && cargo fmt'
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --all-targets --all-features -- -D warnings
+        entry: bash -c 'cd crates && cargo clippy --all-targets --all-features -- -D warnings'
         language: system
         types: [rust]
         pass_filenames: false

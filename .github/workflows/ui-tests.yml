@@ -40,6 +40,7 @@ jobs:
         run: bash ci/free-disk-space.sh
 
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
