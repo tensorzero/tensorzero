@@ -330,6 +330,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     async fn run_evaluation(
         &self,
         params: RunEvaluationParams,
+        heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError>;
 }
 

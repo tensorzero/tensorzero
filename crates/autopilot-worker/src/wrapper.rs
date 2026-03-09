@@ -518,6 +518,7 @@ mod tests {
             async fn run_evaluation(
                 &self,
                 params: durable_tools::RunEvaluationParams,
+                heartbeater: std::sync::Arc<dyn durable_tools::Heartbeater>,
             ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
         }
     }
