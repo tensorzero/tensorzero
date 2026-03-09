@@ -32,7 +32,7 @@ interface ValueItemProps {
     | "comment"
     | "demonstration";
   children: ReactNode;
-  onClick?: (event: React.MouseEvent) => void;
+  onClick?: () => void;
 }
 
 function ValueItem({ iconType, children, onClick }: ValueItemProps) {
@@ -47,7 +47,7 @@ function ValueItem({ iconType, children, onClick }: ValueItemProps) {
           ? (e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                onClick(e as unknown as React.MouseEvent);
+                onClick();
               }
             }
           : undefined
@@ -57,7 +57,14 @@ function ValueItem({ iconType, children, onClick }: ValueItemProps) {
           ? "flex cursor-pointer items-center gap-2 transition-colors duration-300 hover:text-gray-500"
           : "flex items-center gap-2"
       }
-      onClick={onClick}
+      onClick={
+        onClick
+          ? (e) => {
+              e.stopPropagation();
+              onClick();
+            }
+          : undefined
+      }
     >
       <div
         className={`flex h-5 w-5 min-w-[1.25rem] items-center justify-center rounded-md ${iconBg}`}
@@ -134,84 +141,75 @@ export default function FeedbackValue({
 }: FeedbackValueProps) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-  const handleClick = (event: React.MouseEvent) => {
-    if (feedback.type === "comment" || feedback.type === "demonstration") {
-      event.stopPropagation();
-      setIsSheetOpen(true);
-    }
+  const handleClick = () => {
+    setIsSheetOpen(true);
   };
 
   const isHumanFeedback =
     feedback.tags["tensorzero::human_feedback"] === "true";
 
-  if (feedback.type === "boolean" && typeof feedback.value === "boolean") {
-    const optimize = metric?.type === "boolean" ? metric.optimize : "unknown";
-    const success =
-      (feedback.value === true && optimize === "max") ||
-      (feedback.value === false && optimize === "min");
+  switch (feedback.type) {
+    case "boolean": {
+      const optimize = metric?.type === "boolean" ? metric.optimize : "unknown";
+      const success =
+        (feedback.value === true && optimize === "max") ||
+        (feedback.value === false && optimize === "min");
+      const failure =
+        (feedback.value === true && optimize === "min") ||
+        (feedback.value === false && optimize === "max");
+      const status = success ? "success" : failure ? "failure" : "unknown";
 
-    const failure =
-      (feedback.value === true && optimize === "min") ||
-      (feedback.value === false && optimize === "max");
-
-    let status: "success" | "failure" | "default" = "default";
-
-    if (success) {
-      status = "success";
-    } else if (failure) {
-      status = "failure";
+      return (
+        <ValueItem iconType={status}>
+          <ValueItemText>{feedback.value ? "True" : "False"}</ValueItemText>
+          {isHumanFeedback && <UserFeedback />}
+        </ValueItem>
+      );
     }
 
-    return (
-      <ValueItem iconType={status === "default" ? "unknown" : status}>
-        <ValueItemText>{feedback.value ? "True" : "False"}</ValueItemText>
-        {isHumanFeedback && <UserFeedback />}
-      </ValueItem>
-    );
-  }
-
-  if (feedback.type === "float" && typeof feedback.value === "number") {
-    return (
-      <ValueItem iconType="float">
-        <ValueItemText>{feedback.value.toFixed(3)}</ValueItemText>
-        {isHumanFeedback && <UserFeedback />}
-      </ValueItem>
-    );
-  }
-
-  if (feedback.type === "comment" && typeof feedback.value === "string") {
-    return (
-      <>
-        <ValueItem iconType="comment" onClick={handleClick}>
-          <ValueItemText>{feedback.value}</ValueItemText>
+    case "float":
+      return (
+        <ValueItem iconType="float">
+          <ValueItemText>{feedback.value.toFixed(3)}</ValueItemText>
           {isHumanFeedback && <UserFeedback />}
         </ValueItem>
-        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-          <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
-            <CommentModal feedback={feedback} />
-          </SheetContent>
-        </Sheet>
-      </>
-    );
-  }
+      );
 
-  if (feedback.type === "demonstration" && typeof feedback.value === "string") {
-    return (
-      <>
-        <ValueItem iconType="demonstration" onClick={handleClick}>
-          <ValueItemText>
-            <span className="font-mono">{feedback.value}</span>
-          </ValueItemText>
-          {isHumanFeedback && <UserFeedback />}
-        </ValueItem>
-        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-          <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
-            <DemonstrationModal feedback={feedback} />
-          </SheetContent>
-        </Sheet>
-      </>
-    );
-  }
+    case "comment":
+      return (
+        <>
+          <ValueItem iconType="comment" onClick={handleClick}>
+            <ValueItemText>{feedback.value}</ValueItemText>
+            {isHumanFeedback && <UserFeedback />}
+          </ValueItem>
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+            <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+              <CommentModal feedback={feedback} />
+            </SheetContent>
+          </Sheet>
+        </>
+      );
 
-  return <div className="text-red-500">Invalid feedback type</div>;
+    case "demonstration":
+      return (
+        <>
+          <ValueItem iconType="demonstration" onClick={handleClick}>
+            <ValueItemText>
+              <span className="font-mono">{feedback.value}</span>
+            </ValueItemText>
+            {isHumanFeedback && <UserFeedback />}
+          </ValueItem>
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+            <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+              <DemonstrationModal feedback={feedback} />
+            </SheetContent>
+          </Sheet>
+        </>
+      );
+
+    default: {
+      const _exhaustiveCheck: never = feedback;
+      return _exhaustiveCheck;
+    }
+  }
 }

@@ -6,6 +6,28 @@ export type FeedbackData = {
   latestFeedbackByMetric: Record<string, string>;
 };
 
+export interface GroupedFeedback {
+  metrics: FeedbackRow[];
+  comments: Extract<FeedbackRow, { type: "comment" }>[];
+  demonstrations: Extract<FeedbackRow, { type: "demonstration" }>[];
+}
+
+export function groupFeedbackByType(feedback: FeedbackRow[]): GroupedFeedback {
+  const metrics: FeedbackRow[] = [];
+  const comments: Extract<FeedbackRow, { type: "comment" }>[] = [];
+  const demonstrations: Extract<FeedbackRow, { type: "demonstration" }>[] = [];
+  for (const f of feedback) {
+    if (f.type === "boolean" || f.type === "float") {
+      metrics.push(f);
+    } else if (f.type === "comment") {
+      comments.push(f);
+    } else if (f.type === "demonstration") {
+      demonstrations.push(f);
+    }
+  }
+  return { metrics, comments, demonstrations };
+}
+
 export function filterToLatestFeedback(
   feedback: FeedbackRow[],
   feedbackBounds?: FeedbackBounds,

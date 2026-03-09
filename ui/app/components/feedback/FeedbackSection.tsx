@@ -2,7 +2,11 @@ import { Suspense, useEffect } from "react";
 import { Await, useAsyncError, useNavigate } from "react-router";
 import { AlertCircle } from "lucide-react";
 import type { FeedbackRow } from "~/types/tensorzero";
-import { filterToLatestFeedback, type FeedbackData } from "~/utils/feedback";
+import {
+  filterToLatestFeedback,
+  groupFeedbackByType,
+  type FeedbackData,
+} from "~/utils/feedback";
 import { Table, TableBody, TableCell, TableRow } from "~/components/ui/table";
 import { Skeleton } from "~/components/ui/skeleton";
 import {
@@ -130,16 +134,8 @@ function StreamingContent({
 
   const showPagination = !disablePrevious || !disableNext;
 
-  const metrics = filteredFeedback.filter(
-    (f) => f.type === "boolean" || f.type === "float",
-  );
-  const comments = filteredFeedback.filter(
-    (f): f is FeedbackRow & { type: "comment" } => f.type === "comment",
-  );
-  const demonstrations = filteredFeedback.filter(
-    (f): f is FeedbackRow & { type: "demonstration" } =>
-      f.type === "demonstration",
-  );
+  const { metrics, comments, demonstrations } =
+    groupFeedbackByType(filteredFeedback);
 
   return (
     <div className="space-y-6">
@@ -229,16 +225,7 @@ export function FeedbackSection(props: FeedbackSectionProps) {
   }
 
   const { feedback, showDemonstrations = true, pagination } = props;
-  const metrics = feedback.filter(
-    (f) => f.type === "boolean" || f.type === "float",
-  );
-  const comments = feedback.filter(
-    (f): f is FeedbackRow & { type: "comment" } => f.type === "comment",
-  );
-  const demonstrations = feedback.filter(
-    (f): f is FeedbackRow & { type: "demonstration" } =>
-      f.type === "demonstration",
-  );
+  const { metrics, comments, demonstrations } = groupFeedbackByType(feedback);
 
   return (
     <div className="space-y-6">

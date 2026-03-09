@@ -2,7 +2,6 @@ import { Badge } from "~/components/ui/badge";
 import type { FeedbackRow } from "~/types/tensorzero";
 import type { FeedbackConfig } from "~/utils/config/feedback";
 
-// Move the getBadgeStyle function from MetricSelector
 const getBadgeStyle = (
   property: "type" | "optimize" | "level",
   value: string | undefined,
