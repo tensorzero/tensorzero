@@ -80,7 +80,7 @@ async fn test_get_run_metadata_haiku() {
         *metadata,
         partially(matches_json_literal!({
             "evaluation_name": "haiku",
-            "function_name": "generate_haiku",
+            "function_name": "write_haiku",
             "function_type": "chat"
         }))
     );
