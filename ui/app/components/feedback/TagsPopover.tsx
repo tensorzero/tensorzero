@@ -10,11 +10,21 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 
+const T0_PREFIX = "tensorzero::";
+
 function formatTagKey(key: string): string {
-  if (key.startsWith("tensorzero::")) {
-    return key.slice("tensorzero::".length);
+  if (key.startsWith(T0_PREFIX)) {
+    return key.slice(T0_PREFIX.length);
   }
   return key;
+}
+
+function InternalBadge() {
+  return (
+    <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1 py-0.5 font-sans text-[10px] font-medium leading-none">
+      T0
+    </span>
+  );
 }
 
 export function filterStringTags(
@@ -112,22 +122,31 @@ export function TagsPopover({ tags }: TagsPopoverProps) {
         onPointerLeave={scheduleClose}
       >
         <div className="space-y-1.5">
-          {tags.map(([key, val]) => (
-            <div key={key} className="flex gap-2 font-mono text-xs">
-              <TagCell
-                displayText={formatTagKey(key)}
-                fullText={key}
-                className="text-fg-secondary w-40 shrink-0"
-                tooltipSide="left"
-              />
-              <TagCell
-                displayText={val}
-                fullText={val}
-                className="text-fg-primary"
-                tooltipSide="right"
-              />
-            </div>
-          ))}
+          {tags.map(([key, val]) => {
+            const isInternal = key.startsWith(T0_PREFIX);
+            return (
+              <div
+                key={key}
+                className="flex items-center gap-2 font-mono text-xs"
+              >
+                <span className="flex w-40 shrink-0 items-center gap-1">
+                  <TagCell
+                    displayText={formatTagKey(key)}
+                    fullText={key}
+                    className="text-fg-secondary truncate"
+                    tooltipSide="left"
+                  />
+                  {isInternal && <InternalBadge />}
+                </span>
+                <TagCell
+                  displayText={val}
+                  fullText={val}
+                  className="text-fg-primary truncate"
+                  tooltipSide="right"
+                />
+              </div>
+            );
+          })}
         </div>
       </PopoverContent>
     </Popover>

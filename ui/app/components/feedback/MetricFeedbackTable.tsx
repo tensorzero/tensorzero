@@ -26,14 +26,43 @@ import {
   filterStringTags,
 } from "~/components/feedback/TagsPopover";
 
+// Parses evaluator metric names like
+// "tensorzero::evaluation_name::xxx::evaluator_name::yyy"
+// into a short display name ("yyy") with evaluation context.
+const EVAL_PREFIX = "tensorzero::evaluation_name::";
+const EVALUATOR_SEPARATOR = "::evaluator_name::";
+
+interface ParsedMetricName {
+  displayName: string;
+  fullName: string;
+  isEvaluator: boolean;
+  evaluationName?: string;
+}
+
+function parseMetricName(metricName: string): ParsedMetricName {
+  if (metricName.startsWith(EVAL_PREFIX)) {
+    const rest = metricName.slice(EVAL_PREFIX.length);
+    const sepIndex = rest.indexOf(EVALUATOR_SEPARATOR);
+    if (sepIndex !== -1) {
+      return {
+        displayName: rest.slice(sepIndex + EVALUATOR_SEPARATOR.length),
+        fullName: metricName,
+        isEvaluator: true,
+        evaluationName: rest.slice(0, sepIndex),
+      };
+    }
+  }
+  return { displayName: metricName, fullName: metricName, isEvaluator: false };
+}
+
 export function MetricFeedbackTableHeaders() {
   return (
     <TableHeader>
       <TableRow>
-        <TableHead className="w-[40%]">Metric</TableHead>
-        <TableHead className="w-[20%]">Value</TableHead>
-        <TableHead className="w-[14%]">Tags</TableHead>
-        <TableHead className="w-[26%]">Date</TableHead>
+        <TableHead className="w-[52%]">Metric</TableHead>
+        <TableHead className="w-[15%]">Value</TableHead>
+        <TableHead className="w-[11%]">Tags</TableHead>
+        <TableHead className="w-[22%]">Date</TableHead>
       </TableRow>
     </TableHeader>
   );
@@ -86,6 +115,7 @@ function MetricRowItem({
   feedbackConfig,
 }: MetricRowItemProps) {
   const metricName = getMetricName(item);
+  const parsed = parseMetricName(metricName);
   const allTags = filterStringTags(item.tags);
 
   return (
@@ -94,15 +124,24 @@ function MetricRowItem({
         <Tooltip>
           <TooltipTrigger asChild>
             <span
-              className="cursor-default break-all font-mono text-sm underline decoration-dotted decoration-border underline-offset-4"
+              className="flex cursor-default items-center gap-1.5 font-mono text-sm"
               tabIndex={0}
             >
-              {metricName}
+              <span className="truncate underline decoration-dotted decoration-border underline-offset-4">
+                {parsed.displayName}
+              </span>
+              {parsed.isEvaluator && (
+                <span className="bg-bg-tertiary text-fg-tertiary shrink-0 rounded px-1 py-0.5 font-sans text-[10px] font-medium leading-none">
+                  eval
+                </span>
+              )}
             </span>
           </TooltipTrigger>
           <TooltipContent sideOffset={5}>
             <MetricTooltipContent
               id={item.id}
+              fullName={parsed.fullName}
+              evaluationName={parsed.evaluationName}
               feedbackConfig={feedbackConfig}
             />
           </TooltipContent>
@@ -129,11 +168,15 @@ function MetricRowItem({
 
 interface MetricTooltipContentProps {
   id: string;
+  fullName: string;
+  evaluationName?: string;
   feedbackConfig: FeedbackConfig | undefined;
 }
 
 function MetricTooltipContent({
   id,
+  fullName,
+  evaluationName,
   feedbackConfig,
 }: MetricTooltipContentProps) {
   const configParts =
@@ -145,6 +188,10 @@ function MetricTooltipContent({
 
   return (
     <div className="max-w-xs space-y-1.5 font-mono text-xs">
+      <div className="break-all">{fullName}</div>
+      {evaluationName && (
+        <div className="text-fg-tertiary">evaluation: {evaluationName}</div>
+      )}
       <div className="break-all">ID: {id}</div>
       {configParts && <div>{configParts.join(" · ")}</div>}
     </div>
