@@ -9,12 +9,11 @@ const HISTORICAL_HASH = "abc123historicalhash";
 
 /**
  * Fetches the current config hash from the gateway's /status endpoint.
- * Works in both local dev (localhost:3000) and CI (gateway:3000).
+ * Always uses localhost:3000 because the Playwright test runner runs on the
+ * host (not inside Docker), and the gateway container maps port 3000 to the host.
  */
 async function getCurrentConfigHash(page: Page): Promise<string> {
-  const gatewayUrl =
-    process.env.TENSORZERO_GATEWAY_URL || "http://localhost:3000";
-  const response = await page.request.get(`${gatewayUrl}/status`);
+  const response = await page.request.get("http://localhost:3000/status");
   const status = await response.json();
   return status.config_hash;
 }
