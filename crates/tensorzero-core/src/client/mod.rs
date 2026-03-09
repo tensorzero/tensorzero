@@ -351,10 +351,6 @@ pub enum TensorZeroError {
         source: TensorZeroInternalError,
     },
     RequestTimeout,
-    Git {
-        #[source]
-        source: git2::Error,
-    },
 }
 
 impl Display for TensorZeroError {
@@ -373,7 +369,6 @@ impl Display for TensorZeroError {
             }
             TensorZeroError::Other { source } => write!(f, "{source}"),
             TensorZeroError::RequestTimeout => write!(f, "HTTP Error: request timed out"),
-            TensorZeroError::Git { source } => write!(f, "Failed to get git info: {source}"),
         }
     }
 }

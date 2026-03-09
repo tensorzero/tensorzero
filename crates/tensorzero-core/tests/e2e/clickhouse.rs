@@ -1019,10 +1019,7 @@ async fn test_clickhouse_migration_manager() {
         assert_eq!(*migration_id, migration.migration_num().unwrap());
         assert_eq!(*migration_name, migration.name());
         assert_eq!(gateway_version, TENSORZERO_VERSION);
-        assert_eq!(
-            gateway_git_sha,
-            tensorzero_core::built_info::GIT_COMMIT_HASH.unwrap_or("unknown")
-        );
+        assert_eq!(gateway_git_sha, "");
         assert!(applied_at.is_some());
     }
     run_all(&clickhouse, &migrations, &logs_contain).await;
