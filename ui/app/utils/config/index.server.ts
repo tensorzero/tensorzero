@@ -222,7 +222,7 @@ export async function getConfigFromRequest(
     throw redirect(url.pathname + url.search);
   }
 
-  return getConfigForSnapshot(normalizedHash);
+  return getConfigForSnapshot(snapshotHash);
 }
 
 // ============================================================================
