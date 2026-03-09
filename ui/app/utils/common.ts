@@ -187,12 +187,6 @@ export function isErrorLike(error: unknown): error is ErrorLike {
   );
 }
 
-/**
- * Converts a hex string to its decimal string representation.
- *
- * NOT idempotent — input must be hex. Passing a decimal string will
- * produce incorrect results.
- */
 export function hexToDecimal(hex: string): string {
   try {
     return BigInt("0x" + hex).toString();
@@ -201,9 +195,6 @@ export function hexToDecimal(hex: string): string {
   }
 }
 
-/**
- * Converts a decimal string to its hex string representation.
- */
 export function decimalToHex(decimal: string): string {
   try {
     return BigInt(decimal).toString(16);
