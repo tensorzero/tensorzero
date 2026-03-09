@@ -636,7 +636,7 @@ async fn spawn_autopilot_worker_if_configured(
         PostgresConnectionInfo::Disabled => {
             if std::env::var("TENSORZERO_AUTOPILOT_API_KEY").is_ok() {
                 tracing::error!(
-                    "TENSORZERO_AUTOPILOT_API_KEY is set, but Postgres is not enabled."
+                    "`TENSORZERO_AUTOPILOT_API_KEY` is set, but Postgres is not enabled."
                 );
                 return Err(ExitCode::FAILURE);
             }
