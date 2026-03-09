@@ -152,6 +152,14 @@ function GatewayAuthContent() {
               if (e.key === "Enter") handleSubmit();
             }}
           />
+          <div
+            className="grid transition-[grid-template-rows] duration-200 ease-out"
+            style={{ gridTemplateRows: error ? "1fr" : "0fr" }}
+          >
+            <p className="overflow-hidden text-destructive text-sm">
+              {error && <span className="mt-1.5 block">{error}</span>}
+            </p>
+          </div>
         </div>
         <Button
           type="button"
@@ -161,7 +169,6 @@ function GatewayAuthContent() {
         >
           {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
         </Button>
-        {error && <p className="text-destructive text-sm">{error}</p>}
       </div>
     </ErrorContentCard>
   );
