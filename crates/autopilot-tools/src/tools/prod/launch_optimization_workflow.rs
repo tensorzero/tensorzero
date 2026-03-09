@@ -53,7 +53,7 @@ pub struct LaunchOptimizationWorkflowToolParams {
     /// Fraction of data to use for validation (0.0 to 1.0, exclusive).
     #[serde(default)]
     pub val_fraction: Option<f64>,
-    /// The optimizer configuration (e.g., SFT, DPO, MIPROv2).
+    /// The optimizer configuration (e.g., SFT, DICL).
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
