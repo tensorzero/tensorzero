@@ -50,7 +50,7 @@ fn mock_client_with_response(response: InferenceResponse) -> MockTensorZeroClien
         let r = response.clone();
         Box::pin(async move { Ok(r) })
     });
-    mock.expect_action().returning(move |_, _| {
+    mock.expect_action().returning(move |_, _, _| {
         let r = response_clone.clone();
         Box::pin(async move { Ok(durable_tools::ActionResponse::Inference(r)) })
     });
@@ -395,7 +395,9 @@ async fn execute_erased_deserializes_and_serializes_correctly(pool: PgPool) -> s
     let tool = EchoSimpleTool;
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
     let llm_params = serde_json::json!({"message": "hello"});
     // Unit type () deserializes from null, not {}
     let side_info = serde_json::json!(null);
@@ -414,7 +416,9 @@ async fn execute_erased_returns_error_on_invalid_params(pool: PgPool) -> sqlx::R
     let tool = EchoSimpleTool;
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
     // Missing required "message" field
     let llm_params = serde_json::json!({"wrong_field": "hello"});
     let side_info = serde_json::json!(null);
@@ -790,7 +794,9 @@ async fn simple_tool_calls_inference_successfully(pool: PgPool) -> sqlx::Result<
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_response(mock_response));
 
     let tool = InferenceSimpleTool;
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
     let llm_params = serde_json::json!({"prompt": "Say hello"});
     let side_info = serde_json::json!(null);
 
@@ -809,7 +815,9 @@ async fn simple_tool_propagates_inference_error(pool: PgPool) -> sqlx::Result<()
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
     let tool = InferenceSimpleTool;
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
     let llm_params = serde_json::json!({"prompt": "This will fail"});
     let side_info = serde_json::json!(null);
 
