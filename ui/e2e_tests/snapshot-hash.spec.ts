@@ -8,14 +8,17 @@ const FUNCTION_NAME = "write_haiku";
 const HISTORICAL_HASH = "abc123historicalhash";
 
 /**
- * Fetches the current config hash from the gateway's /status endpoint.
+ * Fetches the current config hash as hex from the gateway's /status endpoint.
+ * Returns hex format (matching ClickHouse `lower(hex(UInt256))`) because that's
+ * what real URLs contain — normalizeHashToDecimal expects hex input.
+ *
  * Always uses localhost:3000 because the Playwright test runner runs on the
  * host (not inside Docker), and the gateway container maps port 3000 to the host.
  */
-async function getCurrentConfigHash(page: Page): Promise<string> {
+async function getCurrentConfigHashAsHex(page: Page): Promise<string> {
   const response = await page.request.get("http://localhost:3000/status");
   const status = await response.json();
-  return status.config_hash;
+  return BigInt(status.config_hash).toString(16);
 }
 
 test("function page without snapshot_hash shows no banner", async ({
@@ -54,7 +57,7 @@ test("snapshot_hash shows banner and propagates to variant links", async ({
 test("snapshot_hash matching current config is stripped via redirect", async ({
   page,
 }) => {
-  const currentHash = await getCurrentConfigHash(page);
+  const currentHash = await getCurrentConfigHashAsHex(page);
 
   await page.goto(
     `/observability/functions/${FUNCTION_NAME}?snapshot_hash=${currentHash}`,
