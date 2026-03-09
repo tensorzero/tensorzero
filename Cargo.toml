@@ -46,10 +46,10 @@ reqwest = { version = "0.12.28", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-uuid = { version = "1.21.0", features = ["serde", "v7"] }
+uuid = { version = "1.22.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
-toml = { version = "1.0.3", features = ["preserve_order"] }
+toml = { version = "1.0.6", features = ["preserve_order"] }
 async-stream = "0.3.5"
 async-trait = "0.1.89"
 http = "1.4.0"
@@ -122,7 +122,7 @@ durable-tools-spawn = { path = "crates/durable-tools-spawn" }
 tensorzero = { path = "crates/tensorzero-client" }
 tensorzero-core = { path = "crates/tensorzero-core" }
 regex = "1.12.2"
-redis = { version = "1.0.4", features = [
+redis = { version = "1.0.5", features = [
     "tokio-comp",
     "connection-manager",
     "tls-rustls",
