@@ -4,6 +4,8 @@ use googletest::{
 };
 use serde_json::{Map, Value};
 
+use crate::partially::Partially;
+
 pub use serde_json;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,16 +24,6 @@ pub fn matches_json_literal(expected: Value) -> MatchesJsonLiteralMatcher {
     }
 }
 
-/// Converts a literal matcher into partial-object mode.
-///
-/// In partial-object mode, object keys present in the expected literal must
-/// exist and match in the actual value, but extra keys in the actual object
-/// are ignored (recursively for nested objects). Arrays still require exact
-/// length and positional matches.
-pub fn partially(matcher: MatchesJsonLiteralMatcher) -> MatchesJsonLiteralMatcher {
-    matcher.partially()
-}
-
 /// A convenience macro for inlining a JSON literal matcher.
 #[macro_export]
 macro_rules! matches_json_literal {
@@ -48,7 +40,7 @@ pub struct MatchesJsonLiteralMatcher {
     mode: LiteralMatchMode,
 }
 
-impl MatchesJsonLiteralMatcher {
+impl Partially for MatchesJsonLiteralMatcher {
     fn partially(mut self) -> Self {
         self.mode = LiteralMatchMode::PartialObject;
         self
@@ -173,6 +165,7 @@ fn find_object_mismatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::partially::partially;
     use googletest::prelude::*;
     use serde_json::json;
 
@@ -271,6 +264,135 @@ mod tests {
         expect_that!(
             actual,
             matches_json_literal!({"assistant_name": "AskJeeves"})
+        );
+    }
+
+    // --- Nested objects follow the same exhaustive/partial pattern ---
+
+    #[gtest]
+    fn matches_json_literal_nested_object_exact() {
+        let actual = json!({"outer": {"inner": "value"}});
+        expect_that!(actual, matches_json_literal!({"outer": {"inner": "value"}}));
+    }
+
+    #[gtest]
+    fn matches_json_literal_nested_object_rejects_extra_inner_keys() {
+        let actual = json!({"outer": {"inner": "value", "extra": 1}});
+        expect_that!(
+            actual,
+            not(matches_json_literal!({"outer": {"inner": "value"}}))
+        );
+    }
+
+    #[gtest]
+    fn matches_json_literal_nested_object_rejects_extra_outer_keys() {
+        let actual = json!({"outer": {"inner": "value"}, "extra": 1});
+        expect_that!(
+            actual,
+            not(matches_json_literal!({"outer": {"inner": "value"}}))
+        );
+    }
+
+    #[gtest]
+    fn partially_matches_json_literal_nested_objects_at_all_levels() {
+        let actual = json!({
+            "a": {"b": {"c": 1, "extra_deep": 2}, "extra_mid": 3},
+            "extra_top": 4
+        });
+        expect_that!(
+            actual,
+            partially(matches_json_literal!({"a": {"b": {"c": 1}}}))
+        );
+    }
+
+    #[gtest]
+    fn matches_json_literal_deeply_nested_value_mismatch() {
+        let actual = json!({"a": {"b": {"c": 1}}});
+        expect_that!(actual, not(matches_json_literal!({"a": {"b": {"c": 2}}})));
+    }
+
+    // --- Nested arrays follow the same pattern ---
+
+    #[gtest]
+    fn matches_json_literal_nested_array_exact() {
+        let actual = json!({"items": [1, 2, 3]});
+        expect_that!(actual, matches_json_literal!({"items": [1, 2, 3]}));
+    }
+
+    #[gtest]
+    fn matches_json_literal_nested_array_rejects_different_length() {
+        let actual = json!({"items": [1, 2, 3]});
+        expect_that!(actual, not(matches_json_literal!({"items": [1, 2]})));
+    }
+
+    #[gtest]
+    fn matches_json_literal_nested_array_rejects_wrong_elements() {
+        let actual = json!({"items": [1, 2, 3]});
+        expect_that!(actual, not(matches_json_literal!({"items": [1, 2, 4]})));
+    }
+
+    #[gtest]
+    fn matches_json_literal_nested_array_rejects_wrong_order() {
+        let actual = json!({"items": [1, 2, 3]});
+        expect_that!(actual, not(matches_json_literal!({"items": [3, 2, 1]})));
+    }
+
+    #[gtest]
+    fn matches_json_literal_array_of_objects() {
+        let actual = json!({"items": [{"id": 1}, {"id": 2}]});
+        expect_that!(
+            actual,
+            matches_json_literal!({"items": [{"id": 1}, {"id": 2}]})
+        );
+    }
+
+    #[gtest]
+    fn matches_json_literal_array_of_objects_rejects_extra_keys() {
+        let actual = json!({"items": [{"id": 1, "extra": true}]});
+        expect_that!(actual, not(matches_json_literal!({"items": [{"id": 1}]})));
+    }
+
+    #[gtest]
+    fn partially_matches_json_literal_array_of_objects_allows_extra_keys() {
+        let actual = json!({"items": [{"id": 1, "extra": true}]});
+        expect_that!(
+            actual,
+            partially(matches_json_literal!({"items": [{"id": 1}]}))
+        );
+    }
+
+    #[gtest]
+    fn matches_json_literal_nested_arrays() {
+        let actual = json!({"matrix": [[1, 2], [3, 4]]});
+        expect_that!(actual, matches_json_literal!({"matrix": [[1, 2], [3, 4]]}));
+    }
+
+    #[gtest]
+    fn matches_json_literal_nested_arrays_rejects_inner_mismatch() {
+        let actual = json!({"matrix": [[1, 2], [3, 4]]});
+        expect_that!(
+            actual,
+            not(matches_json_literal!({"matrix": [[1, 2], [3, 5]]}))
+        );
+    }
+
+    // --- partially() propagates to nested objects ---
+
+    #[gtest]
+    fn matches_json_literal_without_partially_nested_extra_keys_fail() {
+        let actual = json!({"outer": {"inner": "value", "extra": true}});
+        expect_that!(
+            actual,
+            not(matches_json_literal!({"outer": {"inner": "value"}}))
+        );
+    }
+
+    #[gtest]
+    fn matches_json_literal_with_partially_nested_extra_keys_succeed() {
+        let actual = json!({"outer": {"inner": "value", "extra": true}});
+        expect_that!(
+            actual,
+            partially(matches_json_literal!({"outer": {"inner": "value"}}))
         );
     }
 }

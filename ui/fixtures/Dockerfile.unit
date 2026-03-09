@@ -4,18 +4,6 @@ FROM node:24.13.0-trixie-slim AS base
 
 RUN npm install -g pnpm
 
-# ========== package-jsons-layer ==========
-
-FROM base AS package-jsons-layer
-WORKDIR /src
-COPY . .
-
-# Archive only package.json and pnpm-lock.yaml recursively, skipping .venv/ and node_modules and .vite
-# pnpm needs these files for the workspace to work
-RUN find . -type d \( -name .venv -o -name node_modules -o -name .vite \) -prune -false -o \
-    -type f \( -name package.json -o -name pnpm-lock.yaml -o -name pnpm-workspace.yaml \) \
-    -exec tar --transform='s|^\./||' --no-recursion -rf /tmp/packages.tar {} \;
-
 # ========== tensorzero-node-build-env ==========
 
 FROM rust:1.93.0 AS tensorzero-node-build-env
@@ -23,7 +11,8 @@ FROM rust:1.93.0 AS tensorzero-node-build-env
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
 
-COPY . /build
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /build/
+COPY crates/ /build/crates/
 WORKDIR /build/crates/tensorzero-node
 
 RUN pnpm install --frozen-lockfile && pnpm run build
@@ -35,8 +24,9 @@ FROM base AS test-env
 WORKDIR /app
 
 # Copy package files first for better caching
-COPY --from=package-jsons-layer /tmp/packages.tar /tmp/packages.tar
-RUN tar -vxf /tmp/packages.tar -C .
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY ui/package.json ./ui/
+COPY crates/tensorzero-node/package.json ./crates/tensorzero-node/
 
 # Install all dependencies (including dev dependencies for testing)
 RUN pnpm install --frozen-lockfile
@@ -47,7 +37,9 @@ COPY --from=tensorzero-node-build-env /build/crates/tensorzero-node/index.cjs /a
 COPY --from=tensorzero-node-build-env /build/crates/tensorzero-node/*linux*.node /app/crates/tensorzero-node/
 
 # Copy the rest of the code
-COPY . .
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY crates/tensorzero-node/package.json ./crates/tensorzero-node/
+COPY ui/ ./ui/
 
 # Set CI environment variable for non-interactive mode
 ENV CI=true
