@@ -25,7 +25,8 @@ jobs:
       pull-requests: read
     runs-on: ubuntu-latest
     outputs:
-      clickhouse-tests: ${{ steps.filter.outputs.clickhouse-tests || 'true' }}
+      clickhouse-tests-merge-queue: ${{ steps.filter.outputs.clickhouse-tests-merge-queue || 'true' }}
+      clickhouse-tests-pr: ${{ steps.filter.outputs.clickhouse-tests-pr || 'true' }}
       client-tests: ${{ steps.filter.outputs.client-tests || 'true' }}
       code: ${{ steps.filter.outputs.code || 'true' }}
       docs: ${{ steps.filter.outputs.docs || 'true' }}
@@ -39,13 +40,10 @@ jobs:
         with:
           predicate-quantifier: "every"
           filters: |
-            clickhouse-tests:
-              - '**'
-              - '!**/README.md'
-              - '!docs/**'
-              - '!examples/**'
-              - '!recipes/**'
-              - '!ui/**'
+            clickhouse-tests-merge-queue:
+              - 'crates/**'
+            clickhouse-tests-pr:
+              - 'crates/tensorzero-core/src/db/**'
             client-tests:
               - '**'
               - '!**/README.md'
@@ -846,7 +844,14 @@ jobs:
         build-mock-provider-api-container,
         build-fixtures-container,
       ]
-    if: ${{ needs.detect-changes.outputs.clickhouse-tests == 'true' && (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: >-
+      ${{
+        (
+          (github.event_name == 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-merge-queue == 'true') ||
+          (github.event_name != 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-pr == 'true')
+        ) &&
+        (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository))
+      }}
     permissions:
       contents: read
       actions: read
