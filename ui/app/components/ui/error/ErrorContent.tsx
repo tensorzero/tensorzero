@@ -94,7 +94,7 @@ function GatewayAuthContent() {
   };
 
   return (
-    <ErrorContentCard className="w-[24rem]">
+    <ErrorContentCard className="w-[22rem]">
       <div className="flex flex-col items-center px-6 pt-9 pb-6 text-center">
         <KeyRound className="mb-5 h-8 w-8 text-orange-500 dark:text-orange-400" />
         <h2 className="text-foreground text-lg font-medium">
