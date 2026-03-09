@@ -1,14 +1,9 @@
-import { useHoverPopover } from "~/hooks/use-hover-popover";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "~/components/ui/popover";
+import { HoverPopover } from "~/components/ui/hover-popover";
 
 const T0_PREFIX = "tensorzero::";
 
@@ -76,54 +71,44 @@ interface TagsPopoverProps {
 }
 
 export function TagsPopover({ tags }: TagsPopoverProps) {
-  const { open, setOpen, triggerProps, contentProps } = useHoverPopover();
-
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <span
-          className="text-fg-tertiary cursor-default text-xs underline decoration-dotted decoration-border underline-offset-4"
-          {...triggerProps}
-        >
+    <HoverPopover
+      side="top"
+      align="center"
+      className="w-auto max-w-md"
+      trigger={
+        <span className="text-fg-tertiary cursor-default text-xs underline decoration-dotted decoration-border underline-offset-4">
           {tags.length} tag{tags.length !== 1 ? "s" : ""}
         </span>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="center"
-        className="w-auto max-w-md p-3"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        {...contentProps}
-      >
-        <div className="space-y-1.5">
-          {tags.map(([key, val]) => {
-            const isInternal = key.startsWith(T0_PREFIX);
-            return (
-              <div
-                key={key}
-                className="flex items-center gap-2 font-mono text-xs"
-              >
-                <span className="flex w-40 shrink-0 items-center gap-1">
-                  <TagCell
-                    displayText={formatTagKey(key)}
-                    fullText={key}
-                    className="text-fg-secondary truncate"
-                    tooltipSide="left"
-                  />
-                  {isInternal && <InternalBadge />}
-                </span>
+      }
+    >
+      <div className="space-y-1.5">
+        {tags.map(([key, val]) => {
+          const isInternal = key.startsWith(T0_PREFIX);
+          return (
+            <div
+              key={key}
+              className="flex items-center gap-2 font-mono text-xs"
+            >
+              <span className="flex w-40 shrink-0 items-center gap-1">
                 <TagCell
-                  displayText={val}
-                  fullText={val}
-                  className="text-fg-primary truncate"
-                  tooltipSide="right"
+                  displayText={formatTagKey(key)}
+                  fullText={key}
+                  className="text-fg-secondary truncate"
+                  tooltipSide="left"
                 />
-              </div>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
+                {isInternal && <InternalBadge />}
+              </span>
+              <TagCell
+                displayText={val}
+                fullText={val}
+                className="text-fg-primary truncate"
+                tooltipSide="right"
+              />
+            </div>
+          );
+        })}
+      </div>
+    </HoverPopover>
   );
 }

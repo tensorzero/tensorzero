@@ -1,4 +1,3 @@
-import { useHoverPopover } from "~/hooks/use-hover-popover";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow, MetricConfig } from "~/types/tensorzero";
@@ -17,11 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "~/components/ui/popover";
+import { HoverPopover } from "~/components/ui/hover-popover";
 import {
   TagsPopover,
   filterStringTags,
@@ -158,8 +153,6 @@ function MetricNamePopover({
   id,
   feedbackConfig,
 }: MetricNamePopoverProps) {
-  const { open, setOpen, triggerProps, contentProps } = useHoverPopover();
-
   const configLine =
     feedbackConfig &&
     feedbackConfig.type !== "comment" &&
@@ -168,12 +161,12 @@ function MetricNamePopover({
       : null;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <span
-          className="inline-flex cursor-default items-center gap-1.5 font-mono text-sm"
-          {...triggerProps}
-        >
+    <HoverPopover
+      side="top"
+      align="start"
+      className="w-auto max-w-md"
+      trigger={
+        <span className="inline-flex cursor-default items-center gap-1.5 font-mono text-sm">
           <span className="truncate underline decoration-dotted decoration-border underline-offset-4">
             {parsed.displayName}
           </span>
@@ -183,26 +176,18 @@ function MetricNamePopover({
             </span>
           )}
         </span>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="start"
-        className="w-auto max-w-md p-3"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        {...contentProps}
-      >
-        <div className="space-y-1.5 font-mono text-xs">
-          <div className="text-fg-tertiary break-all">ID: {id}</div>
-          <div className="text-fg-primary break-all">{parsed.fullName}</div>
-          {parsed.evaluationName && (
-            <div className="text-fg-tertiary">
-              evaluation: {parsed.evaluationName}
-            </div>
-          )}
-          {configLine && <div className="text-fg-tertiary">{configLine}</div>}
-        </div>
-      </PopoverContent>
-    </Popover>
+      }
+    >
+      <div className="space-y-1.5 font-mono text-xs">
+        <div className="text-fg-tertiary break-all">ID: {id}</div>
+        <div className="text-fg-primary break-all">{parsed.fullName}</div>
+        {parsed.evaluationName && (
+          <div className="text-fg-tertiary">
+            evaluation: {parsed.evaluationName}
+          </div>
+        )}
+        {configLine && <div className="text-fg-tertiary">{configLine}</div>}
+      </div>
+    </HoverPopover>
   );
 }

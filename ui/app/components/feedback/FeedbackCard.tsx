@@ -1,11 +1,6 @@
-import { useHoverPopover } from "~/hooks/use-hover-popover";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "~/components/ui/popover";
+import { HoverPopover } from "~/components/ui/hover-popover";
 import {
   parseInferenceOutput,
   isJsonOutput,
@@ -111,29 +106,22 @@ export function DemonstrationCard({ demonstration }: DemonstrationCardProps) {
 }
 
 function CardTimestamp({ timestamp }: { timestamp: string }) {
-  const { open, setOpen, triggerProps, contentProps } = useHoverPopover();
-
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <span className="cursor-default" {...triggerProps}>
+    <HoverPopover
+      side="top"
+      align="end"
+      className="text-xs"
+      trigger={
+        <span className="cursor-default">
           <TableItemTime timestamp={timestamp} />
         </span>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="end"
-        className="w-auto p-3 text-xs"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        {...contentProps}
-      >
-        <div className="flex flex-col gap-1">
-          <div className="text-fg-tertiary">Last updated</div>
-          <TimestampTooltip timestamp={timestamp} />
-        </div>
-      </PopoverContent>
-    </Popover>
+      }
+    >
+      <div className="flex flex-col gap-1">
+        <div className="text-fg-tertiary">Last updated</div>
+        <TimestampTooltip timestamp={timestamp} />
+      </div>
+    </HoverPopover>
   );
 }
 

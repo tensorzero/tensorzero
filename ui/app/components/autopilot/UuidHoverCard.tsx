@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
-import { HoverCard } from "radix-ui";
 import type { ResolvedObject } from "~/types/tensorzero";
 import { EntityPreviewType, useEntityPreview } from "~/hooks/useEntityPreview";
 import { getRelativeTimeString, getTimestampTooltipData } from "~/utils/date";
@@ -16,6 +15,7 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { useFunctionConfig } from "~/context/config";
 import { toFunctionUrl, toResolvedObjectUrl, toVariantUrl } from "~/utils/urls";
 import { useEntitySheet } from "~/context/entity-sheet";
+import { HoverPopover } from "~/components/ui/hover-popover";
 
 interface UuidHoverCardProps {
   uuid: string;
@@ -54,26 +54,16 @@ export function UuidHoverCard({ uuid, obj, children }: UuidHoverCardProps) {
   }
 
   return (
-    <HoverCard.Root openDelay={300} closeDelay={200} onOpenChange={setIsOpen}>
-      <HoverCard.Trigger asChild>{children}</HoverCard.Trigger>
-      <HoverCard.Portal>
-        <HoverCard.Content
-          side="top"
-          sideOffset={4}
-          className={cn(
-            "bg-popover text-popover-foreground z-50 rounded-md border p-3 shadow-md",
-            getHoverCardWidth(obj.type),
-            "data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-            "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
-            "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-          )}
-        >
-          <HoverCardContent uuid={uuid} obj={obj} isOpen={isOpen} />
-        </HoverCard.Content>
-      </HoverCard.Portal>
-    </HoverCard.Root>
+    <HoverPopover
+      openDelay={300}
+      closeDelay={200}
+      onOpenChange={setIsOpen}
+      side="top"
+      className={getHoverCardWidth(obj.type)}
+      trigger={children}
+    >
+      <HoverCardContent uuid={uuid} obj={obj} isOpen={isOpen} />
+    </HoverPopover>
   );
 }
 
