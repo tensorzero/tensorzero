@@ -634,6 +634,12 @@ async fn spawn_autopilot_worker_if_configured(
     let pool = match &gateway_handle.app_state.postgres_connection_info {
         PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
         PostgresConnectionInfo::Disabled => {
+            if std::env::var("TENSORZERO_AUTOPILOT_API_KEY").is_ok() {
+                tracing::error!(
+                    "TENSORZERO_AUTOPILOT_API_KEY is set, but Postgres is not enabled."
+                );
+                return Err(ExitCode::FAILURE);
+            }
             return Ok(None);
         }
         #[cfg(test)]
