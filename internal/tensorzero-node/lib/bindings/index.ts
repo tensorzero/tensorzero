@@ -39,6 +39,7 @@ export * from "./ClientInferenceParams";
 export * from "./CloneDatapointsResponse";
 export * from "./CommentFeedbackRow";
 export * from "./CommentTargetType";
+export * from "./ContentBlock";
 export * from "./ContentBlockChatOutput";
 export * from "./ContentBlockOutput";
 export * from "./CountFeedbackByTargetIdResponse";

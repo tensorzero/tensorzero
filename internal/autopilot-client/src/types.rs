@@ -665,6 +665,8 @@ pub enum ContentBlock {
         #[cfg_attr(feature = "ts-bindings", ts(optional))]
         label: Option<String>,
     },
+    /// Rendered as a collapsible section with a label and markdown body.
+    Collapsible { label: String, text: String },
 }
 
 /// The format of a user question.
