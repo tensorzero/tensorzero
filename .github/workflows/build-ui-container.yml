@@ -39,12 +39,9 @@ jobs:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Build `ui` container
+      - name: Build and push `ui` container
         run: |
-          docker buildx build --build-arg DEBUG_BUILD=1 --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f ui/Dockerfile . -t tensorzero/ui-dev:sha-${{ github.sha }}
-
-      - name: Push `ui` container to DockerHub
-        run: docker push tensorzero/ui-dev:sha-${{ github.sha }}
+          docker buildx build --build-arg DEBUG_BUILD=1 --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f ui/Dockerfile . -t tensorzero/ui-dev:sha-${{ github.sha }} --push
 
       - name: Wait for image to be available on Docker Hub
         run: |
