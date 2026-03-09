@@ -122,9 +122,7 @@ function GatewayAuthContent() {
             <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
               3
             </span>
-            <span>
-              Check gateway logs for authentication details
-            </span>
+            <span>Check gateway logs for authentication details</span>
           </li>
         </ol>
       </div>
