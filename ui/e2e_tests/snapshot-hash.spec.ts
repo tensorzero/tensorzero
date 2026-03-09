@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { decimalToHex } from "~/utils/common";
 
 const FUNCTION_NAME = "write_haiku";
 
@@ -18,7 +19,7 @@ const HISTORICAL_HASH = "abc123historicalhash";
 async function getCurrentConfigHashAsHex(page: Page): Promise<string> {
   const response = await page.request.get("http://localhost:3000/status");
   const status = await response.json();
-  return BigInt(status.config_hash).toString(16);
+  return decimalToHex(status.config_hash);
 }
 
 test("function page without snapshot_hash shows no banner", async ({
