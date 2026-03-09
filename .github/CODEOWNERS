@@ -1,10 +1,10 @@
-/clients/python/tensorzero/generated_types.py @GabrielBianconi
-/clients/python/tensorzero/tensorzero.pyi @GabrielBianconi
-/clients/python/tensorzero/types.py @GabrielBianconi
+/crates/tensorzero-python/tensorzero/generated_types.py @GabrielBianconi
+/crates/tensorzero-python/tensorzero/tensorzero.pyi @GabrielBianconi
+/crates/tensorzero-python/tensorzero/types.py @GabrielBianconi
 /crates/evaluations/src/cli.rs @GabrielBianconi
 /crates/gateway/src/cli.rs @GabrielBianconi
 /crates/gateway/src/routes/external.rs @GabrielBianconi
 
-/tensorzero-core/src/db/clickhouse/migration_manager @virajmehta @Aaron1011
-/tensorzero-core/src/db/postgres/migrations @virajmehta @Aaron1011
+/crates/tensorzero-core/src/db/clickhouse/migration_manager @virajmehta @Aaron1011
+/crates/tensorzero-core/src/db/postgres/migrations @virajmehta @Aaron1011
 /crates/tensorzero-auth/src/postgres/migrations @virajmehta @Aaron1011

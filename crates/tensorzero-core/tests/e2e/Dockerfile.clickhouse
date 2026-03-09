@@ -1,0 +1,59 @@
+# ========== base ==========
+
+FROM rust:1.93.0 AS base
+
+# Install required system dependencies
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        ca-certificates \
+        build-essential \
+        pkg-config \
+        libssl-dev \
+        git  \
+        clickhouse-client && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install cargo-binstall for faster tool installation
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+    https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+# ========== build-env ==========
+
+FROM base AS build-env
+
+WORKDIR /build
+ENV CARGO_INCREMENTAL=0
+
+# Copy the crates directory
+COPY crates/ crates/
+
+# Install cargo-nextest using binstall
+RUN cargo binstall -y cargo-nextest --secure
+
+# Build and archive tests instead of copying entire target directory
+WORKDIR /build/crates
+RUN cargo nextest archive --features e2e_tests --profile clickhouse --archive-file tests.tar.zst
+
+# ========== test-env ==========
+
+FROM base AS test-env
+
+WORKDIR /app
+
+# Copy workspace structure (only crates needed)
+COPY crates/ crates/
+
+# Copy only the test archive instead of entire target directory
+COPY --from=build-env /build/crates/tests.tar.zst /app/crates/tests.tar.zst
+
+# Install cargo-nextest in this stage too (for running tests)
+RUN cargo binstall -y cargo-nextest --secure
+
+# Set CI environment variable
+ENV CI=true
+
+# Set the entrypoint to run tests from archive with absolute config file path and clickhouse profile
+WORKDIR /app/crates
+
+ENTRYPOINT ["cargo", "nextest", "run", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app/crates", "--config-file", "/app/crates/.config/nextest.toml", "--profile", "clickhouse"]

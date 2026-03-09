@@ -51,7 +51,7 @@ pub mod openai_sft;
 pub mod together_sft;
 
 static FERRIS_PNG: &[u8] =
-    include_bytes!("../../../../tensorzero-core/tests/e2e/providers/ferris.png");
+    include_bytes!("../../../tensorzero-core/tests/e2e/providers/ferris.png");
 
 fn use_mock_provider_api() -> bool {
     std::env::var("TENSORZERO_INTERNAL_MOCK_PROVIDER_API")

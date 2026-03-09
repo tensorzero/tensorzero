@@ -12,9 +12,9 @@ mkdir -p lib/bindings
 
 # Generate TypeScript bindings from Rust code
 echo "Generating TypeScript bindings from Rust..."
-cd ../..
-TS_RS_EXPORT_DIR="$(pwd)/crates/tensorzero-node/lib/bindings" cargo tsbuild
-cd crates/tensorzero-node
+cd ..
+TS_RS_EXPORT_DIR="$(pwd)/tensorzero-node/lib/bindings" cargo tsbuild
+cd tensorzero-node
 
 # Generate index file
 echo "Generating index file..."

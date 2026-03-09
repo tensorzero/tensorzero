@@ -3,7 +3,7 @@
 set -e
 
 # Extract rust-version from Cargo.toml
-RUST_VERSION=$(grep '^rust-version = ' Cargo.toml | sed 's/rust-version = "\(.*\)"/\1/')
+RUST_VERSION=$(grep '^rust-version = ' crates/Cargo.toml | sed 's/rust-version = "\(.*\)"/\1/')
 
 if [ -z "$RUST_VERSION" ]; then
   echo "❌ Could not extract rust-version from Cargo.toml"
@@ -13,7 +13,7 @@ fi
 echo "Expected Rust version from Cargo.toml: $RUST_VERSION"
 
 # Check rust-toolchain.toml
-TOOLCHAIN_FILE="rust-toolchain.toml"
+TOOLCHAIN_FILE="crates/rust-toolchain.toml"
 if [ -f "$TOOLCHAIN_FILE" ]; then
   TOOLCHAIN_VERSION=$(grep 'channel = ' "$TOOLCHAIN_FILE" | sed 's/.*channel = "\(.*\)"/\1/')
   if [ "$TOOLCHAIN_VERSION" != "$RUST_VERSION" ]; then
@@ -76,7 +76,7 @@ check_dockerfile \
   "uses rust:$RUST_VERSION"
 
 check_dockerfile \
-  "tensorzero-core/tests/e2e/Dockerfile.live" \
+  "crates/tensorzero-core/tests/e2e/Dockerfile.live" \
   "FROM lukemathwalker/cargo-chef:" \
   "rust-$RUST_MAJOR_MINOR" \
   "cargo-chef uses rust-$RUST_MAJOR_MINOR"
@@ -85,9 +85,9 @@ check_dockerfile \
 DOCKERFILES=(
   "crates/provider-proxy/Dockerfile"
   "crates/evaluations/Dockerfile"
-  "tensorzero-core/tests/e2e/Dockerfile.gateway.e2e"
-  "tensorzero-core/tests/e2e/Dockerfile.clickhouse"
-  "tensorzero-core/tests/mock-provider-api/Dockerfile"
+  "crates/tensorzero-core/tests/e2e/Dockerfile.gateway.e2e"
+  "crates/tensorzero-core/tests/e2e/Dockerfile.clickhouse"
+  "crates/tensorzero-core/tests/mock-provider-api/Dockerfile"
   "ui/fixtures/Dockerfile.unit"
 )
 

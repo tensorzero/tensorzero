@@ -182,7 +182,7 @@ async fn run_evaluations_json() {
     write_json_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
@@ -607,7 +607,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
@@ -708,7 +708,7 @@ async fn run_exact_match_evaluation_chat() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
@@ -851,7 +851,7 @@ async fn run_llm_judge_evaluation_chat() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
@@ -1086,7 +1086,7 @@ async fn run_image_evaluation() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
@@ -1299,7 +1299,7 @@ async fn check_invalid_image_evaluation() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
@@ -1412,7 +1412,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
@@ -1458,7 +1458,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
     write_json_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
@@ -1687,7 +1687,7 @@ async fn run_evaluations_errors() {
     write_json_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
@@ -2122,7 +2122,7 @@ async fn run_evaluations_best_of_3() {
     write_json_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
@@ -2310,7 +2310,7 @@ async fn run_evaluations_mixture_of_3() {
     write_json_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
@@ -2498,7 +2498,7 @@ async fn run_evaluations_dicl() {
     write_json_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
@@ -2688,7 +2688,7 @@ async fn test_query_skips_staled_datapoints() {
     write_json_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("exact_matches_empty".to_string(), dataset_name.clone())]),
@@ -2720,7 +2720,7 @@ async fn test_evaluation_with_dynamic_variant() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
@@ -2832,7 +2832,7 @@ async fn test_max_datapoints_parameter() {
     write_json_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
@@ -2917,7 +2917,7 @@ async fn test_precision_targets_parameter() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
@@ -3144,7 +3144,7 @@ async fn test_cli_args_max_datapoints() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
@@ -3203,7 +3203,7 @@ async fn test_cli_args_precision_targets() {
     write_chat_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
-            "{}/../../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         )),
         &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
