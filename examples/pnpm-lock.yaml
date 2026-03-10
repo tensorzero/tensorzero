@@ -43,6 +43,16 @@ importers:
         specifier: ^24.9.2
         version: 24.12.0
 
+  docs/guides/quickstart:
+    dependencies:
+      openai:
+        specifier: ^6.27.0
+        version: 6.27.0
+    devDependencies:
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+
   guides/tool-use:
     dependencies:
       openai:
@@ -64,16 +74,6 @@ importers:
       process:
         specifier: ^0.11.10
         version: 0.11.10
-    devDependencies:
-      tsx:
-        specifier: ^4.20.3
-        version: 4.21.0
-
-  quickstart:
-    dependencies:
-      openai:
-        specifier: ^6.4.0
-        version: 6.27.0
     devDependencies:
       tsx:
         specifier: ^4.20.3
