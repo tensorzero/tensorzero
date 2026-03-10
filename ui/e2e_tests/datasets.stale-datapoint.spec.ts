@@ -89,7 +89,7 @@ test("should show stale badge in evaluation page basic info", async ({
   // Navigate to evaluation page with a stale datapoint
   // Datapoint 01939a16-b258-71e1-a467-183001c1952c is marked as stale in the fixtures
   await page.goto(
-    "/evaluations/entity_extraction/01939a16-b258-71e1-a467-183001c1952c?evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24",
+    "/evaluations/results/01939a16-b258-71e1-a467-183001c1952c?evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24",
   );
   await page.waitForLoadState("networkidle");
 

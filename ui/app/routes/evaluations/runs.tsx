@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { AlertCircle, Loader2, StopCircle } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import type { Route } from "./+types/route";
+import type { Route } from "./+types/runs";
 import type {
   EvaluationConfig,
   EvaluationResultRow,
@@ -20,7 +20,7 @@ import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import {
   EvaluationTable,
   type SelectedRowData,
-} from "~/routes/evaluations/$evaluation_name/EvaluationTable";
+} from "~/routes/evaluations/EvaluationTable";
 import {
   PageHeader,
   PageLayout,
@@ -42,12 +42,12 @@ import {
 } from "react-router";
 import AutoRefreshIndicator, {
   useAutoRefresh,
-} from "~/routes/evaluations/$evaluation_name/AutoRefreshIndicator";
+} from "~/routes/evaluations/AutoRefreshIndicator";
 import { getRunningEvaluation } from "~/utils/evaluations.server";
 import {
   EvaluationErrorInfo,
   type EvaluationErrorDisplayInfo,
-} from "~/routes/evaluations/$evaluation_name/EvaluationErrorInfo";
+} from "~/routes/evaluations/EvaluationErrorInfo";
 import {
   addEvaluationHumanFeedback,
   getTensorZeroClient,
@@ -57,11 +57,11 @@ import { logger } from "~/utils/logger";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DatasetSelect } from "~/components/dataset/DatasetSelect";
-import { handleBulkAddToDataset } from "~/routes/evaluations/$evaluation_name/bulkAddToDataset.server";
-import { useBulkAddToDatasetToast } from "~/routes/evaluations/$evaluation_name/useBulkAddToDatasetToast";
-import { useCancelEvaluation } from "~/routes/evaluations/$evaluation_name/useCancelEvaluation";
+import { handleBulkAddToDataset } from "~/routes/evaluations/bulkAddToDataset.server";
+import { useBulkAddToDatasetToast } from "~/routes/evaluations/useBulkAddToDatasetToast";
+import { useCancelEvaluation } from "~/routes/evaluations/useCancelEvaluation";
 import { useReadOnly } from "~/context/read-only";
-import BasicInfo from "~/routes/evaluations/$evaluation_name/EvaluationBasicInfo";
+import BasicInfo from "~/routes/evaluations/EvaluationBasicInfo";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import type {
@@ -149,6 +149,7 @@ async function fetchEvaluationData(
   };
 }
 
+/// TODO(#6636): Stop constructing metric configs.
 function buildMetricsConfigFromRunMetadata(
   metrics: RunMetricMetadata[],
 ): Record<string, MetricConfig> {

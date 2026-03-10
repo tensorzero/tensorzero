@@ -1,7 +1,6 @@
 import { logger } from "~/utils/logger";
 import type { EvaluationResultRow } from "~/types/tensorzero";
 
-import { getConfig } from "../config/index.server";
 import { loadFileDataForInput } from "../resolve.server";
 import { getTensorZeroClient } from "../tensorzero.server";
 
@@ -49,21 +48,14 @@ export async function getEvaluationResults(
 }
 
 export async function getEvaluationsForDatapoint(
-  evaluation_name: string,
+  _evaluation_name: string,
   datapoint_id: string,
   evaluation_run_ids: string[],
 ): Promise<EvaluationResultRow[]> {
-  const config = await getConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
-  if (!evaluation_config) {
-    throw new Error(`Evaluation ${evaluation_name} not found in config`);
-  }
-
   const tensorZeroClient = getTensorZeroClient();
   const response = await tensorZeroClient.getEvaluationResults(
     evaluation_run_ids,
     {
-      evaluationName: evaluation_name,
       datapointId: datapoint_id,
       // Limit = u32::MAX to get all results (equivalent to before);
       // We should actually make this smaller but we will revisit these queries

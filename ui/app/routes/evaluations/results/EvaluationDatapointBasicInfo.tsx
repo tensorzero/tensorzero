@@ -59,11 +59,7 @@ export default function BasicInfo({
       <BasicInfoItem>
         <BasicInfoItemTitle>Evaluation</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          <Chip
-            label={evaluation_name}
-            link={`/evaluations/${encodeURIComponent(evaluation_name)}`}
-            font="mono"
-          />
+          <Chip label={evaluation_name} font="mono" />
         </BasicInfoItemContent>
       </BasicInfoItem>
       <BasicInfoItem>

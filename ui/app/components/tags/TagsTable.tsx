@@ -43,17 +43,12 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
   // It has been renamed to "workflow_evaluation_run_id" but queries still use the old name.
   // Gateway double-writes both tags. Future migration will update queries to use new tag.
   const navigableKeys = [
-    "tensorzero::evaluation_name",
+    "tensorzero::evaluation_run_id",
     "tensorzero::dataset_name",
     "tensorzero::evaluator_inference_id",
     "tensorzero::dynamic_evaluation_run_id",
     "tensorzero::workflow_evaluation_run_id",
   ];
-
-  // Add conditional navigation keys
-  if (tags["tensorzero::evaluation_name"]) {
-    navigableKeys.push("tensorzero::evaluation_run_id");
-  }
   if (tags["tensorzero::dataset_name"]) {
     navigableKeys.push("tensorzero::datapoint_id");
   }
@@ -74,9 +69,6 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
           navigate(toDatapointUrl(datasetName, value));
           break;
         }
-        case "tensorzero::evaluation_name":
-          navigate(`/evaluations/${encodeURIComponent(value)}`);
-          break;
         case "tensorzero::dataset_name":
           navigate(toDatasetUrl(value));
           break;

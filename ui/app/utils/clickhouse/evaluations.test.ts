@@ -129,7 +129,7 @@ describe("getEvaluationsForDatapoint", () => {
     const evaluations = await getEvaluationsForDatapoint(
       "haiku",
       "0195d806-e43d-7f7e-bb05-f6dd0d95846f", // Nonexistent datapoint
-      ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
+      ["0196374b-04a3-7013-9049-e59ed5fe3f74"],
     );
     expect(evaluations).toEqual([]);
   });
