@@ -4727,6 +4727,7 @@ dependencies = [
  "dashmap",
  "derive_builder 0.20.2",
  "durable",
+ "durable-tools-spawn",
  "enum-map",
  "futures",
  "futures-core",
