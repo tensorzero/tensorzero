@@ -291,11 +291,16 @@ async fn run() -> Result<(), ExitCode> {
         .log_err_pretty("Failed to collect autopilot tool names")?;
 
     // Resolve tool whitelist from config
-    let tool_whitelist: std::collections::HashSet<String> =
+    let mut tool_whitelist: std::collections::HashSet<String> =
         match &unwritten_config.autopilot.tool_whitelist {
             Some(list) => list.iter().cloned().collect(),
             None => autopilot_tools::default_whitelisted_tool_names(),
         };
+
+    // Subtract tools that require approval from the whitelist
+    for tool in &unwritten_config.autopilot.require_approval {
+        tool_whitelist.remove(tool);
+    }
 
     // Initialize GatewayHandle
     let gateway_handle =

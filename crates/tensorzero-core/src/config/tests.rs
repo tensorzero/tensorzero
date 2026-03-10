@@ -3435,3 +3435,29 @@ async fn test_nested_skip_credential_validation() {
     .await;
     assert!(!skip_credential_validation());
 }
+
+#[test]
+fn test_autopilot_config_require_approval() {
+    // Test with require_approval field
+    let toml_str = r#"
+        tool_whitelist = ["tool1", "tool2", "tool3"]
+        require_approval = ["tool2"]
+    "#;
+    let config: AutopilotConfig = toml::from_str(toml_str).expect("Failed to parse config");
+    assert_eq!(config.tool_whitelist, Some(vec!["tool1".to_string(), "tool2".to_string(), "tool3".to_string()]));
+    assert_eq!(config.require_approval, vec!["tool2".to_string()]);
+
+    // Test without require_approval field (defaults to empty)
+    let toml_str = r#"
+        tool_whitelist = ["tool1", "tool2"]
+    "#;
+    let config: AutopilotConfig = toml::from_str(toml_str).expect("Failed to parse config");
+    assert_eq!(config.tool_whitelist, Some(vec!["tool1".to_string(), "tool2".to_string()]));
+    assert_eq!(config.require_approval, Vec::<String>::new());
+
+    // Test with empty autopilot section (all defaults)
+    let toml_str = r#""#;
+    let config: AutopilotConfig = toml::from_str(toml_str).expect("Failed to parse config");
+    assert_eq!(config.tool_whitelist, None);
+    assert_eq!(config.require_approval, Vec::<String>::new());
+}

@@ -114,6 +114,11 @@ pub struct AutopilotConfig {
     /// If unset, defaults to all nondestructive tools.
     /// If set, replaces the default list entirely.
     pub tool_whitelist: Option<Vec<String>>,
+    /// Tools that require manual approval before execution.
+    /// These tools are subtracted from the whitelist (either default or explicitly configured).
+    /// This allows fine-grained control following the principle of least privilege.
+    #[serde(default)]
+    pub require_approval: Vec<String>,
 }
 
 // Note - the `Default` impl only exists for convenience in tests
