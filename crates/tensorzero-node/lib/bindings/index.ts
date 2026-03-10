@@ -95,6 +95,7 @@ export * from "./EndpointLocation";
 export * from "./EpisodeByIdRow";
 export * from "./EvaluationConfig";
 export * from "./EvaluationFunctionConfig";
+export * from "./EvaluationIdentifier";
 export * from "./EvaluationResultRow";
 export * from "./EvaluationRunCompleteEvent";
 export * from "./EvaluationRunErrorEvent";
