@@ -18,16 +18,21 @@ FROM chef AS builder
 WORKDIR /tensorzero
 ENV CARGO_INCREMENTAL=0
 COPY --from=planner /app/crates/recipe.json /tensorzero/crates/recipe.json
-COPY crates/Cargo.toml crates/Cargo.lock /tensorzero/crates/
+
+# Copy the crate and relevant files; trim workspace to remove other crates
 COPY crates/rust-toolchain.toml /tensorzero/crates/rust-toolchain.toml
-# Trim workspace to only include mock-provider-api
+COPY crates/Cargo.toml crates/Cargo.lock /tensorzero/crates/
 RUN sed -i '/^members = \[/,/^\]/c\members = ["tensorzero-core/tests/mock-provider-api"]' /tensorzero/crates/Cargo.toml
+
 WORKDIR /tensorzero/crates
-
 ARG CARGO_BUILD_FLAGS=""
-
 RUN cargo chef cook --profile dev -p mock-provider-api ${CARGO_BUILD_FLAGS}
+
+# Re-copy the real workspace Cargo.toml (cargo chef cook overwrites it with a minimal version)
+COPY crates/Cargo.toml crates/Cargo.lock /tensorzero/crates/
+RUN sed -i '/^members = \[/,/^\]/c\members = ["tensorzero-core/tests/mock-provider-api"]' /tensorzero/crates/Cargo.toml
 COPY crates/tensorzero-core/tests/mock-provider-api/ /tensorzero/crates/tensorzero-core/tests/mock-provider-api/
+
 RUN cargo build -p mock-provider-api ${CARGO_BUILD_FLAGS} && \
     mkdir -p /release && \
     cp target/debug/mock-provider-api /release/mock-provider-api
