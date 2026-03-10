@@ -197,10 +197,10 @@ export async function getConfigFromRequest(
   if (!snapshotHash) return getConfig();
 
   const currentConfig = await getConfig();
-  const normalizedHash = hexToDecimal(snapshotHash);
+  const decimalHash = hexToDecimal(snapshotHash);
 
   // Fast path: if the URL hash matches current config, strip it.
-  if (currentConfig.config_hash === normalizedHash) {
+  if (currentConfig.config_hash === decimalHash) {
     url.searchParams.delete("snapshot_hash");
     throw redirect(url.pathname + url.search);
   }
@@ -225,17 +225,17 @@ export async function getConfigForSnapshot(
 ): Promise<UiConfig> {
   if (!snapshotHash) return getConfig();
 
-  const normalizedHash = hexToDecimal(snapshotHash);
+  const decimalHash = hexToDecimal(snapshotHash);
 
   const currentConfig = await getConfig();
-  if (currentConfig.config_hash === normalizedHash) return currentConfig;
+  if (currentConfig.config_hash === decimalHash) return currentConfig;
 
-  const cached = snapshotConfigCache.get(normalizedHash);
+  const cached = snapshotConfigCache.get(decimalHash);
   if (cached) return cached;
 
   try {
     const client = getTensorZeroClient();
-    const snapshotConfig = await client.getUiConfigByHash(normalizedHash);
+    const snapshotConfig = await client.getUiConfigByHash(decimalHash);
     // eslint-disable-next-line no-restricted-syntax
     snapshotConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
 
@@ -243,7 +243,7 @@ export async function getConfigForSnapshot(
       const firstKey = snapshotConfigCache.keys().next().value;
       if (firstKey) snapshotConfigCache.delete(firstKey);
     }
-    snapshotConfigCache.set(normalizedHash, snapshotConfig);
+    snapshotConfigCache.set(decimalHash, snapshotConfig);
     return snapshotConfig;
   } catch (error) {
     logger.warn(`Failed to fetch config for snapshot ${snapshotHash}:`, error);

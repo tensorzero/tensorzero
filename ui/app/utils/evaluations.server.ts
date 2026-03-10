@@ -23,7 +23,8 @@ interface ResolvedEvaluationConfig {
 
 /**
  * Resolves an evaluation config by name. If not found in the current config,
- * looks up a matching evaluation run and loads the historical snapshot config.
+ * finds an inference tagged with this evaluation name and uses its
+ * snapshot_hash to load the historical config.
  */
 export async function resolveEvaluationConfig(
   evaluationName: string,
@@ -38,15 +39,22 @@ export async function resolveEvaluationConfig(
     };
   }
 
-  // Evaluation not in current config — try a historical snapshot
+  // Evaluation not in current config — find an inference tagged with this
+  // evaluation name and use its snapshot_hash to load the historical config.
   const client = getTensorZeroClient();
-  const runs = await client.listEvaluationRuns(100, 0);
-  const matchingRun = runs.runs.find(
-    (r) => r.evaluation_name === evaluationName,
-  );
+  const inferences = await client.listInferences({
+    output_source: "none",
+    limit: 1,
+    filters: {
+      type: "tag",
+      key: "tensorzero::evaluation_name",
+      value: evaluationName,
+      comparison_operator: "=",
+    },
+  });
 
-  if (matchingRun?.snapshot_hash) {
-    const snapshotHash = matchingRun.snapshot_hash;
+  const snapshotHash = inferences.inferences[0]?.snapshot_hash;
+  if (snapshotHash) {
     const effectiveConfig = await getConfigForSnapshot(snapshotHash);
     const snapshotEvalConfig = effectiveConfig.evaluations[evaluationName];
     if (snapshotEvalConfig) {
