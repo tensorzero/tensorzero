@@ -12,7 +12,7 @@ Notably, they enable you to:
 1. **Decouple prompts from application code.**
    As you iterate on your prompts over time (or [A/B test different prompts](/experimentation/run-adaptive-ab-tests)), you'll be able to manage them in a centralized way without making changes to the application code.
 2. **Collect a structured inference dataset.**
-   Imagine down the road you want to [fine-tune a model](/recipes/) using your historical data.
+   Imagine down the road you want to [fine-tune a model](/optimization/supervised-fine-tuning-sft) using your historical data.
    If you had only stored prompts as strings, you'd be stuck with the outdated prompts that were actually used at inference time.
    However, if you had access to the input variables in a structured dataset, you'd easily be able to counterfactually swap new prompts into your training data before fine-tuning.
    This is particularly important when experimenting with new models, because prompts don't always translate well between them.
@@ -81,39 +81,13 @@ You can configure multiple templates for a variant.
 
 <Step title="Use your template during inference">
 
-<Tabs>
-
-<Tab title="Python">
-
-Use your template during inference by sending a content block with the template name and arguments.
-
-```python
-result = t0.inference(
-    function_name="fun_fact",
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "template",
-                        "name": "fun_fact_topic",
-                        "arguments": {"topic": "artificial intelligence"},
-                    }
-                ],
-            }
-        ],
-    },
-)
-```
-
-</Tab>
-
-<Tab title="Python (OpenAI SDK)">
-
 Use your template during inference by sending a `tensorzero::template` content block with the template name and arguments.
 
 ```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
+
 result = client.chat.completions.create(
     model="tensorzero::function_name::fun_fact",
     messages=[
@@ -130,40 +104,6 @@ result = client.chat.completions.create(
     ],
 )
 ```
-
-</Tab>
-
-<Tab title="HTTP">
-
-Use your template during inference by sending a `template` content block with the template name and arguments.
-
-```bash
-curl -X POST http://localhost:3000/inference \
-  -H "Content-Type: application/json" \
-  -d '{
-    "function_name": "fun_fact",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "template",
-              "name": "fun_fact_topic",
-              "arguments": {
-                "topic": "artificial intelligence"
-              }
-            }
-          ]
-        }
-      ]
-    }
-  }'
-```
-
-</Tab>
-
-</Tabs>
 
 </Step>
 

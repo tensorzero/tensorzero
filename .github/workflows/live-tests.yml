@@ -49,7 +49,7 @@ env:
 jobs:
   live-tests:
     if: github.repository == 'tensorzero/tensorzero'
-    name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
+    name: "live-tests (batch_writes: ${{ matrix.batch_writes }}, database: ${{ matrix.database }})"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,6 +58,7 @@ jobs:
     strategy:
       matrix:
         batch_writes: [true, false]
+        database: [clickhouse, postgres]
       # Don't fail-fast for manual/cron runs, so that we get the full picture of what broke
       fail-fast: ${{ github.event_name == 'merge_group' }}
 
@@ -103,20 +104,29 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
+      - name: Set Postgres as primary datastore
+        if: matrix.database == 'postgres'
+        run: |
+          echo "TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres" >> $GITHUB_ENV
+          echo "GATEWAY_CONFIG_GLOB={tensorzero,postgres}.*.toml" >> $GITHUB_ENV
+
       - name: Pull images referenced by the compose file
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
 
       - name: Run live tests container via Docker Compose
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm -e TENSORZERO_CI=1 -e TENSORZERO_FF_WRITE_CONFIG_SNAPSHOT=1 live-tests
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
+            -e TENSORZERO_CI=1 \
+            -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
+            live-tests
 
       - name: Print live tests logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
 
       - name: Check e2e logs for impossible error messages
         run: |
-          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs gateway)
+          LOGS=$(docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs gateway)
           if [ -z "$LOGS" ]; then
             echo "ERROR: Gateway logs are empty"
             exit 1
@@ -126,7 +136,7 @@ jobs:
       # TODO - re-enable this: https://github.com/tensorzero/tensorzero/issues/3989
       # - name: Check e2e logs for deprecation warnings (gateway e2e tests only)
       #   run: |
-      #     LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
+      #     LOGS=$(docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
       #     if [ -z "$LOGS" ]; then
       #       echo "ERROR: Gateway logs are empty"
       #       exit 1
@@ -197,7 +207,7 @@ jobs:
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Pull images referenced by the compose file
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
 
       - name: Set Postgres as primary datastore
         if: matrix.database == 'postgres'
@@ -206,12 +216,12 @@ jobs:
 
       - name: Run evaluation tests
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
-            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app --config-file /app/.config/nextest.toml --profile evaluations -j 4"
+            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile evaluations -j 4"
 
       - name: Print evaluation tests logs
         if: always()
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
