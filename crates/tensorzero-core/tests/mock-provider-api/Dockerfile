@@ -5,9 +5,8 @@ FROM lukemathwalker/cargo-chef:latest-rust-1.93-trixie AS chef
 WORKDIR /src
 
 FROM chef AS planner
-WORKDIR /app/crates
-# Only copy workspace manifests and mock-provider-api's Cargo.toml
-# to avoid cache invalidation from unrelated crate changes
+
+# Only copy workspace manifests and mock-provider-api to avoid cache invalidation from unrelated crate changes
 COPY crates/Cargo.toml crates/Cargo.lock ./
 COPY crates/tensorzero-core/tests/mock-provider-api/ tensorzero-core/tests/mock-provider-api/
 # Trim workspace to only include mock-provider-api
@@ -15,23 +14,25 @@ RUN sed -i '/^members = \[/,/^\]/c\members = ["tensorzero-core/tests/mock-provid
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
-WORKDIR /tensorzero
 ENV CARGO_INCREMENTAL=0
-COPY --from=planner /app/crates/recipe.json /tensorzero/crates/recipe.json
 
-# Copy the crate and relevant files; trim workspace to remove other crates
-COPY crates/rust-toolchain.toml /tensorzero/crates/rust-toolchain.toml
-COPY crates/Cargo.toml crates/Cargo.lock /tensorzero/crates/
-RUN sed -i '/^members = \[/,/^\]/c\members = ["tensorzero-core/tests/mock-provider-api"]' /tensorzero/crates/Cargo.toml
+# Set up the Rust toolchain
+COPY crates/rust-toolchain.toml ./rust-toolchain.toml
+RUN rustup show
 
-WORKDIR /tensorzero/crates
+# Copy the recipe and install dependencies (trim workspace to just this crate)
+COPY --from=planner /src/recipe.json ./recipe.json
+COPY crates/Cargo.toml crates/Cargo.lock ./
+RUN sed -i '/^members = \[/,/^\]/c\members = ["tensorzero-core/tests/mock-provider-api"]' Cargo.toml
 ARG CARGO_BUILD_FLAGS=""
 RUN cargo chef cook --profile dev -p mock-provider-api ${CARGO_BUILD_FLAGS}
 
 # Re-copy the real workspace Cargo.toml (cargo chef cook overwrites it with a minimal version)
-COPY crates/Cargo.toml crates/Cargo.lock /tensorzero/crates/
-RUN sed -i '/^members = \[/,/^\]/c\members = ["tensorzero-core/tests/mock-provider-api"]' /tensorzero/crates/Cargo.toml
-COPY crates/tensorzero-core/tests/mock-provider-api/ /tensorzero/crates/tensorzero-core/tests/mock-provider-api/
+COPY crates/Cargo.toml crates/Cargo.lock ./
+RUN sed -i '/^members = \[/,/^\]/c\members = ["tensorzero-core/tests/mock-provider-api"]' Cargo.toml
+
+# Copy the crate itself and build it
+COPY crates/tensorzero-core/tests/mock-provider-api/ tensorzero-core/tests/mock-provider-api/
 
 RUN cargo build -p mock-provider-api ${CARGO_BUILD_FLAGS} && \
     mkdir -p /release && \
