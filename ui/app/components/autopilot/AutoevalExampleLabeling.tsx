@@ -196,7 +196,7 @@ export function AutoevalExampleLabelingCard({
   );
 
   // Sync state when answers arrive after initial mount (e.g. SSE delivers
-  // user_questions_answers while the card is already expanded).
+  // `user_questions_answers` while the card is already expanded).
   useEffect(() => {
     if (!answers) return;
     const updated = initFromAnswers(payload.examples, answers);

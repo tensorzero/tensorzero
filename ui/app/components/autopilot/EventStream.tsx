@@ -869,7 +869,7 @@ export default function EventStream({
   configApplyEnabled = false,
   sessionId,
 }: EventStreamProps) {
-  // Map from user_questions event ID → questions array, used to resolve
+  // Map from `user_questions` event ID → questions array, used to resolve
   // option labels when rendering user_questions_answers events.
   const questionsMap = useMemo(() => {
     const map = new Map<string, EventPayloadUserQuestion[]>();
@@ -881,8 +881,8 @@ export default function EventStream({
     return map;
   }, [events]);
 
-  // Map from autoeval_example_labeling event ID → saved answers from the
-  // corresponding user_questions_answers event.
+  // Map from `autoeval_example_labeling` event ID → saved answers from the
+  // corresponding `user_questions_answers` event.
   const autoevalAnswersMap = useMemo(() => {
     const map = new Map<string, Record<string, UserQuestionAnswer>>();
     for (const event of events) {
@@ -893,7 +893,7 @@ export default function EventStream({
     return map;
   }, [events]);
 
-  // Map from autoeval_example_labeling event ID → payload, for rendering
+  // Map from `autoeval_example_labeling` event ID → payload, for rendering
   // completed labeling cards with saved answers.
   const autoevalPayloadMap = useMemo(() => {
     const map = new Map<string, EventPayloadAutoevalExampleLabeling>();
