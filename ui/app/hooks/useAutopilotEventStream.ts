@@ -261,7 +261,10 @@ export function useAutopilotEventStream({
 
                   // Update pending user questions based on event type
                   setPendingUserQuestions((prev) => {
-                    if (event.payload.type === "user_questions") {
+                    if (
+                      event.payload.type === "user_questions" ||
+                      event.payload.type === "autoeval_example_labeling"
+                    ) {
                       if (prev.some((e) => e.id === event.id)) {
                         return prev;
                       }
