@@ -9,5 +9,4 @@ export type AutoevalLabelQuestion = {
   header: string;
   question: string;
   options: Array<MultipleChoiceOption>;
-  multi_select: boolean;
 };

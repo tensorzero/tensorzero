@@ -42,7 +42,6 @@ const labelingPayload: EventPayloadAutoevalExampleLabeling = {
         header: "Example 1",
         question: "Does this example exhibit the target behavior?",
         options: labelingOptions,
-        multi_select: false,
       },
       explanation_question: {
         id: "ex1-explanation",
@@ -68,7 +67,6 @@ const labelingPayload: EventPayloadAutoevalExampleLabeling = {
         header: "Example 2",
         question: "Does this example exhibit the target behavior?",
         options: labelingOptions,
-        multi_select: false,
       },
       explanation_question: {
         id: "ex2-explanation",
@@ -94,7 +92,6 @@ const labelingPayload: EventPayloadAutoevalExampleLabeling = {
         header: "Example 3",
         question: "Does this example exhibit the target behavior?",
         options: labelingOptions,
-        multi_select: false,
       },
       explanation_question: {
         id: "ex3-explanation",

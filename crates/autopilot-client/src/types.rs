@@ -758,7 +758,6 @@ pub struct AutoevalLabelQuestion {
     pub header: String,
     pub question: String,
     pub options: Vec<MultipleChoiceOption>,
-    pub multi_select: bool,
 }
 
 /// A free-response explanation question within an autoeval example.

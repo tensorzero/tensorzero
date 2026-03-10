@@ -718,20 +718,14 @@ function EventItem({
       {shouldShowDetails && event.payload.type === "user_questions" && (
         <UserQuestionsContent questions={event.payload.questions} />
       )}
-      {shouldShowDetails && event.payload.type === "user_questions_answers" && (
-        <UserQuestionsAnswersContent
-          responses={event.payload.responses}
-          questions={
-            questionsMap?.get(event.payload.user_questions_event_id) ?? []
-          }
-        />
-      )}
       {shouldShowDetails &&
-        event.payload.type === "autoeval_example_labeling" && (
-          <AutoevalExampleLabelingCard
-            payload={event.payload}
-            readOnly
-            answers={autoevalAnswersMap?.get(event.id)}
+        event.payload.type === "user_questions_answers" &&
+        !autoevalPayloadMap?.has(event.payload.user_questions_event_id) && (
+          <UserQuestionsAnswersContent
+            responses={event.payload.responses}
+            questions={
+              questionsMap?.get(event.payload.user_questions_event_id) ?? []
+            }
           />
         )}
       {shouldShowDetails &&
@@ -743,6 +737,14 @@ function EventItem({
             }
             readOnly
             answers={event.payload.responses}
+          />
+        )}
+      {shouldShowDetails &&
+        event.payload.type === "autoeval_example_labeling" && (
+          <AutoevalExampleLabelingCard
+            payload={event.payload}
+            readOnly
+            answers={autoevalAnswersMap?.get(event.id)}
           />
         )}
     </div>
