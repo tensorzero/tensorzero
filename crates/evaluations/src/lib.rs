@@ -245,7 +245,7 @@ pub async fn run_evaluation(
         .functions
         .get(&function_name)
         .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
-        .ok_or_else(|| anyhow!("function '{function_name}' not found"))?;
+        .ok_or_else(|| anyhow!("function `{function_name}` not found"))?;
 
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {

@@ -482,53 +482,6 @@ pub async fn run_evaluation_handler(
 mod tests {
     use super::*;
 
-    /// Generates an evaluation name from the function name and dataset info.
-    /// Format: `{function_name}__{dataset_portion}__{uuid_suffix}`
-    fn generate_evaluation_name(
-        function_name: &str,
-        dataset_name: Option<&str>,
-        datapoint_ids: Option<&[Uuid]>,
-    ) -> String {
-        let dataset_portion = if let Some(name) = dataset_name {
-            name.to_string()
-        } else if let Some(ids) = datapoint_ids {
-            format!("{}_datapoints", ids.len())
-        } else {
-            "unknown".to_string()
-        };
-        // Use a V7 UUID suffix (time-ordered, unique) to avoid collisions
-        let suffix = Uuid::now_v7().simple().to_string();
-        format!("{function_name}__{dataset_portion}__{suffix}")
-    }
-
-    #[test]
-    fn test_generate_evaluation_name_with_dataset() {
-        let name = generate_evaluation_name("my_func", Some("my_dataset"), None);
-        assert!(
-            name.starts_with("my_func__my_dataset__"),
-            "should start with function__dataset: {name}"
-        );
-    }
-
-    #[test]
-    fn test_generate_evaluation_name_with_datapoint_ids() {
-        let ids = vec![Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7()];
-        let name = generate_evaluation_name("my_func", None, Some(&ids));
-        assert!(
-            name.starts_with("my_func__3_datapoints__"),
-            "should include datapoint count: {name}"
-        );
-    }
-
-    #[test]
-    fn test_generate_evaluation_name_unknown() {
-        let name = generate_evaluation_name("my_func", None, None);
-        assert!(
-            name.starts_with("my_func__unknown__"),
-            "should use 'unknown' as dataset portion: {name}"
-        );
-    }
-
     #[test]
     fn test_explicit_format_deserialization() {
         let json = serde_json::json!({

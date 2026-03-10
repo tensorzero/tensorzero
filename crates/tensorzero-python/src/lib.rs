@@ -1319,7 +1319,7 @@ impl TensorZeroGateway {
             .map(|f| tensorzero_core::evaluations::EvaluationFunctionConfig::from(f.as_ref()))
             .ok_or_else(|| {
                 pyo3::exceptions::PyValueError::new_err(format!(
-                    "function '{function_name}' not found"
+                    "function `{function_name}` not found"
                 ))
             })?;
 
@@ -2366,7 +2366,7 @@ impl AsyncTensorZeroGateway {
                 .map(|f| tensorzero_core::evaluations::EvaluationFunctionConfig::from(f.as_ref()))
                 .ok_or_else(|| {
                     pyo3::exceptions::PyValueError::new_err(format!(
-                        "function '{function_name}' not found"
+                        "function `{function_name}` not found"
                     ))
                 })?;
 
