@@ -198,6 +198,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const metric_names = evaluator_names.map((evaluatorName) =>
     getEvaluatorMetricName(params.evaluation_name, evaluatorName),
   );
+  const evaluatorMetricNames: Record<string, string> = {};
+  for (let i = 0; i < evaluator_names.length; i++) {
+    evaluatorMetricNames[evaluator_names[i]] = metric_names[i];
+  }
 
   // Build metrics config map for the relevant metrics
   const metricsConfig: Record<string, MetricConfig> = {};
@@ -265,6 +269,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     offset,
     limit,
     evaluator_names,
+    evaluatorMetricNames,
     running_evaluation_run_ids,
     errors,
     newFeedbackId,
@@ -364,6 +369,7 @@ function ResultsContent({
   evaluation_name,
   evaluationConfig,
   metricsConfig,
+  evaluatorMetricNames,
   data,
   evaluator_names,
   any_evaluation_is_running,
@@ -378,6 +384,7 @@ function ResultsContent({
   evaluation_name: string;
   evaluationConfig: InferenceEvaluationConfig;
   metricsConfig: Record<string, MetricConfig>;
+  evaluatorMetricNames: Record<string, string>;
   data: EvaluationData;
   evaluator_names: string[];
   any_evaluation_is_running: boolean;
@@ -444,6 +451,7 @@ function ResultsContent({
         evaluation_name={evaluation_name}
         evaluationConfig={evaluationConfig}
         metricsConfig={metricsConfig}
+        evaluatorMetricNames={evaluatorMetricNames}
         selected_evaluation_run_infos={selected_evaluation_run_infos}
         evaluation_results={evaluation_results}
         evaluation_statistics={evaluation_statistics}
@@ -478,6 +486,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     offset,
     limit,
     evaluator_names,
+    evaluatorMetricNames,
     running_evaluation_run_ids,
     errors,
     newFeedbackId,
@@ -585,6 +594,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
                   evaluation_name={evaluation_name}
                   evaluationConfig={evaluation_config}
                   metricsConfig={metricsConfig}
+                  evaluatorMetricNames={evaluatorMetricNames}
                   data={resolvedData}
                   evaluator_names={evaluator_names}
                   any_evaluation_is_running={anyEvaluationIsRunning}

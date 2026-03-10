@@ -218,6 +218,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   let evaluator_names: string[];
   let metric_names: string[];
   let metricsConfig: Record<string, MetricConfig>;
+  let evaluatorMetricNames: Record<string, string>;
 
   if (evaluationConfig) {
     // Config found — derive from config (same as existing route)
@@ -225,6 +226,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     metric_names = evaluator_names.map((evaluatorName) =>
       getEvaluatorMetricName(evaluation_name, evaluatorName),
     );
+    evaluatorMetricNames = {};
+    for (let i = 0; i < evaluator_names.length; i++) {
+      evaluatorMetricNames[evaluator_names[i]] = metric_names[i];
+    }
     metricsConfig = {};
     for (const metricName of metric_names) {
       const metricConfig = effectiveConfig.metrics[metricName];
@@ -239,6 +244,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       .map((m) => m.evaluator_name)
       .filter((name): name is string => name != null);
     metricsConfig = buildMetricsConfigFromRunMetadata(firstRunMetadata.metrics);
+    // Build evaluator_name → metric_name mapping from DB metadata
+    evaluatorMetricNames = {};
+    for (const metric of firstRunMetadata.metrics) {
+      if (metric.evaluator_name) {
+        evaluatorMetricNames[metric.evaluator_name] = metric.name;
+      }
+    }
     // Build a minimal evaluationConfig for the components
     const evaluators: Record<string, { type: "exact_match" }> = {};
     for (const name of evaluator_names) {
@@ -323,6 +335,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     offset,
     limit,
     evaluator_names,
+    evaluatorMetricNames,
     running_evaluation_run_ids,
     errors,
     newFeedbackId,
@@ -422,6 +435,7 @@ function ResultsContent({
   evaluation_name,
   evaluationConfig,
   metricsConfig,
+  evaluatorMetricNames,
   data,
   evaluator_names,
   any_evaluation_is_running,
@@ -436,6 +450,7 @@ function ResultsContent({
   evaluation_name: string;
   evaluationConfig: EvaluationConfig;
   metricsConfig: Record<string, MetricConfig>;
+  evaluatorMetricNames: Record<string, string>;
   data: EvaluationData;
   evaluator_names: string[];
   any_evaluation_is_running: boolean;
@@ -502,6 +517,7 @@ function ResultsContent({
         evaluation_name={evaluation_name}
         evaluationConfig={evaluationConfig}
         metricsConfig={metricsConfig}
+        evaluatorMetricNames={evaluatorMetricNames}
         selected_evaluation_run_infos={selected_evaluation_run_infos}
         evaluation_results={evaluation_results}
         evaluation_statistics={evaluation_statistics}
@@ -538,6 +554,7 @@ export default function EvaluationRunsPage({
     offset,
     limit,
     evaluator_names,
+    evaluatorMetricNames,
     running_evaluation_run_ids,
     errors,
     newFeedbackId,
@@ -645,6 +662,7 @@ export default function EvaluationRunsPage({
                   evaluation_name={evaluation_name}
                   evaluationConfig={evaluation_config}
                   metricsConfig={metricsConfig}
+                  evaluatorMetricNames={evaluatorMetricNames}
                   data={resolvedData}
                   evaluator_names={evaluator_names}
                   any_evaluation_is_running={anyEvaluationIsRunning}
