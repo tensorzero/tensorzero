@@ -734,15 +734,41 @@ pub struct EventPayloadAutoevalExampleLabeling {
     pub examples: Vec<AutoevalLabelingExample>,
 }
 
-/// A single example to label, with context and questions.
+/// A single example to label, with context and a structured labeling question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AutoevalLabelingExample {
     /// Rich content blocks providing context (e.g. the prompt and response).
     pub context: Vec<AutoevalContentBlock>,
-    /// Questions about this example (e.g. a label choice and optional explanation).
-    pub questions: Vec<EventPayloadUserQuestion>,
+    /// The multiple-choice labeling question for this example.
+    pub label_question: AutoevalLabelQuestion,
+    /// An optional free-response explanation question.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub explanation_question: Option<AutoevalExplanationQuestion>,
+}
+
+/// A multiple-choice labeling question within an autoeval example.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutoevalLabelQuestion {
+    pub id: Uuid,
+    pub header: String,
+    pub question: String,
+    pub options: Vec<MultipleChoiceOption>,
+    pub multi_select: bool,
+}
+
+/// A free-response explanation question within an autoeval example.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutoevalExplanationQuestion {
+    pub id: Uuid,
+    pub header: String,
+    pub question: String,
 }
 
 /// A block of rich content displayed alongside an autoeval example.

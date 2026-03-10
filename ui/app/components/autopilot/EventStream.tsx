@@ -874,11 +874,6 @@ export default function EventStream({
     for (const event of events) {
       if (event.payload.type === "user_questions") {
         map.set(event.id, event.payload.questions);
-      } else if (event.payload.type === "autoeval_example_labeling") {
-        map.set(
-          event.id,
-          event.payload.examples.flatMap((ex) => ex.questions),
-        );
       }
     }
     return map;

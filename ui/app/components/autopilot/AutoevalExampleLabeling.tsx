@@ -9,8 +9,8 @@ import {
 import { cn } from "~/utils/common";
 import type {
   AutoevalContentBlock,
+  AutoevalLabelingExample,
   EventPayloadAutoevalExampleLabeling,
-  EventPayloadUserQuestion,
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 
@@ -64,31 +64,26 @@ export function AutoevalContentBlockRenderer({
   return content;
 }
 
-function LabelingExample({
-  context,
-  question,
-  explanationQuestion,
+function LabelingExampleCard({
+  example,
   selectedValue,
   onSelect,
   explanationText,
   onExplanationChange,
   readOnly = false,
 }: {
-  context: AutoevalContentBlock[];
-  question: Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>;
-  explanationQuestion?: Extract<
-    EventPayloadUserQuestion,
-    { type: "free_response" }
-  >;
+  example: AutoevalLabelingExample;
   selectedValue: string | null;
   onSelect: (value: string) => void;
   explanationText: string;
   onExplanationChange: (text: string) => void;
   readOnly?: boolean;
 }) {
+  const { context, label_question, explanation_question } = example;
+
   return (
     <div className="flex flex-col gap-3 rounded-md border border-purple-300 bg-purple-50 p-4 dark:border-purple-700 dark:bg-purple-950/30">
-      <span className="text-sm font-semibold">{question.header}</span>
+      <span className="text-sm font-semibold">{label_question.header}</span>
 
       {/* Context blocks */}
       {context.map((block, i) => (
@@ -97,12 +92,12 @@ function LabelingExample({
 
       {/* Question */}
       <Markdown className="text-fg-primary text-sm font-medium">
-        {question.question}
+        {label_question.question}
       </Markdown>
 
       {/* Options as compact radio-style buttons */}
       <div className="flex gap-2">
-        {question.options.map((option) => {
+        {label_question.options.map((option) => {
           const isSelected = selectedValue === option.id;
           return (
             <Tooltip key={option.id}>
@@ -129,10 +124,10 @@ function LabelingExample({
       </div>
 
       {/* Optional explanation */}
-      {explanationQuestion && (
+      {explanation_question && (
         <div className="flex flex-col gap-1">
           <span className="text-fg-muted text-xs">
-            {explanationQuestion.question}
+            {explanation_question.question}
           </span>
           <Textarea
             value={explanationText}
@@ -149,14 +144,25 @@ function LabelingExample({
 }
 
 /** Extract the initial selection/explanation state from saved answers. */
-function initFromAnswers(answers: Record<string, UserQuestionAnswer>) {
+function initFromAnswers(
+  examples: AutoevalLabelingExample[],
+  answers: Record<string, UserQuestionAnswer>,
+) {
   const selections: Record<string, string> = {};
   const explanations: Record<string, string> = {};
-  for (const [id, answer] of Object.entries(answers)) {
-    if (answer.type === "multiple_choice" && answer.selected.length > 0) {
-      selections[id] = answer.selected[0];
-    } else if (answer.type === "free_response") {
-      explanations[id] = answer.text;
+  for (const example of examples) {
+    const labelAnswer = answers[example.label_question.id];
+    if (
+      labelAnswer?.type === "multiple_choice" &&
+      labelAnswer.selected.length > 0
+    ) {
+      selections[example.label_question.id] = labelAnswer.selected[0];
+    }
+    if (example.explanation_question) {
+      const expAnswer = answers[example.explanation_question.id];
+      if (expAnswer?.type === "free_response") {
+        explanations[example.explanation_question.id] = expAnswer.text;
+      }
     }
   }
   return { selections, explanations };
@@ -179,21 +185,9 @@ export function AutoevalExampleLabelingCard({
   answers,
   readOnly = false,
 }: AutoevalExampleLabelingCardProps) {
-  const examples = payload.examples.map((example) => {
-    const labelQ = example.questions.find(
-      (q) => q.type === "multiple_choice",
-    ) as
-      | Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>
-      | undefined;
-    const explanationQ = example.questions.find(
-      (q) => q.type === "free_response",
-    ) as
-      | Extract<EventPayloadUserQuestion, { type: "free_response" }>
-      | undefined;
-    return { context: example.context, labelQ, explanationQ };
-  });
-
-  const initial = answers ? initFromAnswers(answers) : undefined;
+  const initial = answers
+    ? initFromAnswers(payload.examples, answers)
+    : undefined;
   const [selections, setSelections] = useState<Record<string, string>>(
     initial?.selections ?? {},
   );
@@ -204,24 +198,25 @@ export function AutoevalExampleLabelingCard({
   const handleSubmit = () => {
     if (!onSubmit) return;
     const responses: Record<string, UserQuestionAnswer> = {};
-    for (const { labelQ, explanationQ } of examples) {
-      if (labelQ) {
-        const selectedId = selections[labelQ.id];
-        if (selectedId) {
-          responses[labelQ.id] = {
-            type: "multiple_choice",
-            selected: [selectedId],
+    for (const example of payload.examples) {
+      const selectedId = selections[example.label_question.id];
+      if (selectedId) {
+        responses[example.label_question.id] = {
+          type: "multiple_choice",
+          selected: [selectedId],
+        };
+      } else {
+        responses[example.label_question.id] = { type: "skipped" };
+      }
+      if (example.explanation_question) {
+        const text = explanations[example.explanation_question.id];
+        if (text) {
+          responses[example.explanation_question.id] = {
+            type: "free_response",
+            text,
           };
         } else {
-          responses[labelQ.id] = { type: "skipped" };
-        }
-      }
-      if (explanationQ) {
-        const text = explanations[explanationQ.id];
-        if (text) {
-          responses[explanationQ.id] = { type: "free_response", text };
-        } else {
-          responses[explanationQ.id] = { type: "skipped" };
+          responses[example.explanation_question.id] = { type: "skipped" };
         }
       }
     }
@@ -230,33 +225,33 @@ export function AutoevalExampleLabelingCard({
 
   return (
     <div className="flex flex-col gap-4">
-      {examples.map(
-        ({ context, labelQ, explanationQ }) =>
-          labelQ && (
-            <LabelingExample
-              key={labelQ.id}
-              context={context}
-              question={labelQ}
-              explanationQuestion={explanationQ}
-              readOnly={readOnly}
-              selectedValue={selections[labelQ.id] ?? null}
-              onSelect={(value) =>
-                setSelections((prev) => ({ ...prev, [labelQ.id]: value }))
-              }
-              explanationText={
-                explanationQ ? (explanations[explanationQ.id] ?? "") : ""
-              }
-              onExplanationChange={(text) => {
-                if (explanationQ) {
-                  setExplanations((prev) => ({
-                    ...prev,
-                    [explanationQ.id]: text,
-                  }));
-                }
-              }}
-            />
-          ),
-      )}
+      {payload.examples.map((example) => (
+        <LabelingExampleCard
+          key={example.label_question.id}
+          example={example}
+          readOnly={readOnly}
+          selectedValue={selections[example.label_question.id] ?? null}
+          onSelect={(value) =>
+            setSelections((prev) => ({
+              ...prev,
+              [example.label_question.id]: value,
+            }))
+          }
+          explanationText={
+            example.explanation_question
+              ? (explanations[example.explanation_question.id] ?? "")
+              : ""
+          }
+          onExplanationChange={(text) => {
+            if (example.explanation_question) {
+              setExplanations((prev) => ({
+                ...prev,
+                [example.explanation_question!.id]: text,
+              }));
+            }
+          }}
+        />
+      ))}
 
       {!readOnly && (
         <button

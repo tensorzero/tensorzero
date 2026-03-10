@@ -13,6 +13,8 @@ export * from "./ApproveAllToolCallsResponse";
 export * from "./Arguments";
 export * from "./AutoRejectToolCallParams";
 export * from "./AutoevalContentBlock";
+export * from "./AutoevalExplanationQuestion";
+export * from "./AutoevalLabelQuestion";
 export * from "./AutoevalLabelingExample";
 export * from "./AutopilotSideInfo";
 export * from "./AutopilotStatus";
