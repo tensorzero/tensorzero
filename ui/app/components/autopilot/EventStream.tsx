@@ -27,6 +27,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
+import { AutoevalExampleLabelingCard } from "~/components/autopilot/AutoevalExampleLabeling";
 import type {
   AutopilotStatus,
   EventPayloadMessageContent,
@@ -720,6 +721,10 @@ function EventItem({
           }
         />
       )}
+      {shouldShowDetails &&
+        event.payload.type === "autoeval_example_labeling" && (
+          <AutoevalExampleLabelingCard payload={event.payload} />
+        )}
     </div>
   );
 }

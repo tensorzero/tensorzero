@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Textarea } from "~/components/ui/textarea";
 import {
@@ -13,44 +13,54 @@ import type {
   EventPayloadUserQuestion,
 } from "~/types/tensorzero";
 
+function CollapsibleWrapper({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="group rounded-md border">
+      <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium">
+        {label}
+      </summary>
+      <div
+        className="border-t px-3 py-2"
+        style={{ maxHeight: "300px", overflowY: "auto" }}
+      >
+        {children}
+      </div>
+    </details>
+  );
+}
+
 export function AutoevalContentBlockRenderer({
   block,
 }: {
   block: AutoevalContentBlock;
 }) {
+  const { label } = block;
+  let content: ReactNode;
   switch (block.type) {
     case "markdown":
-      return <Markdown className="text-sm">{block.text}</Markdown>;
+      content = <Markdown className="text-sm">{block.text}</Markdown>;
+      break;
     case "json":
-      return (
-        <div className="flex flex-col gap-1">
-          {block.label && (
-            <span className="text-fg-muted text-xs font-medium">
-              {block.label}
-            </span>
-          )}
-          <ReadOnlyCodeBlock
-            code={JSON.stringify(block.data, null, 2)}
-            language="json"
-            maxHeight="150px"
-          />
-        </div>
+      content = (
+        <ReadOnlyCodeBlock
+          code={JSON.stringify(block.data, null, 2)}
+          language="json"
+          maxHeight="150px"
+        />
       );
-    case "collapsible":
-      return (
-        <details className="group rounded-md border">
-          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium">
-            {block.label}
-          </summary>
-          <div
-            className="border-t px-3 py-2"
-            style={{ maxHeight: "300px", overflowY: "auto" }}
-          >
-            <Markdown className="text-sm">{block.text}</Markdown>
-          </div>
-        </details>
-      );
+      break;
   }
+
+  if (label) {
+    return <CollapsibleWrapper label={label}>{content}</CollapsibleWrapper>;
+  }
+  return content;
 }
 
 function LabelingExample({

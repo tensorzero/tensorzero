@@ -754,17 +754,20 @@ pub struct AutoevalLabelingExample {
     ts(export, tag = "type", rename_all = "snake_case")
 )]
 pub enum AutoevalContentBlock {
-    /// Rendered as formatted markdown.
-    Markdown { text: String },
-    /// Rendered as a labeled, formatted JSON viewer.
+    /// Rendered as formatted markdown. If `label` is set, wrapped in a collapsible section.
+    Markdown {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
+        label: Option<String>,
+    },
+    /// Rendered as a formatted JSON viewer. If `label` is set, wrapped in a collapsible section.
     Json {
         data: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "ts-bindings", ts(optional))]
         label: Option<String>,
     },
-    /// Rendered as a collapsible section with a label and markdown body.
-    Collapsible { label: String, text: String },
 }
 
 // =============================================================================
