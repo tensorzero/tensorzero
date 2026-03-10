@@ -112,9 +112,10 @@ export function formatXAxisTimestamp(
     case "day":
     case "week":
     case "month":
-    case "cumulative":
       // Format: YYYY-MM-DD
       return `${date.getFullYear()}-${month}-${day}`;
+    case "cumulative":
+      return "All time";
   }
 }
 
@@ -142,8 +143,9 @@ export function formatTooltipTimestamp(
     case "day":
     case "week":
     case "month":
-    case "cumulative":
       // Format: YYYY-MM-DD
       return `${year}-${month}-${day}`;
+    case "cumulative":
+      return "All time";
   }
 }
