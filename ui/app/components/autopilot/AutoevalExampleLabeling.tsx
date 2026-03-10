@@ -21,12 +21,12 @@ function CollapsibleWrapper({
   children: ReactNode;
 }) {
   return (
-    <details className="group rounded-md border">
+    <details className="group rounded-md border border-purple-200 dark:border-purple-800">
       <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium">
         {label}
       </summary>
       <div
-        className="border-t px-3 py-2"
+        className="border-t border-purple-200 px-3 py-2 dark:border-purple-800"
         style={{ maxHeight: "300px", overflowY: "auto" }}
       >
         {children}
