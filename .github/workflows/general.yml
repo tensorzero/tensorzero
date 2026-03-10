@@ -1462,8 +1462,15 @@ jobs:
         run: pnpm exec mint broken-links --check-anchors
 
   # See 'ci/README.md' at the repository root for more details.
+  # This job queries the GitHub API for all jobs in this workflow run and asserts
+  # that they all passed, except for jobs in the ALLOWED_FAIL and ALLOWED_SKIP
+  # lists defined in ci/check-all-general-jobs-passed.sh.
+  # The `needs` list below is for scheduling only (so this job waits for others
+  # to finish). The actual pass/fail logic is in the script.
   check-all-general-jobs-passed:
-    permissions: {}
+    permissions:
+      actions: read
+      contents: read
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
@@ -1504,11 +1511,11 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - name: Print all job results
-        run: |
-          echo "'needs': ${{ toJson(needs) }}"
-          echo "github.event_name: ${{ github.event_name }}"
-      # Jobs may be intentionally skipped by the detect-changes path filter (e.g. docs-only or code-only changes).
-      # We only fail on actual failures or cancellations.
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-        run: exit 1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          sparse-checkout: ci/check-all-general-jobs-passed.sh
+          sparse-checkout-cone-mode: false
+      - name: Check all jobs passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./ci/check-all-general-jobs-passed.sh
