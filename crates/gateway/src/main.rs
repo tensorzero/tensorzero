@@ -134,8 +134,6 @@ async fn run() -> Result<(), ExitCode> {
         .await
         .log_err_pretty("Failed to set up logs")?;
 
-    let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
-
     if args.early_exit_commands.create_api_key {
         handle_create_api_key(args.early_exit_command_arguments.expiration)
             .await
@@ -177,7 +175,7 @@ async fn run() -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
+    tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION}");
 
     // Handle `--config-file` or `--default-config`
     let (unwritten_config, glob) = match (args.default_config, args.config_file) {
@@ -624,24 +622,25 @@ pub async fn shutdown_signal() {
     };
 }
 
-/// Spawn the autopilot worker if environment variables are set.
+/// Spawn the durable worker if Postgres is configured.
+///
+/// The worker processes tasks from the durable queue. It starts whenever Postgres
+/// is available, regardless of whether the autopilot API key is set. This allows
+/// standalone durable tools (e.g. GEPA) to run without autopilot credentials.
 async fn spawn_autopilot_worker_if_configured(
     gateway_handle: &gateway::GatewayHandle,
 ) -> Result<Option<AutopilotWorkerHandle>, ExitCode> {
-    // Only start if autopilot client is configured
-    if gateway_handle.app_state.autopilot_client.is_none() {
-        tracing::debug!("Autopilot worker not configured: TENSORZERO_AUTOPILOT_API_KEY not set");
-        return Ok(None);
-    }
-
-    // Only start if postgres is enabled (needed for durable task queue)
+    // Only start if Postgres is enabled (needed for durable task queue)
     let pool = match &gateway_handle.app_state.postgres_connection_info {
         PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
         PostgresConnectionInfo::Disabled => {
-            tracing::error!(
-                "TENSORZERO_AUTOPILOT_API_KEY env var set, but Postgres is not enabled."
-            );
-            return Err(ExitCode::FAILURE);
+            if std::env::var("TENSORZERO_AUTOPILOT_API_KEY").is_ok() {
+                tracing::error!(
+                    "`TENSORZERO_AUTOPILOT_API_KEY` is set, but Postgres is not enabled."
+                );
+                return Err(ExitCode::FAILURE);
+            }
+            return Ok(None);
         }
         #[cfg(test)]
         #[expect(unreachable_patterns)]

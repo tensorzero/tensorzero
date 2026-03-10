@@ -458,9 +458,7 @@ pub async fn insert_migration_record(
                 migration_id,
                 migration_name,
                 gateway_version: TENSORZERO_VERSION.to_string(),
-                gateway_git_sha: crate::built_info::GIT_COMMIT_HASH
-                    .unwrap_or("unknown")
-                    .to_string(),
+                gateway_git_sha: String::new(),
                 execution_time_ms: execution_time.as_millis() as u64,
                 applied_at: None,
             }]),

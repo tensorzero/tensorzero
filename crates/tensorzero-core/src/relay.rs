@@ -210,7 +210,7 @@ fn relay_error_from_tensorzero_error(e: TensorZeroError, api_type: ApiType) -> E
             raw_chunk: None,
             status_code: Some(StatusCode::REQUEST_TIMEOUT),
         }),
-        TensorZeroError::Other { .. } | TensorZeroError::Git { .. } => {
+        TensorZeroError::Other { .. } => {
             let message = e.to_string();
             Error::new(ErrorDetails::Relay {
                 message: message.clone(),

@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::error::SpawnError;
 use crate::params::TaskToolParams;
+use crate::types::{TaskPollResult, TaskStatus};
 
 /// A lightweight client for spawning durable tasks.
 ///
@@ -153,6 +154,59 @@ impl SpawnClient {
     /// Get the database pool.
     pub fn pool(&self) -> &PgPool {
         self.durable.pool()
+    }
+
+    /// Poll the status and result of a durable task by ID.
+    ///
+    /// Returns the current status of the task. If the task has completed,
+    /// the result includes the task's output payload. If the task has failed,
+    /// the result includes error information from the last run.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SpawnError::TaskNotFound` if no task with the given ID exists.
+    /// Returns `SpawnError::InvalidState` if the database returns an unrecognized state.
+    pub async fn get_task_result(&self, task_id: Uuid) -> Result<TaskPollResult, SpawnError> {
+        let queue_name = self.queue_name();
+
+        // Query the task table for state and completed_payload
+        let query = format!(
+            "SELECT state, completed_payload FROM durable.t_{queue_name} WHERE task_id = $1"
+        );
+
+        let row: Option<(String, Option<JsonValue>)> = sqlx::query_as(sqlx::AssertSqlSafe(query))
+            .bind(task_id)
+            .fetch_optional(self.pool())
+            .await?;
+
+        let (state_str, completed_payload) = row.ok_or(SpawnError::TaskNotFound(task_id))?;
+
+        let status: TaskStatus = state_str
+            .parse()
+            .map_err(|_| SpawnError::InvalidState(state_str.clone()))?;
+
+        // For failed tasks, fetch the failure_reason from the latest run
+        let error = if status == TaskStatus::Failed {
+            let error_query = format!(
+                "SELECT failure_reason FROM durable.r_{queue_name} \
+                 WHERE task_id = $1 AND failure_reason IS NOT NULL \
+                 ORDER BY attempt DESC LIMIT 1"
+            );
+            let error_row: Option<(Option<JsonValue>,)> =
+                sqlx::query_as(sqlx::AssertSqlSafe(error_query))
+                    .bind(task_id)
+                    .fetch_optional(self.pool())
+                    .await?;
+            error_row.and_then(|(reason,)| reason)
+        } else {
+            None
+        };
+
+        Ok(TaskPollResult {
+            status,
+            result: completed_payload,
+            error,
+        })
     }
 
     /// Interrupt all durable tasks associated with a session ID.
