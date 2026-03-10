@@ -9,7 +9,7 @@
 //! subsequent steps. Instead, each step receives only the fields it needs.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -244,7 +244,7 @@ async fn execute_gepa(
         variants: setup.original_variants.clone(),
         max_concurrency: setup.gepa_config.max_concurrency,
     };
-    let init_scores: HashMap<VariantName, VariantScores> = ctx
+    let init_scores: BTreeMap<VariantName, VariantScores> = ctx
         .step("init_eval", init_eval_params, init_eval_step)
         .await?;
 
@@ -713,10 +713,10 @@ async fn setup_step(
 async fn init_eval_step(
     params: InitEvalStepParams,
     step_state: StepState<ToolAppState>,
-) -> anyhow::Result<HashMap<VariantName, VariantScores>> {
+) -> anyhow::Result<BTreeMap<VariantName, VariantScores>> {
     let heartbeater: Arc<dyn Heartbeater> = step_state.heartbeater.clone();
     let client = step_state.state.t0_client();
-    let mut all_scores: HashMap<VariantName, VariantScores> = HashMap::new();
+    let mut all_scores: BTreeMap<VariantName, VariantScores> = BTreeMap::new();
 
     for (variant_name, variant_config) in &params.variants {
         let variant_info = UninitializedVariantInfo {
