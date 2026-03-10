@@ -394,6 +394,7 @@ class _AsyncGepaNamespace:
         batch_size: Optional[int] = None,
         seed: Optional[int] = None,
         include_inference_for_mutation: Optional[bool] = None,
+        max_concurrency: Optional[int] = None,
     ) -> GepaLaunchResponse: ...
     async def get(self, *, task_id: str) -> Dict[str, Any]: ...
 
