@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
+import { DateTimePicker } from "~/components/ui/date-time-picker";
 import {
   Dialog,
   DialogBody,
@@ -35,7 +35,7 @@ export function GenerateApiKeyModal({
   const { copy, didCopy, isCopyAvailable } = useCopy();
   const isReadOnly = useReadOnly();
   const [description, setDescription] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
+  const [expiresAt, setExpiresAt] = useState<Date | undefined>(undefined);
 
   const isSubmitting = fetcher.state === "submitting";
   const apiKey = fetcher.data?.apiKey;
@@ -99,7 +99,7 @@ export function GenerateApiKeyModal({
                 <div className="space-y-2">
                   <Label>Expires</Label>
                   <p className="text-muted-foreground text-sm">
-                    {new Date(expiresAt).toLocaleString()}
+                    {expiresAt.toLocaleString()}
                   </p>
                 </div>
               )}
@@ -138,13 +138,12 @@ export function GenerateApiKeyModal({
                   Expiration Date{" "}
                   <span className="text-muted-foreground">(optional)</span>
                 </Label>
-                <Input
+                <DateTimePicker
                   id="expires_at"
-                  name="expires_at"
-                  type="datetime-local"
                   value={expiresAt}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                  min={new Date().toISOString().slice(0, 16)}
+                  onChange={setExpiresAt}
+                  minDate={new Date()}
+                  placeholder="No expiration"
                 />
               </div>
               {error && (
@@ -183,10 +182,7 @@ export function GenerateApiKeyModal({
                     formData.append("description", description);
                   }
                   if (expiresAt) {
-                    formData.append(
-                      "expires_at",
-                      new Date(expiresAt).toISOString(),
-                    );
+                    formData.append("expires_at", expiresAt.toISOString());
                   }
                   fetcher.submit(formData, { method: "post" });
                 }}

@@ -427,11 +427,18 @@ test("should create API key with expiration date and show it in the table", asyn
     page.getByRole("heading", { name: "Generate API Key" }),
   ).toBeVisible();
 
-  // Set expiration date to one year from now
-  const futureDate = new Date();
-  futureDate.setFullYear(futureDate.getFullYear() + 1);
-  const futureDateStr = futureDate.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:mm"
-  await page.locator("#expires_at").fill(futureDateStr);
+  await page.locator("#expires_at").click();
+  // Wait for the calendar grid to be visible before interacting
+  await expect(page.getByRole("grid")).toBeVisible();
+
+  // Navigate to next month (aria-label is "Go to the Next Month")
+  await page.getByRole("button", { name: "Go to the Next Month" }).click();
+
+  // Pick day 15 of next month (aria-label includes "15th")
+  await page.getByRole("button", { name: /15th/ }).click();
+
+  // Close the popover by clicking outside
+  await page.keyboard.press("Escape");
 
   const generateButton = page.getByRole("button", { name: "Generate Key" });
   await expect(generateButton).toBeVisible();
