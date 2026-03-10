@@ -148,6 +148,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::internal::evaluations::get_evaluation_results_handler),
         )
         .route(
+            "/internal/evaluations/run_metadata",
+            get(endpoints::internal::evaluations::get_run_metadata_handler),
+        )
+        .route(
             "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback",
             post(endpoints::internal::evaluations::get_human_feedback_handler),
         )
