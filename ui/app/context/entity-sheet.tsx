@@ -130,19 +130,3 @@ export function useEntitySheet() {
   }
   return context;
 }
-
-/** No-op provider for Storybook — avoids requiring Router context. */
-export function MockEntitySheetProvider({ children }: { children: ReactNode }) {
-  return (
-    <EntitySheetContext.Provider
-      value={{
-        sheetState: null,
-        openInferenceSheet: () => {},
-        closeSheet: () => {},
-        handleUuidLinkClick: () => {},
-      }}
-    >
-      {children}
-    </EntitySheetContext.Provider>
-  );
-}

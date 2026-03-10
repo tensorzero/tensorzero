@@ -27,10 +27,8 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
-import { AutoevalExampleLabelingCard } from "~/components/autopilot/AutoevalExampleLabeling";
 import type {
   AutopilotStatus,
-  EventPayloadAutoevalExampleLabeling,
   EventPayloadMessageContent,
   EventPayloadUserQuestion,
   GatewayEvent,
@@ -598,8 +596,6 @@ const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 type EventItemProps = {
   event: GatewayEvent;
   questionsMap?: Map<string, EventPayloadUserQuestion[]>;
-  autoevalAnswersMap?: Map<string, Record<string, UserQuestionAnswer>>;
-  autoevalPayloadMap?: Map<string, EventPayloadAutoevalExampleLabeling>;
   isPendingToolCall?: boolean;
   isPendingQuestion?: boolean;
   configApplyEnabled?: boolean;
@@ -609,8 +605,6 @@ type EventItemProps = {
 function EventItem({
   event,
   questionsMap,
-  autoevalAnswersMap,
-  autoevalPayloadMap,
   isPendingToolCall = false,
   isPendingQuestion = false,
   configApplyEnabled = false,
@@ -627,7 +621,6 @@ function EventItem({
     event.payload.type === "visualization" ||
     event.payload.type === "user_questions" ||
     event.payload.type === "user_questions_answers" ||
-    event.payload.type === "autoeval_example_labeling" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
@@ -718,35 +711,14 @@ function EventItem({
       {shouldShowDetails && event.payload.type === "user_questions" && (
         <UserQuestionsContent questions={event.payload.questions} />
       )}
-      {shouldShowDetails &&
-        event.payload.type === "user_questions_answers" &&
-        !autoevalPayloadMap?.has(event.payload.user_questions_event_id) && (
-          <UserQuestionsAnswersContent
-            responses={event.payload.responses}
-            questions={
-              questionsMap?.get(event.payload.user_questions_event_id) ?? []
-            }
-          />
-        )}
-      {shouldShowDetails &&
-        event.payload.type === "user_questions_answers" &&
-        autoevalPayloadMap?.has(event.payload.user_questions_event_id) && (
-          <AutoevalExampleLabelingCard
-            payload={
-              autoevalPayloadMap.get(event.payload.user_questions_event_id)!
-            }
-            readOnly
-            answers={event.payload.responses}
-          />
-        )}
-      {shouldShowDetails &&
-        event.payload.type === "autoeval_example_labeling" && (
-          <AutoevalExampleLabelingCard
-            payload={event.payload}
-            readOnly
-            answers={autoevalAnswersMap?.get(event.id)}
-          />
-        )}
+      {shouldShowDetails && event.payload.type === "user_questions_answers" && (
+        <UserQuestionsAnswersContent
+          responses={event.payload.responses}
+          questions={
+            questionsMap?.get(event.payload.user_questions_event_id) ?? []
+          }
+        />
+      )}
     </div>
   );
 }
@@ -869,37 +841,13 @@ export default function EventStream({
   configApplyEnabled = false,
   sessionId,
 }: EventStreamProps) {
-  // Map from `user_questions` event ID → questions array, used to resolve
+  // Map from user_questions event ID → questions array, used to resolve
   // option labels when rendering user_questions_answers events.
   const questionsMap = useMemo(() => {
     const map = new Map<string, EventPayloadUserQuestion[]>();
     for (const event of events) {
       if (event.payload.type === "user_questions") {
         map.set(event.id, event.payload.questions);
-      }
-    }
-    return map;
-  }, [events]);
-
-  // Map from `autoeval_example_labeling` event ID → saved answers from the
-  // corresponding `user_questions_answers` event.
-  const autoevalAnswersMap = useMemo(() => {
-    const map = new Map<string, Record<string, UserQuestionAnswer>>();
-    for (const event of events) {
-      if (event.payload.type === "user_questions_answers") {
-        map.set(event.payload.user_questions_event_id, event.payload.responses);
-      }
-    }
-    return map;
-  }, [events]);
-
-  // Map from `autoeval_example_labeling` event ID → payload, for rendering
-  // completed labeling cards with saved answers.
-  const autoevalPayloadMap = useMemo(() => {
-    const map = new Map<string, EventPayloadAutoevalExampleLabeling>();
-    for (const event of events) {
-      if (event.payload.type === "autoeval_example_labeling") {
-        map.set(event.id, event.payload);
       }
     }
     return map;
@@ -938,8 +886,6 @@ export default function EventStream({
           <EventItem
             event={event}
             questionsMap={questionsMap}
-            autoevalAnswersMap={autoevalAnswersMap}
-            autoevalPayloadMap={autoevalPayloadMap}
             isPendingToolCall={pendingToolCallIds?.has(event.id)}
             isPendingQuestion={pendingUserQuestionIds?.has(event.id)}
             configApplyEnabled={configApplyEnabled}
