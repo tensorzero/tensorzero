@@ -32,19 +32,25 @@ export function isReadOnlyMode(): boolean {
  *
  * @throws {Response} 403 Forbidden response if in read-only mode and method is not GET or HEAD
  */
+// POST endpoints that are not data mutations and should bypass read-only mode.
+const READ_ONLY_BYPASS_PATHS = new Set(["/api/auth/set_gateway_key"]);
+
 export const readOnlyMiddleware: Route.MiddlewareFunction = async ({
   request,
 }) => {
   if (isReadOnlyMode()) {
     const method = request.method.toUpperCase();
     if (method !== "GET" && method !== "HEAD") {
-      throw data(
-        {
-          error:
-            "This operation is not allowed in read-only mode. All write operations are disabled.",
-        },
-        { status: 403 },
-      );
+      const url = new URL(request.url);
+      if (!READ_ONLY_BYPASS_PATHS.has(url.pathname)) {
+        throw data(
+          {
+            error:
+              "This operation is not allowed in read-only mode. All write operations are disabled.",
+          },
+          { status: 403 },
+        );
+      }
     }
   }
 };

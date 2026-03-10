@@ -7,3 +7,6 @@ RUN apt-get update \
 
 # Configure postgresql.conf to load pg_cron
 RUN echo "shared_preload_libraries = 'pg_cron'" >> /usr/share/postgresql/postgresql.conf.sample
+
+# The base postgres image creates a `postgres` user (UID 999)
+USER postgres
