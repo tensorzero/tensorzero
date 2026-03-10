@@ -840,19 +840,20 @@ async fn setup_autopilot_client(
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
-            let pool = match postgres_connection_info.get_pool() {
-                Some(pool) => pool,
-                None => {
-                    tracing::warn!(
-                        "Autopilot client requires Postgres; set `TENSORZERO_POSTGRES_URL`. Skipping autopilot setup."
-                    );
-                    return Ok(None);
-                }
-            };
+            let pool = postgres_connection_info.get_pool().ok_or_else(|| {
+                Error::new(ErrorDetails::AppState {
+                    message: "Autopilot client requires Postgres; set `TENSORZERO_POSTGRES_URL`."
+                        .to_string(),
+                })
+            })?;
 
+            // Require `deployment_id` (from ClickHouse) for autopilot
             if deployment_id.is_none() {
-                tracing::warn!("Failed to fetch the deployment ID. Skipping autopilot setup.");
-                return Ok(None);
+                return Err(Error::new(ErrorDetails::AppState {
+                    message:
+                        "Failed to fetch the deployment ID from ClickHouse. Please make sure that ClickHouse is running and accessible."
+                            .to_string(),
+                }));
             }
             let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
                 .unwrap_or_else(|_| "autopilot".to_string());
