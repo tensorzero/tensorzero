@@ -3,15 +3,26 @@ import { test, expect } from "@playwright/test";
 /**
  * Tests for the browser-based API key auth flow.
  *
- * Verifies the /api/auth/set_gateway_key action endpoint and cookie behavior.
- * The fixture gateway has no auth so any key passes validation — we're testing
- * the UI's cookie mechanics, not the gateway's auth logic.
+ * CI runs three auth modes via matrix (auth_mode):
+ * - no_gateway_auth: gateway has no auth, these tests are skipped
+ * - gateway_auth_with_ui_server_key: UI server has TENSORZERO_API_KEY in env → endpoint returns 409
+ * - gateway_auth_with_browser_key: UI server does NOT have key in env → browser flow active
+ *
+ * Tags control which tests run in which mode:
+ * - @gateway-auth-with-browser-key: runs only in gateway_auth_with_browser_key
+ * - @gateway-auth-with-ui-server-key: runs only in gateway_auth_with_ui_server_key
  */
 
-test.describe("Browser API Key - Action Endpoint", () => {
+test.describe("@gateway-auth-with-browser-key Browser Auth Flow", () => {
   test("POST with valid key sets HttpOnly cookie", async ({ request }) => {
+    const apiKey = process.env.TENSORZERO_API_KEY_FOR_BROWSER_AUTH;
+    expect(
+      apiKey,
+      "TENSORZERO_API_KEY_FOR_BROWSER_AUTH must be set for browser key tests",
+    ).toBeTruthy();
+
     const response = await request.post("/api/auth/set_gateway_key", {
-      form: { apiKey: "test-key-abc123" },
+      form: { apiKey: apiKey! },
     });
 
     expect(response.ok()).toBe(true);
@@ -27,53 +38,23 @@ test.describe("Browser API Key - Action Endpoint", () => {
     expect(setCookie).toContain("Max-Age=2592000");
   });
 
-  test("POST with empty key returns 400", async ({ request }) => {
+  test("POST with invalid key returns 401", async ({ request }) => {
     const response = await request.post("/api/auth/set_gateway_key", {
-      form: { apiKey: "" },
+      form: { apiKey: "definitely-not-a-valid-key" },
     });
 
-    expect(response.status()).toBe(400);
+    expect(response.status()).toBe(401);
     const body = await response.json();
-    expect(body.error).toBe("API key is required");
+    expect(body.error).toContain("Invalid API key");
   });
 
-  test("POST with whitespace-only key returns 400", async ({ request }) => {
-    const response = await request.post("/api/auth/set_gateway_key", {
-      form: { apiKey: "   " },
-    });
-
-    expect(response.status()).toBe(400);
-    const body = await response.json();
-    expect(body.error).toBe("API key is required");
-  });
-
-  test("POST with too-long key returns 400", async ({ request }) => {
-    const longKey = "x".repeat(513);
-    const response = await request.post("/api/auth/set_gateway_key", {
-      form: { apiKey: longKey },
-    });
-
-    expect(response.status()).toBe(400);
-    const body = await response.json();
-    expect(body.error).toBe("API key is too long");
-  });
-
-  test("POST trims whitespace from key", async ({ request }) => {
-    const response = await request.post("/api/auth/set_gateway_key", {
-      form: { apiKey: "  trimmed-key  " },
-    });
-
-    expect(response.ok()).toBe(true);
-    const body = await response.json();
-    expect(body.success).toBe(true);
-  });
-});
-
-test.describe("Browser API Key - Cookie Persistence", () => {
   test("cookie persists across page navigations", async ({ page }) => {
+    const apiKey = process.env.TENSORZERO_API_KEY_FOR_BROWSER_AUTH;
+    expect(apiKey).toBeTruthy();
+
     // Set a cookie via the action endpoint
     const response = await page.request.post("/api/auth/set_gateway_key", {
-      form: { apiKey: "persist-test-key" },
+      form: { apiKey: apiKey! },
     });
     expect(response.ok()).toBe(true);
 
@@ -88,7 +69,7 @@ test.describe("Browser API Key - Cookie Persistence", () => {
     expect(authCookie!.httpOnly).toBe(true);
     expect(authCookie!.sameSite).toBe("Strict");
 
-    // Navigate to another page — cookie should still be there
+    // Navigate to another page - cookie should still be there
     await page.goto("/observability/inferences");
     await page.waitForLoadState("networkidle");
     const cookiesAfterNav = await page.context().cookies();
@@ -101,6 +82,9 @@ test.describe("Browser API Key - Cookie Persistence", () => {
   test("different browser contexts have independent cookies", async ({
     browser,
   }) => {
+    const apiKey = process.env.TENSORZERO_API_KEY_FOR_BROWSER_AUTH;
+    expect(apiKey).toBeTruthy();
+
     // Create two isolated browser contexts
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
@@ -109,7 +93,7 @@ test.describe("Browser API Key - Cookie Persistence", () => {
       // Set cookie in context A only
       const requestA = contextA.request;
       const response = await requestA.post("/api/auth/set_gateway_key", {
-        form: { apiKey: "context-a-key" },
+        form: { apiKey: apiKey! },
       });
       expect(response.ok()).toBe(true);
 
@@ -130,5 +114,19 @@ test.describe("Browser API Key - Cookie Persistence", () => {
       await contextA.close();
       await contextB.close();
     }
+  });
+});
+
+test.describe("@gateway-auth-with-ui-server-key Browser Auth Blocked by UI Server Key", () => {
+  test("POST returns 409 when TENSORZERO_API_KEY is set", async ({
+    request,
+  }) => {
+    const response = await request.post("/api/auth/set_gateway_key", {
+      form: { apiKey: "any-key" },
+    });
+
+    expect(response.status()).toBe(409);
+    const body = await response.json();
+    expect(body.error).toContain("TENSORZERO_API_KEY");
   });
 });

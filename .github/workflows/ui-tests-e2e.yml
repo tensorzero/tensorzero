@@ -339,13 +339,15 @@ jobs:
   # Main E2E test job - uses provider-proxy for HTTP-level caching of provider API calls.
   # Replaces the previous ui-tests-e2e-credentials and ui-tests-e2e-existing-model-inference-cache jobs.
   ui-tests-e2e-main:
-    name: ui-tests-e2e-main (auth=${{ matrix.auth_enabled }})
+    name: ui-tests-e2e-main (${{ matrix.auth_mode }})
     runs-on: ubuntu-latest
     if: ${{ github.repository == 'tensorzero/tensorzero' && ((github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group) }}
 
     strategy:
       matrix:
-        auth_enabled: ${{ inputs.is_merge_group && fromJSON('[true, false]') || fromJSON('[false]') }}
+        # PRs: no_gateway_auth (full suite) + gateway_auth_with_browser_key (few browser auth tests)
+        # Merge queue: adds gateway_auth_with_ui_server_key (full suite with UI server-side API key)
+        auth_mode: ${{ inputs.is_merge_group && fromJSON('["no_gateway_auth", "gateway_auth_with_ui_server_key", "gateway_auth_with_browser_key"]') || fromJSON('["no_gateway_auth", "gateway_auth_with_browser_key"]') }}
 
     steps:
       - name: Check out the repo
@@ -449,14 +451,14 @@ jobs:
           echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
           echo "TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
 
-      - name: Enable authentication in config
-        if: matrix.auth_enabled == true
+      - name: Enable gateway authentication in config
+        if: matrix.auth_mode != 'no_gateway_auth'
         working-directory: ui
         run: |
           sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
 
-      - name: Generate API key
-        if: matrix.auth_enabled == true
+      - name: Generate gateway API key and configure for auth mode
+        if: matrix.auth_mode != 'no_gateway_auth'
         working-directory: ui
         run: |
           echo "Starting postgres..."
@@ -494,7 +496,13 @@ jobs:
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
             --create-api-key)
 
-          echo "TENSORZERO_API_KEY=$API_KEY" >> fixtures/.env
+          if [ "${{ matrix.auth_mode }}" = "gateway_auth_with_ui_server_key" ]; then
+            # Server key mode: UI server uses this key to authenticate all requests to the gateway
+            echo "TENSORZERO_API_KEY=$API_KEY" >> fixtures/.env
+          elif [ "${{ matrix.auth_mode }}" = "gateway_auth_with_browser_key" ]; then
+            # Browser key mode: pass to test runner so e2e tests can submit it via the browser auth endpoint
+            echo "TENSORZERO_API_KEY_FOR_BROWSER_AUTH=$API_KEY" >> "$GITHUB_ENV"
+          fi
 
       # Free up disk space from multi-stage builder images
       - name: Prune docker images to free up disk space
@@ -516,7 +524,23 @@ jobs:
           TENSORZERO_CI: 1
           TENSORZERO_POSTGRES_URL: "postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures"
           TENSORZERO_GATEWAY_URL: "http://gateway:3000"
-        run: pnpm ui:test:e2e --grep-invert "@mock" -j 4
+        run: |
+          case "${{ matrix.auth_mode }}" in
+            no_gateway_auth)
+              # Skip all auth-specific tests - gateway has no authentication
+              pnpm ui:test:e2e --grep-invert "@mock|@gateway-auth-with-ui-server-key|@gateway-auth-with-browser-key" -j 4
+              ;;
+            gateway_auth_with_ui_server_key)
+              # Run all tests except mock and browser-key - UI server has the API key,
+              # so @gateway-auth-with-ui-server-key tests (409 rejection) are included
+              pnpm ui:test:e2e --grep-invert "@mock|@gateway-auth-with-browser-key" -j 4
+              ;;
+            gateway_auth_with_browser_key)
+              # Run ONLY browser key tests - gateway has auth but UI server has no API key,
+              # so tests submit the key via the browser auth endpoint
+              pnpm ui:test:e2e --grep "@gateway-auth-with-browser-key" -j 4
+              ;;
+          esac
 
       - name: Upload provider-proxy cache to R2
         if: ${{ always() && (inputs.is_merge_group || github.event_name == 'schedule') }}
@@ -549,7 +573,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: playwright-report-e2e-main-auth-${{ matrix.auth_enabled }}
+          name: playwright-report-e2e-main-${{ matrix.auth_mode }}
           path: |
             ui/playwright-report/
             ui/test-results/
