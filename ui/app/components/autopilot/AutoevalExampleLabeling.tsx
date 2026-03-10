@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
 import { Textarea } from "~/components/ui/textarea";
 import {
@@ -194,6 +194,15 @@ export function AutoevalExampleLabelingCard({
   const [explanations, setExplanations] = useState<Record<string, string>>(
     initial?.explanations ?? {},
   );
+
+  // Sync state when answers arrive after initial mount (e.g. SSE delivers
+  // user_questions_answers while the card is already expanded).
+  useEffect(() => {
+    if (!answers) return;
+    const updated = initFromAnswers(payload.examples, answers);
+    setSelections(updated.selections);
+    setExplanations(updated.explanations);
+  }, [answers, payload.examples]);
 
   const handleSubmit = () => {
     if (!onSubmit) return;
