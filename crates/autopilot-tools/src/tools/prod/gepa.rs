@@ -15,8 +15,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use durable_tools::{
-    RunEvaluationParams, RunEvaluationResponse, TaskTool, ToolAppState, ToolContext, ToolMetadata,
-    ToolResult,
+    Heartbeater, RunEvaluationParams, RunEvaluationResponse, StepState, TaskTool, ToolAppState,
+    ToolContext, ToolMetadata, ToolResult,
 };
 use futures::future::join_all;
 use rand::seq::{IndexedRandom, SliceRandom};
@@ -487,8 +487,11 @@ async fn execute_gepa(
 // ── Step functions ──────────────────────────────────────────────────────
 
 /// Setup step: validate config, resolve initial variants, create val dataset.
-async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Result<SetupResult> {
-    let client = state.t0_client();
+async fn setup_step(
+    params: GepaToolParams,
+    step_state: StepState<ToolAppState>,
+) -> anyhow::Result<SetupResult> {
+    let client = step_state.state.t0_client();
 
     // Get live config for validation
     let config_response = client
@@ -695,9 +698,10 @@ async fn setup_step(params: GepaToolParams, state: ToolAppState) -> anyhow::Resu
 /// Initial evaluation step: evaluate all initial variants on validation set.
 async fn init_eval_step(
     params: InitEvalStepParams,
-    state: ToolAppState,
+    step_state: StepState<ToolAppState>,
 ) -> anyhow::Result<HashMap<VariantName, VariantScores>> {
-    let client = state.t0_client();
+    let heartbeater: Arc<dyn Heartbeater> = step_state.heartbeater.clone();
+    let client = step_state.state.t0_client();
     let mut all_scores: HashMap<VariantName, VariantScores> = HashMap::new();
 
     for (variant_name, variant_config) in &params.variants {
@@ -721,7 +725,10 @@ async fn init_eval_step(
             include_evaluation_infos: false,
         };
 
-        match client.run_evaluation(eval_params).await {
+        match client
+            .run_evaluation(eval_params, heartbeater.clone())
+            .await
+        {
             Ok(response) => {
                 let scores = extract_scores_from_response(&response);
                 if !scores.is_empty() {
@@ -740,9 +747,10 @@ async fn init_eval_step(
 /// Evaluate a variant on a dataset (used for parent, child, and validation evaluations).
 async fn eval_variant_step(
     params: EvalStepParams,
-    state: ToolAppState,
+    step_state: StepState<ToolAppState>,
 ) -> anyhow::Result<Option<EvalResult>> {
-    let client = state.t0_client();
+    let heartbeater: Arc<dyn Heartbeater> = step_state.heartbeater.clone();
+    let client = step_state.state.t0_client();
 
     let variant_info = UninitializedVariantInfo {
         inner: UninitializedVariantConfig::ChatCompletion(params.variant_config),
@@ -764,7 +772,10 @@ async fn eval_variant_step(
         include_evaluation_infos: false,
     };
 
-    match client.run_evaluation(eval_params).await {
+    match client
+        .run_evaluation(eval_params, heartbeater.clone())
+        .await
+    {
         Ok(response) => {
             let scores = extract_scores_from_response(&response);
             if scores.is_empty() {
@@ -794,9 +805,10 @@ async fn eval_variant_step(
 /// checkpointed.
 async fn eval_analyze_mutate_step(
     params: EvalAnalyzeMutateStepParams,
-    state: ToolAppState,
+    step_state: StepState<ToolAppState>,
 ) -> anyhow::Result<Option<EvalAnalyzeMutateResult>> {
-    let client = state.t0_client();
+    let heartbeater: Arc<dyn Heartbeater> = step_state.heartbeater.clone();
+    let client = step_state.state.t0_client();
 
     // ── 1. Evaluate parent with evaluation_infos ────────────────
     let variant_info = UninitializedVariantInfo {
@@ -819,7 +831,10 @@ async fn eval_analyze_mutate_step(
         include_evaluation_infos: true,
     };
 
-    let response = match client.run_evaluation(eval_params).await {
+    let response = match client
+        .run_evaluation(eval_params, heartbeater.clone())
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(
