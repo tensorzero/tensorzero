@@ -216,6 +216,7 @@ pub enum EventPayload {
     Visualization(EventPayloadVisualization),
     UserQuestions(EventPayloadUserQuestions),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
+    AutoevalExampleLabeling(EventPayloadAutoevalExampleLabeling),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -255,6 +256,7 @@ pub enum GatewayEventPayload {
     Visualization(EventPayloadVisualization),
     UserQuestions(EventPayloadUserQuestions),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
+    AutoevalExampleLabeling(EventPayloadAutoevalExampleLabeling),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -277,6 +279,9 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             EventPayload::UserQuestions(q) => Ok(GatewayEventPayload::UserQuestions(q)),
             EventPayload::UserQuestionsAnswers(r) => {
                 Ok(GatewayEventPayload::UserQuestionsAnswers(r))
+            }
+            EventPayload::AutoevalExampleLabeling(l) => {
+                Ok(GatewayEventPayload::AutoevalExampleLabeling(l))
             }
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
@@ -712,6 +717,71 @@ pub struct MultipleChoiceAnswer {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FreeResponseAnswer {
     pub text: String,
+}
+
+// =============================================================================
+// Autoeval Example Labeling Types
+// =============================================================================
+
+/// Payload for an autoeval example labeling event.
+///
+/// Contains a vector of labeling items that the UI tabs through.
+/// Each item is a flexible bundle of optional content blocks,
+/// an optional multiple-choice question, and an optional free-response
+/// question — all reusing existing atomic types.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadAutoevalExampleLabeling {
+    pub items: Vec<AutoevalLabelingItem>,
+}
+
+/// A single labeling item — a flexible bundle of context + questions.
+///
+/// All fields are optional so the LLM can compose whatever combination
+/// it needs: context-only, question-only, or the full bundle.
+/// The UI renders whichever fields are present and tabs through items.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct AutoevalLabelingItem {
+    /// Short label for the tab (e.g. "Example 1", "Security Review").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<String>,
+    /// Rich content blocks providing context (e.g. prompt and response).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context: Vec<AutoevalContentBlock>,
+    /// Optional multiple-choice question (reuses existing question atom).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multiple_choice: Option<EventPayloadUserQuestion>,
+    /// Optional free-response question (reuses existing question atom).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub free_response: Option<EventPayloadUserQuestion>,
+}
+
+/// A block of rich content displayed alongside an autoeval example.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
+pub enum AutoevalContentBlock {
+    /// Rendered as formatted text/markdown.
+    Markdown {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
+        label: Option<String>,
+    },
+    /// Rendered as a formatted JSON viewer.
+    Json {
+        data: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
+        label: Option<String>,
+    },
 }
 
 // =============================================================================
