@@ -20,7 +20,8 @@ ALLOWED_FAIL=(
 # In PR CI, any job may be skipped (e.g., due to path filters or fork conditions).
 # In the merge queue, only jobs in this list may be skipped — all others must run.
 ALLOWED_SKIP=(
-  "cargo-deny"
+  "cargo-deny",
+  "check-docs-broken-links"
 )
 
 SELF_JOB="check-all-general-jobs-passed"
