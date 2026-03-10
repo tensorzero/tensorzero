@@ -55,6 +55,16 @@ use tensorzero_optimizers::gepa::validate::FunctionContext;
 
 use crate::error::AutopilotToolError;
 
+// ── Internal step params ────────────────────────────────────────────────
+
+/// Wraps `GepaToolParams` with durable-generated values for the setup step.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct SetupStepParams {
+    llm_params: GepaToolParams,
+    run_id: Uuid,
+    rng_seed: u64,
+}
+
 // ── Shared metadata helpers ─────────────────────────────────────────────
 
 const GEPA_DESCRIPTION: &str = "Run GEPA (Genetic Evolution with Pareto Analysis) prompt optimization. \
@@ -191,8 +201,21 @@ async fn execute_gepa(
     llm_params: GepaToolParams,
     ctx: &mut ToolContext,
 ) -> ToolResult<GepaToolOutput> {
+    // Generate durable values before the setup step so they are
+    // deterministic across task re-runs.
+    let run_id = ctx.uuid7().await?;
+    let rng_seed: u64 = match llm_params.seed {
+        Some(seed) => seed as u64,
+        None => ctx.rand().await?.to_bits(),
+    };
+
     // ── Step "setup": validate config, resolve datasets ─────────
-    let setup: SetupResult = ctx.step("setup", llm_params.clone(), setup_step).await?;
+    let setup_params = SetupStepParams {
+        llm_params: llm_params.clone(),
+        run_id,
+        rng_seed,
+    };
+    let setup: SetupResult = ctx.step("setup", setup_params, setup_step).await?;
 
     let evaluator_configs = &setup.evaluator_configs;
 
@@ -488,9 +511,12 @@ async fn execute_gepa(
 
 /// Setup step: validate config, resolve initial variants, create val dataset.
 async fn setup_step(
-    params: GepaToolParams,
+    params: SetupStepParams,
     step_state: StepState<ToolAppState>,
 ) -> anyhow::Result<SetupResult> {
+    let run_id = params.run_id;
+    let rng_seed = params.rng_seed;
+    let params = params.llm_params;
     let client = step_state.state.t0_client();
 
     // Get live config for validation
@@ -547,8 +573,6 @@ async fn setup_step(
     let evaluator_configs = match &*function_context.evaluation_config {
         EvaluationConfig::Inference(cfg) => cfg.evaluators.clone(),
     };
-
-    let run_id = Uuid::now_v7();
 
     // Resolve datasets and datapoint IDs.
     // Two modes:
@@ -640,11 +664,8 @@ async fn setup_step(
                 ));
             }
 
-            // Shuffle deterministically for reproducibility
-            let mut split_rng = match gepa_config.seed {
-                Some(seed) => StdRng::seed_from_u64(seed as u64),
-                None => StdRng::from_rng(&mut rand::rng()),
-            };
+            // Shuffle deterministically using the durable rng_seed
+            let mut split_rng = StdRng::seed_from_u64(rng_seed);
             all_ids.shuffle(&mut split_rng);
 
             let split_point = all_ids.len() / 2;
@@ -659,13 +680,6 @@ async fn setup_step(
 
             (dataset_name.clone(), train_ids, dataset_name, val_ids)
         };
-
-    // Generate a deterministic seed for all post-setup RNG usage.
-    // This is checkpointed in SetupResult, ensuring identical RNG state on resume.
-    let rng_seed: u64 = match gepa_config.seed {
-        Some(seed) => seed as u64,
-        None => rand::rng().random::<u64>(),
-    };
 
     let resolved_config = ResolvedGEPAConfig {
         function_name: gepa_config.function_name,
