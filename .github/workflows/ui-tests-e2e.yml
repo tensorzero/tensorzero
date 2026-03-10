@@ -345,9 +345,7 @@ jobs:
 
     strategy:
       matrix:
-        # PRs: no_gateway_auth (full suite) + gateway_auth_with_browser_key (few browser auth tests)
-        # Merge queue: adds gateway_auth_with_ui_server_key (full suite with UI server-side API key)
-        auth_mode: ${{ inputs.is_merge_group && fromJSON('["no_gateway_auth", "gateway_auth_with_ui_server_key", "gateway_auth_with_browser_key"]') || fromJSON('["no_gateway_auth", "gateway_auth_with_browser_key"]') }}
+        auth_mode: ${{ fromJSON('["no_gateway_auth", "gateway_auth_with_ui_server_key", "gateway_auth_with_browser_key"]') }}
 
     steps:
       - name: Check out the repo
