@@ -28,17 +28,27 @@ impl PostgresClient {
     }
 
     #[napi]
-    pub async fn create_api_key(&self, description: Option<String>) -> Result<String, napi::Error> {
+    pub async fn create_api_key(
+        &self,
+        description: Option<String>,
+        expires_at: Option<String>,
+    ) -> Result<String, napi::Error> {
         let pool = self
             .connection_info
             .get_pool()
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
+        let expires_at = expires_at
+            .as_deref()
+            .map(tensorzero_auth::postgres::parse_expires_at)
+            .transpose()
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
         let key = tensorzero_auth::postgres::create_key(
             DEFAULT_ORGANIZATION,
             DEFAULT_WORKSPACE,
             description.as_deref(),
-            None,
+            expires_at,
             pool,
         )
         .await
