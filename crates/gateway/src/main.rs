@@ -663,7 +663,7 @@ async fn spawn_autopilot_worker_if_configured(
         PostgresConnectionInfo::Disabled => {
             if std::env::var("TENSORZERO_AUTOPILOT_API_KEY").is_ok() {
                 tracing::error!(
-                    "TENSORZERO_AUTOPILOT_API_KEY is set, but Postgres is not enabled."
+                    "`TENSORZERO_AUTOPILOT_API_KEY` is set, but Postgres is not enabled."
                 );
                 return Err(ExitCode::FAILURE);
             }
@@ -682,7 +682,6 @@ async fn spawn_autopilot_worker_if_configured(
     let worker_options = WorkerOptions {
         poll_interval: Duration::from_secs(1),
         concurrency: 8,
-        claim_timeout: Duration::from_secs(3600),
         ..Default::default()
     };
     let config = AutopilotWorkerConfig::new(pool, t0_client, default_max_attempts, worker_options);
