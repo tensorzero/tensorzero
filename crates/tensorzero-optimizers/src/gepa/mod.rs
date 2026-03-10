@@ -9,7 +9,7 @@ pub mod durable;
 pub mod evaluate;
 pub mod mutate;
 pub mod pareto;
-pub mod sequential;
+pub(crate) mod sequential;
 pub mod validate;
 
 /// A GEPA variant with its name and configuration

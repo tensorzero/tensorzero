@@ -892,11 +892,11 @@ async fn eval_analyze_mutate_step(
         Ok(a) => a,
         Err(e) => {
             tracing::warn!(
-                "GEPA iteration {}: analysis failed for parent `{}`: {e}. Proceeding with empty analyses.",
+                "GEPA iteration {}: analysis failed for parent `{}`: {e}. Skipping iteration.",
                 params.iteration,
                 params.variant_name,
             );
-            Vec::new()
+            return Ok(None);
         }
     };
 

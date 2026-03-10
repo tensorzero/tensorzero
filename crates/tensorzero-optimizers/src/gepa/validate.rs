@@ -731,7 +731,10 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
     use tensorzero_core::{
-        config::{Config, ErrorContext, SchemaData, TimeoutsConfig, path::ResolvedTomlPathData},
+        config::{
+            Config, ErrorContext, SchemaData, TimeoutsConfig, UninitializedConfig,
+            UninitializedVariantInfo, path::ResolvedTomlPathData,
+        },
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
         experimentation::ExperimentationConfigWithNamespaces,
         function::{FunctionConfig, FunctionConfigChat},
@@ -1683,5 +1686,289 @@ mod tests {
         assert_eq!(extracted.seed, Some(12345));
         assert_eq!(extracted.stop_sequences, Some(vec!["STOP".to_string()]));
         assert_eq!(extracted.reasoning_effort, Some("medium".to_string()));
+    }
+
+    // ============================================================================
+    // Helper for validate_gepa_config_uninitialized tests
+    // ============================================================================
+
+    fn empty_uninitialized_config() -> UninitializedConfig {
+        serde_json::from_value(serde_json::json!({})).expect("empty UninitializedConfig")
+    }
+
+    /// Creates a minimal `UninitializedConfig` with one Chat function and one evaluation.
+    fn create_uninitialized_config_with_variants(
+        function_name: &str,
+        evaluation_name: &str,
+        variants: HashMap<String, UninitializedVariantInfo>,
+    ) -> UninitializedConfig {
+        use tensorzero_core::config::{
+            UninitializedFunctionConfig, UninitializedFunctionConfigChat, UninitializedSchemas,
+        };
+        use tensorzero_core::evaluations::UninitializedInferenceEvaluationConfig;
+        use tensorzero_core::tool::ToolChoice;
+
+        let mut config = empty_uninitialized_config();
+
+        config.functions.insert(
+            function_name.to_string(),
+            UninitializedFunctionConfig::Chat(UninitializedFunctionConfigChat {
+                variants,
+                system_schema: None,
+                user_schema: None,
+                assistant_schema: None,
+                schemas: UninitializedSchemas::default(),
+                tools: vec![],
+                tool_choice: ToolChoice::None,
+                parallel_tool_calls: None,
+                description: None,
+                experimentation: None,
+            }),
+        );
+
+        config.evaluations.insert(
+            evaluation_name.to_string(),
+            tensorzero_core::evaluations::UninitializedEvaluationConfig::Inference(
+                UninitializedInferenceEvaluationConfig {
+                    evaluators: HashMap::new(),
+                    function_name: function_name.to_string(),
+                    description: None,
+                },
+            ),
+        );
+
+        config
+    }
+
+    /// Creates a `UninitializedVariantInfo` wrapping a ChatCompletion config.
+    fn create_uninitialized_variant_info(model: &str) -> UninitializedVariantInfo {
+        UninitializedVariantInfo {
+            inner: tensorzero_core::config::UninitializedVariantConfig::ChatCompletion(
+                create_uninitialized_chat_config(model, Some("System prompt")),
+            ),
+            timeouts: None,
+        }
+    }
+
+    // ============================================================================
+    // Tests for validate_gepa_config_uninitialized
+    // ============================================================================
+
+    #[test]
+    fn test_validate_uninitialized_function_not_found() {
+        let config = create_gepa_config("nonexistent_function", None, None);
+        let uninitialized = empty_uninitialized_config();
+
+        let result = validate_gepa_config_uninitialized(&config, &uninitialized);
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Function `nonexistent_function` not found")
+        );
+    }
+
+    #[test]
+    fn test_validate_uninitialized_evaluation_not_found() {
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_uninitialized_variant_info("openai::gpt-4"),
+        );
+
+        // Create config with function but no matching evaluation
+        let mut uninitialized = empty_uninitialized_config();
+        uninitialized.functions.insert(
+            "test_function".to_string(),
+            tensorzero_core::config::UninitializedFunctionConfig::Chat(
+                tensorzero_core::config::UninitializedFunctionConfigChat {
+                    variants,
+                    system_schema: None,
+                    user_schema: None,
+                    assistant_schema: None,
+                    schemas: tensorzero_core::config::UninitializedSchemas::default(),
+                    tools: vec![],
+                    tool_choice: tensorzero_core::tool::ToolChoice::None,
+                    parallel_tool_calls: None,
+                    description: None,
+                    experimentation: None,
+                },
+            ),
+        );
+
+        let gepa_config = create_gepa_config("test_function", None, None);
+        let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized);
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Evaluation `test_evaluation` not found")
+        );
+    }
+
+    #[test]
+    fn test_validate_uninitialized_initial_variants_empty() {
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_uninitialized_variant_info("openai::gpt-4"),
+        );
+
+        let uninitialized =
+            create_uninitialized_config_with_variants("test_function", "test_evaluation", variants);
+
+        let gepa_config = create_gepa_config("test_function", Some(vec![]), None);
+        let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized);
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("`initial_variants` is empty")
+        );
+    }
+
+    #[test]
+    fn test_validate_uninitialized_initial_variant_not_found() {
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_uninitialized_variant_info("openai::gpt-4"),
+        );
+
+        let uninitialized =
+            create_uninitialized_config_with_variants("test_function", "test_evaluation", variants);
+
+        let gepa_config =
+            create_gepa_config("test_function", Some(vec!["nonexistent".to_string()]), None);
+        let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized);
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Variant `nonexistent` specified in `initial_variants` not found")
+        );
+    }
+
+    #[test]
+    fn test_validate_uninitialized_without_initial_variants_includes_all() {
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_uninitialized_variant_info("openai::gpt-4"),
+        );
+        variants.insert(
+            "v2".to_string(),
+            create_uninitialized_variant_info("anthropic::claude-sonnet-4-5"),
+        );
+        variants.insert(
+            "v3".to_string(),
+            create_uninitialized_variant_info("openai::gpt-3.5-turbo"),
+        );
+
+        let uninitialized =
+            create_uninitialized_config_with_variants("test_function", "test_evaluation", variants);
+
+        let gepa_config = create_gepa_config("test_function", None, None);
+        let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized);
+
+        assert!(result.is_ok(), "validate should succeed");
+        let ctx = result.unwrap();
+        let filtered = ctx.function_config.variants();
+        assert_eq!(
+            filtered.len(),
+            3,
+            "Should include all 3 ChatCompletion variants"
+        );
+        assert!(filtered.contains_key("v1"));
+        assert!(filtered.contains_key("v2"));
+        assert!(filtered.contains_key("v3"));
+    }
+
+    #[test]
+    fn test_validate_uninitialized_with_initial_variants_filters() {
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_uninitialized_variant_info("openai::gpt-4"),
+        );
+        variants.insert(
+            "v2".to_string(),
+            create_uninitialized_variant_info("anthropic::claude-sonnet-4-5"),
+        );
+        variants.insert(
+            "v3".to_string(),
+            create_uninitialized_variant_info("openai::gpt-3.5-turbo"),
+        );
+
+        let uninitialized =
+            create_uninitialized_config_with_variants("test_function", "test_evaluation", variants);
+
+        let gepa_config = create_gepa_config(
+            "test_function",
+            Some(vec!["v1".to_string(), "v3".to_string()]),
+            None,
+        );
+        let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized);
+
+        assert!(result.is_ok(), "validate should succeed");
+        let ctx = result.unwrap();
+        let filtered = ctx.function_config.variants();
+        assert_eq!(filtered.len(), 2, "Should include only v1 and v3");
+        assert!(filtered.contains_key("v1"));
+        assert!(filtered.contains_key("v3"));
+        assert!(!filtered.contains_key("v2"));
+    }
+
+    #[test]
+    fn test_validate_uninitialized_returns_evaluation_config() {
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_uninitialized_variant_info("openai::gpt-4"),
+        );
+
+        let uninitialized =
+            create_uninitialized_config_with_variants("test_function", "test_evaluation", variants);
+
+        let gepa_config = create_gepa_config("test_function", None, None);
+        let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized);
+
+        assert!(result.is_ok());
+        let ctx = result.unwrap();
+        match &*ctx.evaluation_config {
+            EvaluationConfig::Inference(eval) => {
+                assert_eq!(eval.function_name, "test_function");
+            }
+        }
+    }
+
+    #[test]
+    fn test_validate_uninitialized_no_static_tools_when_none_referenced() {
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_uninitialized_variant_info("openai::gpt-4"),
+        );
+
+        let uninitialized =
+            create_uninitialized_config_with_variants("test_function", "test_evaluation", variants);
+
+        let gepa_config = create_gepa_config("test_function", None, None);
+        let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized);
+
+        assert!(result.is_ok());
+        let ctx = result.unwrap();
+        assert!(
+            ctx.static_tools.is_none(),
+            "No tools should be loaded when function has no tools"
+        );
     }
 }

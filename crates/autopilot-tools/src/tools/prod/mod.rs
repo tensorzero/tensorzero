@@ -8,7 +8,7 @@ mod create_datapoints;
 mod create_datapoints_from_inferences;
 mod delete_datapoints;
 mod feedback;
-pub mod gepa;
+mod gepa;
 mod get_config;
 mod get_datapoints;
 mod get_feedback_by_target_id;
