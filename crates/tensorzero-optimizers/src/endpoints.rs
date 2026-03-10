@@ -368,6 +368,14 @@ pub async fn gepa_launch_handler(
         })
     })?;
 
+    // Inline evaluators mode is not yet supported — require evaluation_name
+    if req.evaluation_name.is_none() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Inline `evaluators` mode is not yet supported; provide `evaluation_name`"
+                .to_string(),
+        }));
+    }
+
     // Convert GepaLaunchRequest → GepaToolParams
     let tool_params = GepaToolParams {
         function_name: req.function_name,

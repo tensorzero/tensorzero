@@ -601,6 +601,13 @@ async fn setup_step(
                     anyhow::anyhow!("Either `dataset_name` or `val_dataset_name` must be provided")
                 })?;
 
+            if train_name == val_name {
+                tracing::warn!(
+                    "Train and validation datasets resolve to the same name `{train_name}`. \
+                     Consider using separate datasets or `dataset_name` for auto-split."
+                );
+            }
+
             let train_datapoints = client
                 .list_datapoints(
                     train_name.clone(),
