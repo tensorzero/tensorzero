@@ -159,8 +159,17 @@ export async function action({ request }: Route.ActionArgs) {
           ? description.trim()
           : null;
 
+      const expiresAt = formData.get("expires_at");
+      const expiresAtStr =
+        expiresAt && typeof expiresAt === "string" && expiresAt.trim()
+          ? expiresAt.trim()
+          : null;
+
       const postgresClient = await getPostgresClient();
-      const apiKey = await postgresClient.createApiKey(descriptionStr);
+      const apiKey = await postgresClient.createApiKey(
+        descriptionStr,
+        expiresAtStr,
+      );
 
       return {
         apiKey,

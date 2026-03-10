@@ -415,3 +415,51 @@ test("should paginate API keys with custom limit", async ({ page }) => {
   await expect(prevButton).toBeDisabled(); // Can't go back
   await expect(nextButton).not.toBeDisabled(); // Can go forward
 });
+
+test("should create API key with expiration date and show it in the table", async ({
+  page,
+}) => {
+  await page.goto("/api-keys");
+  await page.waitForLoadState("networkidle");
+
+  await page.getByRole("button", { name: "Generate API Key" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Generate API Key" }),
+  ).toBeVisible();
+
+  // Set expiration date to one year from now
+  const futureDate = new Date();
+  futureDate.setFullYear(futureDate.getFullYear() + 1);
+  const futureDateStr = futureDate.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:mm"
+  await page.locator("#expires_at").fill(futureDateStr);
+
+  const generateButton = page.getByRole("button", { name: "Generate Key" });
+  await expect(generateButton).toBeVisible();
+  await expect(generateButton).toBeEnabled();
+  await page.waitForTimeout(300);
+  await generateButton.click();
+
+  await expect(
+    page.getByRole("heading", { name: "API Key Generated" }),
+  ).toBeVisible();
+
+  // Extract the API key public ID
+  const apiKeyPre = page.locator("pre");
+  const apiKeyText = await apiKeyPre.textContent();
+  const publicIdMatch = apiKeyText!.match(/sk-t0-(\w{12})/);
+  const publicIdPart = publicIdMatch ? publicIdMatch[1] : null;
+  expect(publicIdPart).toBeTruthy();
+
+  await page.getByRole("button", { name: "Close" }).first().click();
+  await page.waitForLoadState("networkidle");
+
+  // Verify "Expires" column (index 2) shows a date, not "Never"
+  const keyRow = page.locator("tbody tr").filter({ hasText: publicIdPart! });
+  await expect(keyRow).toBeVisible();
+
+  const expiresAtCell = keyRow.locator("td").nth(2);
+  await expect(expiresAtCell).not.toContainText("Never");
+
+  // Key should not appear expired/disabled (it expires in the future)
+  await expect(keyRow).not.toHaveClass(/opacity-50/);
+});

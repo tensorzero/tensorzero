@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import {
   Dialog,
   DialogBody,
@@ -34,6 +35,7 @@ export function GenerateApiKeyModal({
   const { copy, didCopy, isCopyAvailable } = useCopy();
   const isReadOnly = useReadOnly();
   const [description, setDescription] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
 
   const isSubmitting = fetcher.state === "submitting";
   const apiKey = fetcher.data?.apiKey;
@@ -93,6 +95,14 @@ export function GenerateApiKeyModal({
                   <p className="text-muted-foreground text-sm">{description}</p>
                 </div>
               )}
+              {expiresAt && (
+                <div className="space-y-2">
+                  <Label>Expires</Label>
+                  <p className="text-muted-foreground text-sm">
+                    {new Date(expiresAt).toLocaleString()}
+                  </p>
+                </div>
+              )}
               <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-950">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
                   Make sure to copy your API key now. For security reasons, you
@@ -122,6 +132,20 @@ export function GenerateApiKeyModal({
                 <p className="text-muted-foreground text-xs">
                   {description.length}/255 characters
                 </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="expires_at">
+                  Expiration Date{" "}
+                  <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  id="expires_at"
+                  name="expires_at"
+                  type="datetime-local"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                />
               </div>
               {error && (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
@@ -157,6 +181,12 @@ export function GenerateApiKeyModal({
                   formData.append("action", "generate");
                   if (description) {
                     formData.append("description", description);
+                  }
+                  if (expiresAt) {
+                    formData.append(
+                      "expires_at",
+                      new Date(expiresAt).toISOString(),
+                    );
                   }
                   fetcher.submit(formData, { method: "post" });
                 }}
