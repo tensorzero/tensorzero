@@ -11,6 +11,7 @@ import type {
   AutoevalContentBlock,
   EventPayloadAutoevalExampleLabeling,
   EventPayloadUserQuestion,
+  UserQuestionAnswer,
 } from "~/types/tensorzero";
 
 function CollapsibleWrapper({
@@ -71,6 +72,7 @@ function LabelingExample({
   onSelect,
   explanationText,
   onExplanationChange,
+  readOnly = false,
 }: {
   context: AutoevalContentBlock[];
   question: Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>;
@@ -82,6 +84,7 @@ function LabelingExample({
   onSelect: (value: string) => void;
   explanationText: string;
   onExplanationChange: (text: string) => void;
+  readOnly?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3 rounded-md border border-purple-300 bg-purple-50 p-4 dark:border-purple-700 dark:bg-purple-950/30">
@@ -106,12 +109,14 @@ function LabelingExample({
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  disabled={readOnly}
                   onClick={() => onSelect(option.id)}
                   className={cn(
                     "rounded-md border px-3 py-1.5 text-sm font-medium transition-all",
                     isSelected
                       ? "border-purple-500 bg-purple-100 text-purple-700 ring-1 ring-purple-500 ring-inset dark:border-purple-400 dark:bg-purple-950/40 dark:text-purple-300 dark:ring-purple-400"
                       : "border-border bg-bg-secondary text-fg-primary hover:border-purple-300 hover:bg-purple-50/50 dark:hover:border-purple-600 dark:hover:bg-purple-950/20",
+                    readOnly && "cursor-default opacity-75",
                   )}
                 >
                   {option.label}
@@ -131,6 +136,7 @@ function LabelingExample({
           </span>
           <Textarea
             value={explanationText}
+            disabled={readOnly}
             onChange={(e) => onExplanationChange(e.target.value)}
             placeholder="Type your explanation..."
             className="bg-bg-secondary min-h-[60px] resize-none text-sm"
@@ -142,11 +148,37 @@ function LabelingExample({
   );
 }
 
+/** Extract the initial selection/explanation state from saved answers. */
+function initFromAnswers(answers: Record<string, UserQuestionAnswer>) {
+  const selections: Record<string, string> = {};
+  const explanations: Record<string, string> = {};
+  for (const [id, answer] of Object.entries(answers)) {
+    if (answer.type === "multiple_choice" && answer.selected.length > 0) {
+      selections[id] = answer.selected[0];
+    } else if (answer.type === "free_response") {
+      explanations[id] = answer.text;
+    }
+  }
+  return { selections, explanations };
+}
+
+type AutoevalExampleLabelingCardProps = {
+  payload: EventPayloadAutoevalExampleLabeling;
+  onSubmit?: (responses: Record<string, UserQuestionAnswer>) => void;
+  isLoading?: boolean;
+  /** Pre-populated answers (e.g. from a completed `user_questions_answers` event). */
+  answers?: Record<string, UserQuestionAnswer>;
+  /** When true, options and textarea are non-interactive and submit is hidden. */
+  readOnly?: boolean;
+};
+
 export function AutoevalExampleLabelingCard({
   payload,
-}: {
-  payload: EventPayloadAutoevalExampleLabeling;
-}) {
+  onSubmit,
+  isLoading = false,
+  answers,
+  readOnly = false,
+}: AutoevalExampleLabelingCardProps) {
   const examples = payload.examples.map((example) => {
     const labelQ = example.questions.find(
       (q) => q.type === "multiple_choice",
@@ -161,8 +193,40 @@ export function AutoevalExampleLabelingCard({
     return { context: example.context, labelQ, explanationQ };
   });
 
-  const [selections, setSelections] = useState<Record<string, string>>({});
-  const [explanations, setExplanations] = useState<Record<string, string>>({});
+  const initial = answers ? initFromAnswers(answers) : undefined;
+  const [selections, setSelections] = useState<Record<string, string>>(
+    initial?.selections ?? {},
+  );
+  const [explanations, setExplanations] = useState<Record<string, string>>(
+    initial?.explanations ?? {},
+  );
+
+  const handleSubmit = () => {
+    if (!onSubmit) return;
+    const responses: Record<string, UserQuestionAnswer> = {};
+    for (const { labelQ, explanationQ } of examples) {
+      if (labelQ) {
+        const selectedId = selections[labelQ.id];
+        if (selectedId) {
+          responses[labelQ.id] = {
+            type: "multiple_choice",
+            selected: [selectedId],
+          };
+        } else {
+          responses[labelQ.id] = { type: "skipped" };
+        }
+      }
+      if (explanationQ) {
+        const text = explanations[explanationQ.id];
+        if (text) {
+          responses[explanationQ.id] = { type: "free_response", text };
+        } else {
+          responses[explanationQ.id] = { type: "skipped" };
+        }
+      }
+    }
+    onSubmit(responses);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -174,6 +238,7 @@ export function AutoevalExampleLabelingCard({
               context={context}
               question={labelQ}
               explanationQuestion={explanationQ}
+              readOnly={readOnly}
               selectedValue={selections[labelQ.id] ?? null}
               onSelect={(value) =>
                 setSelections((prev) => ({ ...prev, [labelQ.id]: value }))
@@ -193,12 +258,16 @@ export function AutoevalExampleLabelingCard({
           ),
       )}
 
-      <button
-        type="button"
-        className="self-end rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
-      >
-        Submit All
-      </button>
+      {!readOnly && (
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={handleSubmit}
+          className="self-end rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+        >
+          {isLoading ? "Submitting..." : "Submit All"}
+        </button>
+      )}
     </div>
   );
 }

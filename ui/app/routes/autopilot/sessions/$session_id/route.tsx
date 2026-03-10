@@ -22,6 +22,7 @@ import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
+import { AutoevalExampleLabelingCard } from "~/components/autopilot/AutoevalExampleLabeling";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
 import { PendingQuestionCard } from "~/components/autopilot/question-cards/PendingQuestionCard";
 import { ApplySessionConfigChangesButton } from "~/components/autopilot/ApplySessionConfigChangesButton";
@@ -980,6 +981,20 @@ function AutopilotSessionEventsPageContent({
                   payload={oldestPendingUserQuestion.payload}
                   isLoading={isQuestionSubmitting}
                   onSubmit={handleAnswerQuestions}
+                />
+              ) : oldestPendingUserQuestion &&
+                oldestPendingUserQuestion.payload.type ===
+                  "autoeval_example_labeling" ? (
+                <AutoevalExampleLabelingCard
+                  key={oldestPendingUserQuestion.id}
+                  payload={oldestPendingUserQuestion.payload}
+                  isLoading={isQuestionSubmitting}
+                  onSubmit={(responses) =>
+                    handleAnswerQuestions(
+                      oldestPendingUserQuestion.id,
+                      responses,
+                    )
+                  }
                 />
               ) : (
                 oldestPendingToolCall &&

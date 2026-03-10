@@ -123,7 +123,10 @@ const meta = {
   title: "Autopilot/ExampleLabeling",
   render: () => (
     <div className="w-[600px] p-4">
-      <AutoevalExampleLabelingCard payload={labelingPayload} />
+      <AutoevalExampleLabelingCard
+        payload={labelingPayload}
+        onSubmit={() => {}}
+      />
     </div>
   ),
 } satisfies Meta;
