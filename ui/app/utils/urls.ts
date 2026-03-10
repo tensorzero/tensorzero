@@ -59,17 +59,6 @@ export function toDatapointUrl(
 // Evaluations
 // ============================================================================
 
-export function toEvaluationUrl(
-  evaluationName: string,
-  queryParams?: { evaluation_run_ids?: string },
-): string {
-  const baseUrl = `/evaluations/${encodeURIComponent(evaluationName)}`;
-  if (queryParams?.evaluation_run_ids) {
-    return `${baseUrl}?evaluation_run_ids=${encodeURIComponent(queryParams.evaluation_run_ids)}`;
-  }
-  return baseUrl;
-}
-
 export function toEvaluationRunsUrl(runIds: string | string[]): string {
   const ids = Array.isArray(runIds) ? runIds.join(",") : runIds;
   return `/evaluation-runs?evaluation_run_ids=${encodeURIComponent(ids)}`;

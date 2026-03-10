@@ -6,7 +6,6 @@ import {
   toEpisodeUrl,
   toDatasetUrl,
   toDatapointUrl,
-  toEvaluationUrl,
   toEvaluationDatapointUrl,
   toWorkflowEvaluationRunUrl,
   toWorkflowEvaluationProjectUrl,
@@ -72,19 +71,6 @@ describe("URL helper functions", () => {
       expect(toDatapointUrl("dataset/test", "point#1")).toBe(
         "/datasets/dataset%2Ftest/datapoint/point%231",
       );
-    });
-  });
-
-  describe("toEvaluationUrl", () => {
-    it("should encode evaluation names", () => {
-      expect(toEvaluationUrl("eval_1")).toBe("/evaluations/eval_1");
-      expect(toEvaluationUrl("eval/test")).toBe("/evaluations/eval%2Ftest");
-    });
-
-    it("should handle query parameters", () => {
-      expect(
-        toEvaluationUrl("eval_1", { evaluation_run_ids: "run_1,run_2" }),
-      ).toBe("/evaluations/eval_1?evaluation_run_ids=run_1%2Crun_2");
     });
   });
 

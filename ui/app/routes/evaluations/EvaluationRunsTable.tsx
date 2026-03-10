@@ -16,12 +16,7 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { useFunctionConfig } from "~/context/config";
-import {
-  toEvaluationUrl,
-  toEvaluationRunsUrl,
-  toDatasetUrl,
-  toFunctionUrl,
-} from "~/utils/urls";
+import { toEvaluationRunsUrl, toDatasetUrl, toFunctionUrl } from "~/utils/urls";
 
 function EvaluationRunRow({
   evaluationRun,
@@ -44,7 +39,7 @@ function EvaluationRunRow({
       </TableCell>
       <TableCell className="max-w-[200px]">
         <Link
-          to={toEvaluationUrl(evaluationRun.evaluation_name)}
+          to={toEvaluationRunsUrl(evaluationRun.evaluation_run_id)}
           className="block no-underline"
         >
           <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">

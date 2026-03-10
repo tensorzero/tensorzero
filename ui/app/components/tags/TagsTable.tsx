@@ -13,7 +13,7 @@ import {
 } from "~/components/ui/table";
 import { useNavigate } from "react-router";
 import {
-  toEvaluationUrl,
+  toEvaluationRunsUrl,
   toDatapointUrl,
   toDatasetUrl,
   toInferenceUrl,
@@ -63,16 +63,9 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
     // Only navigate if not in editing mode and navigation is available
     if (!isEditing && navigableKeys.includes(key)) {
       switch (key) {
-        case "tensorzero::evaluation_run_id": {
-          const evaluationName = tags["tensorzero::evaluation_name"];
-          if (!evaluationName) {
-            return;
-          }
-          navigate(
-            toEvaluationUrl(evaluationName, { evaluation_run_ids: value }),
-          );
+        case "tensorzero::evaluation_run_id":
+          navigate(toEvaluationRunsUrl(value));
           break;
-        }
         case "tensorzero::datapoint_id": {
           const datasetName = tags["tensorzero::dataset_name"];
           if (!datasetName) {
@@ -82,7 +75,7 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
           break;
         }
         case "tensorzero::evaluation_name":
-          navigate(toEvaluationUrl(value));
+          navigate(`/evaluations/${encodeURIComponent(value)}`);
           break;
         case "tensorzero::dataset_name":
           navigate(toDatasetUrl(value));

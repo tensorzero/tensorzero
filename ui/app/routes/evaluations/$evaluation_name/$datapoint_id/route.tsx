@@ -2,7 +2,7 @@ import {
   getEvaluationsForDatapoint,
   pollForEvaluations,
 } from "~/utils/clickhouse/evaluations.server";
-import { toEvaluationUrl, toInferenceUrl } from "~/utils/urls";
+import { toInferenceUrl } from "~/utils/urls";
 import type { Route } from "./+types/route";
 import {
   PageHeader,
@@ -210,7 +210,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? selected_evaluation_run_ids.split(",")
     : [];
   if (selectedRunIds.length === 0) {
-    return redirect(toEvaluationUrl(evaluation_name));
+    return redirect(`/evaluations/${encodeURIComponent(evaluation_name)}`);
   }
 
   const tensorZeroClient = getTensorZeroClient();
@@ -475,7 +475,7 @@ export default function EvaluationDatapointPage({
                 { label: "Evaluations", href: "/evaluations" },
                 {
                   label: params.evaluation_name,
-                  href: toEvaluationUrl(params.evaluation_name),
+                  href: `/evaluations/${encodeURIComponent(params.evaluation_name)}`,
                   isIdentifier: true,
                 },
                 { label: "Results" },
