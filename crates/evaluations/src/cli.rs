@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{ArgGroup, Parser};
 use serde::{Deserialize, Serialize};
 use tensorzero_core::cache::CacheEnabledMode;
 use url::Url;
@@ -23,6 +23,7 @@ pub enum OutputFormat {
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
+#[command(group(ArgGroup::new("eval_source").required(true)))]
 pub struct Args {
     /// Path to tensorzero.toml.
     #[arg(long, default_value = "./config/tensorzero.toml")]
