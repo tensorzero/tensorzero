@@ -5,7 +5,7 @@ description: Learn how to collect metrics and feedback about inferences or seque
 
 The TensorZero Gateway allows you to assign feedback to inferences or sequences of inferences ([episodes](/gateway/guides/episodes/)).
 
-Feedback captures the downstream outcomes of your LLM application, and drive the [experimentation](/experimentation/run-adaptive-ab-tests) and [optimization](/recipes/) workflows in TensorZero.
+Feedback captures the downstream outcomes of your LLM application, and drive the [experimentation](/experimentation/run-adaptive-ab-tests) and [optimization](/optimization/) workflows in TensorZero.
 For example, you can fine-tune models using data from inferences that led to positive downstream behavior.
 
 <Tip>
@@ -87,27 +87,30 @@ level = "inference"
 Let's make an inference call like we did in the Quickstart, and then assign some (positive) feedback to it.
 We'll use the inference response's `inference_id` we receive from the first API call to link the two.
 
-```python title="run.py"
+```python title="main.py"
+from openai import OpenAI
 from tensorzero import TensorZeroGateway
 
-with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
-    inference_response = client.inference(
-        function_name="generate_haiku",
-        input={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Write a haiku about TensorZero.",
-                }
-            ]
-        },
-    )
+openai_client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
-    print(inference_response)
+inference_response = openai_client.chat.completions.create(
+    model="tensorzero::function_name::generate_haiku",
+    messages=[
+        {
+            "role": "user",
+            "content": "Write a haiku about TensorZero.",
+        }
+    ],
+)
 
-    feedback_response = client.feedback(
+print(inference_response)
+
+inference_id = inference_response.id
+
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as t0:
+    feedback_response = t0.feedback(
         metric_name="haiku_rating",
-        inference_id=inference_response.inference_id,  # alternatively, you can assign feedback to an episode_id
+        inference_id=inference_id,  # alternatively, you can assign feedback to an episode_id
         value=True,  # let's assume it deserves a 👍
     )
 
@@ -117,16 +120,27 @@ with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client
 <Accordion title="Sample Output">
 
 ```python
-ChatInferenceResponse(
-    inference_id=UUID('01920c75-d114-7aa1-aadb-26a31bb3c7a0'),
-    episode_id=UUID('01920c75-cdcb-7fa3-bd69-fd28cf615f91'),
-    variant_name='gpt_4o_mini', content=[
-        Text(type='text', text='Silent circuits hum, \nWisdom spun from lines of code, \nDreams in data bloom.')
+ChatCompletion(
+    id='01920c75-d114-7aa1-aadb-26a31bb3c7a0',
+    choices=[
+        Choice(
+            finish_reason='stop',
+            index=0,
+            message=ChatCompletionMessage(
+                content='Silent circuits hum, \nWisdom spun from lines of code, \nDreams in data bloom.',
+                role='assistant',
+            ),
+        )
     ],
-    usage=Usage(
-        input_tokens=15,
-        output_tokens=20,
+    created=1755890789,
+    model='tensorzero::function_name::generate_haiku',
+    object='chat.completion',
+    usage=CompletionUsage(
+        completion_tokens=20,
+        prompt_tokens=15,
+        total_tokens=35,
     ),
+    episode_id='01920c75-cdcb-7fa3-bd69-fd28cf615f91',
 )
 
 FeedbackResponse(feedback_id='01920c75-d11a-7150-81d8-15d497ce7eb8')
@@ -143,9 +157,9 @@ You can assign demonstrations to an inference using the special metric name `dem
 You can't assign demonstrations to an episode.
 
 ```python
-feedback_response = client.feedback(
+feedback_response = t0.feedback(
     metric_name="demonstration",
-    inference_id=inference_response.inference_id,
+    inference_id=inference_id,
     value="Silicon dreams float\nMinds born of human design\nLearning without end",  # the haiku we wish the LLM had written
 )
 ```
@@ -155,9 +169,9 @@ feedback_response = client.feedback(
 You can assign natural-language feedback to an inference or episode using the special metric name `comment`.
 
 ```python
-feedback_response = client.feedback(
+feedback_response = t0.feedback(
     metric_name="comment",
-    inference_id=inference_response.inference_id,
+    inference_id=inference_id,
     value="Never mention you're an artificial intelligence, AI, bot, or anything like that.",
 )
 ```
