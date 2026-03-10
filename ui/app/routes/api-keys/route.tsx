@@ -63,6 +63,7 @@ function ApiKeysContentSkeleton() {
             <TableRow>
               <TableHead className="w-0 whitespace-nowrap">Public ID</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead className="w-0 whitespace-nowrap">Expires</TableHead>
               <TableHead className="w-0 whitespace-nowrap">Created</TableHead>
               <TableHead className="w-0"></TableHead>
             </TableRow>
@@ -75,6 +76,9 @@ function ApiKeysContentSkeleton() {
                 </TableCell>
                 <TableCell>
                   <Skeleton className="h-4 w-48" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20" />
                 </TableCell>
                 <TableCell>
                   <Skeleton className="h-4 w-20" />

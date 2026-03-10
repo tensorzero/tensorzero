@@ -63,6 +63,9 @@ test("should create, display, delete, and persist API key states", async ({
   const firstDescriptionCell = firstKeyRow.locator("td").nth(1);
   await expect(firstDescriptionCell).toContainText("—");
 
+  const firstExpiresAtCell = firstKeyRow.locator("td").nth(2);
+  await expect(firstExpiresAtCell).toContainText("Never");
+
   // 3. Create API key with description
   await page.getByText("Generate API Key").click();
   await expect(
@@ -129,6 +132,9 @@ test("should create, display, delete, and persist API key states", async ({
   // Verify description is shown
   const secondDescriptionCell = secondKeyRow.locator("td").nth(1);
   await expect(secondDescriptionCell).toContainText(description);
+
+  const secondExpiresAtCell = secondKeyRow.locator("td").nth(2);
+  await expect(secondExpiresAtCell).toContainText("Never");
 
   // 4. Delete the first key (without description)
   const firstKeyRowToDelete = page.locator("tbody tr").filter({
