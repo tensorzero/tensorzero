@@ -8,7 +8,9 @@
 //! provide an aggregated response suitable for programmatic use.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use durable::Heartbeater;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -144,6 +146,7 @@ pub struct RunEvaluationResponse {
 pub async fn run_evaluation(
     app_state: AppStateData,
     params: &RunEvaluationParams,
+    heartbeater: Arc<dyn Heartbeater>,
 ) -> Result<RunEvaluationResponse, RunEvaluationError> {
     // Validate concurrency
     if params.concurrency == 0 {
@@ -218,9 +221,10 @@ pub async fn run_evaluation(
         })?;
 
     let run_params = RunEvaluationWithAppStateParams {
-        evaluation_config: (*evaluation_config).clone(),
+        function_name: inference_config.function_name.clone(),
         function_config,
-        evaluation_name: params.evaluation_name.clone(),
+        evaluators: inference_config.evaluators.clone(),
+        evaluation_name: Some(params.evaluation_name.clone()),
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: params.datapoint_ids.clone(),
         variant: EvaluationVariant::Name(params.variant_name.clone()),
@@ -235,32 +239,38 @@ pub async fn run_evaluation(
         .await
         .map_err(|e| RunEvaluationError::Runtime(format!("Evaluation failed: {e}")))?;
 
-    collect_results(result, params.include_datapoint_results).await
+    collect_results(result, params.include_datapoint_results, heartbeater).await
 }
 
 /// Collects evaluation results from the stream and computes statistics.
 async fn collect_results(
     result: evaluations::EvaluationStreamResult,
     include_datapoint_results: bool,
+    heartbeater: Arc<dyn Heartbeater>,
 ) -> Result<RunEvaluationResponse, RunEvaluationError> {
     let evaluation_run_id = result.run_info.evaluation_run_id;
     let num_datapoints = result.run_info.num_datapoints;
-
-    let EvaluationConfig::Inference(ref inference_config) = *result.evaluation_config;
 
     // Collect updates from the stream (OutputFormat::Jsonl skips progress bar rendering)
     let mut stats_collector =
         EvaluationStats::new(evaluations::OutputFormat::Jsonl, num_datapoints);
     let mut sink = std::io::sink();
     let mut receiver = result.receiver;
+    let mut last_heartbeat = std::time::Instant::now();
 
     while let Some(update) = receiver.recv().await {
         if !matches!(update, EvaluationUpdate::RunInfo(_)) {
             let _ = stats_collector.push(update, &mut sink);
         }
+
+        // Heartbeat if >=30s since last heartbeat (real work just completed)
+        if last_heartbeat.elapsed() >= std::time::Duration::from_secs(30) {
+            let _ = heartbeater.heartbeat(None).await;
+            last_heartbeat = std::time::Instant::now();
+        }
     }
 
-    let stats = stats_collector.compute_stats(&inference_config.evaluators);
+    let stats = stats_collector.compute_stats(&result.evaluators);
 
     let datapoint_results = if include_datapoint_results {
         Some(build_datapoint_results(&stats_collector))

@@ -11,7 +11,8 @@ RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/cargo
 
 FROM chef AS planner
 
-COPY . .
+COPY crates/ crates/
+WORKDIR /app/crates
 RUN cargo chef prepare --recipe-path recipe.json
 
 # ========== builder ==========
@@ -20,11 +21,14 @@ FROM chef AS builder
 ENV CARGO_INCREMENTAL=0
 
 # Cook dependencies (cached layer)
-COPY --from=planner /app/recipe.json recipe.json
+COPY --from=planner /app/crates/recipe.json /app/crates/recipe.json
+COPY --from=planner /app/crates/rust-toolchain.toml /app/crates/rust-toolchain.toml
+WORKDIR /app/crates
 RUN cargo chef cook --tests --features e2e_tests --recipe-path recipe.json
 
 # Build tests
-COPY . .
+COPY crates/ /app/crates/
+WORKDIR /app/crates
 RUN cargo nextest archive --features e2e_tests --profile e2e --archive-file tests.tar.zst
 
 # ========== test-env ==========
@@ -38,15 +42,17 @@ WORKDIR /app
 # Copy nextest binary
 COPY --from=builder /usr/local/cargo/bin/cargo-nextest /usr/local/bin/cargo-nextest
 
-# Copy workspace structure
-COPY . .
+# Copy workspace structure (only crates needed for workspace-remap)
+COPY crates/ crates/
 
 # Copy only the test archive instead of entire target directory
-COPY --from=builder /app/tests.tar.zst /app/tests.tar.zst
+COPY --from=builder /app/crates/tests.tar.zst /app/crates/tests.tar.zst
 
 # Set CI environment variable
 ENV CI=true
 
 # Set the entrypoint to run tests from archive with absolute config file path and e2e profile
 # If CARGO_NEXTEST_FLAKY_TESTS is set, exclude those tests using -E filter
-CMD ["sh", "-c", "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app --config-file /app/.config/nextest.toml --profile e2e -j 32 ${CARGO_NEXTEST_FLAKY_TESTS:+-E \"not ($CARGO_NEXTEST_FLAKY_TESTS)\"}"]
+WORKDIR /app/crates
+
+CMD ["sh", "-c", "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile e2e -j 32 ${CARGO_NEXTEST_FLAKY_TESTS:+-E \"not ($CARGO_NEXTEST_FLAKY_TESTS)\"}"]

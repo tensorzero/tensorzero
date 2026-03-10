@@ -6,53 +6,57 @@ use crate::common::get_gateway_endpoint;
 use crate::utils::skip_for_postgres;
 use chrono::Utc;
 use futures::StreamExt;
+use googletest::prelude::*;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 use tensorzero::{
     ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputMessage,
     InputMessageContent,
-};
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
 };
 use tensorzero_core::{
     cache::{CacheEnabledMode, CacheManager, CacheOptions},
     config::provider_types::ProviderTypesConfig,
     db::{
-        DICLQueries, StoredDICLExample, clickhouse::test_helpers::select_json_inference_clickhouse,
-        delegating_connection::DelegatingDatabaseConnection, postgres::PostgresConnectionInfo,
+        DICLQueries, StoredDICLExample,
+        delegating_connection::DelegatingDatabaseConnection,
+        inferences::{InferenceQueries, ListInferencesParams},
+        model_inferences::ModelInferenceQueries,
+        test_helpers::TestDatabaseHelpers,
     },
     embeddings::{EmbeddingEncodingFormat, EmbeddingRequest, UninitializedEmbeddingProviderConfig},
     endpoints::inference::{InferenceClients, InferenceCredentials},
     http::TensorzeroHttpClient,
     inference::types::{
-        Arguments, ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput,
-        ResolvedInputMessage, ResolvedInputMessageContent, Role, StoredContentBlock,
-        StoredRequestMessage, System, Template, Text,
+        Arguments, ContentBlockChatOutput, ContentBlockOutput, JsonInferenceOutput, ResolvedInput,
+        ResolvedInputMessage, ResolvedInputMessageContent, Role, System, Template, Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     rate_limiting::ScopeInfo,
+    stored_inference::StoredInferenceDatabase,
+    test_helpers::get_e2e_config,
 };
-use tokio::time::sleep;
 use uuid::Uuid;
+#[gtest]
 #[tokio::test]
 pub async fn test_dicl_inference_request_no_examples_empty_dicl() {
     test_dicl_inference_request_no_examples("empty_dicl").await;
 }
+#[gtest]
 #[tokio::test]
 pub async fn test_dicl_inference_request_no_examples_empty_dicl_extra_body() {
     test_dicl_inference_request_no_examples("empty_dicl_extra_body").await;
 }
 // This model is identical to `empty_dicl`, but it specified the embedding model
 // using shorthand
+#[gtest]
 #[tokio::test]
 pub async fn test_dicl_inference_request_no_examples_empty_dicl_shorthand() {
     test_dicl_inference_request_no_examples("empty_dicl_shorthand").await;
 }
+#[gtest]
 #[tokio::test]
 async fn test_dicl_reject_unknown_content_block() {
     skip_for_postgres!();
@@ -82,19 +86,21 @@ async fn test_dicl_reject_unknown_content_block() {
         .await
         .unwrap();
     // Check that the API response is correct
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
-    assert!(
+    expect_that!(
         response_json
             .get("error")
             .unwrap()
             .as_str()
             .unwrap()
             .contains("Unsupported content block type `unknown` for provider `dicl`"),
+        eq(true),
         "Unexpected error message: {response_json:#?}"
     );
     println!("API response: {response_json:#?}");
 }
+#[gtest]
 #[tokio::test]
 async fn test_dicl_reject_image_content_block() {
     skip_for_postgres!();
@@ -124,15 +130,16 @@ async fn test_dicl_reject_image_content_block() {
         .await
         .unwrap();
     // Check that the API response is as expected
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    expect_that!(response.status(), eq(StatusCode::BAD_REQUEST));
     let response_json = response.json::<Value>().await.unwrap();
-    assert!(
+    expect_that!(
         response_json
             .get("error")
             .unwrap()
             .as_str()
             .unwrap()
             .contains("Unsupported content block type `image` for provider `dicl`"),
+        eq(true),
         "Unexpected error message: {response_json:#?}"
     );
     println!("API response: {response_json:#?}");
@@ -184,26 +191,34 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
     assert!(input_tokens > 0);
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    sleep(Duration::from_secs(1)).await;
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from API
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Check ChatInference Table
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    println!("ClickHouse - ChatInference: {result:#?}");
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, dicl_variant_name);
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(inferences.len(), 1);
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    println!("ChatInference: {chat:#?}");
+    assert_eq!(chat.inference_id, inference_id);
+    assert_eq!(chat.function_name, payload["function_name"]);
+    assert_eq!(chat.variant_name, dicl_variant_name);
+    assert_eq!(chat.episode_id, episode_id);
+    let input = serde_json::to_value(&chat.input).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
@@ -214,18 +229,14 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
         ]
     });
     assert_eq!(input, correct_input);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let output = chat.output.as_ref().expect("Expected output");
+    assert_eq!(output.len(), 1);
+    let ContentBlockChatOutput::Text(text_block) = &output[0] else {
+        panic!("Expected text content block");
+    };
+    assert_eq!(text_block.text, content);
+    assert!(chat.tool_params.is_none());
+    let inference_params = serde_json::to_value(&chat.inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
@@ -237,39 +248,24 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
             .unwrap(),
         100
     );
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    assert!(chat.processing_time_ms.unwrap() > 0);
+
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2);
-    for model_inference in result {
-        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
-        match model_name {
+    println!("ModelInferences: {model_inferences:#?}");
+    assert_eq!(model_inferences.len(), 2);
+    for mi in &model_inferences {
+        match mi.model_name.as_str() {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
-                assert!(
-                    model_inference
-                        .get("output_tokens")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap()
-                        > 0
-                );
-                let raw_response = model_inference
-                    .get("raw_response")
-                    .unwrap()
-                    .as_str()
-                    .unwrap();
+                assert!(mi.output_tokens.unwrap() > 0);
+                let raw_response = mi.raw_response.as_deref().unwrap();
                 assert!(raw_response.to_lowercase().contains("tokyo"));
                 if dicl_variant_name == "empty_dicl_extra_body" {
-                    let raw_request = model_inference
-                        .get("raw_request")
-                        .unwrap()
-                        .as_str()
-                        .unwrap();
+                    let raw_request = mi.raw_request.as_deref().unwrap();
                     let raw_request: Value = serde_json::from_str(raw_request).unwrap();
                     let temperature = raw_request.get("temperature").unwrap().as_f64().unwrap();
                     assert_eq!(temperature, 0.123);
@@ -277,50 +273,24 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
             }
             "openai::text-embedding-3-small" | "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
-                assert!(model_inference.get("output_tokens").unwrap().is_null());
+                assert!(mi.output_tokens.is_none());
             }
             _ => {
-                panic!("Unexpected model: {model_name}");
+                panic!("Unexpected model: {}", mi.model_name);
             }
         }
-        let model_inference_id = model_inference.get("id").unwrap().as_str().unwrap();
-        assert!(Uuid::parse_str(model_inference_id).is_ok());
-        let inference_id_result = model_inference
-            .get("inference_id")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-        assert_eq!(inference_id_result, inference_id);
-        let raw_request = model_inference
-            .get("raw_request")
-            .unwrap()
-            .as_str()
-            .unwrap();
+        assert_eq!(mi.inference_id, inference_id);
+        let raw_request = mi.raw_request.as_deref().unwrap();
         assert!(raw_request.to_lowercase().contains("japan"));
         assert!(
             serde_json::from_str::<Value>(raw_request).is_ok(),
             "raw_request is not a valid JSON"
         );
-        let raw_response = model_inference
-            .get("raw_response")
-            .unwrap()
-            .as_str()
-            .unwrap();
+        let raw_response = mi.raw_response.as_deref().unwrap();
         assert!(serde_json::from_str::<Value>(raw_response).is_ok());
-        let input_tokens = model_inference
-            .get("input_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap();
-        assert!(input_tokens > 0);
-        let response_time_ms = model_inference
-            .get("response_time_ms")
-            .unwrap()
-            .as_u64()
-            .unwrap();
-        assert!(response_time_ms > 0);
-        assert!(model_inference.get("ttft_ms").unwrap().is_null());
+        assert!(mi.input_tokens.unwrap() > 0);
+        assert!(mi.response_time_ms.unwrap() > 0);
+        assert!(mi.ttft_ms.is_none());
     }
 }
 // Stick an embedding example into the database
@@ -354,23 +324,23 @@ async fn embed_insert_example(
         encoding_format: EmbeddingEncodingFormat::Float,
     };
     let api_keys = InferenceCredentials::default();
-    let clickhouse = get_clickhouse().await;
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let rate_limiting_config: Arc<tensorzero_core::rate_limiting::RateLimitingConfig> =
         Arc::new(Default::default());
     let clients = InferenceClients {
         http_client: client.clone(),
-        clickhouse_connection_info: clickhouse.clone(),
-        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        clickhouse_connection_info: conn.clickhouse.clone(),
+        postgres_connection_info: conn.postgres.clone(),
         credentials: Arc::new(api_keys),
         cache_options: CacheOptions {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
-        cache_manager: CacheManager::new(Arc::new(clickhouse.clone())),
+        cache_manager: CacheManager::new(Arc::new(conn.clickhouse.clone())),
         tags: Arc::new(Default::default()),
         rate_limiting_manager: Arc::new(tensorzero_core::rate_limiting::RateLimitingManager::new(
             rate_limiting_config,
-            Arc::new(PostgresConnectionInfo::Disabled),
+            Arc::new(conn.postgres.clone()),
         )),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
@@ -406,6 +376,7 @@ async fn embed_insert_example(
 }
 /// Testing a DICL variant
 /// Trying to get the LLM to learn that Pinocchio is a liar from examples
+#[gtest]
 #[tokio::test]
 pub async fn test_dicl_inference_request_simple() {
     skip_for_postgres!();
@@ -513,7 +484,8 @@ pub async fn test_dicl_inference_request_simple() {
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
     // Wait for data to be visible
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    database.flush_pending_writes().await;
+    database.sleep_for_writes_to_be_visible().await;
     // Launch the dicl inference request
     let payload = json!({
         "function_name": function_name,
@@ -538,57 +510,72 @@ pub async fn test_dicl_inference_request_simple() {
         .await
         .unwrap();
     // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
+    expect_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     println!("API response: {response_json:#?}");
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    expect_that!(episode_id_response, eq(episode_id));
     let response_variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(response_variant_name, variant_name);
+    expect_that!(response_variant_name, eq(variant_name));
     let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 1);
+    assert_that!(content.len(), eq(1));
     let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
+    expect_that!(content_block_type, eq("text"));
     let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert!(!content.to_lowercase().contains("rowling"));
-    assert!(content.to_lowercase().contains("nose"));
+    expect_that!(content.to_lowercase().contains("rowling"), eq(false));
+    expect_that!(content.to_lowercase().contains("nose"), eq(true));
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 0);
+    expect_that!(input_tokens, gt(0));
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
+    expect_that!(output_tokens, gt(0));
     let original_response = response_json.get("original_response").unwrap();
     let original_response_json: serde_json::Value =
         serde_json::from_str(original_response.as_str().unwrap()).unwrap();
-    assert_eq!(original_response_json["model"], "gpt-4o-mini-2024-07-18");
-    assert!(
-        original_response_json.get("choices").is_some(),
+    expect_that!(
+        original_response_json["model"],
+        eq("gpt-4o-mini-2024-07-18")
+    );
+    expect_that!(
+        original_response_json.get("choices"),
+        some(anything()),
         "Unexpected original_response: {original_response}"
     );
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    // Wait for trailing writes from API
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Check ChatInference Table
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    println!("ClickHouse - ChatInference: {result:#?}");
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-    let retrieved_variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_variant_name, variant_name);
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_that!(inferences.len(), eq(1));
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    println!("ChatInference: {chat:#?}");
+    expect_that!(chat.inference_id, eq(inference_id));
+    expect_that!(
+        chat.function_name,
+        eq(payload["function_name"].as_str().unwrap())
+    );
+    expect_that!(chat.variant_name, eq(variant_name));
+    expect_that!(chat.episode_id, eq(episode_id));
+    let input = serde_json::to_value(&chat.input).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Pinocchio"},
         "messages": [
@@ -598,77 +585,56 @@ pub async fn test_dicl_inference_request_simple() {
             }
         ]
     });
-    assert_eq!(input, correct_input);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    expect_that!(input, eq(&correct_input));
+    let output = chat.output.as_ref().expect("Expected output");
+    assert_that!(output.len(), eq(1));
+    let ContentBlockChatOutput::Text(text_block) = &output[0] else {
+        panic!("Expected text content block");
+    };
+    expect_that!(text_block.text, eq(content));
+    expect_that!(chat.tool_params, none());
+    let inference_params = serde_json::to_value(&chat.inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").is_none());
-    assert!(inference_params.get("seed").is_none());
-    assert_eq!(
+    expect_that!(inference_params.get("temperature"), none());
+    expect_that!(inference_params.get("seed"), none());
+    expect_that!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        eq(100)
     );
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    expect_that!(chat.processing_time_ms.unwrap(), gt(0));
+
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2);
-    for model_inference in result {
-        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
-        let input_messages = model_inference
-            .get("input_messages")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let input_messages: Vec<StoredRequestMessage> =
-            serde_json::from_str(input_messages).unwrap();
-        let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-        match model_name {
+    println!("ModelInferences: {model_inferences:#?}");
+    expect_that!(model_inferences.len(), eq(2));
+    for mi in &model_inferences {
+        let input_messages = mi.input_messages.as_ref().unwrap();
+        let output = mi.output.as_ref().unwrap();
+        match mi.model_name.as_str() {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
-                assert!(
-                    model_inference
-                        .get("output_tokens")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap()
-                        > 0
+                expect_that!(mi.output_tokens.unwrap(), gt(0));
+                let raw_response = mi.raw_response.as_deref().unwrap();
+                expect_that!(raw_response.to_lowercase().contains("rowling"), eq(false));
+                expect_that!(raw_response.to_lowercase().contains("nose"), eq(true));
+                expect_that!(
+                    mi.system.as_deref().unwrap(),
+                    eq(
+                        "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs."
+                    )
                 );
-                let raw_response = model_inference
-                    .get("raw_response")
-                    .unwrap()
-                    .as_str()
-                    .unwrap();
-                assert!(!raw_response.to_lowercase().contains("rowling"));
-                assert!(raw_response.to_lowercase().contains("nose"));
-                let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert_eq!(
-                    system,
-                    "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs."
-                );
-                assert_eq!(input_messages.len(), 7);
-                assert_eq!(output.len(), 1);
+                expect_that!(input_messages.len(), eq(7));
+                assert_that!(output.len(), eq(1));
                 match &output[0] {
-                    StoredContentBlock::Text(text) => {
-                        assert!(text.text.to_lowercase().contains("nose"));
+                    ContentBlockOutput::Text(text) => {
+                        expect_that!(text.text.to_lowercase().contains("nose"), eq(true));
                     }
                     _ => {
                         panic!("Expected a text block, got {:?}", output[0]);
@@ -677,52 +643,30 @@ pub async fn test_dicl_inference_request_simple() {
             }
             "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
-                assert!(model_inference.get("output_tokens").unwrap().is_null());
-                assert!(model_inference.get("system").unwrap().is_null());
-                assert_eq!(input_messages.len(), 1);
-                assert_eq!(output.len(), 0);
+                expect_that!(mi.output_tokens, none());
+                expect_that!(mi.system, none());
+                expect_that!(input_messages.len(), eq(1));
+                expect_that!(output.is_empty(), eq(true));
             }
             _ => {
-                panic!("Unexpected model: {model_name}");
+                panic!("Unexpected model: {}", mi.model_name);
             }
         }
-        let model_inference_id = model_inference.get("id").unwrap().as_str().unwrap();
-        assert!(Uuid::parse_str(model_inference_id).is_ok());
-        let inference_id_result = model_inference
-            .get("inference_id")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-        assert_eq!(inference_id_result, inference_id);
-        let raw_request = model_inference
-            .get("raw_request")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        assert!(
+        expect_that!(mi.inference_id, eq(inference_id));
+        let raw_request = mi.raw_request.as_deref().unwrap();
+        expect_that!(
             serde_json::from_str::<Value>(raw_request).is_ok(),
+            eq(true),
             "raw_request is not a valid JSON"
         );
-        let raw_response = model_inference
-            .get("raw_response")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        assert!(serde_json::from_str::<Value>(raw_response).is_ok());
-        let input_tokens = model_inference
-            .get("input_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap();
-        assert!(input_tokens > 0);
-        let response_time_ms = model_inference
-            .get("response_time_ms")
-            .unwrap()
-            .as_u64()
-            .unwrap();
-        assert!(response_time_ms > 0);
-        assert!(model_inference.get("ttft_ms").unwrap().is_null());
+        let raw_response = mi.raw_response.as_deref().unwrap();
+        expect_that!(
+            serde_json::from_str::<Value>(raw_response).is_ok(),
+            eq(true)
+        );
+        expect_that!(mi.input_tokens.unwrap(), gt(0));
+        expect_that!(mi.response_time_ms.unwrap(), gt(0));
+        expect_that!(mi.ttft_ms, none());
     }
     // Launch the dicl inference request with streaming
     let payload = json!({
@@ -761,7 +705,7 @@ pub async fn test_dicl_inference_request_simple() {
             }
         }
     }
-    assert!(found_done_chunk);
+    expect_that!(found_done_chunk, eq(true));
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
     for chunk in chunks.clone() {
@@ -771,7 +715,7 @@ pub async fn test_dicl_inference_request_simple() {
         let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
         match inference_id {
             Some(existing_id) => {
-                assert_eq!(existing_id, chunk_inference_id);
+                expect_that!(existing_id, eq(chunk_inference_id));
             }
             None => {
                 inference_id = Some(chunk_inference_id);
@@ -779,7 +723,7 @@ pub async fn test_dicl_inference_request_simple() {
         }
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
-        assert_eq!(chunk_episode_id, episode_id);
+        expect_that!(chunk_episode_id, eq(episode_id));
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
             let content_block = content_blocks.first().unwrap();
@@ -788,28 +732,37 @@ pub async fn test_dicl_inference_request_simple() {
         }
     }
     let inference_id = inference_id.unwrap();
-    assert!(!full_content.to_lowercase().contains("rowling"));
-    assert!(full_content.to_lowercase().contains("nose"));
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+    expect_that!(full_content.to_lowercase().contains("rowling"), eq(false));
+    expect_that!(full_content.to_lowercase().contains("nose"), eq(true));
+    // Wait for trailing writes from API
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Check ChatInference Table (streaming)
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    println!("ClickHouse - ChatInference: {result:#?}");
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-    let retrieved_variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_variant_name, variant_name);
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_that!(inferences.len(), eq(1));
+    let chat = match &inferences[0] {
+        StoredInferenceDatabase::Chat(c) => c,
+        StoredInferenceDatabase::Json(_) => panic!("Expected chat inference"),
+    };
+    println!("ChatInference (streaming): {chat:#?}");
+    expect_that!(chat.inference_id, eq(inference_id));
+    expect_that!(
+        chat.function_name,
+        eq(payload["function_name"].as_str().unwrap())
+    );
+    expect_that!(chat.variant_name, eq(variant_name));
+    expect_that!(chat.episode_id, eq(episode_id));
+    let input = serde_json::to_value(&chat.input).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Pinocchio"},
         "messages": [
@@ -819,129 +772,88 @@ pub async fn test_dicl_inference_request_simple() {
             }
         ]
     });
-    assert_eq!(input, correct_input);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    expect_that!(input, eq(&correct_input));
+    let output = chat.output.as_ref().expect("Expected output");
+    assert_that!(output.len(), eq(1));
+    let ContentBlockChatOutput::Text(text_block) = &output[0] else {
+        panic!("Expected text content block");
+    };
+    expect_that!(text_block.text, eq(&full_content));
+    expect_that!(chat.tool_params, none());
+    let inference_params = serde_json::to_value(&chat.inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").is_none());
-    assert!(inference_params.get("seed").is_none());
-    assert_eq!(
+    expect_that!(inference_params.get("temperature"), none());
+    expect_that!(inference_params.get("seed"), none());
+    expect_that!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        eq(100)
     );
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
-    // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    expect_that!(chat.processing_time_ms.unwrap(), gt(0));
+
+    // Check the ModelInference Table (streaming)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2);
-    for model_inference in result {
-        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
-        let input_messages = model_inference
-            .get("input_messages")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let input_messages: Vec<StoredRequestMessage> =
-            serde_json::from_str(input_messages).unwrap();
-        let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-        match model_name {
+    println!("ModelInferences (streaming): {model_inferences:#?}");
+    expect_that!(model_inferences.len(), eq(2));
+    for mi in &model_inferences {
+        let input_messages = mi.input_messages.as_ref().unwrap();
+        let output = mi.output.as_ref().unwrap();
+        match mi.model_name.as_str() {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
-                assert!(
-                    model_inference
-                        .get("output_tokens")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap()
-                        > 0
+                expect_that!(mi.output_tokens.unwrap(), gt(0));
+                let raw_response = mi.raw_response.as_deref().unwrap();
+                expect_that!(raw_response.to_lowercase().contains("rowling"), eq(false));
+                expect_that!(raw_response.to_lowercase().contains("nose"), eq(true));
+                expect_that!(
+                    mi.system.as_deref().unwrap(),
+                    eq(
+                        "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs."
+                    )
                 );
-                let raw_response = model_inference
-                    .get("raw_response")
-                    .unwrap()
-                    .as_str()
-                    .unwrap();
-                assert!(!raw_response.to_lowercase().contains("rowling"));
-                assert!(raw_response.to_lowercase().contains("nose"));
-                let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert_eq!(
-                    system,
-                    "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs."
-                );
-                assert_eq!(input_messages.len(), 7);
-                assert_eq!(output.len(), 1);
+                expect_that!(input_messages.len(), eq(7));
+                assert_that!(output.len(), eq(1));
                 match &output[0] {
-                    StoredContentBlock::Text(text) => {
-                        assert!(text.text.to_lowercase().contains("nose"));
+                    ContentBlockOutput::Text(text) => {
+                        expect_that!(text.text.to_lowercase().contains("nose"), eq(true));
                     }
                     _ => {
                         panic!("Expected a text block, got {:?}", output[0]);
                     }
                 }
-                assert!(!model_inference.get("ttft_ms").unwrap().is_null());
+                expect_that!(mi.ttft_ms, some(anything()));
             }
             "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
-                assert!(model_inference.get("output_tokens").unwrap().is_null());
-                assert!(model_inference.get("system").unwrap().is_null());
-                assert_eq!(input_messages.len(), 1);
-                assert_eq!(output.len(), 0);
+                expect_that!(mi.output_tokens, none());
+                expect_that!(mi.system, none());
+                expect_that!(input_messages.len(), eq(1));
+                expect_that!(output.is_empty(), eq(true));
             }
             _ => {
-                panic!("Unexpected model: {model_name}");
+                panic!("Unexpected model: {}", mi.model_name);
             }
         }
-        let model_inference_id = model_inference.get("id").unwrap().as_str().unwrap();
-        assert!(Uuid::parse_str(model_inference_id).is_ok());
-        let inference_id_result = model_inference
-            .get("inference_id")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-        assert_eq!(inference_id_result, inference_id);
-        let raw_request = model_inference
-            .get("raw_request")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        assert!(raw_request.to_lowercase().contains("potter"));
-        assert!(
+        expect_that!(mi.inference_id, eq(inference_id));
+        let raw_request = mi.raw_request.as_deref().unwrap();
+        expect_that!(raw_request.to_lowercase().contains("potter"), eq(true));
+        expect_that!(
             serde_json::from_str::<Value>(raw_request).is_ok(),
+            eq(true),
             "raw_request is not a valid JSON"
         );
         // Raw response is going to be json lines for streaming responses, so we'll skip this here
-        let input_tokens = model_inference
-            .get("input_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap();
-        assert!(input_tokens > 0);
-        let response_time_ms = model_inference
-            .get("response_time_ms")
-            .unwrap()
-            .as_u64()
-            .unwrap();
-        assert!(response_time_ms > 0);
+        expect_that!(mi.input_tokens.unwrap(), gt(0));
+        expect_that!(mi.response_time_ms.unwrap(), gt(0));
     }
 }
+#[gtest]
 #[tokio::test]
 async fn test_dicl_json_request() {
     skip_for_postgres!();
@@ -1071,7 +983,8 @@ async fn test_dicl_json_request() {
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
     // Wait for data to be visible
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    database.flush_pending_writes().await;
+    database.sleep_for_writes_to_be_visible().await;
     // Launch the dicl inference request
     let payload = json!({
         "function_name": function_name,
@@ -1095,45 +1008,56 @@ async fn test_dicl_json_request() {
         .await
         .unwrap();
     // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
+    expect_that!(response.status(), eq(StatusCode::OK));
     let response_json = response.json::<Value>().await.unwrap();
     println!("API response: {response_json:#?}");
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    expect_that!(episode_id_response, eq(episode_id));
     let response_variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(response_variant_name, variant_name);
+    expect_that!(response_variant_name, eq(variant_name));
     let content = response_json.get("output").unwrap().get("parsed").unwrap();
     let answer = content.get("answer").unwrap().as_str().unwrap();
-    assert!(!answer.to_lowercase().contains("brasilia"));
-    assert!(answer.to_lowercase().contains("nose"));
+    expect_that!(answer.to_lowercase().contains("brasilia"), eq(false));
+    expect_that!(answer.to_lowercase().contains("nose"), eq(true));
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 0);
+    expect_that!(input_tokens, gt(0));
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+    expect_that!(output_tokens, gt(0));
+    // Wait for trailing writes from API
+    let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    conn.flush_pending_writes().await;
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Check JsonInference Table
+    let config = get_e2e_config().await;
+    let inferences = conn
+        .list_inferences(
+            &config,
+            &ListInferencesParams {
+                ids: Some(&[inference_id]),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
-    println!("ClickHouse - JsonInference: {result:#?}");
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
-    let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
-    let retrieved_variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(retrieved_variant_name, variant_name);
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_that!(inferences.len(), eq(1));
+    let json_inf = match &inferences[0] {
+        StoredInferenceDatabase::Json(j) => j,
+        StoredInferenceDatabase::Chat(_) => panic!("Expected json inference"),
+    };
+    println!("JsonInference: {json_inf:#?}");
+    expect_that!(json_inf.inference_id, eq(inference_id));
+    expect_that!(
+        json_inf.function_name,
+        eq(payload["function_name"].as_str().unwrap())
+    );
+    expect_that!(json_inf.variant_name, eq(variant_name));
+    expect_that!(json_inf.episode_id, eq(episode_id));
+    let input = serde_json::to_value(&json_inf.input).unwrap();
     let correct_input = json!({
         "system": {"assistant_name": "Pinocchio"},
         "messages": [
@@ -1143,75 +1067,54 @@ async fn test_dicl_json_request() {
             }
         ]
     });
-    assert_eq!(input, correct_input);
-    let json_output = serde_json::from_str::<JsonInferenceOutput>(
-        result.get("output").unwrap().as_str().unwrap(),
-    )
-    .unwrap();
-    let clickhouse_answer = json_output.parsed.unwrap();
-    let clickhouse_answer = clickhouse_answer.get("answer").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_answer, answer);
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    expect_that!(input, eq(&correct_input));
+    let json_output = json_inf.output.as_ref().expect("Expected output");
+    let db_answer = json_output.parsed.as_ref().unwrap();
+    let db_answer = db_answer.get("answer").unwrap().as_str().unwrap();
+    expect_that!(db_answer, eq(answer));
+    let inference_params = serde_json::to_value(&json_inf.inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").is_none());
-    assert!(inference_params.get("seed").is_none());
-    assert_eq!(
+    expect_that!(inference_params.get("temperature"), none());
+    expect_that!(inference_params.get("seed"), none());
+    expect_that!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        eq(100)
     );
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    expect_that!(json_inf.processing_time_ms.unwrap(), gt(0));
+
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let model_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2);
-    for model_inference in result {
-        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
-        let input_messages = model_inference
-            .get("input_messages")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let input_messages: Vec<StoredRequestMessage> =
-            serde_json::from_str(input_messages).unwrap();
-        let output = model_inference.get("output").unwrap().as_str().unwrap();
-        let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-        match model_name {
+    println!("ModelInferences: {model_inferences:#?}");
+    expect_that!(model_inferences.len(), eq(2));
+    for mi in &model_inferences {
+        let input_messages = mi.input_messages.as_ref().unwrap();
+        let output = mi.output.as_ref().unwrap();
+        match mi.model_name.as_str() {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
-                assert!(
-                    model_inference
-                        .get("output_tokens")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap()
-                        > 0
+                expect_that!(mi.output_tokens.unwrap(), gt(0));
+                let raw_response = mi.raw_response.as_deref().unwrap();
+                expect_that!(raw_response.to_lowercase().contains("brasilia"), eq(false));
+                expect_that!(raw_response.to_lowercase().contains("nose"), eq(true));
+                expect_that!(
+                    mi.system.as_deref().unwrap(),
+                    eq(
+                        "You are a helpful and friendly assistant with a name that will be provided to you.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}\n"
+                    )
                 );
-                let raw_response = model_inference
-                    .get("raw_response")
-                    .unwrap()
-                    .as_str()
-                    .unwrap();
-                assert!(!raw_response.to_lowercase().contains("brasilia"));
-                assert!(raw_response.to_lowercase().contains("nose"));
-                let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert_eq!(
-                    system,
-                    "You are a helpful and friendly assistant with a name that will be provided to you.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}\n"
-                );
-                assert_eq!(input_messages.len(), 7);
-                assert_eq!(output.len(), 1);
+                expect_that!(input_messages.len(), eq(7));
+                assert_that!(output.len(), eq(1));
                 match &output[0] {
-                    StoredContentBlock::Text(text) => {
-                        assert!(!text.text.to_lowercase().contains("brasilia"));
-                        assert!(text.text.to_lowercase().contains("nose"));
+                    ContentBlockOutput::Text(text) => {
+                        expect_that!(text.text.to_lowercase().contains("brasilia"), eq(false));
+                        expect_that!(text.text.to_lowercase().contains("nose"), eq(true));
                     }
                     _ => {
                         panic!("Expected a text block, got {:?}", output[0]);
@@ -1220,55 +1123,34 @@ async fn test_dicl_json_request() {
             }
             "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
-                assert!(model_inference.get("output_tokens").unwrap().is_null());
-                assert!(model_inference.get("system").unwrap().is_null());
-                assert_eq!(input_messages.len(), 1);
-                assert_eq!(output.len(), 0);
+                expect_that!(mi.output_tokens, none());
+                expect_that!(mi.system, none());
+                expect_that!(input_messages.len(), eq(1));
+                expect_that!(output.is_empty(), eq(true));
             }
             _ => {
-                panic!("Unexpected model: {model_name}");
+                panic!("Unexpected model: {}", mi.model_name);
             }
         }
-        let model_inference_id = model_inference.get("id").unwrap().as_str().unwrap();
-        assert!(Uuid::parse_str(model_inference_id).is_ok());
-        let inference_id_result = model_inference
-            .get("inference_id")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-        assert_eq!(inference_id_result, inference_id);
-        let raw_request = model_inference
-            .get("raw_request")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        assert!(
+        expect_that!(mi.inference_id, eq(inference_id));
+        let raw_request = mi.raw_request.as_deref().unwrap();
+        expect_that!(
             serde_json::from_str::<Value>(raw_request).is_ok(),
+            eq(true),
             "raw_request is not a valid JSON"
         );
-        let raw_response = model_inference
-            .get("raw_response")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        assert!(serde_json::from_str::<Value>(raw_response).is_ok());
-        let input_tokens = model_inference
-            .get("input_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap();
-        assert!(input_tokens > 0);
-        let response_time_ms = model_inference
-            .get("response_time_ms")
-            .unwrap()
-            .as_u64()
-            .unwrap();
-        assert!(response_time_ms > 0);
-        assert!(model_inference.get("ttft_ms").unwrap().is_null());
+        let raw_response = mi.raw_response.as_deref().unwrap();
+        expect_that!(
+            serde_json::from_str::<Value>(raw_response).is_ok(),
+            eq(true)
+        );
+        expect_that!(mi.input_tokens.unwrap(), gt(0));
+        expect_that!(mi.response_time_ms.unwrap(), gt(0));
+        expect_that!(mi.ttft_ms, none());
     }
 }
 /// Test that max_distance filters out all irrelevant examples, falling back to vanilla chat completion
+#[gtest]
 #[tokio::test]
 pub async fn test_dicl_max_distance_filters_all_examples() {
     skip_for_postgres!();
@@ -1353,7 +1235,8 @@ max_tokens = 100
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
     // Wait for data to be visible
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    database.flush_pending_writes().await;
+    database.sleep_for_writes_to_be_visible().await;
     // Query about a completely unrelated topic (programming/software)
     // The max_distance should filter out all geography examples due to high cosine distance
     let params = ClientInferenceParams {
@@ -1377,48 +1260,46 @@ max_tokens = 100
     };
     println!("API response: {response:#?}");
     let inference_id = response.inference_id;
-    // Sleep to allow time for data to be inserted into ClickHouse
-    sleep(Duration::from_secs(1)).await;
+
+    // Wait for trailing writes from API
+    database.flush_pending_writes().await;
+    database.sleep_for_writes_to_be_visible().await;
+
     // Check the ModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let model_inferences = database
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2); // embedding + chat completion
-    for model_inference in result {
-        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
-        let input_messages = model_inference
-            .get("input_messages")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let input_messages: Vec<StoredRequestMessage> =
-            serde_json::from_str(input_messages).unwrap();
-        match model_name {
+    println!("ModelInferences: {model_inferences:#?}");
+    expect_that!(model_inferences.len(), eq(2)); // embedding + chat completion
+    for mi in &model_inferences {
+        let input_messages = mi.input_messages.as_ref().unwrap();
+        match mi.model_name.as_str() {
             "openai::gpt-4o-mini-2024-07-18" => {
                 // When all examples are filtered, should behave like vanilla chat completion
                 // This means short input_messages (1-2 messages, not 7+ with examples)
-                assert!(
-                    input_messages.len() <= 2,
+                expect_that!(
+                    input_messages.len(),
+                    le(2),
                     "Expected short input_messages for vanilla chat completion, got {}",
                     input_messages.len()
                 );
                 // System should always contain DICL system instructions
-                let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert!(system.contains("learning by induction"));
+                let system = mi.system.as_deref().unwrap();
+                expect_that!(system.contains("learning by induction"), eq(true));
             }
             "openai::text-embedding-3-small" => {
                 // The embedding call should have 1 input message
-                assert_eq!(input_messages.len(), 1);
+                expect_that!(input_messages.len(), eq(1));
             }
             _ => {
-                panic!("Unexpected model: {model_name}");
+                panic!("Unexpected model: {}", mi.model_name);
             }
         }
     }
 }
 /// Test that max_distance keeps relevant examples when cosine distance is below threshold
+#[gtest]
 #[tokio::test]
 pub async fn test_dicl_max_distance_keeps_relevant_examples() {
     skip_for_postgres!();
@@ -1508,7 +1389,8 @@ max_tokens = 100
     // Join all tasks and wait for them to complete
     futures::future::join_all(tasks).await;
     // Wait for data to be visible
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    database.flush_pending_writes().await;
+    database.sleep_for_writes_to_be_visible().await;
     // Query about a similar topic (Harry Potter author, similar to Lord of the Rings question)
     // The max_distance=0.6 should keep relevant examples
     let params = ClientInferenceParams {
@@ -1532,44 +1414,40 @@ max_tokens = 100
     };
     println!("API response: {response:#?}");
     let inference_id = response.inference_id;
-    // Sleep to allow time for data to be inserted into ClickHouse
-    sleep(Duration::from_secs(1)).await;
+
+    // Wait for trailing writes from API
+    database.flush_pending_writes().await;
+    database.sleep_for_writes_to_be_visible().await;
+
     // Check the ModelInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let model_inferences = database
+        .get_model_inferences_by_inference_id(inference_id)
         .await
         .unwrap();
-    println!("ClickHouse - ModelInference: {result:#?}");
-    assert_eq!(result.len(), 2); // embedding + chat completion
-    for model_inference in result {
-        let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
-        let input_messages = model_inference
-            .get("input_messages")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        let input_messages: Vec<StoredRequestMessage> =
-            serde_json::from_str(input_messages).unwrap();
-        match model_name {
+    println!("ModelInferences: {model_inferences:#?}");
+    expect_that!(model_inferences.len(), eq(2)); // embedding + chat completion
+    for mi in &model_inferences {
+        let input_messages = mi.input_messages.as_ref().unwrap();
+        match mi.model_name.as_str() {
             "openai::gpt-4o-mini-2024-07-18" => {
                 // When relevant examples are kept, should have DICL behavior with examples
                 // This means long input_messages (7 messages: 3 examples * 2 + 1 query)
-                assert_eq!(
+                expect_that!(
                     input_messages.len(),
-                    7,
+                    eq(7),
                     "Expected 7 input_messages with DICL examples, got {}",
                     input_messages.len()
                 );
                 // System should contain DICL instructions
-                let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert!(system.contains("learning by induction"));
+                let system = mi.system.as_deref().unwrap();
+                expect_that!(system.contains("learning by induction"), eq(true));
             }
             "openai::text-embedding-3-small" => {
                 // The embedding call should have 1 input message
-                assert_eq!(input_messages.len(), 1);
+                expect_that!(input_messages.len(), eq(1));
             }
             _ => {
-                panic!("Unexpected model: {model_name}");
+                panic!("Unexpected model: {}", mi.model_name);
             }
         }
     }

@@ -82,6 +82,7 @@ mock! {
             &self,
             snapshot_hash: SnapshotHash,
             input: durable_tools::ActionInput,
+            heartbeater: std::sync::Arc<dyn durable_tools::Heartbeater>,
         ) -> Result<durable_tools::ActionResponse, TensorZeroClientError>;
 
         async fn get_config_snapshot(
@@ -188,6 +189,7 @@ mock! {
         async fn run_evaluation(
             &self,
             params: durable_tools::RunEvaluationParams,
+            heartbeater: std::sync::Arc<dyn durable_tools::Heartbeater>,
         ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
     }
 }

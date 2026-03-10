@@ -4,7 +4,6 @@ version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "awscli",
     "axolotl[flash-attn,deepspeed]",
     "clickhouse-connect",
     "ipykernel",
@@ -24,6 +23,7 @@ dependencies = [
 
 [tool.uv]
 required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+override-dependencies = ["pillow>=12.1.1"]
 
 [tool.uv.extra-build-dependencies]
 flash-attn = [{ requirement = "torch", match-runtime = true }]
