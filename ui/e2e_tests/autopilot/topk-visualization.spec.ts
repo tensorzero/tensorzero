@@ -159,7 +159,6 @@ test.describe("TopK Evaluation Visualization", () => {
     await lastAssistantMessage.scrollIntoViewIfNeeded();
     await expect(lastAssistantMessage).toBeVisible({ timeout: 60000 });
 
-    // Visualization cards now auto-expand when they contain chart data
     // Verify the visualization renders with both chart titles inside the expanded card
     await expect(page.getByText("Mean Performance by Variant")).toBeVisible({
       timeout: 10000,
