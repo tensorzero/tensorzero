@@ -3372,3 +3372,136 @@ async fn test_cli_args_precision_targets() {
         "Should have at least MIN_DATAPOINTS ({MIN_DATAPOINTS}) inferences, got {num_datapoints}"
     );
 }
+
+/// Tests the `--function-name` / `--evaluator-names` CLI path, which resolves
+/// top-level evaluators by name instead of using a named evaluation config.
+#[tokio::test(flavor = "multi_thread")]
+async fn run_evaluation_with_function_name_and_evaluator_names() {
+    init_tracing_for_tests();
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let config = get_config().await;
+    let dataset_name = format!("extract_entities_top_level-{}", Uuid::now_v7());
+    write_json_fixture_to_dataset(
+        &db,
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config_path = get_e2e_config_path();
+    let evaluation_run_id = Uuid::now_v7();
+
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: None,
+        function_name: Some("extract_entities".to_string()),
+        evaluator_names: Some(vec!["exact_match".to_string()]),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: Some(vec![]),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
+        cutoffs: vec![],
+    };
+
+    let mut output = Vec::new();
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
+        .await
+        .expect("Evaluation with --function-name/--evaluator-names should succeed");
+    db.flush_pending_writes().await;
+    sleep(Duration::from_secs(5)).await;
+
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().collect();
+
+    // First line is RunInfo
+    let run_info: serde_json::Value =
+        serde_json::from_str(output_lines[0]).expect("RunInfo should be valid JSON");
+    assert_eq!(run_info["evaluation_run_id"], evaluation_run_id.to_string());
+    assert!(
+        run_info["num_datapoints"].as_u64().unwrap() > 0,
+        "Should have datapoints"
+    );
+
+    // Parse result lines
+    let mut successes = 0;
+    for line in output_lines.iter().skip(1) {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let info = match parsed {
+            EvaluationUpdate::Success(info) => info,
+            EvaluationUpdate::Error(err) => panic!("Unexpected evaluation error: {}", err.message),
+            EvaluationUpdate::RunInfo(_) => continue,
+        };
+
+        // Should only have exact_match evaluator results
+        assert!(
+            info.evaluations.contains_key("exact_match"),
+            "Should have exact_match evaluation result"
+        );
+        assert_eq!(
+            info.evaluations.len(),
+            1,
+            "Should only have one evaluator (exact_match)"
+        );
+        assert!(
+            info.evaluator_errors.is_empty(),
+            "Should have no evaluator errors"
+        );
+
+        // Verify feedback was written with top-level evaluator metric naming
+        let inference_id = info.response.inference_id();
+        let feedback = query_boolean_feedback(
+            &db,
+            inference_id,
+            Some("tensorzero::evaluator::exact_match"),
+        )
+        .await
+        .expect("Should find boolean feedback for top-level evaluator");
+
+        assert_eq!(
+            feedback.metric_name, "tensorzero::evaluator::exact_match",
+            "Metric name should use top-level evaluator naming (no evaluation_name prefix)"
+        );
+        assert_eq!(
+            feedback.tags["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(feedback.tags["tensorzero::evaluator_name"], "exact_match");
+        // Top-level evaluators should not have an evaluation_name tag
+        assert!(
+            !feedback.tags.contains_key("tensorzero::evaluation_name"),
+            "Top-level evaluator feedback should not have evaluation_name tag"
+        );
+
+        // Verify the inference is properly tagged (no evaluation_name)
+        let StoredInferenceDatabase::Json(db_inference) =
+            query_inference(&db, &config, inference_id)
+                .await
+                .expect("Should find json inference")
+        else {
+            panic!("Expected json inference");
+        };
+        assert_eq!(
+            db_inference.tags["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(db_inference.tags["tensorzero::dataset_name"], dataset_name);
+        assert!(
+            !db_inference
+                .tags
+                .contains_key("tensorzero::evaluation_name"),
+            "Top-level evaluator inference should not have evaluation_name tag"
+        );
+
+        successes += 1;
+    }
+    assert_eq!(successes, 6, "Should have 6 successful evaluations");
+}
