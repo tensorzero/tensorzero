@@ -178,10 +178,17 @@ export function AutoevalExampleLabelingCard({
               onSelect={(value) =>
                 setSelections((prev) => ({ ...prev, [labelQ.id]: value }))
               }
-              explanationText={explanations[labelQ.id] ?? ""}
-              onExplanationChange={(text) =>
-                setExplanations((prev) => ({ ...prev, [labelQ.id]: text }))
+              explanationText={
+                explanationQ ? (explanations[explanationQ.id] ?? "") : ""
               }
+              onExplanationChange={(text) => {
+                if (explanationQ) {
+                  setExplanations((prev) => ({
+                    ...prev,
+                    [explanationQ.id]: text,
+                  }));
+                }
+              }}
             />
           ),
       )}
