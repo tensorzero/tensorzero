@@ -1,4 +1,3 @@
-import json
 from asyncio import Semaphore
 from dataclasses import dataclass
 
