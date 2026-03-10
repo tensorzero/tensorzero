@@ -3,7 +3,7 @@
 /**
  * A free-response explanation question within an autoeval example.
  */
-export type AutoevalExplanationQuestion = {
+export type AutoEvalExplanationQuestion = {
   id: string;
   header: string;
   question: string;

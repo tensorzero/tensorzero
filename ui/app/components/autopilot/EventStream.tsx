@@ -285,7 +285,7 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       };
     case "user_questions":
     case "user_questions_answers":
-    case "autoeval_example_labeling":
+    case "auto_eval_example_labeling":
     case "visualization":
     case "unknown":
       return {};
@@ -466,7 +466,7 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     }
-    case "autoeval_example_labeling":
+    case "auto_eval_example_labeling":
       return "Example Labeling";
     case "unknown":
       return (

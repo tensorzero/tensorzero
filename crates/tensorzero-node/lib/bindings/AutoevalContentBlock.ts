@@ -4,6 +4,6 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * A block of rich content displayed alongside an autoeval example.
  */
-export type AutoevalContentBlock =
+export type AutoEvalContentBlock =
   | { type: "markdown"; text: string; label?: string }
   | { type: "json"; data: JsonValue; label?: string };
