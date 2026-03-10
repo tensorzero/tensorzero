@@ -1,0 +1,866 @@
+import {
+  getEvaluationsForDatapoint,
+  pollForEvaluations,
+} from "~/utils/clickhouse/evaluations.server";
+import { toEvaluationRunsUrl, toInferenceUrl } from "~/utils/urls";
+import type { Route } from "./+types/route";
+import {
+  PageHeader,
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+  PageLayout,
+  Breadcrumbs,
+} from "~/components/layout/PageLayout";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+
+import {
+  Await,
+  data,
+  Link,
+  redirect,
+  useFetcher,
+  useLocation,
+} from "react-router";
+import { LayoutErrorBoundary } from "~/components/ui/error/LayoutErrorBoundary";
+import { Suspense } from "react";
+import { InputElement } from "~/components/input_output/InputElement";
+import { EmptyMessage } from "~/components/input_output/ContentBlockElement";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
+import {
+  consolidateEvaluationResults,
+  type ConsolidatedMetric,
+} from "~/utils/clickhouse/evaluations";
+import MetricValue from "~/components/metric/MetricValue";
+import { getMetricType } from "~/utils/config/evaluations";
+import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
+import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
+import {
+  ColorAssignerProvider,
+  useColorAssigner,
+} from "~/hooks/evaluations/ColorAssigner";
+import { getConfig, getConfigForSnapshot } from "~/utils/config/index.server";
+import type {
+  EvaluatorConfig,
+  InferenceEvaluationConfig,
+  MetricConfig,
+  JsonInferenceOutput,
+  ContentBlockChatOutput,
+} from "~/types/tensorzero";
+import type {
+  EvaluationRunMetadata,
+  RunMetricMetadata,
+} from "~/types/tensorzero";
+
+import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import { InferenceButton } from "~/components/utils/InferenceButton";
+import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import { handleAddToDatasetAction } from "~/utils/dataset.server";
+import { renameDatapoint } from "~/routes/datasets/$dataset_name/datapoint/$id/datapointOperations.server";
+import { useToast } from "~/hooks/use-toast";
+import { useEffect } from "react";
+import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
+import { logger } from "~/utils/logger";
+import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
+import { BasicInfoLayoutSkeleton } from "~/components/layout/BasicInfoLayout";
+import { Skeleton } from "~/components/ui/skeleton";
+import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import type { ConsolidatedEvaluationResult } from "~/utils/clickhouse/evaluations";
+import BasicInfo from "~/routes/evaluations/$datapoint_id/EvaluationDatapointBasicInfo";
+
+interface RunInfoData {
+  selected_evaluation_run_infos: EvaluationRunInfo[];
+  allowedEvaluationRunInfos: EvaluationRunInfo[];
+}
+
+interface EvaluationResultsData {
+  consolidatedEvaluationResults: ConsolidatedEvaluationResult[];
+  datapoint_staled_at?: string;
+}
+
+async function fetchRunInfoData(
+  datapoint_id: string,
+  function_name: string,
+  selectedRunIds: string[],
+): Promise<RunInfoData> {
+  const tensorZeroClient = getTensorZeroClient();
+
+  const [selected_evaluation_run_infos, allowedEvaluationRunInfos] =
+    await Promise.all([
+      tensorZeroClient
+        .getEvaluationRunInfos(selectedRunIds, function_name)
+        .then((response) => response.run_infos),
+      tensorZeroClient
+        .getEvaluationRunInfosForDatapoint(datapoint_id, function_name)
+        .then((response) => response.run_infos),
+    ]);
+
+  return {
+    selected_evaluation_run_infos,
+    allowedEvaluationRunInfos,
+  };
+}
+
+// test 3
+
+async function fetchEvaluationResultsData(
+  evaluation_name: string,
+  datapoint_id: string,
+  selectedRunIds: string[],
+  newFeedbackId: string | null,
+): Promise<EvaluationResultsData> {
+  const evaluationResults = newFeedbackId
+    ? await pollForEvaluations(
+        evaluation_name,
+        datapoint_id,
+        selectedRunIds,
+        newFeedbackId,
+      )
+    : await getEvaluationsForDatapoint(
+        evaluation_name,
+        datapoint_id,
+        selectedRunIds,
+      );
+
+  const consolidatedEvaluationResults =
+    consolidateEvaluationResults(evaluationResults);
+  if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
+    const foundEvaluationRunIds = new Set(
+      consolidatedEvaluationResults.map((result) => result.evaluation_run_id),
+    );
+    const missingEvaluationRunIds = selectedRunIds.filter(
+      (id) => !foundEvaluationRunIds.has(id),
+    );
+
+    throw new Error(
+      `Evaluation run ID(s) not found: ${missingEvaluationRunIds.join(", ")}`,
+    );
+  }
+
+  return {
+    consolidatedEvaluationResults,
+    datapoint_staled_at: consolidatedEvaluationResults[0].staled_at,
+  };
+}
+
+function buildMetricsConfigFromRunMetadata(
+  metrics: RunMetricMetadata[],
+): Record<string, MetricConfig> {
+  const metricsConfig: Record<string, MetricConfig> = {};
+  for (const metric of metrics) {
+    metricsConfig[metric.name] = {
+      type: metric.value_type === "boolean" ? "boolean" : "float",
+      level: "inference",
+      optimize: metric.optimize ?? "max",
+    };
+  }
+  return metricsConfig;
+}
+
+function buildEvaluatorMetricNames(
+  metrics: RunMetricMetadata[],
+): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  for (const metric of metrics) {
+    if (metric.evaluator_name) {
+      mapping[metric.evaluator_name] = metric.name;
+    }
+  }
+  return mapping;
+}
+
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const datapoint_id = params.datapoint_id;
+  const url = new URL(request.url);
+  const searchParams = new URLSearchParams(url.search);
+
+  const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
+  const selectedRunIds = selected_evaluation_run_ids
+    ? selected_evaluation_run_ids.split(",")
+    : [];
+  if (selectedRunIds.length === 0) {
+    return redirect("/evaluations");
+  }
+
+  // Fetch run metadata from the database
+  const client = getTensorZeroClient();
+  const runMetadataResponse =
+    await client.getEvaluationRunMetadata(selectedRunIds);
+  const firstRunId = selectedRunIds[0];
+  const firstRunMetadata: EvaluationRunMetadata | undefined =
+    runMetadataResponse.metadata[firstRunId];
+  if (!firstRunMetadata) {
+    throw data(`Evaluation run metadata not found for run ID: ${firstRunId}`, {
+      status: 404,
+    });
+  }
+
+  const evaluation_name = firstRunMetadata.evaluation_name;
+  const function_name = firstRunMetadata.function_name;
+  const function_type = firstRunMetadata.function_type as "chat" | "json";
+
+  // Try to look up the full evaluation config for richer UI
+  const config = await getConfig();
+  let evaluationConfig = config.evaluations[evaluation_name];
+  let effectiveConfig = config;
+
+  if (!evaluationConfig) {
+    const runs = await client.listEvaluationRuns(100, 0);
+    const matchingRun = runs.runs.find(
+      (r) => r.evaluation_name === evaluation_name,
+    );
+    if (matchingRun?.snapshot_hash) {
+      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
+      evaluationConfig = effectiveConfig.evaluations[evaluation_name];
+    }
+  }
+
+  let metricsConfig: Record<string, MetricConfig>;
+  let evaluatorMetricNames: Record<string, string>;
+
+  if (evaluationConfig) {
+    const evaluator_names = Object.keys(evaluationConfig.evaluators);
+    evaluatorMetricNames = {};
+    metricsConfig = {};
+    for (const evaluatorName of evaluator_names) {
+      const metricName = `tensorzero::evaluation_name::${evaluation_name}::evaluator_name::${evaluatorName}`;
+      evaluatorMetricNames[evaluatorName] = metricName;
+      const metricConfig = effectiveConfig.metrics[metricName];
+      if (metricConfig) {
+        metricsConfig[metricName] = metricConfig;
+      }
+    }
+  } else {
+    metricsConfig = buildMetricsConfigFromRunMetadata(firstRunMetadata.metrics);
+    evaluatorMetricNames = buildEvaluatorMetricNames(firstRunMetadata.metrics);
+    // Build a minimal evaluationConfig for the components
+    const evaluators: Record<string, { type: "exact_match" }> = {};
+    for (const metric of firstRunMetadata.metrics) {
+      if (metric.evaluator_name) {
+        evaluators[metric.evaluator_name] = { type: "exact_match" };
+      }
+    }
+    evaluationConfig = {
+      type: "inference" as const,
+      function_name,
+      evaluators,
+    };
+  }
+
+  const newFeedbackId = searchParams.get("newFeedbackId");
+  const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
+
+  const tensorZeroDatapoint = await client.getDatapoint(datapoint_id);
+  if (!tensorZeroDatapoint) {
+    throw data(`No datapoint found for ID \`${datapoint_id}\`.`, {
+      status: 404,
+    });
+  }
+
+  const runInfoData = fetchRunInfoData(
+    datapoint_id,
+    function_name,
+    selectedRunIds,
+  );
+  const evaluationResultsData = fetchEvaluationResultsData(
+    evaluation_name,
+    datapoint_id,
+    selectedRunIds,
+    newFeedbackId,
+  );
+
+  return {
+    evaluation_name,
+    evaluationConfig,
+    functionType: function_type,
+    metricsConfig,
+    evaluatorMetricNames,
+    runInfoData,
+    evaluationResultsData,
+    selectedRunIds,
+    newFeedbackId,
+    newJudgeDemonstrationId,
+  };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const _action = formData.get("_action");
+  switch (_action) {
+    case "addToDataset": {
+      return handleAddToDatasetAction(formData);
+    }
+    case "addFeedback": {
+      const response = await addEvaluationHumanFeedback(formData);
+      const url = new URL(request.url);
+      url.searchParams.delete("beforeFeedback");
+      url.searchParams.delete("afterFeedback");
+      url.searchParams.set(
+        "newFeedbackId",
+        response.feedbackResponse.feedback_id,
+      );
+      if (response.judgeDemonstrationResponse) {
+        url.searchParams.set(
+          "newJudgeDemonstrationId",
+          response.judgeDemonstrationResponse.feedback_id,
+        );
+      } else {
+        logger.warn("No judge demonstration response");
+      }
+      return redirect(url.toString());
+    }
+    case "renameDatapoint": {
+      const datapoint_id = formData.get("datapoint_id") as string;
+      const dataset_name = formData.get("dataset_name") as string;
+      const newName = formData.get("newName") as string;
+
+      await renameDatapoint({
+        datasetName: dataset_name,
+        datapointId: datapoint_id,
+        name: newName ?? null,
+      });
+
+      return data({ success: true });
+    }
+    case null:
+      logger.error("No action provided");
+      return null;
+    default:
+      logger.error(`Unknown action: ${_action}`);
+      return null;
+  }
+}
+
+function EvalRunSelectorSkeleton() {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Skeleton className="h-8 w-48" />
+    </div>
+  );
+}
+
+function InputSkeleton() {
+  return <Skeleton className="h-32 w-full" />;
+}
+
+function OutputsSkeleton() {
+  return (
+    <div className="flex gap-4 overflow-x-auto">
+      <div className="min-w-64 flex-1 space-y-2">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-12 w-full" />
+      </div>
+      <div className="min-w-64 flex-1 space-y-2">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-12 w-full" />
+      </div>
+    </div>
+  );
+}
+
+function BasicInfoWithData({
+  data,
+  evaluation_name,
+  evaluationConfig: evaluation_config,
+  functionType,
+  datapoint_id,
+}: {
+  data: EvaluationResultsData;
+  evaluation_name: string;
+  evaluationConfig: InferenceEvaluationConfig;
+  functionType: "chat" | "json";
+  datapoint_id: string;
+}) {
+  const { consolidatedEvaluationResults, datapoint_staled_at } = data;
+  const fetcher = useFetcher();
+
+  const handleRenameDatapoint = async (newName: string) => {
+    const formData = new FormData();
+    formData.append("_action", "renameDatapoint");
+    formData.append("datapoint_id", datapoint_id);
+    formData.append(
+      "dataset_name",
+      consolidatedEvaluationResults[0].dataset_name,
+    );
+    formData.append("newName", newName);
+    await fetcher.submit(formData, { method: "post", action: "." });
+  };
+
+  return (
+    <BasicInfo
+      evaluation_name={evaluation_name}
+      evaluation_config={evaluation_config}
+      functionType={functionType}
+      dataset_name={consolidatedEvaluationResults[0].dataset_name}
+      datapoint_id={datapoint_id}
+      datapoint_name={consolidatedEvaluationResults[0].name}
+      datapoint_staled_at={datapoint_staled_at}
+      onRenameDatapoint={handleRenameDatapoint}
+    />
+  );
+}
+
+function MainContent({
+  data,
+  evaluation_name,
+  evaluationConfig: evaluation_config,
+  metricsConfig,
+  evaluatorMetricNames,
+  datapoint_id,
+}: {
+  data: EvaluationResultsData;
+  evaluation_name: string;
+  evaluationConfig: InferenceEvaluationConfig;
+  metricsConfig: Record<string, MetricConfig>;
+  evaluatorMetricNames: Record<string, string>;
+  datapoint_id: string;
+}) {
+  const { consolidatedEvaluationResults } = data;
+
+  const outputsToDisplay = [
+    ...(consolidatedEvaluationResults[0].reference_output != null
+      ? [
+          {
+            id: "Reference",
+            output: consolidatedEvaluationResults[0].reference_output,
+            metrics: [],
+            variant_name: "Reference",
+            inferenceId: null,
+            episodeId: null,
+          },
+        ]
+      : []),
+    ...consolidatedEvaluationResults.map((result) => ({
+      id: result.evaluation_run_id,
+      inferenceId: result.inference_id,
+      episodeId: result.episode_id,
+      variant_name: result.variant_name,
+      output: result.generated_output,
+      metrics: result.metrics,
+    })),
+  ];
+
+  return (
+    <SectionsGroup>
+      <SectionLayout>
+        <SectionHeader heading="Input" />
+        {consolidatedEvaluationResults[0].input ? (
+          <InputElement input={consolidatedEvaluationResults[0].input} />
+        ) : (
+          <EmptyMessage message="No input" />
+        )}
+      </SectionLayout>
+      <OutputsSection
+        outputsToDisplay={outputsToDisplay}
+        evaluation_name={evaluation_name}
+        evaluation_config={evaluation_config}
+        metricsConfig={metricsConfig}
+        evaluatorMetricNames={evaluatorMetricNames}
+        datapointId={datapoint_id}
+      />
+    </SectionsGroup>
+  );
+}
+
+function EvalRunSelectorWithData({
+  data,
+  evaluationName,
+}: {
+  data: RunInfoData;
+  evaluationName: string;
+}) {
+  return (
+    <EvalRunSelector
+      evaluationName={evaluationName}
+      selectedRunIdInfos={data.selected_evaluation_run_infos}
+      allowedRunInfos={data.allowedEvaluationRunInfos}
+    />
+  );
+}
+
+export default function EvaluationDatapointPage({
+  loaderData,
+  params,
+}: Route.ComponentProps) {
+  const {
+    evaluation_name,
+    evaluationConfig,
+    functionType,
+    metricsConfig,
+    evaluatorMetricNames,
+    runInfoData,
+    evaluationResultsData,
+    selectedRunIds,
+    newFeedbackId,
+    newJudgeDemonstrationId,
+  } = loaderData;
+  const location = useLocation();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (newFeedbackId) {
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
+    }
+    return;
+  }, [newFeedbackId, newJudgeDemonstrationId, toast]);
+
+  const runIdsParam = selectedRunIds.join(",");
+
+  return (
+    <ColorAssignerProvider selectedRunIds={selectedRunIds}>
+      <PageLayout>
+        <PageHeader
+          eyebrow={
+            <Breadcrumbs
+              segments={[
+                { label: "Evaluations", href: "/evaluations" },
+                {
+                  label: evaluation_name,
+                  href: toEvaluationRunsUrl(runIdsParam),
+                  isIdentifier: true,
+                },
+                { label: "Results" },
+              ]}
+            />
+          }
+          name={params.datapoint_id}
+        >
+          <Suspense
+            key={`${location.key}-basicinfo`}
+            fallback={<BasicInfoLayoutSkeleton rows={5} />}
+          >
+            <Await
+              resolve={evaluationResultsData}
+              errorElement={<SectionAsyncErrorState />}
+            >
+              {(resultsData) => (
+                <BasicInfoWithData
+                  data={resultsData}
+                  evaluation_name={evaluation_name}
+                  evaluationConfig={evaluationConfig}
+                  functionType={functionType}
+                  datapoint_id={params.datapoint_id}
+                />
+              )}
+            </Await>
+          </Suspense>
+        </PageHeader>
+
+        <Suspense
+          key={`${location.key}-selector`}
+          fallback={<EvalRunSelectorSkeleton />}
+        >
+          <Await
+            resolve={runInfoData}
+            errorElement={<SectionAsyncErrorState />}
+          >
+            {(infoData) => (
+              <EvalRunSelectorWithData
+                data={infoData}
+                evaluationName={evaluation_name}
+              />
+            )}
+          </Await>
+        </Suspense>
+
+        {/* Main content - depends on evaluation results */}
+        <Suspense
+          key={`${location.key}-content`}
+          fallback={
+            <SectionsGroup>
+              <SectionLayout>
+                <SectionHeader heading="Input" />
+                <InputSkeleton />
+              </SectionLayout>
+              <SectionLayout>
+                <SectionHeader heading="Output" />
+                <OutputsSkeleton />
+              </SectionLayout>
+            </SectionsGroup>
+          }
+        >
+          <Await
+            resolve={evaluationResultsData}
+            errorElement={<SectionAsyncErrorState />}
+          >
+            {(resultsData) => (
+              <MainContent
+                data={resultsData}
+                evaluation_name={evaluation_name}
+                evaluationConfig={evaluationConfig}
+                metricsConfig={metricsConfig}
+                evaluatorMetricNames={evaluatorMetricNames}
+                datapoint_id={params.datapoint_id}
+              />
+            )}
+          </Await>
+        </Suspense>
+      </PageLayout>
+    </ColorAssignerProvider>
+  );
+}
+
+const MetricsDisplay = ({
+  metrics,
+  evaluatorsConfig,
+  metricsConfig,
+  evaluatorMetricNames,
+  datapointId,
+  inferenceId,
+  evalRunId,
+  variantName,
+}: {
+  metrics: ConsolidatedMetric[];
+  evaluatorsConfig: Record<string, EvaluatorConfig | undefined>;
+  metricsConfig: Record<string, MetricConfig>;
+  evaluatorMetricNames: Record<string, string>;
+  datapointId: string;
+  inferenceId: string | null;
+  evalRunId: string;
+  variantName: string;
+}) => {
+  return (
+    <div className="pt-2">
+      <div className="space-y-1">
+        {metrics.map((metricObj) => {
+          const evaluatorConfig = evaluatorsConfig[metricObj.evaluator_name];
+          if (!evaluatorConfig) return null;
+
+          return (
+            <MetricRow
+              key={metricObj.evaluator_name}
+              evaluatorName={metricObj.evaluator_name}
+              metricValue={metricObj.metric_value}
+              evaluatorConfig={evaluatorConfig}
+              metricsConfig={metricsConfig}
+              evaluatorMetricNames={evaluatorMetricNames}
+              datapointId={datapointId}
+              inferenceId={inferenceId}
+              evaluatorInferenceId={metricObj.evaluator_inference_id}
+              evalRunId={evalRunId}
+              variantName={variantName}
+              isHumanFeedback={metricObj.is_human_feedback}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const MetricRow = ({
+  evaluatorName,
+  metricValue,
+  evaluatorConfig,
+  metricsConfig,
+  evaluatorMetricNames,
+  datapointId,
+  inferenceId,
+  evalRunId,
+  evaluatorInferenceId,
+  variantName,
+  isHumanFeedback,
+}: {
+  evaluatorName: string;
+  metricValue: string;
+  evaluatorConfig: EvaluatorConfig;
+  metricsConfig: Record<string, MetricConfig>;
+  evaluatorMetricNames: Record<string, string>;
+  datapointId: string;
+  inferenceId: string | null;
+  evaluatorInferenceId?: string;
+  evalRunId: string;
+  variantName: string;
+  isHumanFeedback: boolean;
+}) => {
+  const metric_name = evaluatorMetricNames[evaluatorName];
+  if (!metric_name) {
+    logger.warn(`No metric name mapping for evaluator ${evaluatorName}`);
+    return null;
+  }
+  const metricProperties = metricsConfig[metric_name];
+  if (!metricProperties) {
+    return null;
+  }
+  if (inferenceId === null) {
+    logger.warn(
+      `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
+    );
+  }
+  const evaluationType = evaluatorConfig.type;
+  return (
+    <div className="group flex items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="cursor-help text-sm text-gray-600">
+            {evaluatorName}:
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="p-3">
+          <div className="space-y-1 text-left text-xs">
+            <div>
+              <span className="font-medium">Type:</span>
+              <span className="ml-2 font-medium">{metricProperties.type}</span>
+            </div>
+            <div>
+              <span className="font-medium">Optimize:</span>
+              <span className="ml-2 font-medium">
+                {metricProperties.optimize}
+              </span>
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+      <MetricValue
+        value={String(metricValue)}
+        metricType={getMetricType(evaluatorConfig)}
+        optimize={
+          evaluatorConfig.type === "llm_judge"
+            ? evaluatorConfig.optimize
+            : "max"
+        }
+        isHumanFeedback={isHumanFeedback}
+        className="text-sm"
+      />
+      {inferenceId !== null && evaluationType === "llm_judge" && (
+        <div className="flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <EvaluationFeedbackEditor
+            inferenceId={inferenceId}
+            datapointId={datapointId}
+            metricName={metric_name}
+            originalValue={metricValue}
+            evalRunId={evalRunId}
+            evaluatorInferenceId={evaluatorInferenceId}
+            variantName={variantName}
+          />
+          {evaluatorInferenceId && (
+            <InferenceButton
+              inferenceId={evaluatorInferenceId}
+              tooltipText="View LLM judge inference"
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <LayoutErrorBoundary error={error} />;
+}
+
+type OutputsSectionProps = {
+  outputsToDisplay: Array<{
+    id: string;
+    variant_name: string;
+    output?: ContentBlockChatOutput[] | JsonInferenceOutput;
+    metrics: ConsolidatedMetric[];
+    inferenceId: string | null;
+    episodeId: string | null;
+  }>;
+  evaluation_name: string;
+  evaluation_config: InferenceEvaluationConfig;
+  metricsConfig: Record<string, MetricConfig>;
+  evaluatorMetricNames: Record<string, string>;
+  datapointId: string;
+};
+
+function OutputsSection({
+  outputsToDisplay,
+  evaluation_config,
+  metricsConfig,
+  evaluatorMetricNames,
+  datapointId,
+}: OutputsSectionProps) {
+  const { getColor } = useColorAssigner();
+
+  return (
+    <SectionLayout>
+      <SectionHeader heading="Output" />
+      <div className="grid grid-flow-col grid-rows-[min-content_min-content_min-content] gap-x-4 gap-y-2 overflow-x-auto">
+        {outputsToDisplay.map((result) => (
+          <section className="contents" key={result.id}>
+            <div className="row-start-1 flex flex-col gap-1">
+              {result.id === "Reference" ? (
+                <EvaluationRunBadge
+                  runInfo={{
+                    evaluation_run_id: "",
+                    variant_name: result.variant_name,
+                  }}
+                  getColor={() => "bg-gray-100 text-gray-700"}
+                />
+              ) : (
+                <>
+                  <EvaluationRunBadge
+                    runInfo={{
+                      evaluation_run_id: result.id,
+                      variant_name: result.variant_name,
+                    }}
+                    getColor={getColor}
+                  />
+                  {result.inferenceId && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>
+                        Inference:{" "}
+                        <Link
+                          to={toInferenceUrl(result.inferenceId)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {result.inferenceId}
+                        </Link>
+                      </span>
+                      {result.inferenceId && result.episodeId && (
+                        <AddToDatasetButton
+                          inferenceId={result.inferenceId}
+                          functionName={evaluation_config.function_name}
+                          variantName={result.variant_name}
+                          episodeId={result.episodeId}
+                          hasDemonstration={false}
+                          alwaysUseInherit={true}
+                        />
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <section className="row-start-2">
+              {result.output === undefined ? (
+                <EmptyMessage message="No output" />
+              ) : Array.isArray(result.output) ? (
+                <ChatOutputElement output={result.output} />
+              ) : (
+                <JsonOutputElement output={result.output} />
+              )}
+            </section>
+
+            {result.id !== "Reference" &&
+              result.metrics &&
+              result.metrics.length > 0 && (
+                <MetricsDisplay
+                  metrics={result.metrics}
+                  evaluatorsConfig={evaluation_config.evaluators}
+                  metricsConfig={metricsConfig}
+                  evaluatorMetricNames={evaluatorMetricNames}
+                  datapointId={datapointId}
+                  inferenceId={result.inferenceId}
+                  evalRunId={result.id}
+                  variantName={result.variant_name}
+                />
+              )}
+          </section>
+        ))}
+      </div>
+    </SectionLayout>
+  );
+}
