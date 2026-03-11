@@ -81,13 +81,18 @@ check_dockerfile \
   "rust-$RUST_MAJOR_MINOR" \
   "cargo-chef uses rust-$RUST_MAJOR_MINOR"
 
+check_dockerfile \
+  "crates/tensorzero-core/tests/mock-provider-api/Dockerfile" \
+  "FROM lukemathwalker/cargo-chef:" \
+  "rust-$RUST_MAJOR_MINOR" \
+  "cargo-chef uses rust-$RUST_MAJOR_MINOR"
+
 # Other Dockerfiles using rust:X.YY.Z
 DOCKERFILES=(
   "crates/provider-proxy/Dockerfile"
   "crates/evaluations/Dockerfile"
   "crates/tensorzero-core/tests/e2e/Dockerfile.gateway.e2e"
   "crates/tensorzero-core/tests/e2e/Dockerfile.clickhouse"
-  "crates/tensorzero-core/tests/mock-provider-api/Dockerfile"
   "ui/fixtures/Dockerfile.unit"
 )
 

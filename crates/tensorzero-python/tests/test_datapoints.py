@@ -85,7 +85,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
     assert len(listed_datapoints) == 2
 
     # Render the datapoints using experimental_render_samples
-    rendered_samples = embedded_sync_client.experimental_render_samples(
+    rendered_samples = embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=listed_datapoints,
         variants={"basic_test": "test", "json_success": "test"},
     )
@@ -177,7 +177,7 @@ async def test_async_render_datapoints(
     assert len(listed_datapoints) == 2
 
     # Render the datapoints using experimental_render_samples
-    rendered_samples = await embedded_async_client.experimental_render_samples(
+    rendered_samples = await embedded_async_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=listed_datapoints,
         variants={"basic_test": "test", "json_success": "test"},
     )
@@ -270,7 +270,7 @@ def test_sync_render_filtered_datapoints(
     assert len(chat_datapoints) == 2
 
     # Render only the chat datapoints
-    rendered_samples = embedded_sync_client.experimental_render_samples(
+    rendered_samples = embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=chat_datapoints,
         variants={"basic_test": "test"},
     )
