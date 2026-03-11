@@ -86,6 +86,9 @@ jobs:
             sleep $((10 * attempt))
           done
 
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
+
       - name: Build `tensorzero-node`
         working-directory: crates/tensorzero-node
         run: pnpm build:debug

@@ -254,6 +254,9 @@ jobs:
             sleep $((10 * attempt))
           done
 
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
+
       - name: Build Node.js bindings
         working-directory: crates/tensorzero-node
         run: pnpm build-bindings
