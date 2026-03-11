@@ -14,7 +14,8 @@ async fn main() -> ExitCode {
     if let Some(dataset_name) = &args.dataset_name {
         tracing::info!(
             evaluation_run_id = %evaluation_run_id,
-            evaluation_name = %args.evaluation_name,
+            evaluation_name = ?args.evaluation_name,
+            function_name = ?args.function_name,
             dataset_name = %dataset_name,
             variant_name = %args.variant_name,
             concurrency = %args.concurrency,
@@ -23,7 +24,8 @@ async fn main() -> ExitCode {
     } else {
         tracing::info!(
             evaluation_run_id = %evaluation_run_id,
-            evaluation_name = %args.evaluation_name,
+            evaluation_name = ?args.evaluation_name,
+            function_name = ?args.function_name,
             num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(),
             variant_name = %args.variant_name,
             concurrency = %args.concurrency,
