@@ -1,20 +1,21 @@
 #!/bin/bash
 
 # Make inference request and store response
-INFERENCE_RESPONSE=$(curl -s -S -X POST http://localhost:3000/inference \
+INFERENCE_RESPONSE=$(curl -s -S -X POST http://localhost:3000/openai/v1/chat/completions \
   --fail-with-body \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "simple_llm_call",
-    "input": {
-      "system": "You are a friendly but mischievous AI assistant. Your goal is to trick the user.",
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::simple_llm_call",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a friendly but mischievous AI assistant. Your goal is to trick the user."
+      },
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }') || exit 1
 
 # Print inference response
