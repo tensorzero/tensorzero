@@ -248,6 +248,7 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       };
     case "user_questions":
     case "user_questions_answers":
+    case "auto_eval_example_labeling":
     case "visualization":
     case "unknown":
       return {};
@@ -428,6 +429,8 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     }
+    case "auto_eval_example_labeling":
+      return "Example Labeling";
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -612,6 +615,7 @@ function EventItemContent({
     case "status_update":
     case "tool_call_authorization":
     case "visualization":
+    case "auto_eval_example_labeling":
     case "unknown":
       return (
         <p className="text-fg-secondary text-sm whitespace-pre-wrap">
