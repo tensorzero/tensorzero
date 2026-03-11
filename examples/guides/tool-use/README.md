@@ -29,3 +29,7 @@ We provide a simple TensorZero configuration with a `weather_chatbot` chat funct
 
 1. Install the dependencies with `npm install`.
 2. Run the example with `npx tsx openai_sdk.ts`.
+
+#### HTTP (cURL)
+
+1. Run the example with `bash curl.sh`.
