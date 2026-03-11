@@ -298,6 +298,7 @@ mod tests {
                             metrics: vec![InferenceEvaluationRunMetricMetadata {
                                 name: "metric_from_db".to_string(),
                                 evaluator_name: Some("my_evaluator".to_string()),
+                                evaluator_type: Some("exact_match".to_string()),
                                 value_type: "boolean".to_string(),
                                 optimize: None,
                             }],
@@ -349,12 +350,14 @@ mod tests {
                                     InferenceEvaluationRunMetricMetadata {
                                         name: "metric_a".to_string(),
                                         evaluator_name: Some("eval_a".to_string()),
+                                        evaluator_type: None,
                                         value_type: "boolean".to_string(),
                                         optimize: None,
                                     },
                                     InferenceEvaluationRunMetricMetadata {
                                         name: "metric_shared".to_string(),
                                         evaluator_name: Some("eval_shared".to_string()),
+                                        evaluator_type: None,
                                         value_type: "float".to_string(),
                                         optimize: None,
                                     },
@@ -371,12 +374,14 @@ mod tests {
                                     InferenceEvaluationRunMetricMetadata {
                                         name: "metric_shared".to_string(),
                                         evaluator_name: Some("eval_shared".to_string()),
+                                        evaluator_type: None,
                                         value_type: "float".to_string(),
                                         optimize: None,
                                     },
                                     InferenceEvaluationRunMetricMetadata {
                                         name: "metric_b".to_string(),
                                         evaluator_name: Some("eval_b".to_string()),
+                                        evaluator_type: None,
                                         value_type: "boolean".to_string(),
                                         optimize: None,
                                     },

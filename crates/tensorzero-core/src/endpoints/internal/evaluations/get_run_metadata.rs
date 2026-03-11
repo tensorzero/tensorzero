@@ -28,6 +28,9 @@ pub struct RunMetricMetadata {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluator_name: Option<String>,
+    /// The evaluator type: `exact_match`, `llm_judge`, `tool_use`, or `regex`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_type: Option<String>,
     /// `boolean` or `float`
     pub value_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,6 +100,7 @@ pub async fn get_run_metadata_handler(
                 .map(|metric| RunMetricMetadata {
                     name: metric.name,
                     evaluator_name: metric.evaluator_name,
+                    evaluator_type: metric.evaluator_type,
                     value_type: metric.value_type,
                     optimize: metric.optimize,
                 })

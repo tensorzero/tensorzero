@@ -104,6 +104,16 @@ impl From<&FunctionConfig> for EvaluationFunctionConfig {
 }
 
 impl EvaluatorConfig {
+    /// Returns the serde tag value for this evaluator variant.
+    pub fn evaluator_type(&self) -> &'static str {
+        match self {
+            EvaluatorConfig::ExactMatch(_) => "exact_match",
+            EvaluatorConfig::LLMJudge(_) => "llm_judge",
+            EvaluatorConfig::ToolUse(_) => "tool_use",
+            EvaluatorConfig::Regex(_) => "regex",
+        }
+    }
+
     // TODO(shuyangli): Remove this config option and make it a CLI flag instead.
     #[expect(deprecated)]
     pub fn cutoff(&self) -> Option<f32> {

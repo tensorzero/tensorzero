@@ -21,12 +21,14 @@ fn make_test_inference_evaluation_run(run_id: Uuid) -> InferenceEvaluationRunIns
             InferenceEvaluationRunMetricMetadata {
                 name: format!("tensorzero::evaluation_name::e2e::{run_id}::bool"),
                 evaluator_name: Some("exact_match".to_string()),
+                evaluator_type: Some("exact_match".to_string()),
                 value_type: "boolean".to_string(),
                 optimize: Some(MetricConfigOptimize::Max),
             },
             InferenceEvaluationRunMetricMetadata {
                 name: format!("tensorzero::evaluation_name::e2e::{run_id}::float"),
                 evaluator_name: Some("llm_judge".to_string()),
+                evaluator_type: Some("llm_judge".to_string()),
                 value_type: "float".to_string(),
                 optimize: Some(MetricConfigOptimize::Min),
             },

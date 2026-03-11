@@ -42,6 +42,9 @@ pub struct InferenceEvaluationRunMetricMetadata {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluator_name: Option<String>,
+    /// The evaluator type: `exact_match`, `llm_judge`, `tool_use`, or `regex`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluator_type: Option<String>,
     /// `boolean` or `float`
     pub value_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]

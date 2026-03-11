@@ -8,6 +8,10 @@ export type RunMetricMetadata = {
   name: string;
   evaluator_name?: string;
   /**
+   * The evaluator type: `exact_match`, `llm_judge`, `tool_use`, or `regex`.
+   */
+  evaluator_type?: string;
+  /**
    * `boolean` or `float`
    */
   value_type: string;

@@ -114,6 +114,7 @@ fn build_run_metrics_metadata(
             |(evaluator_name, evaluator_config)| InferenceEvaluationRunMetricMetadata {
                 name: get_evaluator_metric_name(evaluation_name, evaluator_name),
                 evaluator_name: Some(evaluator_name.clone()),
+                evaluator_type: Some(evaluator_config.evaluator_type().to_string()),
                 value_type: evaluator_value_type(evaluator_config).to_string(),
                 optimize: Some(evaluator_config.optimize()),
             },
