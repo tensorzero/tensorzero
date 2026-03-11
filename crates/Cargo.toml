@@ -192,6 +192,7 @@ doc_lazy_continuation = "allow"
 
 [profile.dev]
 debug = "line-tables-only"
+split-debuginfo = "unpacked" # Faster builds on macOS (avoids dsymutil)
 
 [profile.performance]
 inherits = "release"

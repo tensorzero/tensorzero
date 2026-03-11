@@ -404,6 +404,8 @@ jobs:
             fi
           done
         shell: bash
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"
@@ -445,6 +447,8 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
 
       - name: Print Rust version
         run: rustc --version
@@ -526,6 +530,8 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
 
       - name: Print Rust version
         run: rustc --version
@@ -607,6 +613,8 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
@@ -647,6 +655,8 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
@@ -902,6 +912,8 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -989,6 +1001,8 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
@@ -1106,6 +1120,8 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
         with:
           cache-provider: "buildjet"

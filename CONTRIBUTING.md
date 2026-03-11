@@ -89,6 +89,7 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Rust (1.80+) [→](https://www.rust-lang.org/tools/install)
 - Install `cargo-deny` [→](https://github.com/EmbarkStudios/cargo-deny)
 - Install `cargo-nextest` [→](https://nexte.st/docs/installation/pre-built-binaries/)
+- Install `mold` linker (Linux) [→](https://github.com/rui314/mold#installation) — required on Linux, configured in `.cargo/config.toml`
 - Install `pre-commit` [→](https://pre-commit.com/#install)
 - Enable `pre-commit` in your repository: `pre-commit install`
 - Install Docker [→](https://docs.docker.com/get-docker/)
@@ -96,6 +97,8 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Python (3.9+) (e.g. `uv python install 3.9` + )
 - Install Node.js (we use v24.13.0) and `npm` [→](https://nodejs.org/en)
 - Install pnpm `npm install -g pnpm@10.15.0` [→](https://pnpm.io/installation)
+
+You can verify your setup by running `./ci/check-dev-env.sh`.
 
 **macOS users:** If you see Rust build errors about missing dynamic libraries for Python, set up a Python virtual environment at `tensorzero/.venv` (e.g. `uv venv` from the `tensorzero` directory)
 This ensures the correct Python libraries are available for the build.
