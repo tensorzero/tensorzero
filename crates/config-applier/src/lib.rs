@@ -740,6 +740,7 @@ type = "exact_match"
                 ..Default::default()
             }),
             timeouts: None,
+            namespace: None,
         };
 
         let edit = EditPayload::UpsertVariant(Box::new(UpsertVariantPayload {
@@ -788,6 +789,7 @@ type = "exact_match"
                 ..Default::default()
             }),
             timeouts: None,
+            namespace: None,
         };
 
         let edit = EditPayload::UpsertVariant(Box::new(UpsertVariantPayload {
@@ -838,6 +840,7 @@ type = "exact_match"
                 ..Default::default()
             }),
             timeouts: Some(Default::default()),
+            namespace: None,
         };
 
         let edit = EditPayload::UpsertVariant(Box::new(UpsertVariantPayload {
