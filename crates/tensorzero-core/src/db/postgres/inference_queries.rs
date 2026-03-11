@@ -28,9 +28,6 @@ use crate::db::inferences::{
 use crate::db::postgres::inference_filter_helpers::{MetricJoinRegistry, apply_inference_filter};
 use crate::db::query_helpers::{json_double_escape_string_without_quotes, uuid_to_datetime};
 use crate::endpoints::inference::InferenceParams;
-use crate::endpoints::stored_inferences::v1::types::{
-    FloatComparisonOperator, TimeComparisonOperator,
-};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfigType;
 use crate::inference::types::ContentBlockChatOutput;
@@ -50,32 +47,6 @@ use crate::tool::types::{ProviderTool, Tool};
 use crate::tool::wire::ToolChoice;
 
 use super::PostgresConnectionInfo;
-
-impl FloatComparisonOperator {
-    pub(super) fn to_postgres_operator(self) -> &'static str {
-        match self {
-            FloatComparisonOperator::LessThan => "<",
-            FloatComparisonOperator::LessThanOrEqual => "<=",
-            FloatComparisonOperator::Equal => "=",
-            FloatComparisonOperator::GreaterThan => ">",
-            FloatComparisonOperator::GreaterThanOrEqual => ">=",
-            FloatComparisonOperator::NotEqual => "!=",
-        }
-    }
-}
-
-impl TimeComparisonOperator {
-    pub(super) fn to_postgres_operator(self) -> &'static str {
-        match self {
-            TimeComparisonOperator::LessThan => "<",
-            TimeComparisonOperator::LessThanOrEqual => "<=",
-            TimeComparisonOperator::Equal => "=",
-            TimeComparisonOperator::GreaterThan => ">",
-            TimeComparisonOperator::GreaterThanOrEqual => ">=",
-            TimeComparisonOperator::NotEqual => "!=",
-        }
-    }
-}
 
 #[async_trait]
 impl InferenceQueries for PostgresConnectionInfo {
@@ -791,17 +762,14 @@ fn build_order_by_clause(
 
             terms.push((
                 term,
-                format!(
-                    "{} NULLS LAST",
-                    effective_direction.to_clickhouse_direction()
-                ),
+                format!("{} NULLS LAST", effective_direction.to_sql_direction()),
             ));
         }
     }
 
     Ok(OrderByResult {
         terms,
-        id_tiebreaker: format!("i.id {}", id_direction.to_clickhouse_direction()),
+        id_tiebreaker: format!("i.id {}", id_direction.to_sql_direction()),
         metric_joins: join_registry.get_joins_sql(),
     })
 }
@@ -1353,13 +1321,13 @@ fn build_inferences_union_query(
             };
             order_clauses.push(format!(
                 "{column} {} NULLS LAST",
-                effective_direction.to_clickhouse_direction()
+                effective_direction.to_sql_direction()
             ));
         }
     }
 
     // Always add id as tie-breaker for deterministic ordering
-    order_clauses.push(format!("id {}", id_direction.to_clickhouse_direction()));
+    order_clauses.push(format!("id {}", id_direction.to_sql_direction()));
 
     let order_by_clause = format!("ORDER BY {}", order_clauses.join(", "));
 

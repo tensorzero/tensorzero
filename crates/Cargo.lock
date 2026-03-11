@@ -7105,12 +7105,14 @@ name = "tensorzero-types"
 version = "2026.3.1"
 dependencies = [
  "aws-smithy-types",
+ "chrono",
  "infer",
  "mime 0.4.0-a.0",
  "object_store",
  "pyo3",
  "rust_decimal",
  "schemars 1.2.1",
+ "secrecy",
  "serde",
  "serde_json",
  "serde_path_to_error",
