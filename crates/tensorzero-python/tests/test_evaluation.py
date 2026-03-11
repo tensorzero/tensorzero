@@ -37,7 +37,7 @@ def test_sync_run_evaluation(
     assert len(run_info["evaluation_run_id"]) == 36  # UUID string length
     assert isinstance(run_info["num_datapoints"], int)
     assert run_info["num_datapoints"] > 0
-    assert set(run_info.keys()) == {"evaluation_run_id", "num_datapoints"}
+    assert set(run_info.keys()) == {"evaluation_name", "evaluation_run_id", "num_datapoints"}
 
     # Consume all results
     results: List[Dict[str, Any]] = []
@@ -143,7 +143,7 @@ async def test_async_run_evaluation(
     assert len(run_info["evaluation_run_id"]) == 36  # UUID string length
     assert isinstance(run_info["num_datapoints"], int)
     assert run_info["num_datapoints"] > 0
-    assert set(run_info.keys()) == {"evaluation_run_id", "num_datapoints"}
+    assert set(run_info.keys()) == {"evaluation_name", "evaluation_run_id", "num_datapoints"}
 
     # Consume all results
     results: List[Dict[str, Any]] = []

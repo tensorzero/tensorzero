@@ -1,5 +1,7 @@
 //! E2E tests for the evaluation endpoints.
 
+mod get_run_metadata;
+
 use std::time::Duration;
 
 use futures::StreamExt;

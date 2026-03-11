@@ -25,7 +25,8 @@ jobs:
       pull-requests: read
     runs-on: ubuntu-latest
     outputs:
-      clickhouse-tests: ${{ steps.filter.outputs.clickhouse-tests || 'true' }}
+      clickhouse-tests-merge-queue: ${{ steps.filter.outputs.clickhouse-tests-merge-queue || 'true' }}
+      clickhouse-tests-pr: ${{ steps.filter.outputs.clickhouse-tests-pr || 'true' }}
       client-tests: ${{ steps.filter.outputs.client-tests || 'true' }}
       code: ${{ steps.filter.outputs.code || 'true' }}
       docs: ${{ steps.filter.outputs.docs || 'true' }}
@@ -39,13 +40,10 @@ jobs:
         with:
           predicate-quantifier: "every"
           filters: |
-            clickhouse-tests:
-              - '**'
-              - '!**/README.md'
-              - '!docs/**'
-              - '!examples/**'
-              - '!recipes/**'
-              - '!ui/**'
+            clickhouse-tests-merge-queue:
+              - 'crates/**'
+            clickhouse-tests-pr:
+              - 'crates/tensorzero-core/src/db/**'
             client-tests:
               - '**'
               - '!**/README.md'
@@ -852,7 +850,14 @@ jobs:
         build-mock-provider-api-container,
         build-fixtures-container,
       ]
-    if: ${{ needs.detect-changes.outputs.clickhouse-tests == 'true' && (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: >-
+      ${{
+        (
+          (github.event_name == 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-merge-queue == 'true') ||
+          (github.event_name != 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-pr == 'true')
+        ) &&
+        (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository))
+      }}
     permissions:
       contents: read
       actions: read
@@ -1462,8 +1467,15 @@ jobs:
         run: pnpm exec mint broken-links --check-anchors
 
   # See 'ci/README.md' at the repository root for more details.
+  # This job queries the GitHub API for all jobs in this workflow run and asserts
+  # that they all passed, except for jobs in the ALLOWED_FAIL and ALLOWED_SKIP
+  # lists defined in ci/check-all-general-jobs-passed.sh.
+  # The `needs` list below is for scheduling only (so this job waits for others
+  # to finish). The actual pass/fail logic is in the script.
   check-all-general-jobs-passed:
-    permissions: {}
+    permissions:
+      actions: read
+      contents: read
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
@@ -1504,11 +1516,11 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - name: Print all job results
-        run: |
-          echo "'needs': ${{ toJson(needs) }}"
-          echo "github.event_name: ${{ github.event_name }}"
-      # Jobs may be intentionally skipped by the detect-changes path filter (e.g. docs-only or code-only changes).
-      # We only fail on actual failures or cancellations.
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-        run: exit 1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          sparse-checkout: ci/check-all-general-jobs-passed.sh
+          sparse-checkout-cone-mode: false
+      - name: Check all jobs passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./ci/check-all-general-jobs-passed.sh

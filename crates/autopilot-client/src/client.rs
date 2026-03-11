@@ -859,6 +859,8 @@ impl AutopilotClient {
                         if sse.event.as_str() == "event" {
                             match serde_json::from_str::<StreamUpdate>(&sse.data) {
                                 Ok(update) => {
+                                    // Reduce peak memory usage by dropping the SSE event as soon as possible
+                                    drop(sse);
                                     // Cache tool calls for later lookup
                                     if let EventPayload::ToolCall(tool_call) = &update.event.payload
                                     {

@@ -235,6 +235,7 @@ pub enum EventPayload {
     Visualization(EventPayloadVisualization),
     UserQuestions(EventPayloadUserQuestions),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
+    AutoEvalExampleLabeling(EventPayloadAutoEvalExampleLabeling),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -285,6 +286,7 @@ pub enum GatewayEventPayload {
     Visualization(EventPayloadVisualization),
     UserQuestions(EventPayloadUserQuestions),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
+    AutoEvalExampleLabeling(EventPayloadAutoEvalExampleLabeling),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -307,6 +309,9 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             EventPayload::UserQuestions(q) => Ok(GatewayEventPayload::UserQuestions(q)),
             EventPayload::UserQuestionsAnswers(r) => {
                 Ok(GatewayEventPayload::UserQuestionsAnswers(r))
+            }
+            EventPayload::AutoEvalExampleLabeling(l) => {
+                Ok(GatewayEventPayload::AutoEvalExampleLabeling(l))
             }
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
@@ -773,6 +778,82 @@ pub struct MultipleChoiceAnswer {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FreeResponseAnswer {
     pub text: String,
+}
+
+// =============================================================================
+// AutoEval Example Labeling Types
+// =============================================================================
+
+/// Payload for an autoeval example labeling event.
+///
+/// Groups labeled examples together, each with rich context blocks
+/// (e.g. prompt/response) and associated labeling questions.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadAutoEvalExampleLabeling {
+    pub examples: Vec<AutoEvalExampleLabeling>,
+}
+
+/// A single example to label, with context and a structured labeling question.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutoEvalExampleLabeling {
+    /// Rich content blocks providing context (e.g. the prompt and response).
+    pub context: Vec<AutoEvalContentBlock>,
+    /// The multiple-choice labeling question for this example.
+    pub label_question: AutoEvalLabelQuestion,
+    /// An optional free-response explanation question.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub explanation_question: Option<AutoEvalExplanationQuestion>,
+}
+
+/// A multiple-choice labeling question within an autoeval example.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutoEvalLabelQuestion {
+    pub id: Uuid,
+    pub header: String,
+    pub question: String,
+    pub options: Vec<MultipleChoiceOption>,
+}
+
+/// A free-response explanation question within an autoeval example.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutoEvalExplanationQuestion {
+    pub id: Uuid,
+    pub header: String,
+    pub question: String,
+}
+
+/// A block of rich content displayed alongside an autoeval example.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
+pub enum AutoEvalContentBlock {
+    /// Rendered as formatted markdown.
+    Markdown {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
+        label: Option<String>,
+    },
+    /// Rendered as a formatted JSON viewer.
+    Json {
+        data: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts-bindings", ts(optional))]
+        label: Option<String>,
+    },
 }
 
 // =============================================================================

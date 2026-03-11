@@ -221,9 +221,10 @@ pub async fn run_evaluation(
         })?;
 
     let run_params = RunEvaluationWithAppStateParams {
-        evaluation_config: (*evaluation_config).clone(),
+        function_name: inference_config.function_name.clone(),
         function_config,
-        evaluation_name: params.evaluation_name.clone(),
+        evaluators: inference_config.evaluators.clone(),
+        evaluation_name: Some(params.evaluation_name.clone()),
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: params.datapoint_ids.clone(),
         variant: EvaluationVariant::Name(params.variant_name.clone()),
@@ -250,8 +251,6 @@ async fn collect_results(
     let evaluation_run_id = result.run_info.evaluation_run_id;
     let num_datapoints = result.run_info.num_datapoints;
 
-    let EvaluationConfig::Inference(ref inference_config) = *result.evaluation_config;
-
     // Collect updates from the stream (OutputFormat::Jsonl skips progress bar rendering)
     let mut stats_collector =
         EvaluationStats::new(evaluations::OutputFormat::Jsonl, num_datapoints);
@@ -271,7 +270,7 @@ async fn collect_results(
         }
     }
 
-    let stats = stats_collector.compute_stats(&inference_config.evaluators);
+    let stats = stats_collector.compute_stats(&result.evaluators);
 
     let datapoint_results = if include_datapoint_results {
         Some(build_datapoint_results(&stats_collector))
