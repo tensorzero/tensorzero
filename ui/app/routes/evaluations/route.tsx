@@ -20,7 +20,7 @@ import {
   parseEvaluationFormData,
   runEvaluation,
 } from "~/utils/evaluations.server";
-import { toEvaluationUrl } from "~/utils/urls";
+import { toEvaluationRunsUrl } from "~/utils/urls";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { logger } from "~/utils/logger";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -183,11 +183,7 @@ export async function action({ request }: Route.ActionArgs) {
       status: 500,
     });
   }
-  return redirect(
-    toEvaluationUrl(evaluation_name, {
-      evaluation_run_ids: evaluation_start_info.evaluation_run_id,
-    }),
-  );
+  return redirect(toEvaluationRunsUrl(evaluation_start_info.evaluation_run_id));
 }
 
 function EvaluationsContent({

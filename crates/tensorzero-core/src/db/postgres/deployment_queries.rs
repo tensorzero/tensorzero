@@ -3,12 +3,18 @@ use sqlx::Row;
 
 use crate::db::DeploymentIdQueries;
 use crate::db::postgres::PostgresConnectionInfo;
-use crate::error::Error;
+use crate::error::{DelayedError, ErrorDetails};
+
+fn sqlx_delayed_error(err: sqlx::Error) -> DelayedError {
+    DelayedError::new(ErrorDetails::PostgresQuery {
+        message: err.to_string(),
+    })
+}
 
 #[async_trait]
 impl DeploymentIdQueries for PostgresConnectionInfo {
     /// Gets or creates a deployment ID in Postgres.
-    async fn get_deployment_id(&self) -> Result<String, Error> {
+    async fn get_deployment_id(&self) -> Result<String, DelayedError> {
         self.get_or_create_deployment_id().await
     }
 }
@@ -19,16 +25,21 @@ impl PostgresConnectionInfo {
     /// This is analogous to the ClickHouse `DeploymentID` table. The deployment ID
     /// is a blake3 hash of a UUIDv7, generated once and stored as a singleton row.
     /// Race conditions are handled via `ON CONFLICT DO NOTHING`.
-    async fn get_or_create_deployment_id(&self) -> Result<String, Error> {
-        let pool = self.get_pool_result()?;
+    async fn get_or_create_deployment_id(&self) -> Result<String, DelayedError> {
+        let pool = self.get_pool_result().map_err(|e| {
+            DelayedError::new(ErrorDetails::PostgresConnection {
+                message: e.to_string(),
+            })
+        })?;
 
         // Try to read existing deployment ID
         let row = sqlx::query("SELECT deployment_id FROM tensorzero.deployment_id LIMIT 1")
             .fetch_optional(pool)
-            .await?;
+            .await
+            .map_err(sqlx_delayed_error)?;
 
         if let Some(row) = row {
-            let deployment_id: String = row.try_get("deployment_id")?;
+            let deployment_id: String = row.try_get("deployment_id").map_err(sqlx_delayed_error)?;
             return Ok(deployment_id);
         }
 
@@ -42,22 +53,28 @@ impl PostgresConnectionInfo {
     /// This supports the case where an existing ClickHouse deployment enables Postgres
     /// and needs to keep the deployment ID consistent across both databases.
     /// Uses `ON CONFLICT DO NOTHING` to handle races, then re-reads the winner.
-    pub async fn insert_deployment_id(&self, deployment_id: &str) -> Result<String, Error> {
-        let pool = self.get_pool_result()?;
+    pub async fn insert_deployment_id(&self, deployment_id: &str) -> Result<String, DelayedError> {
+        let pool = self.get_pool_result().map_err(|e| {
+            DelayedError::new(ErrorDetails::PostgresConnection {
+                message: e.to_string(),
+            })
+        })?;
 
         sqlx::query(
             "INSERT INTO tensorzero.deployment_id (deployment_id) VALUES ($1) ON CONFLICT (dummy) DO NOTHING",
         )
         .bind(deployment_id)
         .execute(pool)
-        .await?;
+        .await
+        .map_err(sqlx_delayed_error)?;
 
         // Re-read to get the winner in case of a race
         let row = sqlx::query("SELECT deployment_id FROM tensorzero.deployment_id LIMIT 1")
             .fetch_one(pool)
-            .await?;
+            .await
+            .map_err(sqlx_delayed_error)?;
 
-        let deployment_id: String = row.try_get("deployment_id")?;
+        let deployment_id: String = row.try_get("deployment_id").map_err(sqlx_delayed_error)?;
         Ok(deployment_id)
     }
 }

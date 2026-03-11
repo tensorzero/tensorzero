@@ -29,7 +29,7 @@ use tokio::{
     try_join,
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+use tracing::{Level, debug, info};
 
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
@@ -145,8 +145,8 @@ async fn synchronize_deployment_id(
         tracing::debug!("Failed to get deployment ID from ClickHouse");
         return Err(());
     };
-    if let Err(e) = &postgres.insert_deployment_id(&id).await {
-        tracing::debug!("Failed to sync deployment ID to Postgres: {e}");
+    if let Err(e) = postgres.insert_deployment_id(&id).await {
+        tracing::debug!("Failed to sync deployment ID to Postgres: {e:?}");
         return Err(());
     }
 
@@ -167,7 +167,7 @@ pub async fn get_deployment_id(
         .get_deployment_id()
         .await
         .map_err(|e| {
-            tracing::debug!("Failed to get deployment ID: {e}");
+            e.log_at_level("Failed to get deployment ID: ", Level::DEBUG);
         })
 }
 
