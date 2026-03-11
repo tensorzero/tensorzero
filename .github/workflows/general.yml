@@ -309,6 +309,9 @@ jobs:
         with:
           version: "0.9.27"
 
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
+
       - name: Generate Python schemas
         run: |
           for attempt in 1 2 3; do
