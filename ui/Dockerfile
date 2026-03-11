@@ -38,7 +38,7 @@ ARG DEBUG_BUILD
 
 # Install Node.js 24 (required by @napi-rs/cli v3)
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
-    apt-get install -y nodejs && \
+    apt-get install -y nodejs mold && \
     rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
 

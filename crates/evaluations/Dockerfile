@@ -11,7 +11,7 @@ ARG PROFILE
 WORKDIR /src
 ENV CARGO_INCREMENTAL=0
 
-RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y clang libc++-dev mold && rm -rf /var/lib/apt/lists/*
 
 COPY crates/ crates/
 WORKDIR /src/crates

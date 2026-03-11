@@ -16,6 +16,8 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 ENV CARGO_INCREMENTAL=0
 
+RUN apt-get update && apt-get install -y mold && rm -rf /var/lib/apt/lists/*
+
 # Set up the Rust toolchain
 COPY crates/rust-toolchain.toml ./rust-toolchain.toml
 RUN rustup show
