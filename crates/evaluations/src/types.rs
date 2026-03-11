@@ -17,6 +17,7 @@ use tensorzero_core::{
     error::Error,
     evaluations::{EvaluationFunctionConfig, EvaluatorConfig},
     inference::types::storage::StoragePath,
+    inference::types::stored_input::StoragePathResolver,
     utils::gateway::AppStateData,
 };
 use tokio::sync::mpsc;
@@ -70,7 +71,6 @@ impl EvaluationsInferenceExecutor for ClientInferenceExecutor {
     }
 
     async fn resolve_storage_path(&self, storage_path: StoragePath) -> Result<String, Error> {
-        use tensorzero_core::inference::types::stored_input::StoragePathResolver;
         self.client.resolve(storage_path).await
     }
 }
