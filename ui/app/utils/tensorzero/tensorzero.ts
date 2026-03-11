@@ -45,6 +45,7 @@ import type {
   GetEvaluationResultsResponse,
   GetEvaluationRunInfosResponse,
   GetEvaluationStatisticsResponse,
+  GetEvaluationRunMetadataResponse,
   GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
   GetFunctionThroughputByVariantResponse,
@@ -1610,10 +1611,31 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   }
 
   /**
+   * Gets metadata for an evaluation run from the database.
+   * @param evaluationRunIds - The UUIDs of the evaluation runs
+   * @returns A promise that resolves with the run metadata
+   * @throws Error if the request fails or the run is not found
+   */
+  async getEvaluationRunMetadata(
+    evaluationRunIds: string[],
+  ): Promise<GetEvaluationRunMetadataResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    const endpoint = `/internal/evaluations/run_metadata?${searchParams.toString()}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationRunMetadataResponse;
+  }
+
+  /**
    * Gets paginated evaluation results across one or more evaluation runs.
-   * @param evaluationName - The name of the evaluation
    * @param evaluationRunIds - Array of evaluation run UUIDs to query
    * @param options - Optional parameters for filtering and pagination
+   * @param options.evaluationName - Optional name of the evaluation (resolved from DB if omitted)
    * @param options.datapointId - Optional datapoint ID to filter results to a specific datapoint
    * @param options.limit - Maximum number of datapoints to return (default: 100)
    * @param options.offset - Number of datapoints to skip (default: 0)
@@ -1621,17 +1643,19 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    * @throws Error if the request fails
    */
   async getEvaluationResults(
-    evaluationName: string,
     evaluationRunIds: string[],
     options: {
+      evaluationName?: string;
       datapointId?: string;
       limit?: number;
       offset?: number;
     } = {},
   ): Promise<GetEvaluationResultsResponse> {
-    const { datapointId, limit = 100, offset = 0 } = options;
+    const { evaluationName, datapointId, limit = 100, offset = 0 } = options;
     const searchParams = new URLSearchParams();
-    searchParams.append("evaluation_name", evaluationName);
+    if (evaluationName) {
+      searchParams.append("evaluation_name", evaluationName);
+    }
     searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
     if (datapointId) {
       searchParams.append("datapoint_id", datapointId);

@@ -14,6 +14,7 @@ use tokio::time::error::Elapsed;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config::namespace::Namespace;
 use crate::config::{
     PathWithContents, TimeoutsConfig, UninitializedVariantConfig, UninitializedVariantInfo,
 };
@@ -65,6 +66,9 @@ pub mod mixture_of_n;
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub namespace: Option<Namespace>,
 }
 
 impl VariantInfo {
@@ -76,6 +80,7 @@ impl VariantInfo {
         UninitializedVariantInfo {
             inner: self.inner.as_uninitialized(),
             timeouts: Some(self.timeouts.clone()),
+            namespace: self.namespace.clone(),
         }
     }
 }

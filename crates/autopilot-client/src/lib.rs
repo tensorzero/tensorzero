@@ -6,7 +6,7 @@
 //!
 //! ```no_run
 //! use autopilot_client::{
-//!     AutopilotClient, CreateEventRequest, EventPayload, EventPayloadMessage,
+//!     AutopilotClient, CreateEventPayload, CreateEventRequest, EventPayloadMessage,
 //!     EventPayloadMessageContent, Role, Text,
 //! };
 //! use uuid::Uuid;
@@ -26,11 +26,12 @@
 //!         deployment_id: Uuid::now_v7().to_string(),
 //!         tensorzero_version: "2025.1.0".to_string(),
 //!         config_snapshot_hash: Some("abc123".to_string()),
-//!         payload: EventPayload::Message(EventPayloadMessage {
+//!         payload: CreateEventPayload::Message(EventPayloadMessage {
 //!             role: Role::User,
 //!             content: vec![EventPayloadMessageContent::Text(Text {
 //!                 text: "Hello!".to_string(),
 //!             })],
+//!             metadata: Default::default(),
 //!         }),
 //!         previous_user_message_event_id: None,
 //!     },

@@ -130,7 +130,7 @@ cargo test-unit
    docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
    ```
 
-2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.
+2. Set the relevant environment variables (`TENSORZERO_CLICKHOUSE_URL` and model provider API keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.). See the [credential docs](https://www.tensorzero.com/docs/deployment/tensorzero-gateway#set-up-model-provider-credentials) for the full list.
 
 3. Launch the gateway in testing mode
 
@@ -157,7 +157,7 @@ cargo test-unit
    docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
    ```
 
-2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.
+2. Set the relevant environment variables (`TENSORZERO_CLICKHOUSE_URL` and model provider API keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.). See the [credential docs](https://www.tensorzero.com/docs/deployment/tensorzero-gateway#set-up-model-provider-credentials) for the full list.
 
 3. Launch the gateway in testing mode
 

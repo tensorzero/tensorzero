@@ -5,9 +5,9 @@ use std::borrow::Cow;
 use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, EventPayloadToolResult, SimpleTool, SimpleToolContext,
-    StepState, TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolFailure, ToolMetadata,
-    ToolOutcome, ToolResult as DurableToolResult, ToolResultExt,
+    CreateEventGatewayRequest, CreateEventPayload, CreateEventPayloadToolResult, SimpleTool,
+    SimpleToolContext, StepState, TaskTool, TensorZeroClient, ToolAppState, ToolContext,
+    ToolFailure, ToolMetadata, ToolOutcome, ToolResult as DurableToolResult, ToolResultExt,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -164,7 +164,7 @@ async fn publish_result(
         .create_autopilot_event(
             params.session_id,
             CreateEventGatewayRequest {
-                payload: EventPayload::ToolResult(EventPayloadToolResult {
+                payload: CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
                 }),
@@ -670,7 +670,7 @@ mod tests {
                 *sid == expected_session_id
                     && matches!(
                         &request.payload,
-                        EventPayload::ToolResult(EventPayloadToolResult {
+                        CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                             tool_call_event_id: tceid,
                             outcome: ToolOutcome::Success(_),
                         }) if *tceid == expected_tool_call_event_id
@@ -710,7 +710,7 @@ mod tests {
             .withf(move |_sid, request| {
                 matches!(
                     &request.payload,
-                    EventPayload::ToolResult(EventPayloadToolResult {
+                    CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                         tool_call_event_id: tceid,
                         outcome: ToolOutcome::Failure {
                             error: ToolFailure::Tool {
