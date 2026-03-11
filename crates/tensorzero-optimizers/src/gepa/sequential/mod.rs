@@ -369,8 +369,9 @@ impl Optimizer for GEPAConfig {
                 parent_evaluation_results.evaluation_infos().len()
             );
 
+            let gepa_client = super::GatewayGepaClient(&gateway_client);
             let parent_analyses = match analyze_inferences(
-                &gateway_client,
+                &gepa_client,
                 parent_evaluation_results.evaluation_infos(),
                 &function_context,
                 &parent.config,
@@ -399,7 +400,7 @@ impl Optimizer for GEPAConfig {
 
             // Generate improved child variant using the mutate function
             let child = match mutate_variant(
-                &gateway_client,
+                &gepa_client,
                 &parent_analyses,
                 &function_context,
                 &parent,
