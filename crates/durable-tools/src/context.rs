@@ -18,7 +18,6 @@ use crate::error::{NonControlToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
-use tokio::sync::RwLockReadGuard;
 
 /// Handle returned by `spawn_tool`, can be joined later with `join_tool`.
 ///
@@ -44,7 +43,7 @@ pub struct ToolAppState<S = ()> {
     /// Database connection pool for database operations.
     pool: PgPool,
     /// Tool registry for looking up and calling other tools.
-    tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
+    tool_registry: Arc<ToolRegistry>,
     /// TensorZero client for calling inference and autopilot operations.
     t0_client: Arc<dyn TensorZeroClient>,
     extra_state: S,
@@ -54,7 +53,7 @@ impl<S> ToolAppState<S> {
     /// Create a new application state.
     pub fn new(
         pool: PgPool,
-        tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
+        tool_registry: Arc<ToolRegistry>,
         t0_client: Arc<dyn TensorZeroClient>,
         extra_state: S,
     ) -> Self {
@@ -161,21 +160,21 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         self.app_state.t0_client.clone()
     }
 
-    /// Get a read lock on the tool registry.
+    /// Get a reference to the tool registry.
     ///
     /// Use this to iterate over tools and convert them to TensorZero tool definitions.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let registry = ctx.registry().await;
+    /// let registry = ctx.registry();
     /// let tools: Result<Vec<Tool>, _> = registry.iter()
     ///     .filter(|t| !t.is_durable())
     ///     .map(Tool::try_from)
     ///     .collect();
     /// ```
-    pub async fn registry_read_lock(&self) -> RwLockReadGuard<'_, ToolRegistry> {
-        self.app_state.tool_registry.read().await
+    pub fn registry(&self) -> &ToolRegistry {
+        &self.app_state.tool_registry
     }
 
     /// Get access to the 'extra_side' provided when building the 'DurableClient'
@@ -283,16 +282,15 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         side_info: JsonValue,
         options: SpawnOptions,
     ) -> ToolResult<ToolHandle> {
-        let is_durable = {
-            let registry = self.app_state.tool_registry.read().await;
-            // Validate params before spawning
-            registry.validate_params(tool_name, &llm_params, &side_info)?;
+        let registry = &self.app_state.tool_registry;
+        // Validate params before spawning
+        registry.validate_params(tool_name, &llm_params, &side_info)?;
+        let is_durable =
             registry
                 .is_durable(tool_name)
                 .ok_or_else(|| NonControlToolError::ToolNotFound {
                     name: tool_name.to_string(),
-                })?
-        };
+                })?;
 
         if is_durable {
             // TaskTool: spawn as subtask
@@ -382,16 +380,13 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
                 let idempotency_key = format!("{task_id}:{tool_name}:{call_id}");
 
                 // Get the simple tool from registry
-                let simple_tool = {
+                let simple_tool =
                     state
                         .tool_registry
-                        .read()
-                        .await
                         .get_simple_tool(&tool_name)
                         .ok_or_else(|| NonControlToolError::ToolNotFound {
                             name: tool_name.clone(),
-                        })?
-                };
+                        })?;
 
                 simple_tool
                     .execute_erased(llm_params, side_info, simple_ctx, &idempotency_key)
