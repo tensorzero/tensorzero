@@ -61,7 +61,7 @@ export const EvaluationResult: Story = {
       { label: "Evaluations", href: "/evaluations" },
       {
         label: "quality_eval",
-        href: "/evaluations/quality_eval",
+        href: "/evaluations/runs?evaluation_run_ids=abc-123",
         isIdentifier: true,
       },
       { label: "Results" },
