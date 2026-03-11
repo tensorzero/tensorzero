@@ -10,6 +10,19 @@ async function getCurrentConfigHashAsHex(page: Page): Promise<string> {
   return decimalToHex(status.config_hash);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function stripNulls(obj: any): any {
+  if (Array.isArray(obj)) return obj.map(stripNulls);
+  if (obj !== null && typeof obj === "object") {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([, v]) => v !== null)
+        .map(([k, v]) => [k, stripNulls(v)]),
+    );
+  }
+  return obj;
+}
+
 /**
  * Writes a modified config to create a real historical snapshot.
  * Adds an extra template to produce a different hash from the current config.
@@ -21,20 +34,26 @@ async function createHistoricalSnapshot(page: Page): Promise<string> {
   );
   const { config, extra_templates, tags } = await configResponse.json();
 
+  // Strip null values — GET serializes Option::None as null but POST rejects them.
   const writeResponse = await page.request.post(
     `${GATEWAY_URL}/internal/config`,
     {
-      data: {
+      data: stripNulls({
         config,
         extra_templates: {
           ...extra_templates,
           "test_snapshot_marker.txt": "historical config for e2e test",
         },
         tags,
-      },
+      }),
     },
   );
-  expect(writeResponse.ok()).toBe(true);
+  if (!writeResponse.ok()) {
+    const text = await writeResponse.text();
+    throw new Error(
+      `POST /internal/config failed (${writeResponse.status()}): ${text}`,
+    );
+  }
   const { hash } = await writeResponse.json();
   return decimalToHex(hash);
 }
