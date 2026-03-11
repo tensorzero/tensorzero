@@ -1,15 +1,12 @@
 from asyncio import Semaphore
 from dataclasses import dataclass
 
-from tensorzero import (
-    AsyncTensorZeroGateway,
-    ChatInferenceResponse,
-    Message,
-    ToolCall,
-    ToolResult,
+from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
 )
-from tensorzero.util import UUID
-from tools import load_wikipedia_page, search_wikipedia
+from tools import load_wikipedia_page, parse_tool_arguments, search_wikipedia
 
 # ## Agentic RAG
 #
@@ -34,81 +31,85 @@ class RunResult:
 
 
 async def ask_question(
-    t0: AsyncTensorZeroGateway,
+    openai_client: AsyncOpenAI,
     semaphore: Semaphore,
     question: str,
-    episode_id: UUID,
+    episode_id: str,
     verbose: bool = False,
 ) -> RunResult:
     """
     Asks a question to the multi-hop retrieval agent and returns the answer.
 
     Args:
-        question (str): The question to ask the agent.
-        verbose (bool, optional): Whether to print verbose output. Defaults to False.
+        openai_client: The OpenAI client pointed at the TensorZero Gateway.
+        semaphore: A semaphore to limit concurrency.
+        question: The question to ask the agent.
+        episode_id: The episode ID for the workflow evaluation run.
+        verbose: Whether to print verbose output. Defaults to False.
 
     Returns:
-        str: The answer to the question.
+        RunResult: The answer and number of iterations.
     """
     # Initialize the message history with the user's question
-    messages: list[Message] = [{"role": "user", "content": question}]
+    messages: list[ChatCompletionMessageParam] = [{"role": "user", "content": question}]
 
     t = None
     for t in range(MAX_INFERENCES):
         if verbose:
             print()
         async with semaphore:
-            response = await t0.inference(
-                function_name="multi_hop_rag_agent",
-                input={"messages": messages},
-                episode_id=episode_id,
+            response = await openai_client.chat.completions.create(
+                model="tensorzero::function_name::multi_hop_rag_agent",
+                messages=messages,
+                extra_body={"tensorzero::episode_id": episode_id},
             )
-            assert isinstance(response, ChatInferenceResponse)
+
+        assistant_message = response.choices[0].message
 
         # Append the assistant's response to the messages
-        messages.append({"role": "assistant", "content": response.content})
+        messages.append(assistant_message)  # type: ignore
 
-        # Start constructing the tool call results
-        output_content_blocks = []
+        tool_calls = assistant_message.tool_calls
+        if not tool_calls:
+            # No tool calls — the model responded with text only
+            if verbose:
+                print(f"[Text Response] {assistant_message.content}")
+            continue
 
-        for content_block in response.content:
-            if isinstance(content_block, ToolCall):
-                if verbose:
-                    print(f"[Tool Call] {content_block.name}: {content_block.arguments}")
+        # Process each tool call
+        for tool_call in tool_calls:
+            assert isinstance(tool_call, ChatCompletionMessageFunctionToolCall)
+            name = tool_call.function.name
+            arguments = parse_tool_arguments(tool_call.function.arguments)
 
-                if content_block.name is None or content_block.arguments is None:
-                    output_content_blocks.append(
-                        ToolResult(
-                            name=content_block.raw_name,
-                            id=content_block.id,
-                            result="ERROR: invalid tool call",
-                        )
-                    )
-                elif content_block.name == "search_wikipedia":
-                    output_content_blocks.append(search_wikipedia(content_block))
-                elif content_block.name == "load_wikipedia_page":
-                    output_content_blocks.append(load_wikipedia_page(content_block))
-                elif content_block.name == "think":
-                    # The `think` tool is just used to plan the next steps, and there's no actual tool to call.
-                    # Some providers like OpenAI require a tool result, so we'll provide an empty string.
-                    output_content_blocks.append(
-                        ToolResult(
-                            name="think",
-                            id=content_block.id,
-                            result="",
-                        )
-                    )
-                elif content_block.name == "answer_question":
-                    return RunResult(answer=content_block.arguments["answer"], t=t)
+            if verbose:
+                print(f"[Tool Call] {name}: {arguments}")
+
+            if name == "search_wikipedia":
+                result = search_wikipedia(arguments)
+            elif name == "load_wikipedia_page":
+                result = load_wikipedia_page(arguments)
+            elif name == "think":
+                # The `think` tool is just used to plan the next steps, and there's no actual tool to call.
+                # Some providers like OpenAI require a tool result, so we'll provide an empty string.
+                result = ""
+            elif name == "answer_question":
+                return RunResult(answer=arguments.get("answer", ""), t=t)
             else:
-                # We don't need to do anything with other content blocks.
-                print(f"[Other Content Block] {content_block}")
+                result = f"ERROR: unknown tool `{name}`"
 
-        messages.append({"role": "user", "content": output_content_blocks})
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result,
+                }
+            )
+
         approx_message_length = len(str(messages))
         if approx_message_length > MAX_MESSAGE_LENGTH:
             try:
-                messages = await compact_context(t0, semaphore, question, messages, episode_id, verbose)
+                messages = await compact_context(openai_client, semaphore, question, messages, episode_id, verbose)
             except Exception as e:
                 print(f"Error compacting context: {e}")
                 messages = messages[:-2]
@@ -122,28 +123,35 @@ async def ask_question(
 
 
 async def compact_context(
-    t0: AsyncTensorZeroGateway,
+    openai_client: AsyncOpenAI,
     semaphore: Semaphore,
     question: str,
-    messages: list[Message],
-    episode_id: UUID,
+    messages: list[ChatCompletionMessageParam],
+    episode_id: str,
     verbose: bool = False,
-):
+) -> list[ChatCompletionMessageParam]:
     if verbose:
         print("Compacting context...")
     async with semaphore:
-        response = await t0.inference(
-            function_name="compact_context",
-            input={
-                "system": {"question": question},
-                "messages": messages,
-            },
-            episode_id=episode_id,
+        response = await openai_client.chat.completions.create(
+            model="tensorzero::function_name::compact_context",
+            messages=[
+                {
+                    "role": "system",
+                    "content": [  # type: ignore
+                        {
+                            "type": "text",
+                            "tensorzero::arguments": {"question": question},
+                        }
+                    ],
+                },
+                *messages,
+            ],
+            extra_body={"tensorzero::episode_id": episode_id},
         )
-        assert isinstance(response, ChatInferenceResponse)
 
-    compacted_messages: list[Message] = [
+    compacted_messages: list[ChatCompletionMessageParam] = [
         {"role": "user", "content": question},
-        {"role": "assistant", "content": response.content},
+        {"role": "assistant", "content": response.choices[0].message.content or ""},
     ]
     return compacted_messages
