@@ -169,6 +169,7 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
     let dynamic_variant_config = UninitializedVariantInfo {
         inner: UninitializedVariantConfig::ChatCompletion(params.variant_config),
         timeouts: None,
+        namespace: None,
     };
 
     // Extract function name and evaluators from evaluation config

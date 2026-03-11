@@ -172,6 +172,7 @@ pub async fn mutate_variant(
     let mutate_variant_info = UninitializedVariantInfo {
         inner: UninitializedVariantConfig::ChatCompletion(mutate_variant_config),
         timeouts: None,
+        namespace: None,
     };
 
     // Build input Arguments for the mutate function

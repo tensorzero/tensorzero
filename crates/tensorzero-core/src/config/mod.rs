@@ -1630,6 +1630,7 @@ impl Config {
         }
 
         namespace::validate_namespaced_model_usage(&self.functions, &self.models)?;
+        namespace::validate_namespaced_variant_usage(&self.functions)?;
 
         for embedding_model_name in self.embedding_models.table.keys() {
             if embedding_model_name.starts_with("tensorzero::") {
@@ -2441,6 +2442,9 @@ pub struct UninitializedVariantInfo {
     pub inner: UninitializedVariantConfig,
     #[serde(default)]
     pub timeouts: Option<TimeoutsConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub namespace: Option<Namespace>,
 }
 
 /// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
@@ -2518,6 +2522,7 @@ impl UninitializedVariantInfo {
         Ok(VariantInfo {
             inner,
             timeouts: self.timeouts.unwrap_or_default(),
+            namespace: self.namespace,
         })
     }
 }
