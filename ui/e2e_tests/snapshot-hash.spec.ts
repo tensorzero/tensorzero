@@ -29,7 +29,6 @@ function stripNulls(obj: any): any {
 }
 
 // Creates a real historical snapshot via POST /internal/config.
-// See https://github.com/tensorzero/tensorzero/issues/6874 for stripNulls.
 async function createHistoricalSnapshot(page: Page): Promise<string> {
   const headers = gatewayHeaders();
 
