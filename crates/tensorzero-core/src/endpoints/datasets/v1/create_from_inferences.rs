@@ -9,6 +9,7 @@ use crate::db::datasets::DatasetQueries;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
+use crate::openapi::TensorZeroErrorResponse;
 use crate::stored_inference::{StoredInference, StoredInferenceDatabase};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -19,6 +20,21 @@ use super::types::{
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/from_inferences` endpoint.
 /// Creates datapoints from inferences based on either specific inference IDs or an inference query.
+#[utoipa::path(
+    post,
+    path = "/v1/datasets/{dataset_name}/from_inferences",
+    tag = "datasets",
+    params(
+        ("dataset_name" = String, Path, description = "Dataset name"),
+    ),
+    request_body = CreateDatapointsFromInferenceRequest,
+    responses(
+        (status = 200, description = "Created datapoint IDs", body = CreateDatapointsResponse),
+        (status = 400, description = "Invalid request", body = TensorZeroErrorResponse),
+        (status = 404, description = "Dataset not found", body = TensorZeroErrorResponse),
+        (status = 500, description = "Internal server error", body = TensorZeroErrorResponse),
+    ),
+)]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "datasets.v1.create_from_inferences", skip(app_state, request))]
 pub async fn create_from_inferences_handler(

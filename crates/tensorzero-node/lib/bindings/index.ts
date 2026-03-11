@@ -177,6 +177,7 @@ export * from "./GatewayListConfigWritesResponse";
 export * from "./GatewayListEventsResponse";
 export * from "./GatewayStreamUpdate";
 export * from "./GatewayToolCallAuthorizationStatus";
+export * from "./GatewayToolCallEvent";
 export * from "./GepaEvaluatorStats";
 export * from "./GepaToolOutput";
 export * from "./GepaToolParams";

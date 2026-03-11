@@ -35,7 +35,9 @@ use pyo3::prelude::*;
 ///
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema, utoipa::ToSchema,
+)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -99,7 +101,7 @@ impl StoredInput {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -241,7 +243,9 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(
+    Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, utoipa::ToSchema,
+)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -337,11 +341,12 @@ impl StoredInputMessageContent {
 /// A newtype wrapper around `ObjectStoragePointer` that handles legacy deserialization formats.
 /// See the deserializer implementation below for details on the legacy formats it supports.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[repr(transparent)]
 #[serde(transparent)]
+#[schema(value_type = ObjectStoragePointer)]
 pub struct StoredFile(pub ObjectStoragePointer);
 
 impl Deref for StoredFile {

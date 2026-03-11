@@ -964,19 +964,25 @@ pub enum ContentBlockOutput {
 
 /// Defines the types of content block that can come from a `chat` function
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(
+    Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, utoipa::ToSchema,
+)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[export_schema]
 pub enum ContentBlockChatOutput {
     #[schemars(title = "ContentBlockChatOutputText")]
+    #[schema(title = "ContentBlockChatOutputText")]
     Text(Text),
     #[schemars(title = "ContentBlockChatOutputToolCall")]
+    #[schema(title = "ContentBlockChatOutputToolCall")]
     ToolCall(InferenceResponseToolCall),
     #[schemars(title = "ContentBlockChatOutputThought")]
+    #[schema(title = "ContentBlockChatOutputThought")]
     Thought(Thought),
     #[schemars(title = "ContentBlockChatOutputUnknown")]
+    #[schema(title = "ContentBlockChatOutputUnknown")]
     Unknown(Unknown),
 }
 
@@ -1415,7 +1421,7 @@ pub struct JsonInferenceResult {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema, utoipa::ToSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]

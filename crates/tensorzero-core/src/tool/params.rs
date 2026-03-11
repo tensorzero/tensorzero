@@ -81,7 +81,9 @@ use super::wire::ToolChoice;
 ///
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema,
+)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields, export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]

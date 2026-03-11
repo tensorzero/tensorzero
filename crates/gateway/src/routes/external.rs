@@ -10,7 +10,7 @@ use tensorzero_core::endpoints::openai_compatible::build_openai_compatible_route
 use tensorzero_core::observability::OtelEnabledRoutes;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
 use utoipa::OpenApi;
-use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -79,14 +79,12 @@ pub fn build_non_otel_enabled_routes(
 /// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_observability_routes() -> OpenApiRouter<AppStateData> {
     new_external_openapi_router()
-        .route(
-            "/v1/inferences/list_inferences",
-            post(endpoints::stored_inferences::v1::list_inferences_handler),
-        )
-        .route(
-            "/v1/inferences/get_inferences",
-            post(endpoints::stored_inferences::v1::get_inferences_handler),
-        )
+        .routes(routes!(
+            endpoints::stored_inferences::v1::get_inferences::list_inferences_handler
+        ))
+        .routes(routes!(
+            endpoints::stored_inferences::v1::get_inferences::get_inferences_handler
+        ))
 }
 
 /// This function builds the public routes for datasets.
@@ -97,17 +95,18 @@ fn build_datasets_routes() -> OpenApiRouter<AppStateData> {
         .route(
             "/v1/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::v1::create_datapoints_handler)
-                .patch(endpoints::datasets::v1::update_datapoints_handler)
                 .delete(endpoints::datasets::v1::delete_datapoints_handler),
         )
+        .routes(routes!(
+            endpoints::datasets::v1::update_datapoints::update_datapoints_handler
+        ))
         .route(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
             patch(endpoints::datasets::v1::update_datapoints_metadata_handler),
         )
-        .route(
-            "/v1/datasets/{dataset_name}/from_inferences",
-            post(endpoints::datasets::v1::create_from_inferences_handler),
-        )
+        .routes(routes!(
+            endpoints::datasets::v1::create_from_inferences::create_from_inferences_handler
+        ))
         .route(
             "/v1/datasets/{dataset_name}/list_datapoints",
             post(endpoints::datasets::v1::list_datapoints_handler),

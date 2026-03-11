@@ -17,6 +17,7 @@ use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input, InputExt};
 use crate::jsonschema_util::JSONSchema;
+use crate::openapi::TensorZeroErrorResponse;
 use crate::tool::apply_dynamic_tool_params_update_to_tool_call_config;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -39,6 +40,21 @@ pub struct UpdateDatapointsPathParams {
     pub dataset_name: String,
 }
 
+#[utoipa::path(
+    patch,
+    path = "/v1/datasets/{dataset_name}/datapoints",
+    tag = "datasets",
+    params(
+        ("dataset_name" = String, Path, description = "Dataset name"),
+    ),
+    request_body = UpdateDatapointsRequest,
+    responses(
+        (status = 200, description = "Updated datapoint IDs", body = UpdateDatapointsResponse),
+        (status = 400, description = "Invalid request", body = TensorZeroErrorResponse),
+        (status = 404, description = "Dataset or datapoint not found", body = TensorZeroErrorResponse),
+        (status = 500, description = "Internal server error", body = TensorZeroErrorResponse),
+    ),
+)]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "datasets.v1.update_datapoints", skip(app_state, request))]
 pub async fn update_datapoints_handler(

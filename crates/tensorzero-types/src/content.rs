@@ -14,9 +14,10 @@ use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(transparent)]
+#[schema(value_type = Object)]
 pub struct Arguments(
     // This type cannot be a Python dataclass because it's equivalent to a Map with arbitrary keys,
     // and Python dataclasses need its slots specified. So all references to this type need to be
@@ -25,24 +26,26 @@ pub struct Arguments(
 );
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 #[export_schema]
 pub struct Template {
     pub name: String,
     #[schemars(with = "Map<String, Value>")]
+    #[schema(value_type = Object)]
     pub arguments: Arguments,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema, utoipa::ToSchema)]
 #[serde(untagged)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub enum System {
     Text(String),
     #[schemars(with = "Map<String, Value>")]
+    #[schema(value_type = Object)]
     Template(Arguments),
 }
 
@@ -55,7 +58,7 @@ pub enum System {
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
@@ -81,7 +84,7 @@ impl Text {
 /// Struct that represents raw text content that should be passed directly to the model
 /// without any template processing or validation
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
@@ -107,7 +110,7 @@ impl RawText {
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[export_schema]
@@ -229,7 +232,9 @@ impl Unknown {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(
+    Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, utoipa::ToSchema,
+)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[serde(tag = "type")]
@@ -242,7 +247,7 @@ pub enum ThoughtSummaryBlock {
 
 /// Struct that represents a model's reasoning
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 // Note: We don't use `get_all` because `extra_data` is `Value` which doesn't implement `IntoPyObject`.
 // The fields are exposed via a manual `#[pymethods]` impl below.

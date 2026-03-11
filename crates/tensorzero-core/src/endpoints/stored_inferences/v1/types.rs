@@ -15,7 +15,7 @@ use crate::stored_inference::StoredInference;
 pub use crate::endpoints::shared_types::OrderDirection;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FloatMetricFilter {
     pub metric_name: String,
@@ -24,7 +24,7 @@ pub struct FloatMetricFilter {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct BooleanMetricFilter {
     pub metric_name: String,
@@ -33,7 +33,7 @@ pub struct BooleanMetricFilter {
 
 /// Filter by tag key-value pair.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TagFilter {
     pub key: String,
@@ -43,7 +43,7 @@ pub struct TagFilter {
 
 /// Filter by timestamp.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TimeFilter {
     #[cfg_attr(feature = "ts-bindings", ts(type = "Date"))]
@@ -54,7 +54,7 @@ pub struct TimeFilter {
 
 /// Comparison operators for float metrics.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum FloatComparisonOperator {
     #[serde(rename = "<")]
@@ -73,7 +73,7 @@ pub enum FloatComparisonOperator {
 
 /// Comparison operators for timestamps.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TimeComparisonOperator {
     #[serde(rename = "<")]
@@ -92,7 +92,7 @@ pub enum TimeComparisonOperator {
 
 /// Comparison operators for tag filters.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum TagComparisonOperator {
     #[serde(rename = "=")]
@@ -103,7 +103,7 @@ pub enum TagComparisonOperator {
 
 /// Filter by whether an inference has a demonstration.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct DemonstrationFeedbackFilter {
     pub has_demonstration: bool,
@@ -112,7 +112,7 @@ pub struct DemonstrationFeedbackFilter {
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "by", rename_all = "snake_case")]
 pub enum OrderByTerm {
@@ -140,7 +140,7 @@ pub enum OrderByTerm {
 
 /// Order by clauses for querying inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OrderBy {
     /// The property to order by.
@@ -153,7 +153,7 @@ pub struct OrderBy {
 
 /// Filters for querying inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -161,41 +161,58 @@ pub struct OrderBy {
 pub enum InferenceFilter {
     /// Filter by the value of a float metric
     #[schemars(title = "InferenceFilterFloatMetric")]
+    #[schema(title = "InferenceFilterFloatMetric")]
     FloatMetric(FloatMetricFilter),
 
     /// Filter by the value of a boolean metric
     #[schemars(title = "InferenceFilterBooleanMetric")]
+    #[schema(title = "InferenceFilterBooleanMetric")]
     BooleanMetric(BooleanMetricFilter),
 
     /// Filter by whether an inference has a demonstration.
     #[schemars(title = "InferenceFilterDemonstrationFeedback")]
+    #[schema(title = "InferenceFilterDemonstrationFeedback")]
     DemonstrationFeedback(DemonstrationFeedbackFilter),
 
     /// Filter by tag key-value pair
     #[schemars(title = "InferenceFilterTag")]
+    #[schema(title = "InferenceFilterTag")]
     Tag(TagFilter),
 
     /// Filter by the timestamp of an inference.
     #[schemars(title = "InferenceFilterTime")]
+    #[schema(title = "InferenceFilterTime")]
     Time(TimeFilter),
 
     /// Logical AND of multiple filters
     #[schemars(title = "InferenceFilterAnd")]
-    And { children: Vec<InferenceFilter> },
+    #[schema(title = "InferenceFilterAnd")]
+    And {
+        #[schema(no_recursion)]
+        children: Vec<InferenceFilter>,
+    },
 
     /// Logical OR of multiple filters
     #[schemars(title = "InferenceFilterOr")]
-    Or { children: Vec<InferenceFilter> },
+    #[schema(title = "InferenceFilterOr")]
+    Or {
+        #[schema(no_recursion)]
+        children: Vec<InferenceFilter>,
+    },
 
     /// Logical NOT of a filter
     #[schemars(title = "InferenceFilterNot")]
-    Not { child: Box<InferenceFilter> },
+    #[schema(title = "InferenceFilterNot")]
+    Not {
+        #[schema(no_recursion)]
+        child: Box<InferenceFilter>,
+    },
 }
 
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Default, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Default, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 pub struct ListInferencesRequest {
@@ -323,7 +340,7 @@ impl ListInferencesRequest {
 /// Request to get specific inferences by their IDs.
 /// Used by the `POST /v1/inferences/get_inferences` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 pub struct GetInferencesRequest {
@@ -346,7 +363,7 @@ pub struct GetInferencesRequest {
 
 /// Response containing the requested inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct GetInferencesResponse {

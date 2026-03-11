@@ -5,6 +5,7 @@ use tracing::instrument;
 use crate::config::Config;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
 use crate::error::{Error, ErrorDetails};
+use crate::openapi::TensorZeroErrorResponse;
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -12,6 +13,17 @@ use super::types::{GetInferencesRequest, GetInferencesResponse, ListInferencesRe
 
 /// Handler for the POST `/v1/inferences/get_inferences` endpoint.
 /// Retrieves specific inferences by their IDs.
+#[utoipa::path(
+    post,
+    path = "/v1/inferences/get_inferences",
+    tag = "inferences",
+    request_body = GetInferencesRequest,
+    responses(
+        (status = 200, description = "Get stored inferences by ID", body = GetInferencesResponse),
+        (status = 400, description = "Invalid request", body = TensorZeroErrorResponse),
+        (status = 500, description = "Internal server error", body = TensorZeroErrorResponse),
+    ),
+)]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "inferences.v1.get_inferences", skip(app_state, request))]
 pub async fn get_inferences_handler(
@@ -61,6 +73,17 @@ pub async fn get_inferences(
 
 /// Handler for the POST `/v1/inferences/list_inferences` endpoint.
 /// Lists inferences with optional filtering, pagination, and sorting.
+#[utoipa::path(
+    post,
+    path = "/v1/inferences/list_inferences",
+    tag = "inferences",
+    request_body = ListInferencesRequest,
+    responses(
+        (status = 200, description = "List stored inferences", body = GetInferencesResponse),
+        (status = 400, description = "Invalid request", body = TensorZeroErrorResponse),
+        (status = 500, description = "Internal server error", body = TensorZeroErrorResponse),
+    ),
+)]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "inferences.v1.list_inferences", skip(app_state, request))]
 pub async fn list_inferences_handler(

@@ -7,7 +7,7 @@ use axum::routing::{get, post};
 use tensorzero_core::endpoints;
 use tensorzero_core::utils::gateway::AppStateData;
 use utoipa::OpenApi;
-use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -25,6 +25,7 @@ fn new_internal_openapi_router() -> OpenApiRouter<AppStateData> {
 
 pub fn build_internal_non_otel_enabled_routes() -> OpenApiRouter<AppStateData> {
     new_internal_openapi_router()
+        .merge(build_documented_internal_routes())
         .route(
             "/internal/functions/{function_name}/variant_sampling_probabilities",
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
@@ -168,10 +169,6 @@ pub fn build_internal_non_otel_enabled_routes() -> OpenApiRouter<AppStateData> {
             "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback",
             post(endpoints::internal::evaluations::get_human_feedback_handler),
         )
-        .route(
-            "/internal/evaluations/run",
-            post(super::evaluations::run_evaluation_handler),
-        )
         // Workflow evaluation endpoints
         .route(
             "/internal/workflow_evaluations/projects",
@@ -254,12 +251,7 @@ pub fn build_internal_non_otel_enabled_routes() -> OpenApiRouter<AppStateData> {
         )
         .route(
             "/internal/autopilot/v1/sessions/{session_id}/events",
-            get(endpoints::internal::autopilot::list_events_handler)
-                .post(endpoints::internal::autopilot::create_event_handler),
-        )
-        .route(
-            "/internal/autopilot/v1/sessions/{session_id}/events/stream",
-            get(endpoints::internal::autopilot::stream_events_handler),
+            post(endpoints::internal::autopilot::create_event_handler),
         )
         .route(
             "/internal/autopilot/v1/sessions/{session_id}/actions/approve_all",
@@ -287,4 +279,13 @@ pub fn build_internal_non_otel_enabled_routes() -> OpenApiRouter<AppStateData> {
             "/internal/autopilot/status",
             get(endpoints::internal::autopilot::autopilot_status_handler),
         )
+}
+
+fn build_documented_internal_routes() -> OpenApiRouter<AppStateData> {
+    new_internal_openapi_router()
+        .routes(routes!(super::evaluations::run_evaluation_handler))
+        .routes(routes!(endpoints::internal::autopilot::list_events_handler))
+        .routes(routes!(
+            endpoints::internal::autopilot::stream_events_handler
+        ))
 }

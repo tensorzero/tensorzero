@@ -23,7 +23,7 @@ use uuid::Uuid;
 /// Content block types allowed in autopilot event messages.
 /// Restricted to only Text blocks (no ToolCall, File, Template, etc.).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
     feature = "ts-bindings",
@@ -36,7 +36,7 @@ pub enum EventPayloadMessageContent {
 /// A message payload specific to autopilot events.
 /// Content is restricted to Text blocks only.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadMessage {
     pub role: Role,
@@ -48,7 +48,7 @@ pub struct EventPayloadMessage {
     pub metadata: EventPayloadMessageMetadata,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct EventPayloadMessageMetadata {
     /// Attempted lookups for anything that matched a UUID regex
     /// in the parent `EventPayloadMessage`
@@ -75,7 +75,7 @@ impl From<EventPayloadMessage> for InputMessage {
 
 /// A session representing an autopilot conversation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct Session {
     pub id: Uuid,
@@ -108,7 +108,7 @@ pub struct Event {
 ///
 /// Uses `GatewayEventPayload` which excludes `NotAvailable` authorization status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GatewayEvent {
     pub id: Uuid,
@@ -130,9 +130,39 @@ impl TryFrom<Event> for GatewayEvent {
     }
 }
 
+/// A tool call event as seen by gateway consumers.
+///
+/// Unlike [`GatewayEvent`], this payload is narrowed to `tool_call`.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GatewayToolCallEvent {
+    pub id: Uuid,
+    pub payload: GatewayEventPayloadToolCall,
+    pub session_id: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+impl TryFrom<Event> for GatewayToolCallEvent {
+    type Error = &'static str;
+
+    fn try_from(event: Event) -> Result<Self, Self::Error> {
+        let EventPayload::ToolCall(tool_call) = event.payload else {
+            return Err("Expected tool_call event");
+        };
+
+        Ok(GatewayToolCallEvent {
+            id: event.id,
+            payload: tool_call.into(),
+            session_id: event.session_id,
+            created_at: event.created_at,
+        })
+    }
+}
+
 /// The UX-relevant status of the Autopilot.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum AutopilotStatus {
@@ -159,7 +189,7 @@ pub struct StreamUpdate {
 ///
 /// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GatewayStreamUpdate {
     pub event: GatewayEvent,
@@ -179,21 +209,21 @@ impl TryFrom<StreamUpdate> for GatewayStreamUpdate {
 
 /// Error payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct EventPayloadError {
     pub message: String,
 }
 
 /// Status update payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct EventPayloadStatusUpdate {
     pub status_update: StatusUpdate,
 }
 
 /// Tool result payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct EventPayloadToolResult {
     pub tool_call_event_id: Uuid,
     pub outcome: ToolOutcome,
@@ -222,7 +252,7 @@ pub struct EventPayloadToolResult {
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(tag = "type", rename_all = "snake_case"))]
 pub enum EventPayload {
@@ -272,24 +302,35 @@ pub enum CreateEventPayload {
 ///
 /// Uses `GatewayEventPayloadToolCallAuthorization` which excludes `NotAvailable` status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
     feature = "ts-bindings",
     ts(export, tag = "type", rename_all = "snake_case")
 )]
 pub enum GatewayEventPayload {
+    #[schema(title = "GatewayEventPayloadMessage")]
     Message(EventPayloadMessage),
+    #[schema(title = "GatewayEventPayloadError")]
     Error(EventPayloadError),
+    #[schema(title = "GatewayEventPayloadStatusUpdate")]
     StatusUpdate(EventPayloadStatusUpdate),
+    #[schema(title = "GatewayEventPayloadToolCall")]
     ToolCall(GatewayEventPayloadToolCall),
+    #[schema(title = "GatewayEventPayloadToolCallAuthorization")]
     ToolCallAuthorization(GatewayEventPayloadToolCallAuthorization),
+    #[schema(title = "GatewayEventPayloadToolResult")]
     ToolResult(EventPayloadToolResult),
+    #[schema(title = "GatewayEventPayloadVisualization")]
     Visualization(EventPayloadVisualization),
+    #[schema(title = "GatewayEventPayloadUserQuestions")]
     UserQuestions(EventPayloadUserQuestions),
+    #[schema(title = "GatewayEventPayloadUserQuestionsAnswers")]
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
+    #[schema(title = "GatewayEventPayloadAutoEvalExampleLabeling")]
     AutoEvalExampleLabeling(EventPayloadAutoEvalExampleLabeling),
     AutoEvalExampleLabelingAnswers(EventPayloadAutoEvalExampleLabelingAnswers),
+    #[schema(title = "GatewayEventPayloadUnknown")]
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -326,7 +367,7 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
 
 /// A status update within a session.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
     feature = "ts-bindings",
@@ -345,7 +386,7 @@ pub enum StatusUpdate {
 /// This extends the interface of a standard tool call with bookkeeping information that
 /// allows the caller to send over non-llm generated parameters.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct EventPayloadToolCall {
     /// Name
     pub name: String,
@@ -358,7 +399,7 @@ pub struct EventPayloadToolCall {
 /// Tool call payload as seen by gateway consumers.
 /// Includes `requires_approval` which is set by the gateway based on tool whitelist config.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayEventPayloadToolCall {
     pub name: String,
     pub arguments: serde_json::Value,
@@ -386,7 +427,7 @@ impl From<EventPayloadToolCall> for GatewayEventPayloadToolCall {
 /// We should implement this as a type that has optional or mandatory fields as needed
 /// for each kind of tool
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct AutopilotSideInfo {
     /// The event ID of the ToolCall event (for correlating ToolResult).
     pub tool_call_event_id: Uuid,
@@ -403,7 +444,7 @@ pub struct AutopilotSideInfo {
 
 /// Side info for optimization workflow tool (hidden from LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, utoipa::ToSchema)]
 pub struct OptimizationWorkflowSideInfo {
     /// Polling interval in seconds (default: 60).
     #[serde(default = "default_poll_interval_secs")]
@@ -457,7 +498,7 @@ impl AutopilotSideInfo {
 /// `AutopilotToolResult::value()` which returns the structured value directly
 /// or parses the legacy string as a fallback.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(untagged)]
 pub enum AutopilotToolResult {
     Typed {
@@ -487,7 +528,7 @@ impl AutopilotToolResult {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallDecisionSource {
     Ui,
@@ -496,7 +537,7 @@ pub enum ToolCallDecisionSource {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct EventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
@@ -526,7 +567,7 @@ pub struct CreateEventPayloadToolCallAuthorization {
 ///
 /// Uses `GatewayToolCallAuthorizationStatus` which excludes `NotAvailable`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct GatewayEventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
@@ -558,7 +599,7 @@ impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallA
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallAuthorizationStatus {
     Approved,
@@ -571,7 +612,7 @@ pub enum ToolCallAuthorizationStatus {
 /// This is a narrower type than `ToolCallAuthorizationStatus` that excludes
 /// `NotAvailable` since that status is filtered out before reaching consumers.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GatewayToolCallAuthorizationStatus {
     Approved,
@@ -597,18 +638,21 @@ impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutcome {
+    #[schema(title = "ToolOutcomeSuccess")]
     Success(AutopilotToolResult),
     /// The user rejected the tool call request
     /// Note that this is currently never directly sent by the client - instead,
     /// `ToolCallAuthorizationStatus::Rejected` is sent to the server.
     /// The rejected tool will show in in the events list as `EventPayload::ToolResult`
     /// with `ToolOutcome::Rejected`
+    #[schema(title = "ToolOutcomeRejected")]
     Rejected {
         reason: String,
     },
+    #[schema(title = "ToolOutcomeFailure")]
     Failure {
         /// Structured error data from the tool.
         error: tensorzero_types::ToolFailure,
@@ -625,7 +669,7 @@ pub enum ToolOutcome {
 
 /// Summary statistics for a variant's performance.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct VariantSummary {
     /// Estimated mean performance.
@@ -643,7 +687,7 @@ pub struct VariantSummary {
 
 /// Visualization data for a top-k evaluation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct TopKEvaluationVisualization {
     /// Map of variant names to their summary statistics.
@@ -661,7 +705,7 @@ pub struct TopKEvaluationVisualization {
 
 /// Types of visualizations that can be displayed.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
     feature = "ts-bindings",
@@ -669,16 +713,18 @@ pub struct TopKEvaluationVisualization {
 )]
 pub enum VisualizationType {
     /// Top-k evaluation results showing variant performance comparisons.
+    #[schema(title = "VisualizationTypeTopKEvaluation")]
     TopKEvaluation(TopKEvaluationVisualization),
     /// Unknown visualization type for forward compatibility.
     /// Old clients can gracefully handle new visualization types they don't recognize.
     #[serde(untagged)]
+    #[schema(title = "VisualizationTypeUnknown")]
     Unknown(serde_json::Value),
 }
 
 /// Visualization payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadVisualization {
     /// The ID of the tool execution that generated this visualization.
@@ -695,7 +741,7 @@ pub struct EventPayloadVisualization {
 
 /// Questions payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadUserQuestions {
     pub questions: Vec<EventPayloadUserQuestion>,
@@ -703,7 +749,7 @@ pub struct EventPayloadUserQuestions {
 
 /// A single question to display to the user.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadUserQuestion {
     pub id: Uuid,
@@ -717,7 +763,7 @@ pub struct EventPayloadUserQuestion {
 
 /// The format of a user question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EventPayloadUserQuestionInner {
@@ -727,7 +773,7 @@ pub enum EventPayloadUserQuestionInner {
 
 /// A multiple choice question with options.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MultipleChoiceQuestion {
     /// Should be 2-4 options.
@@ -738,7 +784,7 @@ pub struct MultipleChoiceQuestion {
 
 /// An option in a multiple choice question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MultipleChoiceOption {
     pub id: Uuid,
@@ -750,7 +796,7 @@ pub struct MultipleChoiceOption {
 
 /// User responses payload for an event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadUserQuestionsAnswers {
     /// Map from question UUID to response.
@@ -760,18 +806,20 @@ pub struct EventPayloadUserQuestionsAnswers {
 
 /// A user's response to a question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum UserQuestionAnswer {
+    #[schema(title = "UserQuestionAnswerMultipleChoice")]
     MultipleChoice(MultipleChoiceAnswer),
+    #[schema(title = "UserQuestionAnswerFreeResponse")]
     FreeResponse(FreeResponseAnswer),
     Skipped,
 }
 
 /// A user's answer to a multiple choice question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct MultipleChoiceAnswer {
     /// IDs of the selected options.
@@ -780,7 +828,7 @@ pub struct MultipleChoiceAnswer {
 
 /// A user's free-form text answer.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FreeResponseAnswer {
     pub text: String,
@@ -795,7 +843,7 @@ pub struct FreeResponseAnswer {
 /// Groups labeled examples together, each with rich context blocks
 /// (e.g. prompt/response) and associated labeling questions.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadAutoEvalExampleLabeling {
     pub examples: Vec<AutoEvalExampleLabeling>,
@@ -803,7 +851,7 @@ pub struct EventPayloadAutoEvalExampleLabeling {
 
 /// A single example to label, with context and a structured labeling question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AutoEvalExampleLabeling {
     /// Rich content blocks providing context (e.g. the prompt and response).
@@ -818,7 +866,7 @@ pub struct AutoEvalExampleLabeling {
 
 /// A multiple-choice labeling question within an autoeval example.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AutoEvalLabelQuestion {
     pub id: Uuid,
@@ -829,7 +877,7 @@ pub struct AutoEvalLabelQuestion {
 
 /// A free-response explanation question within an autoeval example.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AutoEvalExplanationQuestion {
     pub id: Uuid,
@@ -839,7 +887,7 @@ pub struct AutoEvalExplanationQuestion {
 
 /// A block of rich content displayed alongside an autoeval example.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(
     feature = "ts-bindings",
@@ -878,7 +926,7 @@ pub struct CreateEventPayloadAutoEvalExampleLabelingAnswers {
 /// Includes the full context blocks so the UI can render everything
 /// without looking up the original labeling event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadAutoEvalExampleLabelingAnswers {
     pub examples: Vec<AutoEvalLabeledExample>,
@@ -888,7 +936,7 @@ pub struct EventPayloadAutoEvalExampleLabelingAnswers {
 
 /// A labeled example with its full context and submitted answers.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AutoEvalLabeledExample {
     /// Rich content blocks providing context (e.g. the prompt and response).
@@ -1022,7 +1070,7 @@ pub struct ListEventsResponse {
 ///
 /// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GatewayListEventsResponse {
     pub events: Vec<GatewayEvent>,
@@ -1033,9 +1081,9 @@ pub struct GatewayListEventsResponse {
     pub status: AutopilotStatus,
     /// All tool calls in Event history that do not have responses.
     /// These may be duplicates of some of the values in events.
-    /// All EventPayloads in these Events should be of type ToolCall.
+    /// Payloads are always of type `tool_call`.
     #[serde(default)]
-    pub pending_tool_calls: Vec<GatewayEvent>,
+    pub pending_tool_calls: Vec<GatewayToolCallEvent>,
     /// All user_questions events that do not have a matching user_questions_answers event.
     #[serde(default)]
     pub pending_user_questions: Vec<GatewayEvent>,

@@ -2172,7 +2172,9 @@ pub struct InferenceModels {
 /// InferenceParams is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(
+    Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema,
+)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct InferenceParams {
@@ -2180,7 +2182,9 @@ pub struct InferenceParams {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(
+    Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema,
+)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionInferenceParams {

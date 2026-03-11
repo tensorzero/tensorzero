@@ -15,7 +15,7 @@ pub const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
 pub const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]

@@ -42,7 +42,9 @@ pub use tool_failure::{NonControlToolError, ToolFailure};
 use uuid::Uuid;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, sqlx::Type)]
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, Serialize, sqlx::Type, utoipa::ToSchema,
+)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "text", rename_all = "snake_case")]
@@ -63,7 +65,7 @@ impl FunctionType {
 
 /// A single resolved object type for a given UUID.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize, utoipa::ToSchema)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
@@ -96,7 +98,7 @@ pub enum ResolvedObject {
 
 /// Response type for the resolve_uuid endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ResolveUuidResponse {
     pub id: Uuid,

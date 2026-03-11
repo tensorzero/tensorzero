@@ -15,7 +15,7 @@ use url::Url;
 
 /// Detail level for input images (affects fidelity and token cost)
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -27,7 +27,7 @@ pub enum Detail {
 
 /// A file already encoded as base64
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
@@ -36,9 +36,11 @@ pub struct Base64File {
     #[serde(alias = "url")] // DEPRECATED
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[schemars(with = "Option<String>")]
+    #[schema(value_type = Option<String>)]
     pub source_url: Option<Url>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     #[schemars(with = "String")]
+    #[schema(value_type = String)]
     pub mime_type: MediaType,
     // This field contains *unprefixed* base64-encoded data.
     // It's private and validated by the constructor.
@@ -256,14 +258,16 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
 
 /// A file that can be located at a URL
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct UrlFile {
     #[schemars(with = "String")]
+    #[schema(value_type = String)]
     pub url: Url,
     #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
     #[schemars(with = "Option<String>")]
+    #[schema(value_type = Option<String>)]
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
@@ -303,16 +307,18 @@ impl<'de> Deserialize<'de> for UrlFile {
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[schemars(with = "Option<String>")]
+    #[schema(value_type = Option<String>)]
     pub source_url: Option<Url>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     #[schemars(with = "String")]
+    #[schema(value_type = String)]
     pub mime_type: MediaType,
     pub storage_path: StoragePath,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -365,7 +371,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 /// This struct can NOT be stored in the database.
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ObjectStorageFile {
@@ -377,7 +383,7 @@ pub struct ObjectStorageFile {
 /// A file that we failed to read from object storage.
 /// This struct can NOT be stored in the database.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct ObjectStorageError {
@@ -389,7 +395,7 @@ pub struct ObjectStorageError {
 
 /// A file for an inference or a datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]

@@ -72,7 +72,9 @@ pub struct SimpleStoredSampleInfo {
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(
+    Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, utoipa::ToSchema,
+)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -303,7 +305,7 @@ impl StoredInferenceDatabase {
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StoredChatInference {
     pub function_name: String,
@@ -408,7 +410,7 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StoredJsonInference {
     pub function_name: String,

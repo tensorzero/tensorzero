@@ -15,7 +15,7 @@ use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 /// prior to any processing into LLM representations below.
 /// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
+#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct InputMessage {
@@ -24,7 +24,9 @@ pub struct InputMessage {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(
+    Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize, utoipa::ToSchema,
+)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(
@@ -34,20 +36,27 @@ pub struct InputMessage {
 #[export_schema]
 pub enum InputMessageContent {
     #[schemars(title = "InputMessageContentText")]
+    #[schema(title = "InputMessageContentText")]
     Text(Text),
     #[schemars(title = "InputMessageContentTemplate")]
+    #[schema(title = "InputMessageContentTemplate")]
     Template(Template),
     // `ToolCallWrapper` is `serde(untagged)` so no need to name it.
     #[schemars(with = "ToolCallWrapperJsonSchema")]
+    #[schema(value_type = ToolCallWrapper)]
     ToolCall(ToolCallWrapper),
     #[schemars(title = "InputMessageContentToolResult")]
+    #[schema(title = "InputMessageContentToolResult")]
     ToolResult(ToolResult),
     #[schemars(title = "InputMessageContentRawText")]
+    #[schema(title = "InputMessageContentRawText")]
     RawText(RawText),
     #[schemars(title = "InputMessageContentThought")]
+    #[schema(title = "InputMessageContentThought")]
     Thought(Thought),
     #[serde(alias = "image")]
     #[schemars(title = "InputMessageContentFile")]
+    #[schema(title = "InputMessageContentFile")]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
@@ -55,12 +64,15 @@ pub enum InputMessageContent {
     /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
     #[schemars(title = "InputMessageContentUnknown")]
+    #[schema(title = "InputMessageContentUnknown")]
     Unknown(Unknown),
 }
 
 /// API representation of an input to a model.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema, utoipa::ToSchema,
+)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]

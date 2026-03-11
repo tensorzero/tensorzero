@@ -10,14 +10,16 @@ use serde_json::Value;
 use tensorzero_derive::export_schema;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(
+    Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema,
+)]
 #[serde(transparent)]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
     #[serde(flatten)]
@@ -25,7 +27,7 @@ pub struct ExtraBodyReplacement {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
 #[export_schema]
 #[serde(rename_all = "snake_case")]
 pub enum ExtraBodyReplacementKind {
@@ -179,7 +181,7 @@ pub fn prepare_relay_extra_headers(
 /// The 'InferenceExtraBody' options provided directly in an inference request.
 /// These have not yet been filtered by variant name
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraBody {
     extra_body: Vec<DynamicExtraBody>,
@@ -301,7 +303,7 @@ pub mod dynamic {
     use tensorzero_derive::export_schema;
 
     #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-    #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+    #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
     #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
     #[export_schema]
     #[serde(untagged, deny_unknown_fields)]
