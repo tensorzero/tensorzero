@@ -6,7 +6,7 @@ import type { AutoEvalLabelQuestion } from "./AutoEvalLabelQuestion";
 /**
  * A single example to label, with context and a structured labeling question.
  */
-export type AutoEvalLabelingExample = {
+export type AutoEvalExampleLabeling = {
   /**
    * Rich content blocks providing context (e.g. the prompt and response).
    */

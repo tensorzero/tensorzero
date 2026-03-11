@@ -731,14 +731,14 @@ pub struct FreeResponseAnswer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EventPayloadAutoEvalExampleLabeling {
-    pub examples: Vec<AutoEvalLabelingExample>,
+    pub examples: Vec<AutoEvalExampleLabeling>,
 }
 
 /// A single example to label, with context and a structured labeling question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalLabelingExample {
+pub struct AutoEvalExampleLabeling {
     /// Rich content blocks providing context (e.g. the prompt and response).
     pub context: Vec<AutoEvalContentBlock>,
     /// The multiple-choice labeling question for this example.
@@ -779,14 +779,14 @@ pub struct AutoEvalExplanationQuestion {
     ts(export, tag = "type", rename_all = "snake_case")
 )]
 pub enum AutoEvalContentBlock {
-    /// Rendered as formatted markdown. If `label` is set, wrapped in a collapsible section.
+    /// Rendered as formatted markdown.
     Markdown {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(feature = "ts-bindings", ts(optional))]
         label: Option<String>,
     },
-    /// Rendered as a formatted JSON viewer. If `label` is set, wrapped in a collapsible section.
+    /// Rendered as a formatted JSON viewer.
     Json {
         data: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
