@@ -21,7 +21,10 @@ use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::delegating_connection::PrimaryDatastore;
-use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
+use tensorzero_core::db::postgres::{
+    PostgresConnectionInfo, manual_run_postgres_migrations,
+    postgres_setup::check_pgcron_configured_correctly,
+};
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{self, Error, ErrorDetails};
@@ -112,6 +115,28 @@ async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::erro
     let disabled_time = tensorzero_auth::postgres::disable_key(public_id, &pool).await?;
 
     tracing::info!("Deleted API key {public_id} at {disabled_time}");
+
+    Ok(())
+}
+
+async fn validate_pgcron_setup_for_postgres_primary(
+    gateway_handle: &gateway::GatewayHandle,
+) -> Result<(), ExitCode> {
+    if gateway_handle.app_state.primary_datastore != PrimaryDatastore::Postgres {
+        return Ok(());
+    }
+    let Some(pgpool) = gateway_handle.app_state.postgres_connection_info.get_pool() else {
+        tracing::error!(
+            "Postgres is configured to be the primary observability backend, but cannot establish a postgres connection."
+        );
+        return Err(ExitCode::FAILURE);
+    };
+
+    check_pgcron_configured_correctly(pgpool).await.map_err(|e| {
+        tracing::error!("Postgres is configured to be the primary observability backend, but pgcron is not configured correctly.");
+        e.log();
+        ExitCode::FAILURE
+    })?;
 
     Ok(())
 }
@@ -302,6 +327,8 @@ async fn run() -> Result<(), ExitCode> {
         gateway::GatewayHandle::new(unwritten_config, available_tools, tool_whitelist)
             .await
             .log_err_pretty("Failed to initialize AppState")?;
+
+    validate_pgcron_setup_for_postgres_primary(&gateway_handle).await?;
 
     // Start autopilot worker if configured
     let autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle).await?;
