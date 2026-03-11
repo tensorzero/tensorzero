@@ -4,7 +4,7 @@ import type {
   EventPayloadAutoEvalExampleLabeling,
   UserQuestionAnswer,
 } from "~/types/tensorzero";
-import { AutoevalExampleLabelingCard } from "./AutoevalExampleLabeling";
+import { AutoEvalExampleLabelingCard } from "./AutoEvalExampleLabeling";
 
 // ── Fixtures ──────────────────────────────────────────────────────────
 
@@ -564,14 +564,14 @@ const jsonFallbackPayload: EventPayloadAutoEvalExampleLabeling = {
 // ── Meta ──────────────────────────────────────────────────────────────
 
 const meta = {
-  title: "Autopilot/AutoevalExampleLabeling",
-  component: AutoevalExampleLabelingCard,
+  title: "Autopilot/AutoEvalExampleLabeling",
+  component: AutoEvalExampleLabelingCard,
   render: (args) => (
     <div className="w-[800px] p-4">
-      <AutoevalExampleLabelingCard {...args} />
+      <AutoEvalExampleLabelingCard {...args} />
     </div>
   ),
-} satisfies Meta<typeof AutoevalExampleLabelingCard>;
+} satisfies Meta<typeof AutoEvalExampleLabelingCard>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -651,7 +651,7 @@ function InteractiveLabeling() {
 
   return (
     <div className="flex w-[800px] flex-col gap-4 p-4">
-      <AutoevalExampleLabelingCard
+      <AutoEvalExampleLabelingCard
         payload={multiExamplePayload}
         isLoading={false}
         onSubmit={(responses) => setLastSubmission(responses)}

@@ -22,7 +22,7 @@ import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
-import { AutoevalExampleLabelingCard } from "~/components/autopilot/AutoevalExampleLabeling";
+import { AutoEvalExampleLabelingCard } from "~/components/autopilot/AutoEvalExampleLabeling";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
 import { PendingQuestionCard } from "~/components/autopilot/question-cards/PendingQuestionCard";
 import { ApplySessionConfigChangesButton } from "~/components/autopilot/ApplySessionConfigChangesButton";
@@ -976,7 +976,7 @@ function AutopilotSessionEventsPageContent({
               {oldestPendingUserQuestion &&
               oldestPendingUserQuestion.payload.type ===
                 "auto_eval_example_labeling" ? (
-                <AutoevalExampleLabelingCard
+                <AutoEvalExampleLabelingCard
                   key={oldestPendingUserQuestion.id}
                   payload={oldestPendingUserQuestion.payload}
                   isLoading={isQuestionSubmitting}

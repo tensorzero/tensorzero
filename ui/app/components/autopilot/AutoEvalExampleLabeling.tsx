@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
@@ -19,7 +19,7 @@ import type {
   ContentBlockChatOutput,
 } from "~/types/tensorzero";
 
-const CONTEXT_MAX_HEIGHT = 200;
+const CONTEXT_MAX_HEIGHT = 150;
 
 function asInferenceInput(data: unknown): Input | undefined {
   if (
@@ -48,7 +48,15 @@ function asChatOutput(data: unknown): ContentBlockChatOutput[] | undefined {
   return undefined;
 }
 
-function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
+interface ContextBlockProps {
+  block: AutoEvalContentBlock;
+  maxHeight: number | "Content";
+}
+
+function ContextBlock({ block, maxHeight }: ContextBlockProps) {
+  const heightStyle =
+    maxHeight === "Content" ? undefined : { maxHeight: `${maxHeight}px` };
+
   switch (block.type) {
     case "json": {
       const inferenceInput = asInferenceInput(block.data);
@@ -60,10 +68,7 @@ function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
                 {block.label}
               </span>
             )}
-            <InputElement
-              input={inferenceInput}
-              maxHeight={CONTEXT_MAX_HEIGHT}
-            />
+            <InputElement input={inferenceInput} maxHeight={maxHeight} />
           </div>
         );
       }
@@ -77,10 +82,7 @@ function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
                 {block.label}
               </span>
             )}
-            <ChatOutputElement
-              output={chatOutput}
-              maxHeight={CONTEXT_MAX_HEIGHT}
-            />
+            <ChatOutputElement output={chatOutput} maxHeight={maxHeight} />
           </div>
         );
       }
@@ -92,7 +94,10 @@ function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
               {block.label}
             </span>
           )}
-          <pre className="bg-bg-primary border-border overflow-auto rounded-lg border p-4 text-xs">
+          <pre
+            className="bg-bg-primary border-border overflow-auto rounded-lg border p-4 text-xs"
+            style={heightStyle}
+          >
             {JSON.stringify(block.data, null, 2)}
           </pre>
         </div>
@@ -106,7 +111,10 @@ function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
               {block.label}
             </span>
           )}
-          <div className="bg-bg-primary border-border overflow-auto rounded-lg border p-4 text-sm whitespace-pre-wrap">
+          <div
+            className="bg-bg-primary border-border overflow-auto rounded-lg border p-4 text-sm whitespace-pre-wrap"
+            style={heightStyle}
+          >
             {block.text}
           </div>
         </div>
@@ -115,17 +123,76 @@ function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
   }
 }
 
-type AutoevalExampleLabelingCardProps = {
+/**
+ * Renders context blocks in a grid. When exactly 2 blocks are side-by-side
+ * (md+ breakpoint), measures natural content heights and constrains both
+ * to the shorter block's height so they visually match.
+ */
+function ContextGrid({ blocks }: { blocks: AutoEvalContentBlock[] }) {
+  const [matchedMaxHeight, setMatchedMaxHeight] = useState<number | "Content">(
+    "Content",
+  );
+  const blockRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const shouldMatch = blocks.length >= 2;
+
+  useLayoutEffect(() => {
+    if (!shouldMatch) {
+      setMatchedMaxHeight(CONTEXT_MAX_HEIGHT);
+      return;
+    }
+
+    // Only match when side-by-side at md+ breakpoint
+    if (!window.matchMedia("(min-width: 768px)").matches) {
+      setMatchedMaxHeight(CONTEXT_MAX_HEIGHT);
+      return;
+    }
+
+    // Wait until "Content" mode render to measure natural heights
+    if (matchedMaxHeight !== "Content") return;
+
+    const heights = blockRefs.current
+      .filter((el): el is HTMLDivElement => el !== null)
+      .map((el) => el.scrollHeight);
+
+    if (heights.length >= 2) {
+      setMatchedMaxHeight(Math.min(...heights, CONTEXT_MAX_HEIGHT));
+    } else {
+      setMatchedMaxHeight(CONTEXT_MAX_HEIGHT);
+    }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs every render to measure after DOM updates
+  }, [shouldMatch, matchedMaxHeight]);
+
+  const effectiveMaxHeight = shouldMatch
+    ? matchedMaxHeight
+    : CONTEXT_MAX_HEIGHT;
+
+  return (
+    <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-2 md:gap-4">
+      {blocks.map((block, i) => (
+        <div
+          key={i}
+          ref={(el) => {
+            blockRefs.current[i] = el;
+          }}
+        >
+          <ContextBlock block={block} maxHeight={effectiveMaxHeight} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type AutoEvalExampleLabelingCardProps = {
   payload: EventPayloadAutoEvalExampleLabeling;
   onSubmit: (responses: Record<string, UserQuestionAnswer>) => void;
   isLoading?: boolean;
 };
 
-export function AutoevalExampleLabelingCard({
+export function AutoEvalExampleLabelingCard({
   payload,
   onSubmit,
   isLoading = false,
-}: AutoevalExampleLabelingCardProps) {
+}: AutoEvalExampleLabelingCardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [selections, setSelections] = useState<Record<number, string>>({});
   const [rationales, setRationales] = useState<Record<number, string>>({});
@@ -226,11 +293,7 @@ export function AutoevalExampleLabelingCard({
           key={activeIndex}
           className="animate-in fade-in flex flex-col gap-3 duration-200"
         >
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-4">
-            {example.context.map((block, i) => (
-              <ContextBlock key={i} block={block} />
-            ))}
-          </div>
+          <ContextGrid blocks={example.context} />
 
           <div className="flex flex-col gap-1.5">
             <span className="text-fg-secondary text-sm">
