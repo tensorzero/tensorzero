@@ -475,18 +475,19 @@ pub async fn stream_events_handler(
     // Convert the autopilot event stream to SSE events
     let sse_stream = stream.map(
         |result: Result<GatewayStreamUpdate, autopilot_client::AutopilotError>| match result {
-            Ok(event) => match serde_json::to_string(&event) {
-                Ok(data) => Ok(SseEvent::default().event("event").data(data)),
-                Err(e) => {
+            Ok(event) => SseEvent::default()
+                .event("event")
+                .json_data(event)
+                .map_err(|e| {
                     tracing::error!(
                         "Failed to serialize autopilot event: {}",
                         DisplayOrDebugGateway::new(&e)
                     );
-                    Err(Error::new(ErrorDetails::Serialization {
+                    Error::new(ErrorDetails::Serialization {
                         message: e.to_string(),
-                    }))
-                }
-            },
+                    })
+                }),
+
             Err(e) => {
                 tracing::error!("Autopilot stream error: {}", DisplayOrDebugGateway::new(&e));
                 Err(Error::from(e))

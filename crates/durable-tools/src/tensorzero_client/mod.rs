@@ -195,12 +195,17 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     /// with a specific config version, enabling reproducibility by using the exact
     /// configuration that was active at a previous point in time.
     ///
+    /// The `heartbeater` is threaded through to long-running operations
+    /// (e.g., evaluations) so they can extend the durable task lease.
+    /// Use `Arc::new(NoopHeartbeater)` in non-durable contexts.
+    ///
     /// Returns the appropriate response type based on the action input.
     /// Streaming inference is not supported and will return an error.
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
+        heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<ActionResponse, TensorZeroClientError>;
 
     /// Get a config snapshot by hash, or the live config if no hash is provided.
@@ -325,6 +330,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     async fn run_evaluation(
         &self,
         params: RunEvaluationParams,
+        heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError>;
 }
 

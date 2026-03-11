@@ -2179,7 +2179,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=43d73ea835f1e528462105250ce01822af09d7fc#43d73ea835f1e528462105250ce01822af09d7fc"
+source = "git+https://github.com/tensorzero/durable?rev=2d69424943b1db91b055154062143457c91e8ee7#2d69424943b1db91b055154062143457c91e8ee7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2380,12 +2380,15 @@ version = "2026.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "clap",
  "futures",
+ "googletest",
  "indicatif",
  "regex",
  "serde",
  "serde_json",
+ "tensorzero",
  "tensorzero-core",
  "tokio",
  "tokio-util",
@@ -6927,6 +6930,7 @@ dependencies = [
  "derive_builder 0.20.2",
  "durable",
  "durable-tools",
+ "durable-tools-spawn",
  "enum-map",
  "futures",
  "futures-core",

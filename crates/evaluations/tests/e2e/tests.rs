@@ -4,6 +4,8 @@
 )]
 
 mod common;
+mod test_top_level_evaluator;
+
 use clap::Parser;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
 use evaluations::stopping::MIN_DATAPOINTS;
@@ -29,22 +31,25 @@ use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
     v1::{list_datapoints, types::ListDatapointsRequest},
 };
-use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
+use tensorzero_core::evaluations::{
+    EvaluationConfig, LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType,
+};
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::stored_inference::StoredInferenceDatabase;
 use tokio::time::sleep;
 use url::Url;
 
-use common::{get_config, get_e2e_config_path, get_tensorzero_client, init_tracing_for_tests};
+use common::{get_config, get_e2e_config_path, init_tracing_for_tests};
 use evaluations::{
-    Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationFunctionConfigTable,
-    EvaluationVariant, OutputFormat, run_evaluation, run_evaluation_core_streaming,
+    Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationVariant, OutputFormat,
+    run_evaluation, run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
 };
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
+use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::client::{
     ClientBuilder, ClientBuilderMode, FeedbackParams, InferenceResponse, Role,
 };
@@ -178,7 +183,7 @@ async fn run_evaluations_json() {
     let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let config = get_config().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
-    let tensorzero_client = get_tensorzero_client().await;
+    let tensorzero_client = make_embedded_gateway().await;
     write_json_fixture_to_dataset(
         &db,
         &PathBuf::from(&format!(
@@ -544,25 +549,22 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
     init_tracing_for_tests();
     let config = get_config().await;
     let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
-    let tensorzero_client = get_tensorzero_client().await;
+    let tensorzero_client = make_embedded_gateway().await;
     let evaluation_run_id = Uuid::now_v7();
 
     let evaluation_name = "entity_extraction".to_string();
 
-    // Extract evaluation config from config
+    // Extract evaluation config fields
     let evaluation_config = config
         .evaluations
         .get(&evaluation_name)
-        .expect("evaluation 'entity_extraction' not found")
-        .clone();
-
-    // Build function configs table from all functions in config
-    let function_configs: EvaluationFunctionConfigTable = config
+        .expect("evaluation 'entity_extraction' not found");
+    let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+    let function_config = config
         .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+        .get(&inference_config.function_name)
+        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+        .expect("function should exist");
 
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
@@ -571,10 +573,10 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(db.clone()),
-
-        evaluation_config,
-        function_configs,
-        evaluation_name,
+        function_name: inference_config.function_name.clone(),
+        function_config,
+        evaluators: inference_config.evaluators.clone(),
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         dataset_name: None,
         datapoint_ids: Some(vec![Uuid::now_v7()]),
@@ -872,7 +874,7 @@ async fn run_llm_judge_evaluation_chat() {
     let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp| dp.id()).collect();
 
     let config_path = get_e2e_config_path();
-    let tensorzero_client = get_tensorzero_client().await;
+    let tensorzero_client = make_embedded_gateway().await;
     let evaluation_run_id = Uuid::now_v7();
     let args = || Args {
         config_file: config_path.clone(),
@@ -1741,7 +1743,7 @@ async fn run_evaluations_errors() {
 #[expect(deprecated)]
 async fn test_run_llm_judge_evaluator_chat() {
     init_tracing_for_tests();
-    let tensorzero_client = get_tensorzero_client().await;
+    let tensorzero_client = make_embedded_gateway().await;
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
         inference_executor,
@@ -1819,6 +1821,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1836,6 +1839,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "sad_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1853,6 +1857,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "zero",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1870,6 +1875,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "one",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1914,6 +1920,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -1928,7 +1935,7 @@ async fn test_run_llm_judge_evaluator_chat() {
 #[expect(deprecated)]
 async fn test_run_llm_judge_evaluator_json() {
     init_tracing_for_tests();
-    let tensorzero_client = get_tensorzero_client().await;
+    let tensorzero_client = make_embedded_gateway().await;
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
     let clients = Arc::new(Clients {
         inference_executor,
@@ -2008,6 +2015,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2025,6 +2033,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "sad_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2042,6 +2051,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "zero",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2059,6 +2069,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "one",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2103,6 +2114,7 @@ async fn test_run_llm_judge_evaluator_json() {
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
         evaluator_name: "happy_bool",
+
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
         inference_cache: CacheEnabledMode::Off,
@@ -2777,19 +2789,17 @@ async fn test_evaluation_with_dynamic_variant() {
     let evaluation_run_id = Uuid::now_v7();
     let evaluation_name = "haiku_with_outputs".to_string();
 
-    // Extract evaluation config and function config
+    // Extract evaluation config fields
     let evaluation_config = config
         .evaluations
         .get(&evaluation_name)
-        .expect("evaluation config should exist")
-        .clone();
-    // Build function configs table from all functions in config
-    let function_configs: EvaluationFunctionConfigTable = config
+        .expect("evaluation config should exist");
+    let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+    let function_config = config
         .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+        .get(&inference_config.function_name)
+        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+        .expect("function should exist");
 
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
@@ -2797,13 +2807,13 @@ async fn test_evaluation_with_dynamic_variant() {
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(db.clone()),
-
-        evaluation_config,
-        function_configs,
+        function_name: inference_config.function_name.clone(),
+        function_config,
+        evaluators: inference_config.evaluators.clone(),
         dataset_name: Some(dataset_name),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
@@ -2826,7 +2836,7 @@ async fn test_max_datapoints_parameter() {
     init_tracing_for_tests();
     let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("extract_entities_max_datapoints-{}", Uuid::now_v7());
-    let tensorzero_client = get_tensorzero_client().await;
+    let tensorzero_client = make_embedded_gateway().await;
 
     // Write 10 datapoints to the dataset
     write_json_fixture_to_dataset(
@@ -2844,19 +2854,17 @@ async fn test_max_datapoints_parameter() {
     let evaluation_run_id = Uuid::now_v7();
     let evaluation_name = "entity_extraction".to_string();
 
-    // Extract evaluation config and function config
+    // Extract evaluation config fields
     let evaluation_config = config
         .evaluations
         .get(&evaluation_name)
-        .expect("evaluation config should exist")
-        .clone();
-    // Build function configs table from all functions in config
-    let function_configs: EvaluationFunctionConfigTable = config
+        .expect("evaluation config should exist");
+    let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+    let function_config = config
         .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+        .get(&inference_config.function_name)
+        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+        .expect("function should exist");
 
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
@@ -2865,13 +2873,13 @@ async fn test_max_datapoints_parameter() {
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(db.clone()),
-
-        evaluation_config,
-        function_configs,
+        function_name: inference_config.function_name.clone(),
+        function_config,
+        evaluators: inference_config.evaluators.clone(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
@@ -2911,7 +2919,7 @@ async fn test_precision_targets_parameter() {
     init_tracing_for_tests();
     let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
     let dataset_name = format!("good-haiku-data-precision-{}", Uuid::now_v7());
-    let tensorzero_client = get_tensorzero_client().await;
+    let tensorzero_client = make_embedded_gateway().await;
 
     // Use existing chat fixture that has both outputs (for exact_match) and inputs (for LLM judge)
     write_chat_fixture_to_dataset(
@@ -2930,19 +2938,17 @@ async fn test_precision_targets_parameter() {
     let evaluation_name = "haiku_without_outputs".to_string(); // Has both exact_match and topic_starts_with_f
     let evaluation_name_tag = evaluation_name.clone();
 
-    // Extract evaluation config and function configs table
+    // Extract evaluation config fields
     let evaluation_config = config
         .evaluations
         .get(&evaluation_name)
-        .expect("evaluation config should exist")
-        .clone();
-    // Build function configs table from all functions in config
-    let function_configs: EvaluationFunctionConfigTable = config
+        .expect("evaluation config should exist");
+    let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+    let function_config = config
         .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+        .get(&inference_config.function_name)
+        .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+        .expect("function should exist");
 
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client.clone()));
@@ -2967,12 +2973,13 @@ async fn test_precision_targets_parameter() {
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(db.clone()),
-        evaluation_config,
-        function_configs,
+        function_name: inference_config.function_name.clone(),
+        function_config,
+        evaluators: inference_config.evaluators.clone(),
         dataset_name: Some(dataset_name.clone()),
         datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
-        evaluation_name,
+        evaluation_name: Some(evaluation_name),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 5,

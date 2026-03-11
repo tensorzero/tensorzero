@@ -12,8 +12,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use evaluations::{
-    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationFunctionConfig,
-    EvaluationFunctionConfigTable, EvaluationVariant, run_evaluation_core_streaming,
+    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationVariant, run_evaluation_core_streaming,
 };
 use futures::StreamExt;
 use pyo3::{
@@ -1306,17 +1305,23 @@ impl TensorZeroGateway {
                 pyo3::exceptions::PyValueError::new_err(format!(
                     "evaluation '{evaluation_name}' not found"
                 ))
-            })?
-            .clone();
+            })?;
 
-        // Build function configs table from all functions in the config
-        let function_configs: EvaluationFunctionConfigTable = app_state
+        let tensorzero_core::evaluations::EvaluationConfig::Inference(ref inference_eval_config) =
+            **evaluation_config;
+        let function_name = inference_eval_config.function_name.clone();
+        let evaluators = inference_eval_config.evaluators.clone();
+
+        let function_config = app_state
             .config
             .functions
-            .iter()
-            .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-            .collect();
-        let function_configs = Arc::new(function_configs);
+            .get(&function_name)
+            .map(|f| tensorzero_core::evaluations::EvaluationFunctionConfig::from(f.as_ref()))
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "function `{function_name}` not found"
+                ))
+            })?;
 
         // Wrap the client in ClientInferenceExecutor for use with evaluations
         let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
@@ -1324,16 +1329,17 @@ impl TensorZeroGateway {
         let core_args = EvaluationCoreArgs {
             inference_executor,
             db: Arc::new(app_state.get_delegating_database()),
-            evaluation_config,
-            function_configs,
-            evaluation_name,
+            function_name,
+            function_config,
+            evaluators: evaluators.clone(),
+            evaluation_name: Some(evaluation_name),
             evaluation_run_id,
             dataset_name,
             datapoint_ids,
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
-            tags: HashMap::new(), // No external tags for Python client evaluations
+            tags: HashMap::new(),
         };
 
         let result = tokio_block_on_without_gil(
@@ -1347,7 +1353,7 @@ impl TensorZeroGateway {
         Ok(EvaluationJobHandler {
             receiver: Mutex::new(result.receiver),
             run_info: result.run_info,
-            evaluation_config: result.evaluation_config,
+            evaluators: result.evaluators,
             evaluation_infos: Arc::new(Mutex::new(Vec::new())),
             evaluation_errors: Arc::new(Mutex::new(Vec::new())),
         })
@@ -2345,17 +2351,24 @@ impl AsyncTensorZeroGateway {
                     pyo3::exceptions::PyValueError::new_err(format!(
                         "evaluation '{evaluation_name}' not found"
                     ))
-                })?
-                .clone();
+                })?;
 
-            // Build function configs table from all functions in the config
-            let function_configs: EvaluationFunctionConfigTable = app_state
+            let tensorzero_core::evaluations::EvaluationConfig::Inference(
+                ref inference_eval_config,
+            ) = **evaluation_config;
+            let function_name = inference_eval_config.function_name.clone();
+            let evaluators = inference_eval_config.evaluators.clone();
+
+            let function_config = app_state
                 .config
                 .functions
-                .iter()
-                .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-                .collect();
-            let function_configs = Arc::new(function_configs);
+                .get(&function_name)
+                .map(|f| tensorzero_core::evaluations::EvaluationFunctionConfig::from(f.as_ref()))
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "function `{function_name}` not found"
+                    ))
+                })?;
 
             // Wrap the client in ClientInferenceExecutor for use with evaluations
             let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
@@ -2363,16 +2376,17 @@ impl AsyncTensorZeroGateway {
             let core_args = EvaluationCoreArgs {
                 inference_executor,
                 db: Arc::new(app_state.get_delegating_database()),
-                evaluation_config,
-                function_configs,
-                evaluation_name,
+                function_name,
+                function_config,
+                evaluators: evaluators.clone(),
+                evaluation_name: Some(evaluation_name),
                 evaluation_run_id,
                 dataset_name,
                 datapoint_ids,
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
-                tags: HashMap::new(), // No external tags for Python client evaluations
+                tags: HashMap::new(),
             };
 
             let result =
@@ -2386,7 +2400,7 @@ impl AsyncTensorZeroGateway {
                 let handler = AsyncEvaluationJobHandler {
                     receiver: Arc::new(Mutex::new(result.receiver)),
                     run_info: result.run_info,
-                    evaluation_config: result.evaluation_config,
+                    evaluators: result.evaluators,
                     evaluation_infos: Arc::new(Mutex::new(Vec::new())),
                     evaluation_errors: Arc::new(Mutex::new(Vec::new())),
                 };

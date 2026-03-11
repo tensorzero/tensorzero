@@ -7,7 +7,7 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{FeedbackParams, InferenceResponse, Input};
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
-use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig, get_evaluator_metric_name};
+use tensorzero_core::evaluations::{EvaluatorConfig, get_evaluator_metric_name};
 
 mod exact_match;
 use exact_match::run_exact_match_evaluator;
@@ -30,7 +30,9 @@ pub struct EvaluateInferenceParams {
     pub inference_response: Arc<InferenceResponse>,
     pub datapoint: Arc<Datapoint>,
     pub input: Arc<Input>,
-    pub evaluation_config: Arc<EvaluationConfig>,
+    /// Evaluator configurations to run.
+    pub evaluators: Arc<HashMap<String, EvaluatorConfig>>,
+    /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
     pub evaluation_name: Option<Arc<String>>,
     pub clients: Arc<Clients>,
     pub evaluation_run_id: Uuid,
@@ -63,7 +65,7 @@ pub(crate) async fn evaluate_inference(
         inference_response,
         datapoint,
         input,
-        evaluation_config,
+        evaluators,
         evaluation_name,
         clients,
         evaluation_run_id,
@@ -71,19 +73,13 @@ pub(crate) async fn evaluate_inference(
         external_tags,
         send_feedback,
     } = params;
-    let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
-
-    // Filter evaluators based on cancellation tokens
-    let evaluators_to_run = inference_evaluation_config
-        .evaluators
-        .keys()
-        .filter(|name| {
-            // Only run evaluators whose tokens are not in the map or not cancelled
-            // Empty map means no adaptive stopping, so all evaluators run
-            cancellation_tokens
-                .get(*name)
-                .is_none_or(|token| !token.is_cancelled())
-        });
+    let evaluators_to_run = evaluators.keys().filter(|name| {
+        // Only run evaluators whose tokens are not in the map or not cancelled
+        // Empty map means no adaptive stopping, so all evaluators run
+        cancellation_tokens
+            .get(*name)
+            .is_none_or(|token| !token.is_cancelled())
+    });
 
     info!(
         evaluators = ?evaluators_to_run,
@@ -94,7 +90,7 @@ pub(crate) async fn evaluate_inference(
         FuturesUnordered::from_iter(evaluators_to_run.into_iter().map(
             |evaluator_name| async {
                 let inference_response = inference_response.clone();
-                let evaluation_config = evaluation_config.clone();
+                let evaluators = evaluators.clone();
                 let evaluator_name = evaluator_name.clone();
                 debug!(evaluator_name = %evaluator_name, "Starting evaluator");
                 let datapoint = datapoint.clone();
@@ -106,12 +102,12 @@ pub(crate) async fn evaluate_inference(
                 let external_tags_for_feedback = external_tags.clone();
 
                 let result = run_evaluator(RunEvaluatorParams {
-                    evaluation_config: &evaluation_config,
+                    evaluators: &evaluators,
                     evaluator_name: evaluator_name_clone,
                     inference_response: &inference_response,
                     clients: &clients,
                     datapoint: &datapoint,
-                    evaluation_name: evaluation_name.as_ref().map(|s| s.as_str()),
+                    evaluation_name: evaluation_name.as_deref().map(String::as_str),
                     evaluation_run_id,
                     input: &input,
                     inference_cache,
@@ -136,20 +132,18 @@ pub(crate) async fn evaluate_inference(
                                 .map(|(k, v)| (k.clone(), v.clone()))
                                 .collect();
                             tags.extend(result.tags());
-                            tags.extend([
-                                (
-                                    "tensorzero::evaluation_run_id".to_string(),
-                                    evaluation_run_id.to_string(),
-                                ),
-                                (
-                                    "tensorzero::datapoint_id".to_string(),
-                                    datapoint.id().to_string(),
-                                ),
-                                (
-                                    "tensorzero::evaluator_name".to_string(),
-                                    evaluator_name.to_string(),
-                                ),
-                            ]);
+                            tags.extend([(
+                                "tensorzero::evaluation_run_id".to_string(),
+                                evaluation_run_id.to_string(),
+                            ),(
+                                "tensorzero::datapoint_id".to_string(),
+                                datapoint.id().to_string(),
+                            ), (
+                                "tensorzero::evaluator_name".to_string(),
+                                evaluator_name.to_string(),
+                            )]);
+                            // TODO(#6676): now that we have human-readable evaluation names, stop writing it
+                            // (it will get out of sync).
                             if let Some(eval_name) = &evaluation_name {
                                 tags.insert(
                                     "tensorzero::evaluation_name".to_string(),
@@ -165,13 +159,14 @@ pub(crate) async fn evaluate_inference(
                             // Only send feedback when send_feedback is true
                             // Dynamic variants have send_feedback=false and skip feedback persistence
                             if send_feedback {
+                                let metric_name = get_evaluator_metric_name(
+                                    evaluation_name.as_deref().map(String::as_str),
+                                    &evaluator_name,
+                                );
                                 match clients
                                     .inference_executor
                                     .feedback(FeedbackParams {
-                                        metric_name: get_evaluator_metric_name(
-                                            evaluation_name.as_ref().map(|s| s.as_str()),
-                                            &evaluator_name,
-                                        ),
+                                        metric_name,
                                         value: value.clone(),
                                         inference_id: Some(inference_response.inference_id()),
                                         dryrun: Some(false),
@@ -210,7 +205,7 @@ pub(crate) async fn evaluate_inference(
 }
 
 struct RunEvaluatorParams<'a> {
-    evaluation_config: &'a EvaluationConfig,
+    evaluators: &'a HashMap<String, EvaluatorConfig>,
     evaluator_name: String,
     inference_response: &'a InferenceResponse,
     clients: &'a Clients,
@@ -234,7 +229,7 @@ struct RunEvaluatorParams<'a> {
 #[instrument(skip_all, fields(evaluator_name = %params.evaluator_name, datapoint_id = %params.datapoint.id()))]
 async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult> {
     let RunEvaluatorParams {
-        evaluation_config,
+        evaluators,
         evaluator_name,
         inference_response,
         clients,
@@ -245,8 +240,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
         inference_cache,
         external_tags,
     } = params;
-    let EvaluationConfig::Inference(inference_evaluation_config) = evaluation_config;
-    let evaluator_config = match inference_evaluation_config.evaluators.get(&evaluator_name) {
+    let evaluator_config = match evaluators.get(&evaluator_name) {
         Some(evaluator_config) => {
             debug!("Evaluator config found");
             evaluator_config
