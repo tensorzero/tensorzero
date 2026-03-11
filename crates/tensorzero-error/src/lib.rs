@@ -1,0 +1,2363 @@
+#[cfg(feature = "e2e_tests")]
+use std::backtrace::Backtrace;
+use std::sync::Arc;
+use std::time::Duration;
+
+#[cfg(feature = "axum")]
+use axum::response::{IntoResponse, Json, Response};
+use http::StatusCode;
+use indexmap::IndexMap;
+use minijinja_utils::AnalysisError;
+#[cfg(feature = "otel")]
+use opentelemetry::trace::Status;
+use serde::{Serialize, Serializer};
+use serde_json::{Value, json};
+use std::fmt::{Debug, Display};
+use std::sync::OnceLock;
+use thiserror::Error;
+#[cfg(feature = "otel")]
+use tracing::Span;
+#[cfg(feature = "otel")]
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use url::Url;
+use uuid::Uuid;
+
+use tensorzero_types::{ApiType, RawResponseEntry, SnapshotHash, StoragePath, Thought};
+
+use crate::rate_limiting_types::{FailedRateLimit, RateLimitingConfigScopes};
+
+pub mod delayed_error;
+pub use delayed_error::DelayedError;
+
+pub mod rate_limiting_types;
+
+const RUN_MIGRATIONS_COMMAND: &str = "Please see our documentation to learn more about deploying ClickHouse: https://www.tensorzero.com/docs/deployment/clickhouse";
+
+/// Controls whether to include raw request/response details in error output
+///
+/// When true:
+/// - Raw request/response details are logged for inference provider errors
+/// - Raw details are included in error response bodies
+/// - Most commonly affects errors from provider API requests/responses
+///
+/// WARNING: Setting this to true will expose potentially sensitive request/response
+/// data in logs and error responses. Use with caution.
+static DEBUG: OnceLock<bool> = OnceLock::new();
+
+#[cfg(feature = "e2e_tests")]
+fn get_debug() -> &'static bool {
+    DEBUG.get_or_init(|| true)
+}
+
+#[cfg(not(feature = "e2e_tests"))]
+fn get_debug() -> Option<&'static bool> {
+    DEBUG.get()
+}
+
+fn is_debug() -> bool {
+    #[cfg(feature = "e2e_tests")]
+    {
+        *get_debug()
+    }
+    #[cfg(not(feature = "e2e_tests"))]
+    {
+        *get_debug().unwrap_or(&false)
+    }
+}
+
+pub fn set_debug(debug: bool) -> Result<(), Error> {
+    // We already initialized `DEBUG`, so do nothing
+    if cfg!(feature = "e2e_tests") {
+        return Ok(());
+    }
+    DEBUG.set(debug).map_err(|_| {
+        Error::new(ErrorDetails::Config {
+            message: "Failed to set debug mode".to_string(),
+        })
+    })
+}
+
+static UNSTABLE_ERROR_JSON: OnceLock<bool> = OnceLock::new();
+
+pub fn set_unstable_error_json(unstable_error_json: bool) -> Result<(), Error> {
+    UNSTABLE_ERROR_JSON.set(unstable_error_json).map_err(|_| {
+        Error::new(ErrorDetails::Config {
+            message: "Failed to set unstable error JSON".to_string(),
+        })
+    })
+}
+
+pub fn warn_discarded_cache_write(raw_response: &str) {
+    if is_debug() {
+        tracing::warn!("Skipping cache write due to invalid output:\nRaw response: {raw_response}");
+    } else {
+        tracing::warn!("Skipping cache write due to invalid output");
+    }
+}
+
+pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
+    if is_debug() {
+        tracing::warn!(
+            "TensorZero doesn't support input thought blocks for the `{provider_type}` provider. Many providers don't support them; if this provider does, please let us know: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests\n\n{thought:?}"
+        );
+    } else {
+        tracing::warn!(
+            "TensorZero doesn't support input thought blocks for the `{provider_type}` provider. Many providers don't support them; if this provider does, please let us know: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
+        );
+    }
+}
+
+pub fn warn_discarded_unknown_chunk(provider_type: &str, part: &str) {
+    if is_debug() {
+        tracing::warn!("Discarding unknown chunk in {provider_type} response: {part}");
+    } else {
+        tracing::warn!("Discarding unknown chunk in {provider_type} response");
+    }
+}
+
+pub const IMPOSSIBLE_ERROR_MESSAGE: &str = "This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports";
+
+/// Chooses between a `Debug` or `Display` representation based on the gateway-level `DEBUG` flag.
+pub struct DisplayOrDebugGateway<T: Debug + Display> {
+    val: T,
+}
+
+impl<T: Debug + Display> DisplayOrDebugGateway<T> {
+    pub fn new(val: T) -> Self {
+        Self { val }
+    }
+}
+
+impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if is_debug() {
+            write!(f, "{:?}", self.val)
+        } else {
+            write!(f, "{}", self.val)
+        }
+    }
+}
+
+#[derive(Clone, Error, Serialize)]
+#[serde(transparent)]
+// As long as the struct member is private, we force people to use the `new` method and log the error.
+// We arc `ErrorDetails` per the `clippy::result_large_err` lint, as well as to make it cloneable
+pub struct Error {
+    details: Arc<ErrorDetails>,
+    #[cfg(feature = "e2e_tests")]
+    #[serde(skip)]
+    backtrace: Option<Arc<Backtrace>>,
+}
+
+impl Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Error").field(&self.details).finish()
+    }
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl PartialEq for Error {
+    fn eq(&self, other: &Self) -> bool {
+        self.details == other.details
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.details)
+    }
+}
+
+// In e2e mode, we currently always call `Backtrace::capture`,
+// and rely on the standard library checking `RUST_BACKTRACE`/`RUST_LIB_BACKTRACE`
+// to determine if `Backtrace::capture` actually does anything
+#[cfg(feature = "e2e_tests")]
+#[expect(clippy::unnecessary_wraps)]
+fn opt_capture_backtrace() -> Option<Arc<Backtrace>> {
+    Some(Arc::new(Backtrace::capture()))
+}
+
+impl Error {
+    pub fn new(details: ErrorDetails) -> Self {
+        let err = Self {
+            details: Arc::new(details),
+            #[cfg(feature = "e2e_tests")]
+            backtrace: opt_capture_backtrace(),
+        };
+        err.log();
+        err
+    }
+
+    // If you need to construct an error without logging it, use `DelayedError` instead.
+    // This method should only be called within `DelayedError` itself.
+    fn new_without_logging(details: ErrorDetails) -> Self {
+        Self {
+            details: Arc::new(details),
+            #[cfg(feature = "e2e_tests")]
+            backtrace: opt_capture_backtrace(),
+        }
+    }
+
+    pub fn status_code(&self) -> StatusCode {
+        self.details.status_code()
+    }
+
+    pub fn underlying_status_code(&self) -> Option<StatusCode> {
+        self.details.underlying_status_code()
+    }
+
+    pub fn get_details(&self) -> &ErrorDetails {
+        &self.details
+    }
+
+    /// Ensures that the OpenTelemetry span corresponding to `span` is marked as an error.
+    /// If our level is `ERROR`, then we'll do nothing, since logging an error automatically marks the span as an error.
+    /// If our level is anything else, then we explicitly mark the span as an error using our own messages
+    /// This is used by callers that only want to log a warning to the console, but want an error to show up in OpenTelemetry
+    /// for a particular span.
+    #[cfg(feature = "otel")]
+    pub fn ensure_otel_span_errored(&self, span: &Span) {
+        if self.details.level() != tracing::Level::ERROR {
+            span.set_status(Status::Error {
+                description: self.to_string().into(),
+            });
+        }
+    }
+
+    #[allow(clippy::allow_attributes, clippy::unused_self)]
+    fn log_backtrace(&self) {
+        #[cfg(feature = "e2e_tests")]
+        if let Some(backtrace) = &self.backtrace
+            && matches!(
+                backtrace.status(),
+                std::backtrace::BacktraceStatus::Captured
+            )
+        {
+            tracing::error!("Backtrace: {}", backtrace);
+        }
+    }
+
+    pub fn log(&self) {
+        self.details.log();
+        self.log_backtrace();
+    }
+
+    pub fn log_at_level(&self, prefix: &str, level: tracing::Level) {
+        self.details.log_at_level(prefix, level);
+        self.log_backtrace();
+    }
+
+    pub fn is_retryable(&self) -> bool {
+        self.details.is_retryable()
+    }
+
+    /// Extracts raw response entries from inference errors in the error tree.
+    ///
+    /// Walks `AllVariantsFailed` -> `AllModelProvidersFailed` -> individual provider errors
+    /// and collects `RawResponseEntry` values from errors that have `raw_response` data.
+    ///
+    /// Returns `None` if no entries were collected.
+    pub fn extract_raw_response(&self) -> Option<Vec<RawResponseEntry>> {
+        let mut entries = Vec::new();
+        self.details.collect_raw_response(&mut entries);
+        if entries.is_empty() {
+            None
+        } else {
+            Some(entries)
+        }
+    }
+
+    /// Extracts the raw chunk string from a mid-stream error, if available.
+    pub fn extract_raw_chunk(&self) -> Option<String> {
+        self.details.extract_raw_chunk()
+    }
+
+    /// Builds an HTTP error response, optionally including raw response entries from failed providers.
+    #[cfg(feature = "axum")]
+    pub fn into_response_with_raw_entries(
+        self,
+        openai_format: bool,
+        include_raw_response: bool,
+    ) -> Response {
+        let raw_response = if include_raw_response {
+            self.extract_raw_response()
+        } else {
+            None
+        };
+        let body = self.build_response_body(openai_format, raw_response);
+        let mut response = (self.status_code(), Json(body)).into_response();
+        response.extensions_mut().insert(self);
+        response
+    }
+
+    /// Builds a JSON value for a mid-stream streaming error SSE event.
+    ///
+    /// Uses `raw_chunk` / `tensorzero_raw_chunk` (matching success chunk format)
+    /// instead of the structured `raw_response` array used in terminal errors.
+    pub fn build_streaming_error_event(
+        &self,
+        openai_format: bool,
+        include_raw_response: bool,
+    ) -> Value {
+        let mut body = self.build_response_body(openai_format, None);
+        if include_raw_response && let Some(raw_chunk) = self.details.extract_raw_chunk() {
+            let key = if openai_format {
+                "tensorzero_raw_chunk"
+            } else {
+                "raw_chunk"
+            };
+            body[key] = Value::String(raw_chunk);
+        }
+        body
+    }
+
+    /// Builds the JSON response body for this error.
+    ///
+    /// When `openai_format` is true, returns `{"error": {"message": "..."}}` (OpenAI-compatible).
+    /// When `openai_format` is false, returns `{"error": "..."}` (TensorZero default).
+    ///
+    /// If `unstable_error_json` is enabled, includes structured error details as `error_json` and `tensorzero_error_json`.
+    ///
+    /// If `raw_response` is `Some`, includes the raw response entries in the body.
+    pub fn build_response_body(
+        &self,
+        openai_format: bool,
+        raw_response: Option<Vec<RawResponseEntry>>,
+    ) -> Value {
+        let message = self.to_string();
+        let mut body = if openai_format {
+            json!({"error": {"message": message}})
+        } else {
+            json!({"error": message})
+        };
+        if *UNSTABLE_ERROR_JSON.get().unwrap_or(&false) {
+            let error_json =
+                serde_json::to_value(self.get_details()).unwrap_or_else(|e| json!(e.to_string()));
+            if openai_format {
+                body["error"]["error_json"] = error_json.clone(); // DEPRECATED (#5821 / 2026.4+)
+                body["error"]["tensorzero_error_json"] = error_json;
+            } else {
+                body["error_json"] = error_json;
+            }
+        }
+        if let Some(entries) = raw_response {
+            let entries_json =
+                serde_json::to_value(entries).unwrap_or_else(|e| json!(e.to_string()));
+            if openai_format {
+                body["tensorzero_raw_response"] = entries_json;
+            } else {
+                body["raw_response"] = entries_json;
+            }
+        }
+        body
+    }
+}
+
+// Expect for derive Serialize
+#[expect(clippy::trivially_copy_pass_by_ref, clippy::ref_option)]
+fn serialize_status<S>(code: &Option<StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match code {
+        Some(c) => serializer.serialize_u16(c.as_u16()),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn serialize_if_debug<T, S>(data: T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: Serialize,
+    S: Serializer,
+{
+    if is_debug() {
+        return data.serialize(serializer);
+    }
+    serializer.serialize_none()
+}
+
+impl From<ErrorDetails> for Error {
+    fn from(details: ErrorDetails) -> Self {
+        Error::new(details)
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
+#[serde(rename_all = "snake_case")]
+pub enum TimeoutKind {
+    NonStreamingTotal,
+    StreamingTtft,
+    StreamingTotal,
+}
+
+impl TimeoutKind {
+    /// Returns the config field name this timeout corresponds to.
+    pub fn config_name(&self) -> &'static str {
+        match self {
+            TimeoutKind::NonStreamingTotal => "non_streaming.total_ms",
+            TimeoutKind::StreamingTtft => "streaming.ttft_ms",
+            TimeoutKind::StreamingTotal => "streaming.total_ms",
+        }
+    }
+}
+
+#[derive(Debug, Error, Serialize)]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
+pub enum ErrorDetails {
+    AllRetriesFailed {
+        errors: Vec<Error>,
+    },
+    AllVariantsFailed {
+        // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
+        errors: IndexMap<String, Error>,
+    },
+    /// Error when all candidates for best/mixture-of-N fails; this corresponds to a single variant failure
+    AllCandidatesFailed {
+        candidate_errors: IndexMap<String, Error>,
+    },
+    TensorZeroAuth {
+        message: String,
+    },
+    InvalidInferenceTarget {
+        message: String,
+    },
+    ApiKeyMissing {
+        provider_name: String,
+        message: String,
+    },
+    AppState {
+        message: String,
+    },
+    BadCredentialsPreInference {
+        provider_name: String,
+    },
+    Base64 {
+        message: String,
+    },
+    BatchInputValidation {
+        index: usize,
+        message: String,
+    },
+    BatchNotFound {
+        id: Uuid,
+    },
+    BadFileFetch {
+        url: Url,
+        message: String,
+    },
+    Cache {
+        message: String,
+    },
+    Glob {
+        glob: String,
+        message: String,
+    },
+    ChannelWrite {
+        message: String,
+    },
+    ClickHouseConfiguration {
+        message: String,
+    },
+    ClickHouseConnection {
+        message: String,
+    },
+    ClickHouseDeserialization {
+        message: String,
+    },
+    ClickHouseMigration {
+        id: String,
+        message: String,
+    },
+    ClickHouseMigrationsDisabled,
+    ClickHouseQuery {
+        message: String,
+    },
+    Config {
+        message: String,
+    },
+    CostComputation {
+        message: String,
+    },
+    ConfigSnapshotNotFound {
+        snapshot_hash: String,
+    },
+    ConfigSnapshotHashMismatch {
+        expected: SnapshotHash,
+        actual: SnapshotHash,
+    },
+    ObjectStoreUnconfigured {
+        block_type: String,
+    },
+    DatapointNotFound {
+        dataset_name: String,
+        datapoint_id: Uuid,
+    },
+    DiclMissingOutput,
+    DuplicateTool {
+        name: String,
+    },
+    DuplicateRateLimitingConfigScope {
+        scope: RateLimitingConfigScopes,
+    },
+    DynamicEndpointNotFound {
+        key_name: String,
+    },
+    DynamicRegionNotFound {
+        key_name: String,
+    },
+    DynamicJsonSchema {
+        message: String,
+    },
+    EvaluationRun {
+        message: String,
+    },
+    DynamicTemplateLoad {
+        internal: AnalysisError,
+    },
+    FileRead {
+        message: String,
+        file_path: String,
+    },
+    GCPCredentials {
+        message: String,
+    },
+    Inference {
+        message: String,
+    },
+    InferenceClient {
+        message: String,
+        #[serde(serialize_with = "serialize_status")]
+        status_code: Option<StatusCode>,
+        provider_type: String,
+        api_type: ApiType,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_response: Option<String>,
+    },
+    InferenceNotFound {
+        inference_id: Uuid,
+    },
+    FatalStreamError {
+        message: String,
+        provider_type: String,
+        api_type: ApiType,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_response: Option<String>,
+    },
+    InferenceServer {
+        message: String,
+        provider_type: String,
+        api_type: ApiType,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_response: Option<String>,
+    },
+    InvalidClientMode {
+        mode: String,
+        message: String,
+    },
+    InvalidDynamicEndpoint {
+        url: String,
+    },
+    InvalidEncodedJobHandle,
+    InvalidJobHandle {
+        message: String,
+    },
+    InvalidInferenceOutputSource {
+        source_kind: String,
+    },
+    ObjectStoreWrite {
+        message: String,
+        path: StoragePath,
+    },
+    InternalError {
+        message: String,
+    },
+    InferenceTimeout {
+        variant_name: String,
+    },
+    VariantTimeout {
+        variant_name: String,
+        timeout: Duration,
+        kind: TimeoutKind,
+    },
+    ModelTimeout {
+        model_name: String,
+        timeout: Duration,
+        kind: TimeoutKind,
+    },
+    ModelProviderTimeout {
+        provider_name: String,
+        timeout: Duration,
+        kind: TimeoutKind,
+    },
+    InputValidation {
+        source: Box<Error>,
+    },
+    InvalidBatchParams {
+        message: String,
+    },
+    InvalidBaseUrl {
+        message: String,
+    },
+    InvalidCandidate {
+        variant_name: String,
+        message: String,
+    },
+    InvalidDatasetName {
+        dataset_name: String,
+    },
+    InvalidDiclConfig {
+        message: String,
+    },
+    InvalidWorkflowEvaluationRun {
+        episode_id: Uuid,
+    },
+    InvalidTensorzeroUuid {
+        kind: String,
+        message: String,
+    },
+    InvalidFunctionVariants {
+        message: String,
+    },
+    InvalidMetricName {
+        metric_name: String,
+    },
+    InvalidMessage {
+        message: String,
+    },
+    InvalidModel {
+        model_name: String,
+    },
+    InvalidModelProvider {
+        model_name: String,
+        provider_name: String,
+    },
+    InvalidOpenAICompatibleRequest {
+        message: String,
+    },
+    InvalidProviderConfig {
+        message: String,
+    },
+    InvalidRenderedStoredInference {
+        message: String,
+    },
+    InvalidRequest {
+        message: String,
+    },
+    InvalidTemplatePath,
+    InvalidTool {
+        message: String,
+    },
+    InvalidVariantForOptimization {
+        function_name: String,
+        variant_name: String,
+    },
+    InvalidValFraction {
+        val_fraction: f64,
+    },
+    InvalidUuid {
+        raw_uuid: String,
+    },
+    JsonRequest {
+        message: String,
+    },
+    JsonSchema {
+        message: String,
+    },
+    JsonSchemaValidation {
+        messages: Vec<String>,
+        data: Box<Value>,
+        schema: Box<Value>,
+    },
+    MissingFunctionInVariants {
+        function_name: String,
+    },
+    MiniJinjaEnvironment {
+        message: String,
+    },
+    MiniJinjaTemplate {
+        template_name: String,
+        message: String,
+    },
+    MiniJinjaTemplateMissing {
+        template_name: String,
+    },
+    MiniJinjaTemplateRender {
+        template_name: String,
+        message: String,
+    },
+    MissingBatchInferenceResponse {
+        inference_id: Option<Uuid>,
+    },
+    MissingFileExtension {
+        file_name: String,
+    },
+    ModelNotFound {
+        model_name: String,
+    },
+    AllModelProvidersFailed {
+        // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
+        provider_errors: IndexMap<String, Error>,
+    },
+    ModelValidation {
+        message: String,
+    },
+    NoFallbackVariantsRemaining,
+    /// Feature not yet implemented. Used for stubbed functionality during incremental migration.
+    NotImplemented {
+        message: String,
+    },
+    Observability {
+        message: String,
+    },
+    OutputParsing {
+        message: String,
+        raw_output: String,
+    },
+    OptimizationResponse {
+        message: String,
+        provider_type: String,
+    },
+    OutputValidation {
+        source: Box<Error>,
+    },
+    // TODO(shuyang): once 3496 merges: change all of these to taking sqlx errors rather than string. Note also sqlx::Error is not Serialize?
+    PostgresConnectionInitialization {
+        message: String,
+    },
+    PostgresConnection {
+        message: String,
+    },
+    PostgresMigration {
+        message: String,
+    },
+    PostgresQuery {
+        message: String,
+    },
+    PostgresResult {
+        result_type: &'static str,
+        message: String,
+    },
+    ValkeyConnection {
+        message: String,
+    },
+    ValkeyQuery {
+        message: String,
+    },
+    ProviderNotFound {
+        provider_name: String,
+    },
+    RateLimitExceeded {
+        failed_rate_limits: Vec<FailedRateLimit>,
+    },
+    Relay {
+        message: String,
+        #[serde(skip)]
+        raw_response: Vec<RawResponseEntry>,
+        #[serde(skip)]
+        raw_chunk: Option<String>,
+        #[serde(serialize_with = "serialize_status")]
+        status_code: Option<StatusCode>,
+    },
+    RateLimitMissingMaxTokens,
+    Serialization {
+        message: String,
+    },
+    ExtraBodyReplacement {
+        message: String,
+        pointer: String,
+    },
+    StreamError {
+        source: Box<Error>,
+        /// The raw SSE event data that produced this error, if available.
+        /// Used by relay to populate `raw_chunk` with the downstream's actual event payload.
+        #[serde(skip)]
+        raw_event: Option<String>,
+    },
+    ToolNotFound {
+        name: String,
+    },
+    ToolNotLoaded {
+        name: String,
+    },
+    IncompatibleTool {
+        message: String,
+    },
+    TypeConversion {
+        message: String,
+    },
+    UnknownCandidate {
+        name: String,
+    },
+    UnknownEvaluation {
+        name: String,
+    },
+    UnknownFunction {
+        name: String,
+    },
+    UnknownModel {
+        name: String,
+    },
+    UnknownTool {
+        name: String,
+    },
+    UnknownVariant {
+        name: String,
+    },
+    UnknownMetric {
+        name: String,
+    },
+    UnsupportedModelProviderForBatchInference {
+        provider_type: String,
+    },
+    UnsupportedVariantForBatchInference {
+        variant_name: Option<String>,
+    },
+    UnsupportedVariantForStreamingInference {
+        variant_type: String,
+        issue_link: Option<String>,
+    },
+    UnsupportedModelProviderForStreamingInference {
+        provider_type: String,
+    },
+    UnsupportedVariantForFunctionType {
+        function_name: String,
+        variant_name: String,
+        function_type: String,
+        variant_type: String,
+    },
+    UnsupportedContentBlockType {
+        content_block_type: String,
+        provider_type: String,
+    },
+    UuidInFuture {
+        raw_uuid: String,
+    },
+    UnsupportedFileExtension {
+        extension: String,
+    },
+    RouteNotFound {
+        path: String,
+        method: String,
+    },
+    AutopilotUnavailable,
+    Autopilot {
+        message: String,
+        status_code: Option<u16>,
+    },
+}
+impl ErrorDetails {
+    /// Defines the error level for logging this error
+    fn level(&self) -> tracing::Level {
+        match self {
+            ErrorDetails::AllRetriesFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::AllCandidatesFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::TensorZeroAuth { .. } => tracing::Level::WARN,
+            ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
+            ErrorDetails::AppState { .. } => tracing::Level::ERROR,
+            ErrorDetails::ObjectStoreUnconfigured { .. } => tracing::Level::ERROR,
+            ErrorDetails::ExtraBodyReplacement { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
+            ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::Base64 { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
+            ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::Cache { .. } => tracing::Level::WARN,
+            ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::BadFileFetch { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
+            ErrorDetails::Config { .. } => tracing::Level::ERROR,
+            ErrorDetails::CostComputation { .. } => tracing::Level::WARN,
+            ErrorDetails::ConfigSnapshotNotFound { .. } => tracing::Level::ERROR,
+            ErrorDetails::ConfigSnapshotHashMismatch { .. } => tracing::Level::ERROR,
+            ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
+            ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
+            ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicRegionNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::EvaluationRun { .. } => tracing::Level::ERROR,
+            ErrorDetails::DynamicTemplateLoad { .. } => tracing::Level::ERROR,
+            ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
+            ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
+            ErrorDetails::Inference { .. } => tracing::Level::ERROR,
+            ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
+            ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::Relay { .. } => tracing::Level::ERROR,
+            ErrorDetails::FatalStreamError { .. } => tracing::Level::ERROR,
+            ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::ModelTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::VariantTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::InternalError { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::Glob { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidWorkflowEvaluationRun { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidInferenceOutputSource { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
+            ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidMetricName { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
+            ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidUuid { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidDynamicEndpoint { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidValFraction { .. } => tracing::Level::WARN,
+            ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
+            ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
+            ErrorDetails::JsonSchemaValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::MiniJinjaEnvironment { .. } => tracing::Level::ERROR,
+            ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
+            ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
+            ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            ErrorDetails::MissingFunctionInVariants { .. } => tracing::Level::ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
+            ErrorDetails::MissingFileExtension { .. } => tracing::Level::WARN,
+            ErrorDetails::AllModelProvidersFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::ModelNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => tracing::Level::WARN,
+            ErrorDetails::NotImplemented { .. } => tracing::Level::ERROR,
+            ErrorDetails::Observability { .. } => tracing::Level::WARN,
+            ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
+            ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::OptimizationResponse { .. } => tracing::Level::ERROR,
+            ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresConnectionInitialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresResult { .. } => tracing::Level::ERROR,
+            ErrorDetails::PostgresQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::ValkeyConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::ValkeyQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::RateLimitExceeded { .. } => tracing::Level::WARN,
+            ErrorDetails::RateLimitMissingMaxTokens => tracing::Level::WARN,
+            ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
+            ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
+            ErrorDetails::IncompatibleTool { .. } => tracing::Level::WARN,
+            ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownEvaluation { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownModel { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedFileExtension { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
+                tracing::Level::ERROR
+            }
+            ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedVariantForFunctionType { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
+            ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::AutopilotUnavailable => tracing::Level::WARN,
+            ErrorDetails::Autopilot { .. } => tracing::Level::ERROR,
+        }
+    }
+
+    /// Returns the most recent 'underlying' status code for this error.
+    /// For example, if an inference fails due to all models failing, this will
+    /// return the status code of the last model that failed.
+    ///
+    /// Returns `None` if the error doesn't have a concept of a 'last' status code.
+    fn underlying_status_code(&self) -> Option<StatusCode> {
+        match self {
+            ErrorDetails::AllRetriesFailed { errors } => errors
+                .last()
+                .and_then(|error| error.underlying_status_code()),
+            ErrorDetails::AllVariantsFailed { errors } => errors
+                .values()
+                .last()
+                .and_then(|error| error.underlying_status_code()),
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => candidate_errors
+                .values()
+                .last()
+                .and_then(|error| error.underlying_status_code()),
+            ErrorDetails::InferenceClient { status_code, .. } => *status_code,
+            ErrorDetails::Relay { status_code, .. } => *status_code,
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
+                .values()
+                .last()
+                .and_then(|error| error.underlying_status_code()),
+            _ => None,
+        }
+    }
+
+    /// Defines the HTTP status code for responses involving this error
+    fn status_code(&self) -> StatusCode {
+        match self {
+            ErrorDetails::AllRetriesFailed { errors } => errors
+                .last()
+                .map(|e| e.status_code())
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+            ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
+            ErrorDetails::AllCandidatesFailed { .. } => StatusCode::BAD_GATEWAY,
+            ErrorDetails::TensorZeroAuth { .. } => StatusCode::UNAUTHORIZED,
+            ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseMigrationsDisabled => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::CostComputation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ConfigSnapshotNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::ConfigSnapshotHashMismatch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::EvaluationRun { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DynamicTemplateLoad { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::DynamicRegionNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ObjectStoreWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InferenceClient { status_code, .. } => {
+                status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
+            }
+            ErrorDetails::Base64 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BadFileFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::FatalStreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::Relay { status_code, .. } => {
+                status_code.unwrap_or(StatusCode::BAD_GATEWAY)
+            }
+            ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::VariantTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::InvalidClientMode { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidEncodedJobHandle => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidJobHandle { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidTensorzeroUuid { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidValFraction { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::UnsupportedContentBlockType { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidDynamicEndpoint { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidWorkflowEvaluationRun { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidMetricName { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidModelProvider { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidRenderedStoredInference { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidVariantForOptimization { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::JsonRequest { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::JsonSchemaValidation { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MiniJinjaEnvironment { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::AllModelProvidersFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
+            ErrorDetails::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
+            ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::OptimizationResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::PostgresConnectionInitialization { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::PostgresConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorDetails::PostgresQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresResult { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::PostgresMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ValkeyConnection { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorDetails::ValkeyQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
+            ErrorDetails::RateLimitMissingMaxTokens => StatusCode::BAD_REQUEST,
+            ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::IncompatibleTool { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UnknownFunction { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnknownEvaluation { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnsupportedFileExtension { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::UnsupportedVariantForStreamingInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UnsupportedVariantForFunctionType { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::AutopilotUnavailable => StatusCode::NOT_IMPLEMENTED,
+            ErrorDetails::Autopilot { status_code, .. } => status_code
+                .and_then(|code| StatusCode::from_u16(code).ok())
+                .unwrap_or(StatusCode::BAD_GATEWAY),
+        }
+    }
+
+    pub fn log_at_level(&self, prefix: &str, level: tracing::Level) {
+        match level {
+            tracing::Level::ERROR => tracing::error!("{prefix}{self}"),
+            tracing::Level::WARN => tracing::warn!("{prefix}{self}"),
+            tracing::Level::INFO => tracing::info!("{prefix}{self}"),
+            tracing::Level::DEBUG => tracing::debug!("{prefix}{self}"),
+            tracing::Level::TRACE => tracing::trace!("{prefix}{self}"),
+        }
+    }
+
+    /// Log the error using the `tracing` library
+    pub fn log(&self) {
+        self.log_at_level("", self.level());
+    }
+
+    pub fn is_retryable(&self) -> bool {
+        match &self {
+            ErrorDetails::AllRetriesFailed { .. } => false,
+            ErrorDetails::RateLimitExceeded { .. } => false,
+            // For AllModelProvidersFailed we will retry if any provider error is retryable
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
+                .iter()
+                .any(|(_, error)| error.is_retryable()),
+            _ => true,
+        }
+    }
+
+    /// Recursively collects `RawResponseEntry` values from inference errors in the error tree.
+    fn collect_raw_response(&self, entries: &mut Vec<RawResponseEntry>) {
+        match self {
+            ErrorDetails::AllRetriesFailed { errors } => {
+                for error in errors {
+                    error.details.collect_raw_response(entries);
+                }
+            }
+            ErrorDetails::AllVariantsFailed { errors } => {
+                for error in errors.values() {
+                    error.details.collect_raw_response(entries);
+                }
+            }
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => {
+                for error in candidate_errors.values() {
+                    error.details.collect_raw_response(entries);
+                }
+            }
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => {
+                for error in provider_errors.values() {
+                    error.details.collect_raw_response(entries);
+                }
+            }
+            ErrorDetails::InferenceClient {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            }
+            | ErrorDetails::InferenceServer {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            }
+            | ErrorDetails::FatalStreamError {
+                raw_response: Some(data),
+                provider_type,
+                api_type,
+                ..
+            } => {
+                entries.push(RawResponseEntry {
+                    model_inference_id: None,
+                    provider_type: provider_type.clone(),
+                    api_type: *api_type,
+                    data: data.clone(),
+                });
+            }
+            ErrorDetails::Relay { raw_response, .. } => {
+                entries.extend(raw_response.clone());
+            }
+            _ => {}
+        }
+    }
+
+    /// Extracts the raw response string from a mid-stream error.
+    ///
+    /// Unlike `collect_raw_response` which produces structured `RawResponseEntry` values,
+    /// this returns just the raw response string for use as `raw_chunk` in streaming error events.
+    fn extract_raw_chunk(&self) -> Option<String> {
+        match self {
+            ErrorDetails::InferenceClient {
+                raw_response: Some(data),
+                ..
+            }
+            | ErrorDetails::InferenceServer {
+                raw_response: Some(data),
+                ..
+            }
+            | ErrorDetails::FatalStreamError {
+                raw_response: Some(data),
+                ..
+            } => Some(data.clone()),
+            ErrorDetails::Relay { raw_chunk, .. } => raw_chunk.clone(),
+            ErrorDetails::StreamError {
+                raw_event: Some(raw_event),
+                ..
+            } => Some(raw_event.clone()),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for ErrorDetails {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorDetails::AllRetriesFailed { errors } => {
+                write!(
+                    f,
+                    "All retries failed with errors: {}",
+                    errors
+                        .iter()
+                        .map(|error| format!("{error}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            ErrorDetails::AllVariantsFailed { errors } => {
+                write!(
+                    f,
+                    "All variants failed with errors: {}",
+                    errors
+                        .iter()
+                        .map(|(variant_name, error)| format!("{variant_name}: {error}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
+            }
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => {
+                write!(
+                    f,
+                    "All candidates failed with errors: {}",
+                    candidate_errors
+                        .iter()
+                        .map(|(candidate_name, error)| format!("{candidate_name}: {error}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
+            }
+            ErrorDetails::TensorZeroAuth { message } => {
+                write!(f, "TensorZero authentication error: {message}")
+            }
+            ErrorDetails::ModelProviderTimeout {
+                provider_name,
+                timeout,
+                kind,
+            } => {
+                let config_name = kind.config_name();
+                write!(
+                    f,
+                    "Model provider {provider_name} timed out due to configured `{config_name}` timeout ({timeout:?})"
+                )
+            }
+            ErrorDetails::ModelTimeout {
+                model_name,
+                timeout,
+                kind,
+            } => {
+                let config_name = kind.config_name();
+                write!(
+                    f,
+                    "Model {model_name} timed out due to configured `{config_name}` timeout ({timeout:?})"
+                )
+            }
+            ErrorDetails::VariantTimeout {
+                variant_name,
+                timeout,
+                kind,
+            } => {
+                let config_name = kind.config_name();
+                write!(
+                    f,
+                    "Variant `{variant_name}` timed out due to configured `{config_name}` timeout ({timeout:?})"
+                )
+            }
+            ErrorDetails::ObjectStoreWrite { message, path } => {
+                write!(
+                    f,
+                    "Error writing to object store: `{message}`. Path: {path:?}"
+                )
+            }
+            ErrorDetails::InvalidInferenceTarget { message } => {
+                write!(f, "Invalid inference target: {message}")
+            }
+            ErrorDetails::BadFileFetch { url, message } => {
+                write!(f, "Error fetching file from {url}: {message}")
+            }
+            ErrorDetails::ObjectStoreUnconfigured { block_type } => {
+                write!(
+                    f,
+                    "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration."
+                )
+            }
+            ErrorDetails::Relay { message, .. } => {
+                write!(f, "Error forwarding request in relay mode: {message}")
+            }
+            ErrorDetails::UnsupportedContentBlockType {
+                content_block_type,
+                provider_type,
+            } => {
+                write!(
+                    f,
+                    "Unsupported content block type `{content_block_type}` for provider `{provider_type}`",
+                )
+            }
+            ErrorDetails::ExtraBodyReplacement { message, pointer } => {
+                write!(
+                    f,
+                    "Error replacing extra body: `{message}` with pointer: `{pointer}`"
+                )
+            }
+            ErrorDetails::Glob { glob, message } => {
+                write!(f, "Error using glob: `{glob}`: {message}")
+            }
+            ErrorDetails::ApiKeyMissing {
+                provider_name,
+                message,
+            } => {
+                write!(f, "API key missing for provider {provider_name}: {message}")
+            }
+            ErrorDetails::AppState { message } => {
+                write!(f, "Error initializing AppState: {message}")
+            }
+            ErrorDetails::BadCredentialsPreInference { provider_name } => {
+                write!(
+                    f,
+                    "Bad credentials at inference time for provider: {provider_name}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
+                )
+            }
+            ErrorDetails::Base64 { message } => {
+                write!(f, "Error decoding base64: {message}")
+            }
+            ErrorDetails::BatchInputValidation { index, message } => {
+                write!(f, "Input at index {index} failed validation: {message}",)
+            }
+            ErrorDetails::BatchNotFound { id } => {
+                write!(f, "Batch request not found for id: {id}")
+            }
+            ErrorDetails::Cache { message } => {
+                write!(f, "Error in cache: {message}")
+            }
+            ErrorDetails::ChannelWrite { message } => {
+                write!(f, "Error writing to channel: {message}")
+            }
+            ErrorDetails::ClickHouseConfiguration { message } => {
+                write!(f, "Error in ClickHouse configuration: {message}")
+            }
+            ErrorDetails::ClickHouseConnection { message } => {
+                write!(f, "Error connecting to ClickHouse: {message}")
+            }
+            ErrorDetails::ClickHouseDeserialization { message } => {
+                write!(f, "Error deserializing ClickHouse response: {message}")
+            }
+            ErrorDetails::ClickHouseMigration { id, message } => {
+                write!(f, "Error running ClickHouse migration {id}: {message}")
+            }
+            ErrorDetails::ClickHouseMigrationsDisabled => {
+                write!(
+                    f,
+                    "Automatic ClickHouse migrations were disabled, but not all migrations were run. {RUN_MIGRATIONS_COMMAND}"
+                )
+            }
+            ErrorDetails::ClickHouseQuery { message } => {
+                write!(f, "Failed to run ClickHouse query: {message}")
+            }
+            ErrorDetails::Config { message } => {
+                write!(f, "{message}")
+            }
+            ErrorDetails::CostComputation { message } => {
+                write!(f, "Cost computation error: {message}")
+            }
+            ErrorDetails::ConfigSnapshotNotFound { snapshot_hash } => {
+                write!(f, "Config snapshot not found for hash: {snapshot_hash}")
+            }
+            ErrorDetails::ConfigSnapshotHashMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "Config snapshot hash does not match expected hash. Expected {expected} but got {actual}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                )
+            }
+            ErrorDetails::DatapointNotFound {
+                dataset_name,
+                datapoint_id,
+            } => {
+                write!(
+                    f,
+                    "Datapoint not found for dataset: {dataset_name} and id: {datapoint_id}"
+                )
+            }
+            ErrorDetails::DiclMissingOutput => {
+                write!(
+                    f,
+                    "DICL example missing output. There was a bug in a notebook from 2025-08 that may have caused the output to not be written to ClickHouse. You can remove the examples with missing output by running the query `DELETE FROM DynamicInContextLearningExample WHERE empty(output)`."
+                )
+            }
+            ErrorDetails::DuplicateTool { name } => {
+                write!(f, "Duplicate tool name: {name}. Tool names must be unique.")
+            }
+            ErrorDetails::DuplicateRateLimitingConfigScope { scope } => {
+                write!(
+                    f,
+                    "Duplicate rate limiting config scope: {scope:?}. Rate limiting config scopes must be unique."
+                )
+            }
+            ErrorDetails::DynamicJsonSchema { message } => {
+                write!(
+                    f,
+                    "Error in compiling client-provided JSON schema: {message}"
+                )
+            }
+            ErrorDetails::EvaluationRun { message } => {
+                write!(f, "Evaluation run error: {message}")
+            }
+            ErrorDetails::DynamicEndpointNotFound { key_name } => {
+                write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
+            }
+            ErrorDetails::DynamicRegionNotFound { key_name } => {
+                write!(f, "Dynamic region '{key_name}' not found in credentials")
+            }
+            ErrorDetails::DynamicTemplateLoad { internal } => match internal {
+                AnalysisError::ParseError(err) => {
+                    write!(
+                        f,
+                        "Failed to parse template during validation of loads: {err}"
+                    )
+                }
+                AnalysisError::DynamicLoadsFound(loads) => {
+                    writeln!(
+                        f,
+                        "TensorZero does not allow templates with dynamic paths to be loaded. Found {} dynamic load(s):",
+                        loads.len()
+                    )?;
+                    for (i, load) in loads.iter().enumerate() {
+                        if i > 0 {
+                            writeln!(f)?;
+                        }
+                        write!(
+                            f,
+                            "  {}:{}:{}: dynamic {} - {}:\n    {}",
+                            load.template_name,
+                            load.line,
+                            load.column,
+                            load.load_kind,
+                            load.reason,
+                            load.source_quote
+                        )?;
+                    }
+                    writeln!(
+                        f,
+                        "Please use explicit paths to templates instead of variables. You may be able to use if / else statements to achieve the desired behavior."
+                    )?;
+                    Ok(())
+                }
+            },
+
+            ErrorDetails::FileRead { message, file_path } => {
+                write!(f, "Error reading file {file_path}: {message}")
+            }
+            ErrorDetails::GCPCredentials { message } => {
+                write!(f, "Error in acquiring GCP credentials: {message}")
+            }
+            ErrorDetails::Inference { message } => write!(f, "{message}"),
+            ErrorDetails::InferenceClient {
+                message,
+                provider_type,
+                raw_request,
+                raw_response,
+                status_code,
+                ..
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if is_debug() {
+                    write!(
+                        f,
+                        "Error from {} client: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
+                        raw_response
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Error{} from {} client: {}",
+                        status_code.map_or(String::new(), |s| format!(" {s}")),
+                        provider_type,
+                        message
+                    )
+                }
+            }
+            ErrorDetails::InferenceNotFound { inference_id } => {
+                write!(f, "Inference not found for id: {inference_id}")
+            }
+            ErrorDetails::InferenceServer {
+                message,
+                provider_type,
+                raw_request,
+                raw_response,
+                ..
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if is_debug() {
+                    write!(
+                        f,
+                        "Error from {} server: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
+                        raw_response
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
+                    )
+                } else {
+                    write!(f, "Error from {provider_type} server: {message}")
+                }
+            }
+            ErrorDetails::FatalStreamError {
+                message,
+                provider_type,
+                raw_request,
+                raw_response,
+                ..
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if is_debug() {
+                    write!(
+                        f,
+                        "Inference stream closed due to error from {} server: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
+                        raw_response
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Inference stream closed due to error from {provider_type} server: {message}"
+                    )
+                }
+            }
+            ErrorDetails::InferenceTimeout { variant_name } => {
+                write!(f, "Inference timed out for variant: {variant_name}")
+            }
+            ErrorDetails::InputValidation { source } => {
+                write!(f, "Input validation failed with messages: {source}")
+            }
+            ErrorDetails::InternalError { message } => {
+                write!(f, "Internal error: {message}")
+            }
+            ErrorDetails::InvalidBaseUrl { message } => {
+                write!(f, "Invalid batch params retrieved from database: {message}")
+            }
+            ErrorDetails::InvalidBatchParams { message } => write!(f, "{message}"),
+            ErrorDetails::InvalidCandidate {
+                variant_name,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Invalid candidate variant as a component of variant {variant_name}: {message}"
+                )
+            }
+            ErrorDetails::InvalidClientMode { mode, message } => {
+                write!(f, "Invalid client mode: {mode}. {message}")
+            }
+            ErrorDetails::InvalidDiclConfig { message } => {
+                write!(
+                    f,
+                    "Invalid dynamic in-context learning config: {message}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
+                )
+            }
+            ErrorDetails::InvalidDatasetName { dataset_name } => {
+                write!(
+                    f,
+                    "Invalid dataset name: {dataset_name}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\""
+                )
+            }
+            ErrorDetails::InvalidWorkflowEvaluationRun { episode_id } => {
+                write!(
+                    f,
+                    "Workflow evaluation run not found for episode id: {episode_id}",
+                )
+            }
+            ErrorDetails::InvalidDynamicEndpoint { url } => {
+                write!(f, "Invalid dynamic endpoint URL: {url}")
+            }
+            ErrorDetails::InvalidEncodedJobHandle => {
+                write!(
+                    f,
+                    "Invalid encoded job handle. Failed to decode using URL-safe Base64."
+                )
+            }
+            ErrorDetails::InvalidJobHandle { message } => {
+                write!(f, "Failed to deserialize job handle: {message}")
+            }
+            ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{message}"),
+            ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
+                write!(f, "Invalid {kind} ID: {message}")
+            }
+            ErrorDetails::InvalidInferenceOutputSource { source_kind } => {
+                write!(
+                    f,
+                    "Invalid inference output source: {source_kind}. Should be one of: \"inference\" or \"demonstration\"."
+                )
+            }
+            ErrorDetails::InvalidMetricName { metric_name } => {
+                write!(f, "Invalid metric name: {metric_name}")
+            }
+            ErrorDetails::InvalidMessage { message } => write!(f, "{message}"),
+            ErrorDetails::InvalidModel { model_name } => {
+                write!(f, "Invalid model: {model_name}")
+            }
+            ErrorDetails::InvalidModelProvider {
+                model_name,
+                provider_name,
+            } => {
+                write!(
+                    f,
+                    "Invalid model provider: {provider_name} for model: {model_name}"
+                )
+            }
+            ErrorDetails::InvalidValFraction { val_fraction } => {
+                write!(
+                    f,
+                    "Invalid val fraction: {val_fraction}. Must be between 0 and 1."
+                )
+            }
+            ErrorDetails::InvalidOpenAICompatibleRequest { message } => write!(
+                f,
+                "Invalid request to OpenAI-compatible endpoint: {message}"
+            ),
+            ErrorDetails::InvalidProviderConfig { message } => write!(f, "{message}"),
+            ErrorDetails::InvalidRequest { message } => write!(f, "{message}"),
+            ErrorDetails::InvalidRenderedStoredInference { message } => {
+                write!(f, "Invalid rendered stored inference: {message}")
+            }
+            ErrorDetails::InvalidTemplatePath => {
+                write!(f, "Template path failed to convert to Rust string")
+            }
+            ErrorDetails::InvalidTool { message } => write!(f, "{message}"),
+            ErrorDetails::InvalidUuid { raw_uuid } => {
+                write!(f, "Failed to parse UUID as v7: {raw_uuid}")
+            }
+            ErrorDetails::InvalidVariantForOptimization {
+                function_name,
+                variant_name,
+            } => {
+                write!(
+                    f,
+                    "Invalid variant for optimization: {variant_name} for function: {function_name}"
+                )
+            }
+            ErrorDetails::JsonRequest { message } => write!(f, "{message}"),
+            ErrorDetails::JsonSchema { message } => write!(f, "{message}"),
+            ErrorDetails::JsonSchemaValidation {
+                messages,
+                data,
+                schema,
+            } => {
+                write!(f, "JSON Schema validation failed:\n{}", messages.join("\n"))?;
+                // `debug` defaults to false so we don't log data by default
+                if is_debug() {
+                    write!(
+                        f,
+                        "\n\nData:\n{}",
+                        serde_json::to_string(data).map_err(|_| std::fmt::Error)?
+                    )?;
+                }
+                write!(
+                    f,
+                    "\n\nSchema:\n{}",
+                    serde_json::to_string(schema).map_err(|_| std::fmt::Error)?
+                )
+            }
+            ErrorDetails::MiniJinjaEnvironment { message } => {
+                write!(f, "Error initializing MiniJinja environment: {message}")
+            }
+            ErrorDetails::MiniJinjaTemplate {
+                template_name,
+                message,
+            } => {
+                write!(f, "Error rendering template {template_name}: {message}")
+            }
+            ErrorDetails::MiniJinjaTemplateMissing { template_name } => {
+                write!(f, "Template not found: {template_name}")
+            }
+            ErrorDetails::MiniJinjaTemplateRender {
+                template_name,
+                message,
+            } => {
+                write!(f, "Error rendering template {template_name}: {message}")
+            }
+            ErrorDetails::MissingBatchInferenceResponse { inference_id } => match inference_id {
+                Some(inference_id) => write!(
+                    f,
+                    "Missing batch inference response for inference id: {inference_id}"
+                ),
+                None => write!(f, "Missing batch inference response"),
+            },
+            ErrorDetails::MissingFunctionInVariants { function_name } => {
+                write!(f, "Missing function in variants: {function_name}")
+            }
+            ErrorDetails::MissingFileExtension { file_name } => {
+                write!(
+                    f,
+                    "Could not determine file extension for file: {file_name}"
+                )
+            }
+            ErrorDetails::ModelNotFound { model_name } => {
+                write!(f, "Model not found: {model_name}")
+            }
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => {
+                write!(
+                    f,
+                    "All model providers failed to infer with errors: {}",
+                    provider_errors
+                        .iter()
+                        .map(|(provider_name, error)| format!("{provider_name}: {error}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            ErrorDetails::NoFallbackVariantsRemaining => {
+                write!(f, "No fallback variants remaining.")
+            }
+            ErrorDetails::NotImplemented { message } => {
+                write!(f, "Not implemented: {message}")
+            }
+            ErrorDetails::ModelValidation { message } => {
+                write!(f, "Failed to validate model: {message}")
+            }
+            ErrorDetails::Observability { message } => {
+                write!(f, "{message}")
+            }
+            ErrorDetails::OptimizationResponse {
+                message,
+                provider_type,
+            } => {
+                write!(
+                    f,
+                    "Error from {provider_type} optimization response: {message}"
+                )
+            }
+            ErrorDetails::OutputParsing {
+                raw_output,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Error parsing output as JSON with message: {message}: {raw_output}"
+                )
+            }
+            ErrorDetails::OutputValidation { source } => {
+                write!(f, "Output validation failed with messages: {source}")
+            }
+            ErrorDetails::PostgresConnectionInitialization { message } => {
+                write!(
+                    f,
+                    "Postgres connection initialization failed with message: {message}"
+                )
+            }
+            ErrorDetails::PostgresConnection { message } => {
+                write!(f, "Error connecting to Postgres: {message}")
+            }
+            ErrorDetails::PostgresMigration { message } => {
+                write!(f, "Postgres migration failed with message: {message}")
+            }
+            ErrorDetails::PostgresResult {
+                result_type,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Unexpected Postgres result of type {result_type}: {message}"
+                )
+            }
+            ErrorDetails::PostgresQuery { message } => {
+                write!(f, "Postgres query failed: {message}")
+            }
+            ErrorDetails::ValkeyConnection { message } => {
+                write!(f, "Error connecting to Valkey: {message}")
+            }
+            ErrorDetails::ValkeyQuery { message } => {
+                write!(f, "Valkey query failed: {message}")
+            }
+            ErrorDetails::ProviderNotFound { provider_name } => {
+                write!(f, "Provider not found: {provider_name}")
+            }
+            ErrorDetails::RateLimitExceeded { failed_rate_limits } => {
+                if failed_rate_limits.len() == 1 {
+                    let limit = &failed_rate_limits[0];
+                    let scope = limit
+                        .scope_key
+                        .iter()
+                        .map(|key| key.to_config_representation())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
+                    write!(
+                        f,
+                        "TensorZero rate limit exceeded for `{}` resource.\nScope: {}\nRequested: {}\nAvailable: {}",
+                        limit.resource.as_str(),
+                        scope,
+                        limit.requested,
+                        limit.available
+                    )
+                } else {
+                    writeln!(
+                        f,
+                        "TensorZero rate limits exceeded for {} rules:",
+                        failed_rate_limits.len()
+                    )?;
+                    for (i, limit) in failed_rate_limits.iter().enumerate() {
+                        if i > 0 {
+                            writeln!(f)?;
+                        }
+                        let scope = limit
+                            .scope_key
+                            .iter()
+                            .map(|key| key.to_config_representation())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
+                        write!(
+                            f,
+                            "- Resource: `{}`\n    ├ Scope: {}\n    ├ Requested: {}\n    └ Available: {}",
+                            limit.resource.as_str(),
+                            scope,
+                            limit.requested,
+                            limit.available
+                        )?;
+                    }
+                    Ok(())
+                }
+            }
+            ErrorDetails::RateLimitMissingMaxTokens => {
+                write!(
+                    f,
+                    "Missing `max_tokens` for request subject to rate limiting rules."
+                )
+            }
+            ErrorDetails::StreamError { source, .. } => {
+                write!(f, "Error in streaming response: {source}")
+            }
+            ErrorDetails::Serialization { message } => write!(f, "{message}"),
+            ErrorDetails::TypeConversion { message } => write!(f, "{message}"),
+            ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {name}"),
+            ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {name}"),
+            ErrorDetails::IncompatibleTool { message } => write!(f, "{message}"),
+            ErrorDetails::UnknownCandidate { name } => {
+                write!(f, "Unknown candidate variant: {name}")
+            }
+            ErrorDetails::UnknownEvaluation { name } => write!(f, "Unknown evaluation: {name}"),
+            ErrorDetails::UnknownFunction { name } => write!(f, "Unknown function: {name}"),
+            ErrorDetails::UnknownModel { name } => write!(f, "Unknown model: {name}"),
+            ErrorDetails::UnknownTool { name } => write!(f, "Unknown tool: {name}"),
+            ErrorDetails::UnknownVariant { name } => write!(f, "Unknown variant: {name}"),
+            ErrorDetails::UnknownMetric { name } => write!(f, "Unknown metric: {name}"),
+            ErrorDetails::UnsupportedModelProviderForBatchInference { provider_type } => {
+                write!(
+                    f,
+                    "Unsupported model provider for batch inference: {provider_type}"
+                )
+            }
+            ErrorDetails::UnsupportedModelProviderForStreamingInference { provider_type } => {
+                write!(
+                    f,
+                    "Unsupported model provider for streaming inference: {provider_type}"
+                )
+            }
+            ErrorDetails::UnsupportedFileExtension { extension } => {
+                write!(f, "Unsupported file extension: {extension}")
+            }
+            ErrorDetails::UnsupportedVariantForBatchInference { variant_name } => {
+                match variant_name {
+                    Some(variant_name) => {
+                        write!(f, "Unsupported variant for batch inference: {variant_name}")
+                    }
+                    None => write!(f, "Unsupported variant for batch inference"),
+                }
+            }
+            ErrorDetails::UnsupportedVariantForStreamingInference {
+                variant_type,
+                issue_link,
+            } => {
+                if let Some(link) = issue_link {
+                    write!(
+                        f,
+                        "Unsupported variant for streaming inference of type {variant_type}. For more information, see: {link}"
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Unsupported variant for streaming inference of type {variant_type}"
+                    )
+                }
+            }
+            ErrorDetails::UnsupportedVariantForFunctionType {
+                function_name,
+                variant_name,
+                function_type,
+                variant_type,
+            } => {
+                write!(
+                    f,
+                    "Unsupported variant `{variant_name}` of type `{variant_type}` for function `{function_name}` of type `{function_type}`"
+                )
+            }
+            ErrorDetails::UuidInFuture { raw_uuid } => {
+                write!(f, "UUID is in the future: {raw_uuid}")
+            }
+            ErrorDetails::RouteNotFound { path, method } => {
+                write!(f, "Route not found: {method} {path}")
+            }
+            ErrorDetails::AutopilotUnavailable => {
+                write!(f, "Autopilot credentials unavailable")
+            }
+            ErrorDetails::Autopilot { message, .. } => {
+                write!(f, "Autopilot API error: {message}")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "axum")]
+impl IntoResponse for Error {
+    /// Log the error and convert it into an Axum response
+    fn into_response(self) -> Response {
+        let body = self.build_response_body(false, None);
+        let mut response = (self.status_code(), Json(body)).into_response();
+        // Attach the error to the response, so that we can set a nice message in our
+        // `apply_otel_http_trace_layer` middleware
+        response.extensions_mut().insert(self);
+        response
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Self::new(ErrorDetails::Serialization {
+            message: err.to_string(),
+        })
+    }
+}
+
+#[cfg(feature = "sqlx")]
+impl From<sqlx::Error> for Error {
+    fn from(err: sqlx::Error) -> Self {
+        Self::new(ErrorDetails::PostgresQuery {
+            message: err.to_string(),
+        })
+    }
+}
+
+#[cfg(feature = "redis")]
+impl From<redis::RedisError> for Error {
+    fn from(err: redis::RedisError) -> Self {
+        Self::new(ErrorDetails::ValkeyQuery {
+            message: err.to_string(),
+        })
+    }
+}
+
+impl From<AnalysisError> for Error {
+    fn from(err: AnalysisError) -> Self {
+        Self::new(ErrorDetails::DynamicTemplateLoad { internal: err })
+    }
+}
+
+#[cfg(feature = "autopilot-client")]
+impl From<autopilot_client::AutopilotError> for Error {
+    fn from(err: autopilot_client::AutopilotError) -> Self {
+        match err {
+            autopilot_client::AutopilotError::Http {
+                status_code,
+                message,
+            } => Self::new(ErrorDetails::Autopilot {
+                message,
+                status_code: Some(status_code),
+            }),
+            autopilot_client::AutopilotError::Request(e) => Self::new(ErrorDetails::Autopilot {
+                message: e.to_string(),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Json(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("JSON error: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Sse(message) => Self::new(ErrorDetails::Autopilot {
+                message: format!("SSE error: {message}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::InvalidUrl(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Invalid URL: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Spawn(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Spawn error: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::Database(e) => Self::new(ErrorDetails::Autopilot {
+                message: format!("Database error: {e}"),
+                status_code: None,
+            }),
+            autopilot_client::AutopilotError::MissingConfig(field) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Missing config: {field}"),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::ToolCallNotFound(id) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Tool call not found: {id}"),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::PartialSpawnFailure { errors, .. } => {
+                let failed_ids: Vec<_> = errors.iter().map(|(id, _)| id.to_string()).collect();
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!(
+                        "Failed to spawn {} approved tool call(s): {}",
+                        errors.len(),
+                        failed_ids.join(", ")
+                    ),
+                    status_code: None,
+                })
+            }
+            autopilot_client::AutopilotError::Internal(message) => {
+                Self::new(ErrorDetails::Autopilot {
+                    message: format!("Internal error: {message}"),
+                    status_code: None,
+                })
+            }
+        }
+    }
+}
+
+impl From<tensorzero_types::TypeError> for Error {
+    fn from(err: tensorzero_types::TypeError) -> Self {
+        match err {
+            tensorzero_types::TypeError::InvalidDataPrefix(message) => {
+                Self::new(ErrorDetails::InternalError { message })
+            }
+            tensorzero_types::TypeError::InvalidBase64(message)
+            | tensorzero_types::TypeError::InvalidMimeType(message) => {
+                Self::new(ErrorDetails::Base64 { message })
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_from_inference_client() {
+        let error = Error::new(ErrorDetails::InferenceClient {
+            message: "bad request".to_string(),
+            status_code: Some(StatusCode::BAD_REQUEST),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: Some(r#"{"error":{"message":"invalid"}}"#.to_string()),
+        });
+        let entries = error.extract_raw_response();
+        assert!(
+            entries.is_some(),
+            "should extract entries from InferenceClient with raw_response"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(entries.len(), 1, "should have exactly one entry");
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].api_type, ApiType::ChatCompletions);
+        assert_eq!(entries[0].data, r#"{"error":{"message":"invalid"}}"#);
+        assert!(
+            entries[0].model_inference_id.is_none(),
+            "model_inference_id should be None for error entries"
+        );
+    }
+
+    #[test]
+    fn test_extract_from_model_providers_exhausted() {
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert(
+            "provider_a".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "error a".to_string(),
+                status_code: None,
+                provider_type: "openai".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: Some("response_a".to_string()),
+            }),
+        );
+        provider_errors.insert(
+            "provider_b".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "error b".to_string(),
+                status_code: None,
+                provider_type: "anthropic".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: None, // No raw_response
+            }),
+        );
+        let error = Error::new(ErrorDetails::AllModelProvidersFailed { provider_errors });
+        let entries = error.extract_raw_response();
+        assert!(
+            entries.is_some(),
+            "should extract entries even if only some providers have raw_response"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(
+            entries.len(),
+            1,
+            "should have one entry (only provider_a has raw_response)"
+        );
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].data, "response_a");
+    }
+
+    #[test]
+    fn test_extract_from_all_variants_failed() {
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert(
+            "provider_1".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "err".to_string(),
+                status_code: None,
+                provider_type: "openai".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: Some("raw_1".to_string()),
+            }),
+        );
+        provider_errors.insert(
+            "provider_2".to_string(),
+            Error::new(ErrorDetails::InferenceServer {
+                message: "server err".to_string(),
+                provider_type: "anthropic".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: Some("raw_2".to_string()),
+            }),
+        );
+        let mut variant_errors = IndexMap::new();
+        variant_errors.insert(
+            "variant_a".to_string(),
+            Error::new(ErrorDetails::AllModelProvidersFailed { provider_errors }),
+        );
+        let error = Error::new(ErrorDetails::AllVariantsFailed {
+            errors: variant_errors,
+        });
+        let entries = error.extract_raw_response();
+        assert!(
+            entries.is_some(),
+            "should extract entries from nested AllVariantsFailed -> AllModelProvidersFailed"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(entries.len(), 2, "should have two entries");
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].data, "raw_1");
+        assert_eq!(entries[1].provider_type, "anthropic");
+        assert_eq!(entries[1].data, "raw_2");
+    }
+
+    #[test]
+    fn test_extract_from_non_inference_error() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "bad config".to_string(),
+        });
+        let entries = error.extract_raw_response();
+        assert!(entries.is_none(), "non-inference errors should return None");
+    }
+
+    #[test]
+    fn test_extract_all_none_raw_responses() {
+        let error = Error::new(ErrorDetails::InferenceClient {
+            message: "err".to_string(),
+            status_code: None,
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: None,
+        });
+        let entries = error.extract_raw_response();
+        assert!(
+            entries.is_none(),
+            "InferenceClient with raw_response: None should return None"
+        );
+    }
+
+    #[test]
+    fn test_build_response_body_with_entries() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "test error".to_string(),
+        });
+        let entries = vec![RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: r#"{"error":"bad"}"#.to_string(),
+        }];
+        let body = error.build_response_body(false, Some(entries));
+        assert!(
+            body.get("raw_response").is_some(),
+            "TZ native body should have `raw_response` field"
+        );
+        let raw_response = body["raw_response"].as_array().unwrap();
+        assert_eq!(raw_response.len(), 1, "should have one raw_response entry");
+        assert_eq!(raw_response[0]["provider_type"], "openai");
+        assert!(
+            raw_response[0]["model_inference_id"].is_null(),
+            "model_inference_id should be null when None"
+        );
+    }
+
+    #[test]
+    fn test_build_response_body_openai_with_entries() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "test error".to_string(),
+        });
+        let entries = vec![RawResponseEntry {
+            model_inference_id: None,
+            provider_type: "anthropic".to_string(),
+            api_type: ApiType::ChatCompletions,
+            data: "raw data".to_string(),
+        }];
+        let body = error.build_response_body(true, Some(entries));
+        assert!(
+            body.get("tensorzero_raw_response").is_some(),
+            "OAI body should have `tensorzero_raw_response` field"
+        );
+        let raw_response = body["tensorzero_raw_response"].as_array().unwrap();
+        assert_eq!(raw_response.len(), 1, "should have one entry");
+        assert_eq!(raw_response[0]["provider_type"], "anthropic");
+    }
+
+    #[test]
+    fn test_build_response_body_without_entries() {
+        let error = Error::new(ErrorDetails::Config {
+            message: "test error".to_string(),
+        });
+        let body = error.build_response_body(false, None);
+        assert!(
+            body.get("raw_response").is_none(),
+            "should not have `raw_response` field when entries is None"
+        );
+    }
+
+    #[test]
+    fn test_extract_from_fatal_stream_error() {
+        let error = Error::new(ErrorDetails::FatalStreamError {
+            message: "stream died".to_string(),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: Some("stream_error_data".to_string()),
+        });
+        let entries = error.extract_raw_response();
+        assert!(
+            entries.is_some(),
+            "should extract entries from FatalStreamError with raw_response"
+        );
+        let entries = entries.unwrap();
+        assert_eq!(entries.len(), 1, "should have exactly one entry");
+        assert_eq!(entries[0].data, "stream_error_data");
+    }
+}

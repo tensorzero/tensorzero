@@ -7004,6 +7004,7 @@ dependencies = [
  "tensorzero-auth",
  "tensorzero-config-paths",
  "tensorzero-derive",
+ "tensorzero-error",
  "tensorzero-types",
  "tensorzero-types-providers",
  "tensorzero-unsafe-helpers",
@@ -7036,6 +7037,29 @@ dependencies = [
  "serde_path_to_error",
  "syn 2.0.117",
  "trybuild",
+]
+
+[[package]]
+name = "tensorzero-error"
+version = "2026.3.1"
+dependencies = [
+ "autopilot-client",
+ "axum",
+ "http 1.4.0",
+ "indexmap 2.13.0",
+ "minijinja-utils",
+ "opentelemetry",
+ "redis",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tensorzero-types",
+ "thiserror 2.0.18",
+ "tracing",
+ "tracing-opentelemetry",
+ "ts-rs",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -7117,9 +7141,12 @@ name = "tensorzero-types"
 version = "2026.3.3"
 dependencies = [
  "aws-smithy-types",
+ "blake3",
  "chrono",
+ "hex",
  "infer",
  "mime 0.4.0-a.0",
+ "num-bigint",
  "object_store",
  "pyo3",
  "rust_decimal",

@@ -27,6 +27,7 @@ members = [
     "tensorzero-ts-types",
     "tensorzero-types",
     "tensorzero-types-providers",
+    "tensorzero-error",
     "tensorzero-unsafe-helpers",
 ]
 resolver = "2"
