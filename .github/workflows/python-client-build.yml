@@ -53,10 +53,6 @@ jobs:
           workspaces: "crates -> target"
       - name: Build wheels
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
-        env:
-          # Override .cargo/config.toml mold linker flags (mold unavailable in manylinux containers)
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: ""
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS: ""
         with:
           working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}
@@ -111,10 +107,6 @@ jobs:
           version: "0.9.27"
       - name: Build wheels
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021
-        env:
-          # Override .cargo/config.toml mold linker flags (mold unavailable in musllinux containers)
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: ""
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS: ""
         with:
           working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}

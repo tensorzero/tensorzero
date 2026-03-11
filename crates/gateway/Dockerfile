@@ -19,6 +19,8 @@ ARG PROFILE
 WORKDIR /tensorzero
 ENV CARGO_INCREMENTAL=0
 RUN apt-get update && apt-get install -y clang libc++-dev mold && rm -rf /var/lib/apt/lists/*
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-fuse-ld=mold"
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-fuse-ld=mold"
 COPY --from=planner /app/crates/recipe.json /tensorzero/crates/recipe.json
 COPY crates/rust-toolchain.toml /tensorzero/crates/rust-toolchain.toml
 WORKDIR /tensorzero/crates
