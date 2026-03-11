@@ -1304,9 +1304,11 @@ mod tests {
 
     use super::*;
     use crate::config::snapshot::SnapshotHash;
+    use crate::config::{MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
     use crate::db::clickhouse::{ClickHouseResponse, ClickHouseResponseMetadata};
     use crate::db::feedback::CommentTargetType;
+    use crate::function::FunctionConfigType;
 
     /// Normalize whitespace and newlines in a query for comparison
     fn normalize_whitespace(s: &str) -> String {
@@ -2298,9 +2300,6 @@ mod tests {
     // =====================================================================
     // Tests for get_variant_performances query building
     // =====================================================================
-
-    use crate::config::{MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType};
-    use crate::function::FunctionConfigType;
 
     fn make_inference_level_float_metric() -> MetricConfig {
         MetricConfig {

@@ -13,6 +13,10 @@ pub mod storage;
 pub mod tool;
 pub mod tool_failure;
 
+use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
+use uuid::Uuid;
+
 pub(crate) fn deprecation_warning(message: &str) {
     tracing::warn!("Deprecation Warning: {message}");
 }
@@ -34,12 +38,9 @@ pub use message::{Input, InputMessage, InputMessageContent, TextKind};
 pub use role::{
     ASSISTANT_TEXT_TEMPLATE_VAR, Role, SYSTEM_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR,
 };
-use serde::{Deserialize, Serialize};
 pub use storage::{StorageKind, StoragePath};
-use tensorzero_derive::TensorZeroDeserialize;
 pub use tool::{InferenceResponseToolCall, ToolCall, ToolCallWrapper, ToolChoice, ToolResult};
 pub use tool_failure::{NonControlToolError, ToolFailure};
-use uuid::Uuid;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, sqlx::Type)]

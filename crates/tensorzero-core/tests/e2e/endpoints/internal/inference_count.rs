@@ -8,8 +8,8 @@
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tensorzero_core::endpoints::internal::inference_count::{
-    InferenceCountResponse, InferenceWithFeedbackCountResponse,
-    ListFunctionsWithInferenceCountResponse,
+    GetFunctionThroughputByVariantResponse, InferenceCountResponse,
+    InferenceWithFeedbackCountResponse, ListFunctionsWithInferenceCountResponse,
 };
 use tokio::time::{Duration, sleep};
 use uuid::Uuid;
@@ -699,8 +699,6 @@ pub async fn test_get_inference_count_nonexistent_variant() {
 }
 
 // Tests for function throughput by variant endpoint
-
-use tensorzero_core::endpoints::internal::inference_count::GetFunctionThroughputByVariantResponse;
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_function_throughput_by_variant_cumulative() {

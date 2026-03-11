@@ -189,7 +189,8 @@ pub async fn get_variant_performances(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Config, ConfigFileGlob};
+    use crate::config::{Config, ConfigFileGlob, MetricConfigLevel, MetricConfigType};
+    use crate::db::feedback::MockFeedbackQueries;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -264,9 +265,6 @@ mod tests {
     // =================================================================
     // Tests for get_variant_performances
     // =================================================================
-
-    use crate::config::{MetricConfigLevel, MetricConfigType};
-    use crate::db::feedback::MockFeedbackQueries;
 
     fn create_config_with_function_and_metric() -> String {
         r#"

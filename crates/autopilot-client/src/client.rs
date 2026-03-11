@@ -1196,6 +1196,10 @@ impl AutopilotClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::{
+        AutopilotSideInfo, GatewayEventPayloadToolCall, OptimizationWorkflowSideInfo,
+    };
+
     #[test]
     fn test_is_unknown_tool_with_known_tool() {
         let mut tools = HashSet::new();
@@ -1292,10 +1296,6 @@ mod tests {
     // -------------------------------------------------------------------------
     // requires_approval tests
     // -------------------------------------------------------------------------
-
-    use crate::types::{
-        AutopilotSideInfo, GatewayEventPayloadToolCall, OptimizationWorkflowSideInfo,
-    };
 
     /// Helper to build a minimal `AutopilotSideInfo` for tests.
     fn test_side_info() -> AutopilotSideInfo {

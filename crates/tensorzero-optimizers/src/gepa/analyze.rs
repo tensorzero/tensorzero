@@ -527,6 +527,7 @@ mod tests {
     use evaluations::stats::EvaluationInfo;
     use serde_json::json;
     use std::collections::HashMap;
+    use tensorzero_core::inference::types::{Thought, ThoughtSummaryBlock};
     use tensorzero_core::{
         config::{SchemaData, path::ResolvedTomlPathData},
         db::stored_datapoint::StoredChatInferenceDatapoint,
@@ -1064,8 +1065,6 @@ mod tests {
     // ============================================================================
     // Unit Tests for type-safe thought signature stripping
     // ============================================================================
-
-    use tensorzero_core::inference::types::{Thought, ThoughtSummaryBlock};
 
     #[test]
     fn test_strip_signatures_from_chat_output_removes_signature() {

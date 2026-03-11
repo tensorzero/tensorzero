@@ -801,6 +801,9 @@ jobs:
       - name: Check durable dependencies
         run: ./ci/check-durable-deps.sh
 
+      - name: Check Rust use placement
+        run: python3 ci/check_use_placement.py
+
       - name: Run cargo fmt
         working-directory: crates
         run: cargo fmt --all --check
