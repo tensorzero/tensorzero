@@ -1437,6 +1437,14 @@ impl TensorZeroGateway {
         variants: HashMap<String, String>,
         concurrency: Option<usize>,
     ) -> PyResult<Vec<RenderedSample>> {
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "`experimental_render_samples` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead.",
+                this.py().get_type::<PyDeprecationWarning>(),
+            ),
+        )?;
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
             PyValueError::new_err(
@@ -1474,6 +1482,14 @@ impl TensorZeroGateway {
         val_samples: Option<Vec<Bound<'_, PyAny>>>,
         optimization_config: Bound<'_, PyAny>,
     ) -> PyResult<OptimizationJobHandle> {
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "`experimental_launch_optimization` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead.",
+                this.py().get_type::<PyDeprecationWarning>(),
+            ),
+        )?;
         let client = this.as_super().client.clone();
         let train_samples = train_samples
             .iter()
@@ -2523,6 +2539,14 @@ impl AsyncTensorZeroGateway {
         variants: HashMap<String, String>,
         concurrency: Option<usize>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "`experimental_render_samples` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead.",
+                this.py().get_type::<PyDeprecationWarning>(),
+            ),
+        )?;
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
             PyValueError::new_err(
@@ -2566,6 +2590,14 @@ impl AsyncTensorZeroGateway {
         val_samples: Option<Vec<Bound<'a, PyAny>>>,
         optimization_config: Bound<'a, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "`experimental_launch_optimization` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead.",
+                this.py().get_type::<PyDeprecationWarning>(),
+            ),
+        )?;
         let client = this.as_super().client.clone();
         let train_samples = train_samples
             .iter()
