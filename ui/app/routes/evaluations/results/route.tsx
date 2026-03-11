@@ -44,6 +44,7 @@ import {
   ColorAssignerProvider,
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import { getConfig, getConfigForSnapshot } from "~/utils/config/index.server";
 import type {
   InferenceEvaluationConfig,
@@ -188,6 +189,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
   let evaluationConfig = config.evaluations[evaluation_name];
   let effectiveConfig = config;
+  let snapshotHash: string | undefined;
 
   if (!evaluationConfig) {
     const runs = await client.listEvaluationRuns(100, 0);
@@ -195,6 +197,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       (r) => r.evaluation_name === evaluation_name,
     );
     if (matchingRun?.snapshot_hash) {
+      snapshotHash = matchingRun.snapshot_hash;
       effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
       evaluationConfig = effectiveConfig.evaluations[evaluation_name];
     }
@@ -265,6 +268,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     evaluation_name,
     evaluationConfig,
+    snapshotHash,
     functionType: function_type,
     metricsConfig,
     evaluatorMetricNames,
@@ -359,12 +363,14 @@ function BasicInfoWithData({
   evaluationConfig: evaluation_config,
   functionType,
   datapoint_id,
+  snapshotHash,
 }: {
   data: EvaluationResultsData;
   evaluation_name: string;
   evaluationConfig: InferenceEvaluationConfig;
   functionType: "chat" | "json";
   datapoint_id: string;
+  snapshotHash?: string;
 }) {
   const { consolidatedEvaluationResults, datapoint_staled_at } = data;
   const fetcher = useFetcher();
@@ -391,6 +397,7 @@ function BasicInfoWithData({
       datapoint_name={consolidatedEvaluationResults[0].name}
       datapoint_staled_at={datapoint_staled_at}
       onRenameDatapoint={handleRenameDatapoint}
+      snapshotHash={snapshotHash}
     />
   );
 }
@@ -480,6 +487,7 @@ export default function EvaluationDatapointPage({
   const {
     evaluation_name,
     evaluationConfig,
+    snapshotHash,
     functionType,
     metricsConfig,
     evaluatorMetricNames,
@@ -506,6 +514,7 @@ export default function EvaluationDatapointPage({
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
         <PageHeader
+          banner={snapshotHash ? <SnapshotBanner /> : undefined}
           eyebrow={
             <Breadcrumbs
               segments={[
@@ -536,6 +545,7 @@ export default function EvaluationDatapointPage({
                   evaluationConfig={evaluationConfig}
                   functionType={functionType}
                   datapoint_id={params.datapoint_id}
+                  snapshotHash={snapshotHash}
                 />
               )}
             </Await>

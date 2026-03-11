@@ -57,6 +57,7 @@ import { handleBulkAddToDataset } from "~/routes/evaluations/bulkAddToDataset.se
 import { useBulkAddToDatasetToast } from "~/routes/evaluations/useBulkAddToDatasetToast";
 import { useCancelEvaluation } from "~/routes/evaluations/useCancelEvaluation";
 import { useReadOnly } from "~/context/read-only";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import BasicInfo from "~/routes/evaluations/EvaluationBasicInfo";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -185,6 +186,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const config = await getConfig();
   let evaluationConfig = config.evaluations[evaluation_name];
   let effectiveConfig = config;
+  let snapshotHash: string | undefined;
 
   if (!evaluationConfig) {
     const runs = await client.listEvaluationRuns(100, 0);
@@ -192,6 +194,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       (r) => r.evaluation_name === evaluation_name,
     );
     if (matchingRun?.snapshot_hash) {
+      snapshotHash = matchingRun.snapshot_hash;
       effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
       evaluationConfig = effectiveConfig.evaluations[evaluation_name];
     }
@@ -311,6 +314,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     evaluation_name,
     evaluationConfig,
+    snapshotHash,
     function_type,
     metricsConfig,
     evaluationData: fetchEvaluationData(
@@ -538,6 +542,7 @@ export default function EvaluationRunsPage({
   const {
     evaluation_name,
     evaluationConfig: evaluation_config,
+    snapshotHash,
     function_type,
     metricsConfig,
     evaluationData,
@@ -610,6 +615,7 @@ export default function EvaluationRunsPage({
   return (
     <PageLayout>
       <PageHeader
+        banner={snapshotHash ? <SnapshotBanner /> : undefined}
         eyebrow={
           <Breadcrumbs
             segments={[{ label: "Evaluations", href: "/evaluations" }]}
@@ -620,6 +626,7 @@ export default function EvaluationRunsPage({
         <BasicInfo
           evaluation_config={evaluation_config}
           functionType={function_type}
+          snapshotHash={snapshotHash}
         />
         <ActionBar>
           <DatasetSelect

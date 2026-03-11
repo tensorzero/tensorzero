@@ -12,11 +12,13 @@ import type { InferenceEvaluationConfig } from "~/types/tensorzero";
 interface BasicInfoProps {
   evaluation_config: InferenceEvaluationConfig;
   functionType: "chat" | "json";
+  snapshotHash?: string;
 }
 
 export default function BasicInfo({
   evaluation_config,
   functionType,
+  snapshotHash,
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const functionIconConfig = getFunctionTypeIcon(functionType);
@@ -32,7 +34,7 @@ export default function BasicInfo({
               iconBg={functionIconConfig.iconBg}
               label={functionName}
               secondaryLabel={`· ${functionType}`}
-              link={toFunctionUrl(functionName)}
+              link={toFunctionUrl(functionName, snapshotHash)}
               font="mono"
             />
           )}
