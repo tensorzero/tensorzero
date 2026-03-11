@@ -32,6 +32,8 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 async-stream = { workspace = true }
+utoipa.workspace = true
+utoipa-axum.workspace = true
 
 [lints]
 workspace = true

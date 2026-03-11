@@ -3,15 +3,28 @@
 //! These routes are for internal use. They are unstable and might change without notice,
 //! and do not export any OpenTelemetry spans.
 
-use axum::{
-    Router,
-    routing::{get, post},
-};
+use axum::routing::{get, post};
 use tensorzero_core::endpoints;
 use tensorzero_core::utils::gateway::AppStateData;
+use utoipa::OpenApi;
+use utoipa_axum::router::OpenApiRouter;
 
-pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
-    Router::new()
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "TensorZero Gateway Internal API",
+        description = "Internal and unstable TensorZero Gateway endpoints.",
+        version = env!("CARGO_PKG_VERSION")
+    )
+)]
+struct InternalApiDoc;
+
+fn new_internal_openapi_router() -> OpenApiRouter<AppStateData> {
+    OpenApiRouter::with_openapi(InternalApiDoc::openapi())
+}
+
+pub fn build_internal_non_otel_enabled_routes() -> OpenApiRouter<AppStateData> {
+    new_internal_openapi_router()
         .route(
             "/internal/functions/{function_name}/variant_sampling_probabilities",
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),

@@ -90,6 +90,8 @@ ts-rs = { version = "12.0.1", features = [
     "chrono-impl",
     "no-serde-warnings",
 ] }
+utoipa = { version = "5.4.0", features = ["chrono", "url", "uuid"] }
+utoipa-axum = "0.2.0"
 pin-project = "1.1.11"
 chrono = { version = "0.4.43", features = ["serde"] }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [

@@ -26,6 +26,7 @@ tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
 url.workspace = true
 uuid.workspace = true
+utoipa.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
 tensorzero-types = { path = "../tensorzero-types" }
 
