@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { data } from "react-router";
 import {
   EvaluationErrorSchema,
   type DisplayEvaluationError,
@@ -9,68 +8,9 @@ import type {
   EvaluationRunEvent,
   FunctionConfig,
   EvaluationFunctionConfig,
-  InferenceEvaluationConfig,
-  UiConfig,
 } from "~/types/tensorzero";
-import { getConfig, getConfigForSnapshot } from "./config/index.server";
+import { getConfig } from "./config/index.server";
 import { getTensorZeroClient } from "./tensorzero.server";
-
-interface ResolvedEvaluationConfig {
-  evaluationConfig: InferenceEvaluationConfig;
-  effectiveConfig: UiConfig;
-  snapshotHash: string | undefined;
-}
-
-/**
- * Resolves an evaluation config by name. If not found in the current config,
- * finds an inference tagged with this evaluation name and uses its
- * snapshot_hash to load the historical config.
- */
-export async function resolveEvaluationConfig(
-  evaluationName: string,
-): Promise<ResolvedEvaluationConfig> {
-  const config = await getConfig();
-  const evaluationConfig = config.evaluations[evaluationName];
-  if (evaluationConfig) {
-    return {
-      evaluationConfig,
-      effectiveConfig: config,
-      snapshotHash: undefined,
-    };
-  }
-
-  // Evaluation not in current config — find an inference tagged with this
-  // evaluation name and use its snapshot_hash to load the historical config.
-  const client = getTensorZeroClient();
-  const inferences = await client.listInferences({
-    output_source: "none",
-    limit: 1,
-    filters: {
-      type: "tag",
-      key: "tensorzero::evaluation_name",
-      value: evaluationName,
-      comparison_operator: "=",
-    },
-  });
-
-  const snapshotHash = inferences.inferences[0]?.snapshot_hash;
-  if (snapshotHash) {
-    const effectiveConfig = await getConfigForSnapshot(snapshotHash);
-    const snapshotEvalConfig = effectiveConfig.evaluations[evaluationName];
-    if (snapshotEvalConfig) {
-      return {
-        evaluationConfig: snapshotEvalConfig,
-        effectiveConfig,
-        snapshotHash,
-      };
-    }
-  }
-
-  throw data(
-    `Evaluation config not found for evaluation \`${evaluationName}\``,
-    { status: 404 },
-  );
-}
 
 /**
  * Converts a FunctionConfig to the minimal EvaluationFunctionConfig format
