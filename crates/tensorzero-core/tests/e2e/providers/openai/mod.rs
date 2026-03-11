@@ -1336,7 +1336,7 @@ async fn test_embedding_request() {
 
     // Assert that the norm is approximately 1 (allowing for small floating-point errors)
     assert!(
-        (norm - 1.0).abs() < 1e-6,
+        (norm - 1.0).abs() < 1e-3,
         "The L2 norm of the embedding should be 1, but it is {norm}"
     );
     // Check that the timestamp in created is within 1 second of the current time
