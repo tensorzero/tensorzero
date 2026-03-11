@@ -210,10 +210,10 @@ interface EvaluationTableProps {
   selected_evaluation_run_infos: EvaluationRunInfo[];
   evaluation_results: EvaluationResultRow[];
   evaluation_statistics: EvaluationStatistics[];
-  evaluator_names: string[];
+  metric_names: string[];
   evaluation_name: string;
   metricsConfig: Record<string, RunMetricMetadata>;
-  /** Maps evaluator_name → metric_name. */
+  /** Maps full metric_name → short evaluator_name. */
   evaluatorMetricNames: Record<string, string>;
   selectedRows: Map<string, SelectedRowData>;
   setSelectedRows: React.Dispatch<
@@ -241,21 +241,15 @@ export function EvaluationTable({
   selected_evaluation_run_infos,
   evaluation_results,
   evaluation_statistics,
-  evaluator_names,
+  metric_names,
   evaluation_name,
   metricsConfig,
   evaluatorMetricNames,
   selectedRows,
   setSelectedRows,
 }: EvaluationTableProps) {
-  const resolveMetricName = (evaluatorName: string): string => {
-    const name = evaluatorMetricNames[evaluatorName];
-    if (!name) {
-      logger.warn(
-        `No metric name mapping for evaluator ${evaluatorName} in evaluation ${evaluation_name}`,
-      );
-    }
-    return name ?? evaluatorName;
+  const resolveEvaluatorName = (metricName: string): string => {
+    return evaluatorMetricNames[metricName] ?? metricName;
   };
   const selectedRunIds = selected_evaluation_run_infos.map(
     (info) => info.evaluation_run_id,
@@ -413,18 +407,16 @@ export function EvaluationTable({
                       Generated Output
                     </TableHead>
                     {/* Dynamic metric columns */}
-                    {evaluator_names.map((evaluator_name) => {
-                      // Get the metric name for this evaluator
-                      const metric_name = resolveMetricName(evaluator_name);
+                    {metric_names.map((metric_name) => {
+                      const evaluator_name = resolveEvaluatorName(metric_name);
 
-                      // Filter statistics for this specific metric
                       const filteredStats = evaluation_statistics.filter(
                         (stat) => stat.metric_name === metric_name,
                       );
 
                       return (
                         <TableHead
-                          key={evaluator_name}
+                          key={metric_name}
                           className="py-2 text-center"
                         >
                           <EvaluatorHeader
@@ -574,9 +566,7 @@ export function EvaluationTable({
                               </TableCell>
 
                               {/* Metrics cells */}
-                              {evaluator_names.map((evaluator_name) => {
-                                const metric_name =
-                                  resolveMetricName(evaluator_name);
+                              {metric_names.map((metric_name) => {
                                 const metricValue =
                                   data.metrics.get(metric_name);
                                 const metricConfig = metricsConfig[metric_name];

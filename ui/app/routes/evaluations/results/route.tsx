@@ -183,7 +183,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const function_name = allMetadata[0].function_name;
   const function_type = allMetadata[0].function_type as "chat" | "json";
 
-  const { metricsConfig, evaluatorMetricNames } = mergeRunMetrics(allMetadata);
+  const { metricsConfig } = mergeRunMetrics(allMetadata);
 
   const newFeedbackId = searchParams.get("newFeedbackId");
   const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
@@ -213,7 +213,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     functionName: function_name,
     functionType: function_type,
     metricsConfig,
-    evaluatorMetricNames,
     runInfoData,
     evaluationResultsData,
     selectedRunIds,
@@ -346,14 +345,12 @@ function MainContent({
   evaluation_name,
   function_name,
   metricsConfig,
-  evaluatorMetricNames,
   datapoint_id,
 }: {
   data: EvaluationResultsData;
   evaluation_name: string;
   function_name: string;
   metricsConfig: Record<string, RunMetricMetadata>;
-  evaluatorMetricNames: Record<string, string>;
   datapoint_id: string;
 }) {
   const { consolidatedEvaluationResults } = data;
@@ -396,7 +393,6 @@ function MainContent({
         evaluation_name={evaluation_name}
         function_name={function_name}
         metricsConfig={metricsConfig}
-        evaluatorMetricNames={evaluatorMetricNames}
         datapointId={datapoint_id}
       />
     </SectionsGroup>
@@ -428,7 +424,6 @@ export default function EvaluationDatapointPage({
     functionName,
     functionType,
     metricsConfig,
-    evaluatorMetricNames,
     runInfoData,
     evaluationResultsData,
     selectedRunIds,
@@ -531,7 +526,6 @@ export default function EvaluationDatapointPage({
                 evaluation_name={evaluation_name}
                 function_name={functionName}
                 metricsConfig={metricsConfig}
-                evaluatorMetricNames={evaluatorMetricNames}
                 datapoint_id={params.datapoint_id}
               />
             )}
@@ -545,7 +539,6 @@ export default function EvaluationDatapointPage({
 const MetricsDisplay = ({
   metrics,
   metricsConfig,
-  evaluatorMetricNames,
   datapointId,
   inferenceId,
   evalRunId,
@@ -553,7 +546,6 @@ const MetricsDisplay = ({
 }: {
   metrics: ConsolidatedMetric[];
   metricsConfig: Record<string, RunMetricMetadata>;
-  evaluatorMetricNames: Record<string, string>;
   datapointId: string;
   inferenceId: string | null;
   evalRunId: string;
@@ -564,12 +556,12 @@ const MetricsDisplay = ({
       <div className="space-y-1">
         {metrics.map((metricObj) => (
           <MetricRow
-            key={metricObj.evaluator_name}
+            key={metricObj.metric_name}
+            metricName={metricObj.metric_name}
             evaluatorName={metricObj.evaluator_name}
             metricValue={metricObj.metric_value}
             isLlmJudgeEvaluation={!!metricObj.evaluator_inference_id}
             metricsConfig={metricsConfig}
-            evaluatorMetricNames={evaluatorMetricNames}
             datapointId={datapointId}
             inferenceId={inferenceId}
             evaluatorInferenceId={metricObj.evaluator_inference_id}
@@ -584,11 +576,11 @@ const MetricsDisplay = ({
 };
 
 const MetricRow = ({
+  metricName,
   evaluatorName,
   metricValue,
   isLlmJudgeEvaluation,
   metricsConfig,
-  evaluatorMetricNames,
   datapointId,
   inferenceId,
   evalRunId,
@@ -596,11 +588,11 @@ const MetricRow = ({
   variantName,
   isHumanFeedback,
 }: {
+  metricName: string;
   evaluatorName: string;
   metricValue: string;
   isLlmJudgeEvaluation: boolean;
   metricsConfig: Record<string, RunMetricMetadata>;
-  evaluatorMetricNames: Record<string, string>;
   datapointId: string;
   inferenceId: string | null;
   evaluatorInferenceId?: string;
@@ -608,18 +600,13 @@ const MetricRow = ({
   variantName: string;
   isHumanFeedback: boolean;
 }) => {
-  const metric_name = evaluatorMetricNames[evaluatorName];
-  if (!metric_name) {
-    logger.warn(`No metric name mapping for evaluator ${evaluatorName}`);
-    return null;
-  }
-  const metricProperties = metricsConfig[metric_name];
+  const metricProperties = metricsConfig[metricName];
   if (!metricProperties) {
     return null;
   }
   if (inferenceId === null) {
     logger.warn(
-      `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
+      `Inference ID is null for metric ${metricName} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
     );
   }
   return (
@@ -659,7 +646,7 @@ const MetricRow = ({
           <EvaluationFeedbackEditor
             inferenceId={inferenceId}
             datapointId={datapointId}
-            metricName={metric_name}
+            metricName={metricName}
             originalValue={metricValue}
             evalRunId={evalRunId}
             evaluatorInferenceId={evaluatorInferenceId}
@@ -693,7 +680,6 @@ type OutputsSectionProps = {
   evaluation_name: string;
   function_name: string;
   metricsConfig: Record<string, RunMetricMetadata>;
-  evaluatorMetricNames: Record<string, string>;
   datapointId: string;
 };
 
@@ -701,7 +687,6 @@ function OutputsSection({
   outputsToDisplay,
   function_name,
   metricsConfig,
-  evaluatorMetricNames,
   datapointId,
 }: OutputsSectionProps) {
   const { getColor } = useColorAssigner();
@@ -773,7 +758,6 @@ function OutputsSection({
                 <MetricsDisplay
                   metrics={result.metrics}
                   metricsConfig={metricsConfig}
-                  evaluatorMetricNames={evaluatorMetricNames}
                   datapointId={datapointId}
                   inferenceId={result.inferenceId}
                   evalRunId={result.id}

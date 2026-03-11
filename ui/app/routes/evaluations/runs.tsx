@@ -177,9 +177,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
-  const evaluation_name = allMetadata[0].evaluation_name;
-  const function_name = allMetadata[0].function_name;
-  const function_type = allMetadata[0].function_type as "chat" | "json";
+  // Use the first selected run ID (not Object.values order) for primary
+  // metadata, since the server returns a HashMap with no stable ordering.
+  const primaryMetadata =
+    runMetadataResponse.metadata[selected_evaluation_run_ids_array[0]] ??
+    allMetadata[0];
+  const evaluation_name = primaryMetadata.evaluation_name;
+  const function_name = primaryMetadata.function_name;
+  const function_type = primaryMetadata.function_type as "chat" | "json";
 
   const {
     metrics: mergedMetrics,
@@ -187,9 +192,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     evaluatorMetricNames,
   } = mergeRunMetrics(allMetadata);
   const metric_names = mergedMetrics.map((m) => m.name);
-  const evaluator_names = mergedMetrics
-    .map((m) => m.evaluator_name)
-    .filter((name): name is string => name != null);
 
   const newFeedbackId = searchParams.get("newFeedbackId");
   const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
@@ -252,7 +254,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     has_selected_runs: selected_evaluation_run_ids_array.length > 0,
     offset,
     limit,
-    evaluator_names,
+    metric_names,
     evaluatorMetricNames,
     running_evaluation_run_ids,
     errors,
@@ -354,7 +356,7 @@ function ResultsContent({
   metricsConfig,
   evaluatorMetricNames,
   data,
-  evaluator_names,
+  metric_names,
   any_evaluation_is_running,
   has_selected_runs,
   offset,
@@ -368,7 +370,7 @@ function ResultsContent({
   metricsConfig: Record<string, RunMetricMetadata>;
   evaluatorMetricNames: Record<string, string>;
   data: EvaluationData;
-  evaluator_names: string[];
+  metric_names: string[];
   any_evaluation_is_running: boolean;
   has_selected_runs: boolean;
   offset: number;
@@ -436,7 +438,7 @@ function ResultsContent({
         selected_evaluation_run_infos={selected_evaluation_run_infos}
         evaluation_results={evaluation_results}
         evaluation_statistics={evaluation_statistics}
-        evaluator_names={evaluator_names}
+        metric_names={metric_names}
         selectedRows={selectedRows}
         setSelectedRows={setSelectedRows}
       />
@@ -469,7 +471,7 @@ export default function EvaluationRunsPage({
     has_selected_runs,
     offset,
     limit,
-    evaluator_names,
+    metric_names,
     evaluatorMetricNames,
     running_evaluation_run_ids,
     errors,
@@ -580,7 +582,7 @@ export default function EvaluationRunsPage({
                     metricsConfig={metricsConfig}
                     evaluatorMetricNames={evaluatorMetricNames}
                     data={resolvedData}
-                    evaluator_names={evaluator_names}
+                    metric_names={metric_names}
                     any_evaluation_is_running={anyEvaluationIsRunning}
                     has_selected_runs={has_selected_runs}
                     offset={offset}

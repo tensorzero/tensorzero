@@ -69,6 +69,9 @@ export function consolidateEvaluationResults(
 export interface MergedRunMetrics {
   metrics: RunMetricMetadata[];
   metricsConfig: Record<string, RunMetricMetadata>;
+  // Maps full metric_name → short evaluator_name. Keyed by full metric name
+  // so that the same evaluator appearing in different contexts (e.g. nested in
+  // a named evaluation vs. top-level) gets separate entries.
   evaluatorMetricNames: Record<string, string>;
 }
 
@@ -106,7 +109,7 @@ export function mergeRunMetrics(
   const evaluatorMetricNames: Record<string, string> = {};
   for (const metric of metrics) {
     if (metric.evaluator_name) {
-      evaluatorMetricNames[metric.evaluator_name] = metric.name;
+      evaluatorMetricNames[metric.name] = metric.evaluator_name;
     }
   }
 
