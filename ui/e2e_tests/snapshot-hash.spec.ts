@@ -4,6 +4,11 @@ import { decimalToHex } from "~/utils/common";
 const FUNCTION_NAME = "write_haiku";
 const GATEWAY_URL = "http://localhost:3000";
 
+function gatewayHeaders(): Record<string, string> {
+  const key = process.env.TENSORZERO_API_KEY;
+  return key ? { Authorization: `Bearer ${key}` } : {};
+}
+
 async function getCurrentConfigHashAsHex(page: Page): Promise<string> {
   const response = await page.request.get(`${GATEWAY_URL}/status`);
   const status = await response.json();
@@ -23,21 +28,21 @@ function stripNulls(obj: any): any {
   return obj;
 }
 
-/**
- * Writes a modified config to create a real historical snapshot.
- * Adds an extra template to produce a different hash from the current config.
- * Returns the hash as hex.
- */
+// Creates a real historical snapshot via POST /internal/config.
+// See https://github.com/tensorzero/tensorzero/issues/6874 for stripNulls.
 async function createHistoricalSnapshot(page: Page): Promise<string> {
+  const headers = gatewayHeaders();
+
   const configResponse = await page.request.get(
     `${GATEWAY_URL}/internal/config`,
+    { headers },
   );
   const { config, extra_templates, tags } = await configResponse.json();
 
-  // Strip null values — GET serializes Option::None as null but POST rejects them.
   const writeResponse = await page.request.post(
     `${GATEWAY_URL}/internal/config`,
     {
+      headers,
       data: stripNulls({
         config,
         extra_templates: {
