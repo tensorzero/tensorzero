@@ -615,6 +615,7 @@ function EventItemContent({
     case "status_update":
     case "tool_call_authorization":
     case "visualization":
+    case "auto_eval_example_labeling":
     case "unknown":
       return (
         <p className="text-fg-secondary text-sm whitespace-pre-wrap">
