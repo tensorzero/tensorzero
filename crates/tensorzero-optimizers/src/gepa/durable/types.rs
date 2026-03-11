@@ -65,6 +65,9 @@ pub struct GepaToolParams {
     /// Maximum number of concurrent inference calls.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrency: Option<u32>,
+    /// Maximum number of datapoints to load from each dataset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_datapoints: Option<u32>,
 }
 
 /// Output of the durable GEPA tool.

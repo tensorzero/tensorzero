@@ -393,6 +393,7 @@ pub async fn gepa_launch_handler(
         seed: req.seed,
         include_inference_for_mutation: req.include_inference_for_mutation,
         max_concurrency: req.max_concurrency,
+        max_datapoints: req.max_datapoints,
     };
 
     let llm_params = serde_json::to_value(&tool_params).map_err(|e| {

@@ -585,6 +585,9 @@ async fn setup_step(
     // Two modes:
     //   1. Separate datasets: `train_dataset_name` + `val_dataset_name`
     //   2. Auto-split: single `dataset_name` shuffled and split 50/50
+    let max_datapoints = params.max_datapoints.unwrap_or(1000);
+    let fetch_limit = max_datapoints.saturating_add(1);
+
     let has_separate_datasets =
         params.train_dataset_name.is_some() || params.val_dataset_name.is_some();
 
@@ -619,36 +622,49 @@ async fn setup_step(
                 .list_datapoints(
                     train_name.clone(),
                     ListDatapointsRequest {
-                        limit: Some(u32::MAX),
+                        limit: Some(fetch_limit),
                         ..Default::default()
                     },
                 )
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to list training datapoints: {e}"))?;
 
-            let train_ids: Vec<Uuid> = train_datapoints.datapoints.iter().map(|d| d.id()).collect();
+            let mut train_ids: Vec<Uuid> =
+                train_datapoints.datapoints.iter().map(|d| d.id()).collect();
             if train_ids.is_empty() {
                 return Err(anyhow::anyhow!(
                     "Training dataset `{train_name}` contains no datapoints"
                 ));
+            }
+            if train_ids.len() > max_datapoints as usize {
+                tracing::warn!(
+                    "Training dataset `{train_name}` has more than {max_datapoints} datapoints, truncating"
+                );
+                train_ids.truncate(max_datapoints as usize);
             }
 
             let val_datapoints = client
                 .list_datapoints(
                     val_name.clone(),
                     ListDatapointsRequest {
-                        limit: Some(u32::MAX),
+                        limit: Some(fetch_limit),
                         ..Default::default()
                     },
                 )
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to list val datapoints: {e}"))?;
 
-            let val_ids: Vec<Uuid> = val_datapoints.datapoints.iter().map(|d| d.id()).collect();
+            let mut val_ids: Vec<Uuid> = val_datapoints.datapoints.iter().map(|d| d.id()).collect();
             if val_ids.is_empty() {
                 return Err(anyhow::anyhow!(
                     "Validation dataset `{val_name}` contains no datapoints"
                 ));
+            }
+            if val_ids.len() > max_datapoints as usize {
+                tracing::warn!(
+                    "Validation dataset `{val_name}` has more than {max_datapoints} datapoints, truncating"
+                );
+                val_ids.truncate(max_datapoints as usize);
             }
 
             (train_name, train_ids, val_name, val_ids)
@@ -664,7 +680,7 @@ async fn setup_step(
                 .list_datapoints(
                     dataset_name.clone(),
                     ListDatapointsRequest {
-                        limit: Some(u32::MAX),
+                        limit: Some(fetch_limit),
                         ..Default::default()
                     },
                 )
@@ -672,6 +688,12 @@ async fn setup_step(
                 .map_err(|e| anyhow::anyhow!("Failed to list datapoints: {e}"))?;
 
             let mut all_ids: Vec<Uuid> = all_datapoints.datapoints.iter().map(|d| d.id()).collect();
+            if all_ids.len() > max_datapoints as usize {
+                tracing::warn!(
+                    "Dataset `{dataset_name}` has more than {max_datapoints} datapoints, truncating"
+                );
+                all_ids.truncate(max_datapoints as usize);
+            }
             if all_ids.len() < 2 {
                 return Err(anyhow::anyhow!(
                     "Dataset `{dataset_name}` needs at least 2 datapoints for auto-split"
