@@ -60,7 +60,7 @@ export const GatewayUnavailable: Story = {
 export const AuthenticationFailed: Story = {
   args: {
     error: { type: InfraErrorType.GatewayAuthFailed },
-    label: "Auth Error",
+    label: "Authentication Required",
   },
 };
 

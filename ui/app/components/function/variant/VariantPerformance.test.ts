@@ -1,6 +1,6 @@
 import { expect, test, describe } from "vitest";
 import type { VariantPerformanceRow } from "~/types/tensorzero";
-import { transformVariantPerformances } from "./VariantPerformance";
+import { transformVariantPerformances } from "./VariantPerformanceChart";
 
 describe("transformVariantPerformances", () => {
   test("transforms single period with multiple variants", () => {

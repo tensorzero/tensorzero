@@ -42,16 +42,6 @@ It uses LLMs to analyze inference results and propose prompt improvements, then 
 
 See the [GEPA Guide](/optimization/gepa) to learn more.
 
-### MIPRO
-
-MIPRO (Multi-prompt Instruction PRoposal Optimizer) is a method for automatically improving system instructions and few-shot demonstrations in LLM applications — including ones with multiple LLM functions or calls.
-
-![MIPRO Diagram](./index-mipro-diagram.svg)
-
-MIPRO can optimize prompts across an entire LLM pipeline without needing fine-grained labels or gradients. Instead, it uses a Bayesian optimizer to figure out which instructions and demonstrations actually improve end-to-end performance. By combining application-aware prompt proposals and stochastic mini-batch evaluations, MIPRO can improve downstream task performance compared to traditional prompt engineering approaches.
-
-We provide a recipe for [Automated Prompt Engineering with MIPRO](https://github.com/tensorzero/tensorzero/tree/main/recipes/mipro).
-
 ## Inference-Time Optimization
 
 ### Best-of-N & Mixture-of-N Sampling

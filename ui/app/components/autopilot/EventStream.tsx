@@ -33,7 +33,6 @@ import type {
   EventPayloadUserQuestion,
   GatewayEvent,
   GatewayEventPayload,
-  TopKEvaluationVisualization,
   UserQuestionAnswer,
   VisualizationType,
 } from "~/types/tensorzero";
@@ -41,7 +40,10 @@ import { formatResponse } from "~/components/autopilot/question-cards/formatResp
 import { hasAnsweredResponse } from "~/components/autopilot/question-cards/responseStatus";
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
-import TopKEvaluationViz from "./TopKEvaluationViz";
+import EventVisualization, {
+  detectEventVisualization,
+  type EventVisualizationData,
+} from "./EventVisualization";
 
 /**
  * Max height for expandable tool content (tool call arguments, tool results, errors).
@@ -186,45 +188,6 @@ function getVisualizationTitle(visualization: VisualizationType): string {
     return `Visualization (${String(visualization.type)})`;
   }
   return "Visualization";
-}
-
-/**
- * Renders the appropriate visualization component based on the type.
- */
-function VisualizationRenderer({
-  visualization,
-}: {
-  visualization: VisualizationType;
-}) {
-  // Check for known visualization types
-  if (
-    typeof visualization === "object" &&
-    visualization !== null &&
-    "type" in visualization &&
-    visualization.type === "top_k_evaluation"
-  ) {
-    // Type assertion needed because TypeScript can't narrow through the untagged union
-    return (
-      <TopKEvaluationViz data={visualization as TopKEvaluationVisualization} />
-    );
-  }
-
-  // Unknown or malformed visualization - show raw JSON with a warning
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="text-fg-muted flex items-center gap-2 text-sm">
-        <AlertTriangle className="h-4 w-4 text-yellow-600" />
-        <span>
-          Unknown visualization type. Your TensorZero deployment may be
-          outdated.
-        </span>
-      </div>
-      <ReadOnlyCodeBlock
-        code={JSON.stringify(visualization, null, 2)}
-        language="json"
-      />
-    </div>
-  );
 }
 
 /**
@@ -590,6 +553,79 @@ function UserQuestionsAnswersContent({
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
+interface EventItemContentProps {
+  event: GatewayEvent;
+  description?: string;
+  visualizationData: EventVisualizationData | null;
+  questionsMap?: Map<string, EventPayloadUserQuestion[]>;
+}
+
+function EventItemContent({
+  event,
+  description,
+  visualizationData,
+  questionsMap,
+}: EventItemContentProps) {
+  if (visualizationData) {
+    return <EventVisualization data={visualizationData} />;
+  }
+
+  if (event.payload.type === "user_questions") {
+    return <UserQuestionsContent questions={event.payload.questions} />;
+  }
+
+  if (event.payload.type === "user_questions_answers") {
+    return (
+      <UserQuestionsAnswersContent
+        responses={event.payload.responses}
+        questions={
+          questionsMap?.get(event.payload.user_questions_event_id) ?? []
+        }
+      />
+    );
+  }
+
+  if (!description) return null;
+
+  switch (event.payload.type) {
+    case "message":
+      return (
+        <Markdown remarkPlugins={uuidRemarkPlugins} components={uuidComponents}>
+          {description}
+        </Markdown>
+      );
+
+    case "tool_call":
+      return <ReadOnlyCodeBlock code={description} language="json" />;
+
+    case "tool_result":
+    case "error":
+      return (
+        <p
+          className="text-fg-secondary overflow-y-auto text-sm whitespace-pre-wrap font-mono"
+          style={{ maxHeight: TOOL_CONTENT_MAX_HEIGHT }}
+        >
+          {description}
+        </p>
+      );
+
+    case "status_update":
+    case "tool_call_authorization":
+    case "visualization":
+    case "unknown":
+      return (
+        <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+          {description}
+        </p>
+      );
+
+    default: {
+      const _exhaustiveCheck: never = event.payload;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
 type EventItemProps = {
   event: GatewayEvent;
   questionsMap?: Map<string, EventPayloadUserQuestion[]>;
@@ -608,6 +644,12 @@ function EventItem({
   sessionId,
 }: EventItemProps) {
   const { yoloMode } = useAutopilotSession();
+
+  const visualizationData = useMemo(
+    () => detectEventVisualization(event),
+    [event],
+  );
+
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
@@ -623,7 +665,7 @@ function EventItem({
     (event.payload.type === "tool_result" &&
       (event.payload.outcome.type === "success" ||
         event.payload.outcome.type === "failure"));
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(visualizationData != null);
   const shouldShowDetails = !isExpandable || isExpanded;
   const label = <span className="text-sm font-medium">{title}</span>;
 
@@ -671,49 +713,12 @@ function EventItem({
           <TableItemTime timestamp={event.created_at} />
         </div>
       </div>
-      {shouldShowDetails && summary.description && (
-        <>
-          {event.payload.type === "message" ? (
-            <Markdown
-              remarkPlugins={uuidRemarkPlugins}
-              components={uuidComponents}
-            >
-              {summary.description}
-            </Markdown>
-          ) : event.payload.type === "tool_call" ? (
-            <ReadOnlyCodeBlock code={summary.description} language="json" />
-          ) : (
-            <p
-              className={cn(
-                "text-fg-secondary text-sm whitespace-pre-wrap",
-                (event.payload.type === "tool_result" ||
-                  event.payload.type === "error") &&
-                  "overflow-y-auto font-mono",
-              )}
-              style={
-                event.payload.type === "tool_result" ||
-                event.payload.type === "error"
-                  ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
-                  : undefined
-              }
-            >
-              {summary.description}
-            </p>
-          )}
-        </>
-      )}
-      {shouldShowDetails && event.payload.type === "visualization" && (
-        <VisualizationRenderer visualization={event.payload.visualization} />
-      )}
-      {shouldShowDetails && event.payload.type === "user_questions" && (
-        <UserQuestionsContent questions={event.payload.questions} />
-      )}
-      {shouldShowDetails && event.payload.type === "user_questions_answers" && (
-        <UserQuestionsAnswersContent
-          responses={event.payload.responses}
-          questions={
-            questionsMap?.get(event.payload.user_questions_event_id) ?? []
-          }
+      {shouldShowDetails && (
+        <EventItemContent
+          event={event}
+          description={summary.description}
+          visualizationData={visualizationData}
+          questionsMap={questionsMap}
         />
       )}
     </div>
