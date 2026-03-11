@@ -736,6 +736,7 @@ async fn init_eval_step(
         let variant_info = UninitializedVariantInfo {
             inner: UninitializedVariantConfig::ChatCompletion(variant_config.clone()),
             timeouts: None,
+            namespace: None,
         };
 
         let eval_params = RunEvaluationParams {
@@ -783,6 +784,7 @@ async fn eval_variant_step(
     let variant_info = UninitializedVariantInfo {
         inner: UninitializedVariantConfig::ChatCompletion(params.variant_config),
         timeouts: None,
+        namespace: None,
     };
 
     let eval_params = RunEvaluationParams {
@@ -842,6 +844,7 @@ async fn eval_analyze_mutate_step(
     let variant_info = UninitializedVariantInfo {
         inner: UninitializedVariantConfig::ChatCompletion(params.variant_config.clone()),
         timeouts: None,
+        namespace: None,
     };
 
     let eval_params = RunEvaluationParams {

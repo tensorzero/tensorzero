@@ -1747,6 +1747,7 @@ mod tests {
                 create_uninitialized_chat_config(model, Some("System prompt")),
             ),
             timeouts: None,
+            namespace: None,
         }
     }
 
