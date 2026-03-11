@@ -51,13 +51,13 @@
               "gateway/configure-functions-and-variants",
               "gateway/create-a-prompt-template",
               "gateway/generate-structured-outputs",
+              "gateway/call-llms-with-image-and-file-inputs",
               "gateway/generate-embeddings",
               "gateway/guides/batch-inference",
               "gateway/guides/episodes",
               "gateway/guides/inference-caching",
               "gateway/guides/inference-time-optimizations",
               "gateway/guides/metrics-feedback",
-              "gateway/guides/multimodal-inference",
               "gateway/guides/retries-fallbacks",
               "gateway/guides/streaming-inference",
               "gateway/guides/tool-use",
@@ -373,6 +373,14 @@
     {
       "source": "/gateway/guides/prompt-templates-schemas/",
       "destination": "/gateway/create-a-prompt-template"
+    },
+    {
+      "source": "/gateway/guides/multimodal-inference",
+      "destination": "/gateway/call-llms-with-image-and-file-inputs"
+    },
+    {
+      "source": "/gateway/guides/multimodal-inference/",
+      "destination": "/gateway/call-llms-with-image-and-file-inputs"
     },
     {
       "source": "/evaluations/static-evaluations/cli-reference",
