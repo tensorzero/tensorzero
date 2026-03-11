@@ -62,7 +62,6 @@
               "gateway/guides/streaming-inference",
               "gateway/guides/tool-use",
               "gateway/benchmarks",
-              "gateway/clients",
               "gateway/configuration-reference",
               "gateway/data-model",
               {
@@ -429,6 +428,14 @@
     {
       "source": "/recipes/",
       "destination": "/optimization"
+    },
+    {
+      "source": "/gateway/clients",
+      "destination": "/gateway"
+    },
+    {
+      "source": "/gateway/clients/",
+      "destination": "/gateway"
     }
   ]
 }
