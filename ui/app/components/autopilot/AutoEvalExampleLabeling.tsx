@@ -1,16 +1,17 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { Textarea } from "~/components/ui/textarea";
 import { StepTab } from "~/components/autopilot/question-cards/StepTab";
 import { InputElement } from "~/components/input_output/InputElement";
 import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { ScrollFadeContainer } from "~/components/input_output/ScrollFadeContainer";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
+import { Markdown } from "~/components/ui/markdown";
 import { OptionButton } from "~/components/autopilot/question-cards/OptionButton";
 import type {
   AutoEvalContentBlock,
@@ -20,7 +21,7 @@ import type {
   ContentBlockChatOutput,
 } from "~/types/tensorzero";
 
-const CONTEXT_MAX_HEIGHT = 120;
+const CONTEXT_MAX_HEIGHT = 300;
 
 function asInferenceInput(data: unknown): Input | undefined {
   if (
@@ -36,6 +37,7 @@ function asInferenceInput(data: unknown): Input | undefined {
 
 function asChatOutput(data: unknown): ContentBlockChatOutput[] | undefined {
   if (Array.isArray(data)) {
+    if (data.length === 0) return data as ContentBlockChatOutput[];
     const first = data[0];
     if (
       first &&
@@ -49,148 +51,83 @@ function asChatOutput(data: unknown): ContentBlockChatOutput[] | undefined {
   return undefined;
 }
 
-interface ContextBlockProps {
+function ContextBlock({
+  block,
+  maxHeight,
+}: {
   block: AutoEvalContentBlock;
-  height: number | "Content";
-}
-
-function ContextBlock({ block, height }: ContextBlockProps) {
-  // Pass maxHeight to sub-components so they handle internal scrolling
-  const maxHeight = height === "Content" ? ("Content" as const) : height;
-
-  switch (block.type) {
-    case "json": {
-      const inferenceInput = asInferenceInput(block.data);
-      if (inferenceInput) {
-        return (
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            {block.label && (
-              <span className="text-fg-tertiary text-xs font-medium">
-                {block.label}
-              </span>
-            )}
-            <InputElement input={inferenceInput} maxHeight={maxHeight} />
-          </div>
-        );
-      }
-
-      const chatOutput = asChatOutput(block.data);
-      if (chatOutput) {
-        return (
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            {block.label && (
-              <span className="text-fg-tertiary text-xs font-medium">
-                {block.label}
-              </span>
-            )}
-            <ChatOutputElement output={chatOutput} maxHeight={maxHeight} />
-          </div>
-        );
-      }
-
-      const heightStyle =
-        height === "Content" ? undefined : { maxHeight: `${height}px` };
-      return (
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          {block.label && (
-            <span className="text-fg-tertiary text-xs font-medium">
-              {block.label}
-            </span>
-          )}
-          <pre
-            className="bg-bg-primary border-border flex-1 overflow-auto rounded-lg border p-4 text-xs"
-            style={heightStyle}
-          >
-            {JSON.stringify(block.data, null, 2)}
-          </pre>
-        </div>
-      );
-    }
-    case "markdown": {
-      const heightStyle =
-        height === "Content" ? undefined : { maxHeight: `${height}px` };
-      return (
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          {block.label && (
-            <span className="text-fg-tertiary text-xs font-medium">
-              {block.label}
-            </span>
-          )}
-          <div
-            className="bg-bg-primary border-border flex-1 overflow-auto rounded-lg border p-4 text-sm whitespace-pre-wrap"
-            style={heightStyle}
-          >
-            {block.text}
-          </div>
-        </div>
-      );
-    }
-    default: {
-      const _exhaustiveCheck: never = block;
-      return _exhaustiveCheck;
-    }
-  }
-}
-
-/**
- * Renders context blocks in a grid. When 2+ blocks are side-by-side
- * (md+ breakpoint), measures natural content heights and sets both
- * to the taller block's height (capped at CONTEXT_MAX_HEIGHT) so they match.
- */
-function ContextGrid({ blocks }: { blocks: AutoEvalContentBlock[] }) {
-  const [matchedHeight, setMatchedHeight] = useState<number | "Content">(
-    "Content",
+  maxHeight: number;
+}) {
+  const label = block.label && (
+    <span className="text-fg-tertiary text-xs font-medium">{block.label}</span>
   );
-  const blockRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const shouldMatch = blocks.length >= 2;
 
-  useLayoutEffect(() => {
-    if (!shouldMatch) {
-      setMatchedHeight(CONTEXT_MAX_HEIGHT);
-      return;
+  const content = (() => {
+    switch (block.type) {
+      case "json": {
+        const inferenceInput = asInferenceInput(block.data);
+        if (inferenceInput) {
+          return (
+            <InputElement
+              input={inferenceInput}
+              overflow={{ type: "scroll", maxHeight }}
+            />
+          );
+        }
+        const chatOutput = asChatOutput(block.data);
+        if (chatOutput) {
+          return (
+            <ChatOutputElement
+              output={chatOutput}
+              overflow={{ type: "scroll", maxHeight }}
+            />
+          );
+        }
+        // JSON fallback — wrap in card + scroll container
+        return (
+          <div className="bg-bg-primary border-border flex flex-1 flex-col rounded-lg border">
+            <ScrollFadeContainer maxHeight={maxHeight} contentClassName="px-4">
+              <pre className="text-xs">
+                {JSON.stringify(block.data, null, 2)}
+              </pre>
+            </ScrollFadeContainer>
+          </div>
+        );
+      }
+      case "markdown":
+        return (
+          <div className="bg-bg-primary border-border flex flex-1 flex-col rounded-lg border">
+            <ScrollFadeContainer maxHeight={maxHeight} contentClassName="px-4">
+              <Markdown className="text-sm">{block.text}</Markdown>
+            </ScrollFadeContainer>
+          </div>
+        );
+      default: {
+        const _exhaustiveCheck: never = block;
+        return _exhaustiveCheck;
+      }
     }
-
-    // Only match when side-by-side at md+ breakpoint
-    if (!window.matchMedia("(min-width: 768px)").matches) {
-      setMatchedHeight(CONTEXT_MAX_HEIGHT);
-      return;
-    }
-
-    // Wait until "Content" mode render to measure natural heights
-    if (matchedHeight !== "Content") return;
-
-    const heights = blockRefs.current
-      .filter((el): el is HTMLDivElement => el !== null)
-      .map((el) => el.scrollHeight);
-
-    if (heights.length >= 2) {
-      // Both blocks match the taller one, capped at max
-      setMatchedHeight(Math.min(Math.max(...heights), CONTEXT_MAX_HEIGHT));
-    } else {
-      setMatchedHeight(CONTEXT_MAX_HEIGHT);
-    }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- measure after DOM paint
-  }, [shouldMatch, matchedHeight]);
-
-  const effectiveHeight = shouldMatch ? matchedHeight : CONTEXT_MAX_HEIGHT;
-  const wrapperStyle =
-    effectiveHeight === "Content"
-      ? undefined
-      : { height: `${effectiveHeight}px` };
+  })();
 
   return (
-    <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-2 md:gap-4">
+    <div className="flex min-w-0 flex-1 flex-col gap-1">
+      {label}
+      <div className="flex min-h-0 flex-1 flex-col">{content}</div>
+    </div>
+  );
+}
+
+function ContextGrid({ blocks }: { blocks: AutoEvalContentBlock[] }) {
+  const isSideBySide = blocks.length >= 2;
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-1 gap-2 md:gap-4",
+        isSideBySide && "md:grid-cols-2",
+      )}
+    >
       {blocks.map((block, i) => (
-        <div
-          key={i}
-          ref={(el) => {
-            blockRefs.current[i] = el;
-          }}
-          className="flex"
-          style={wrapperStyle}
-        >
-          <ContextBlock block={block} height={effectiveHeight} />
-        </div>
+        <ContextBlock key={i} block={block} maxHeight={CONTEXT_MAX_HEIGHT} />
       ))}
     </div>
   );
@@ -210,6 +147,25 @@ export function AutoEvalExampleLabelingCard({
   const [activeIndex, setActiveIndex] = useState(0);
   const [selections, setSelections] = useState<Record<number, string>>({});
   const [rationales, setRationales] = useState<Record<number, string>>({});
+
+  const MAX_TEXTAREA_ROWS = 3;
+  const autoResize = useCallback((el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20;
+    const padding =
+      parseFloat(getComputedStyle(el).paddingTop) +
+      parseFloat(getComputedStyle(el).paddingBottom);
+    const maxHeight = lineHeight * MAX_TEXTAREA_ROWS + padding;
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, []);
+
+  const autoResizeRef = useCallback(
+    (el: HTMLTextAreaElement | null) => {
+      if (el) autoResize(el);
+    },
+    [autoResize],
+  );
 
   const totalExamples = payload.examples.length;
   if (totalExamples === 0) return null;
@@ -272,7 +228,7 @@ export function AutoEvalExampleLabelingCard({
       {/* Header */}
       <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-3">
         <span className="text-sm font-medium">
-          Provide examples to improve evaluator accuracy
+          Label examples to improve evaluator accuracy
         </span>
         <button
           type="button"
@@ -359,21 +315,27 @@ export function AutoEvalExampleLabelingCard({
 
           {example.explanation_question && (
             <div className="flex flex-col gap-1.5">
-              <span className="text-fg-secondary text-sm">
-                {example.explanation_question.question}
-              </span>
-              <Textarea
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-fg-secondary text-sm">
+                  {example.explanation_question.question}
+                </span>
+                <span className="text-fg-tertiary shrink-0 text-xs">
+                  Optional
+                </span>
+              </div>
+              <textarea
+                ref={autoResizeRef}
                 value={rationales[activeIndex] ?? ""}
                 disabled={isLoading}
-                onChange={(e) =>
+                onChange={(e) => {
                   setRationales((prev) => ({
                     ...prev,
                     [activeIndex]: e.target.value,
-                  }))
-                }
-                placeholder="Rationale (optional)..."
-                className="bg-bg-secondary min-h-[60px] resize-none text-sm"
-                rows={2}
+                  }));
+                  autoResize(e.target);
+                }}
+                className="border-input focus-visible:border-border-accent bg-bg-secondary w-full resize-none overscroll-none rounded-md border px-3 py-2 text-sm transition-colors focus-visible:ring-0 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+                rows={1}
               />
             </div>
           )}
