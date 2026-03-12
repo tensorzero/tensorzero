@@ -29,7 +29,7 @@ use tokio::{
     try_join,
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+use tracing::{Level, debug, info};
 
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
@@ -145,8 +145,8 @@ async fn synchronize_deployment_id(
         tracing::debug!("Failed to get deployment ID from ClickHouse");
         return Err(());
     };
-    if let Err(e) = &postgres.insert_deployment_id(&id).await {
-        tracing::debug!("Failed to sync deployment ID to Postgres: {e}");
+    if let Err(e) = postgres.insert_deployment_id(&id).await {
+        tracing::debug!("Failed to sync deployment ID to Postgres: {e:?}");
         return Err(());
     }
 
@@ -167,7 +167,7 @@ pub async fn get_deployment_id(
         .get_deployment_id()
         .await
         .map_err(|e| {
-            tracing::debug!("Failed to get deployment ID: {e}");
+            e.log_at_level("Failed to get deployment ID: ", Level::DEBUG);
         })
 }
 
@@ -200,7 +200,6 @@ pub async fn get_howdy_report<'a>(
         inference_count: inference_count.to_string(),
         feedback_count: feedback_count.to_string(),
         gateway_version: crate::endpoints::status::TENSORZERO_VERSION,
-        commit_hash: crate::built_info::GIT_COMMIT_HASH_SHORT,
         input_token_total: token_totals.input_tokens.map(|x| x.to_string()),
         output_token_total: token_totals.output_tokens.map(|x| x.to_string()),
         chat_inference_count: Some(inference_counts.chat_inference_count.to_string()),
@@ -224,7 +223,6 @@ pub struct HowdyReportBody<'a> {
     pub inference_count: String,
     pub feedback_count: String,
     pub gateway_version: &'static str,
-    pub commit_hash: Option<&'static str>,
     pub input_token_total: Option<String>,
     pub output_token_total: Option<String>,
     pub chat_inference_count: Option<String>,

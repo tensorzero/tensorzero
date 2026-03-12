@@ -6,7 +6,6 @@ import {
   toEpisodeUrl,
   toDatasetUrl,
   toDatapointUrl,
-  toEvaluationUrl,
   toEvaluationDatapointUrl,
   toWorkflowEvaluationRunUrl,
   toWorkflowEvaluationProjectUrl,
@@ -75,35 +74,21 @@ describe("URL helper functions", () => {
     });
   });
 
-  describe("toEvaluationUrl", () => {
-    it("should encode evaluation names", () => {
-      expect(toEvaluationUrl("eval_1")).toBe("/evaluations/eval_1");
-      expect(toEvaluationUrl("eval/test")).toBe("/evaluations/eval%2Ftest");
-    });
-
-    it("should handle query parameters", () => {
-      expect(
-        toEvaluationUrl("eval_1", { evaluation_run_ids: "run_1,run_2" }),
-      ).toBe("/evaluations/eval_1?evaluation_run_ids=run_1%2Crun_2");
-    });
-  });
-
   describe("toEvaluationDatapointUrl", () => {
-    it("should encode evaluation name and datapoint ID", () => {
-      expect(toEvaluationDatapointUrl("eval_1", "point_1")).toBe(
-        "/evaluations/eval_1/point_1",
-      );
-      expect(toEvaluationDatapointUrl("eval/test", "point#1")).toBe(
-        "/evaluations/eval%2Ftest/point%231",
-      );
-    });
-
-    it("should handle query parameters", () => {
+    it("should encode datapoint ID and include evaluation_run_ids", () => {
       expect(
-        toEvaluationDatapointUrl("eval_1", "point_1", {
+        toEvaluationDatapointUrl("point_1", {
           evaluation_run_ids: "run_1",
         }),
-      ).toBe("/evaluations/eval_1/point_1?evaluation_run_ids=run_1");
+      ).toBe("/evaluations/results/point_1?evaluation_run_ids=run_1");
+    });
+
+    it("should encode special characters", () => {
+      expect(
+        toEvaluationDatapointUrl("point#1", {
+          evaluation_run_ids: "run_1,run_2",
+        }),
+      ).toBe("/evaluations/results/point%231?evaluation_run_ids=run_1%2Crun_2");
     });
   });
 

@@ -59,27 +59,16 @@ export function toDatapointUrl(
 // Evaluations
 // ============================================================================
 
-export function toEvaluationUrl(
-  evaluationName: string,
-  queryParams?: { evaluation_run_ids?: string },
-): string {
-  const baseUrl = `/evaluations/${encodeURIComponent(evaluationName)}`;
-  if (queryParams?.evaluation_run_ids) {
-    return `${baseUrl}?evaluation_run_ids=${encodeURIComponent(queryParams.evaluation_run_ids)}`;
-  }
-  return baseUrl;
+export function toEvaluationRunsUrl(runIds: string | string[]): string {
+  const ids = Array.isArray(runIds) ? runIds.join(",") : runIds;
+  return `/evaluations/runs?evaluation_run_ids=${encodeURIComponent(ids)}`;
 }
 
 export function toEvaluationDatapointUrl(
-  evaluationName: string,
   datapointId: string,
-  queryParams?: { evaluation_run_ids?: string },
+  queryParams: { evaluation_run_ids: string },
 ): string {
-  const baseUrl = `/evaluations/${encodeURIComponent(evaluationName)}/${encodeURIComponent(datapointId)}`;
-  if (queryParams?.evaluation_run_ids) {
-    return `${baseUrl}?evaluation_run_ids=${encodeURIComponent(queryParams.evaluation_run_ids)}`;
-  }
-  return baseUrl;
+  return `/evaluations/results/${encodeURIComponent(datapointId)}?evaluation_run_ids=${encodeURIComponent(queryParams.evaluation_run_ids)}`;
 }
 
 // ============================================================================

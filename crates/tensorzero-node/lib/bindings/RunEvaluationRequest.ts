@@ -8,20 +8,6 @@ import type { UninitializedVariantInfo } from "./UninitializedVariantInfo";
  */
 export type RunEvaluationRequest = {
   /**
-   * The evaluation configuration (serialized).
-   * When `None`, the server resolves this from its loaded config using `evaluation_name`.
-   */
-  evaluation_config?: EvaluationConfig;
-  /**
-   * The function configuration for output schema validation.
-   * When `None`, the server resolves this from its loaded config using the evaluation's function name.
-   */
-  function_config?: EvaluationFunctionConfig;
-  /**
-   * Name of the evaluation
-   */
-  evaluation_name: string;
-  /**
    * Name of the dataset to evaluate (optional, either this or datapoint_ids must be provided)
    */
   dataset_name?: string;
@@ -53,4 +39,12 @@ export type RunEvaluationRequest = {
    * Per-evaluator precision targets for adaptive stopping
    */
   precision_targets?: { [key in string]: number };
-};
+} & (
+  | {
+      evaluation_config: EvaluationConfig;
+      evaluation_name: string;
+      function_config: EvaluationFunctionConfig;
+    }
+  | { function_name: string; evaluator_names: Array<string> }
+  | { evaluation_name: string }
+);

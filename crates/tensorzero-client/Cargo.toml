@@ -1,6 +1,6 @@
 [package]
 name = "tensorzero"
-version = "0.0.0"
+version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -24,7 +24,6 @@ url = { workspace = true }
 pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
-git2 = { workspace = true }
 mime = { workspace = true }
 tempfile = { workspace = true }
 paste = { version = "1.0.15", optional = true }

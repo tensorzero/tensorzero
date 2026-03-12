@@ -53,7 +53,7 @@ pub struct LaunchOptimizationWorkflowToolParams {
     /// Fraction of data to use for validation (0.0 to 1.0, exclusive).
     #[serde(default)]
     pub val_fraction: Option<f64>,
-    /// The optimizer configuration (e.g., SFT, DPO, MIPROv2).
+    /// The optimizer configuration (e.g., SFT, DICL).
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
@@ -325,31 +325,36 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         // Step 1: Launch the optimization workflow
         let job_handle: OptimizationJobHandle = ctx
-            .step("launch", llm_params.clone(), |params, state| async move {
-                let data_source = OptimizationDataSource::from_flat_fields(
-                    params.output_source,
-                    params.dataset_name,
-                    params.query_variant_name,
-                    params.filters,
-                    params.order_by,
-                    params.limit,
-                    params.offset,
-                )
-                .map_err(|e| anyhow::anyhow!(e))?;
-                let launch_params = LaunchOptimizationWorkflowParams {
-                    function_name: params.function_name,
-                    template_variant_name: params.template_variant_name,
-                    data_source,
-                    val_fraction: params.val_fraction,
-                    optimizer_config: params.optimizer_config,
-                };
+            .step(
+                "launch",
+                llm_params.clone(),
+                |params, step_state| async move {
+                    let data_source = OptimizationDataSource::from_flat_fields(
+                        params.output_source,
+                        params.dataset_name,
+                        params.query_variant_name,
+                        params.filters,
+                        params.order_by,
+                        params.limit,
+                        params.offset,
+                    )
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                    let launch_params = LaunchOptimizationWorkflowParams {
+                        function_name: params.function_name,
+                        template_variant_name: params.template_variant_name,
+                        data_source,
+                        val_fraction: params.val_fraction,
+                        optimizer_config: params.optimizer_config,
+                    };
 
-                state
-                    .t0_client()
-                    .launch_optimization_workflow(launch_params)
-                    .await
-                    .map_err(|e| anyhow::Error::msg(e.to_string()))
-            })
+                    step_state
+                        .state
+                        .t0_client()
+                        .launch_optimization_workflow(launch_params)
+                        .await
+                        .map_err(|e| anyhow::Error::msg(e.to_string()))
+                },
+            )
             .await?;
 
         // Step 2: Poll until completion
@@ -364,8 +369,9 @@ impl TaskTool for LaunchOptimizationWorkflowTool {
                 .step(
                     &format!("poll_{iteration}"),
                     job_handle.clone(),
-                    |handle, state| async move {
-                        state
+                    |handle, step_state| async move {
+                        step_state
+                            .state
                             .t0_client()
                             .poll_optimization(&handle)
                             .await

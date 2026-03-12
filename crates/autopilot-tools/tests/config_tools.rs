@@ -46,7 +46,9 @@ async fn test_get_config_tool_with_hash(pool: PgPool) {
 
     let tool = GetConfigTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
 
     let result = tool
         .execute_erased(
@@ -110,7 +112,9 @@ async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
 
     let tool = WriteConfigTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
 
     let result = tool
         .execute_erased(

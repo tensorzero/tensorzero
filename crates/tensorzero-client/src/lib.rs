@@ -125,17 +125,12 @@ pub use tensorzero_optimizers::endpoints::{
     LaunchOptimizationWorkflowParams, OptimizationDataSource,
 };
 
-// Keep git module for Git-related extension traits
-mod git;
-
 #[cfg(feature = "e2e_tests")]
 pub mod test_helpers;
 
 // Re-export observability for pyo3 feature
 #[cfg(feature = "pyo3")]
 pub use tensorzero_core::observability;
-
-use crate::git::GitInfo;
 
 /// Parameters for running an evaluation over HTTP via the SSE endpoint.
 #[derive(Debug, serde::Serialize)]
@@ -163,7 +158,7 @@ pub struct RunEvaluationHttpParams {
 pub struct ClientEvaluationStreamResult {
     pub receiver: mpsc::Receiver<EvaluationUpdate>,
     pub run_info: RunInfo,
-    pub evaluation_config: Arc<EvaluationConfig>,
+    pub evaluators: HashMap<String, tensorzero_core::evaluations::EvaluatorConfig>,
 }
 
 // NOTE(shuyangli): For methods that delegate to APIs in the gateway, the arguments generally are flattened from the request type for
@@ -635,11 +630,6 @@ impl ClientExt for Client {
         // We validate the tags here since we're going to add git information to the tags afterwards and set internal to true
         validate_tags(&params.tags, false)
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
-
-        // Apply the git information to the tags so it gets stored for our workflow evaluation run
-        if let Ok(git_info) = GitInfo::new() {
-            params.tags.extend(git_info.into_tags());
-        }
 
         // Set internal to true so we don't validate the tags again
         params.internal = true;
@@ -1502,15 +1492,18 @@ impl ClientExt for Client {
 
         let run_info = RunInfo {
             evaluation_run_id: start_event.evaluation_run_id,
+            evaluation_name: start_event.evaluation_name,
             num_datapoints: start_event.num_datapoints,
         };
 
-        let evaluation_config = Arc::new(start_event.evaluation_config.ok_or_else(|| {
+        let evaluation_config = start_event.evaluation_config.ok_or_else(|| {
             evaluation_run_error(
                 "Server did not include `evaluation_config` in the Start event. \
                  Ensure the server is up to date.",
             )
-        })?);
+        })?;
+        let EvaluationConfig::Inference(inference_config) = evaluation_config;
+        let evaluators = inference_config.evaluators;
 
         let (sender, receiver) = mpsc::channel(128);
         let verbose_errors = self.verbose_errors;
@@ -1610,7 +1603,7 @@ impl ClientExt for Client {
         Ok(ClientEvaluationStreamResult {
             receiver,
             run_info,
-            evaluation_config,
+            evaluators,
         })
     }
 

@@ -409,6 +409,7 @@ mod tests {
                             .unwrap(),
                         ),
                         timeouts: Default::default(),
+                        namespace: None,
                     }),
                 )
             })

@@ -5,9 +5,9 @@ use std::borrow::Cow;
 use async_trait::async_trait;
 use autopilot_client::AutopilotToolResult;
 use durable_tools::{
-    CreateEventGatewayRequest, EventPayload, EventPayloadToolResult, SimpleTool, SimpleToolContext,
-    TaskTool, TensorZeroClient, ToolAppState, ToolContext, ToolFailure, ToolMetadata, ToolOutcome,
-    ToolResult as DurableToolResult, ToolResultExt,
+    CreateEventGatewayRequest, CreateEventPayload, CreateEventPayloadToolResult, SimpleTool,
+    SimpleToolContext, StepState, TaskTool, TensorZeroClient, ToolAppState, ToolContext,
+    ToolFailure, ToolMetadata, ToolOutcome, ToolResult as DurableToolResult, ToolResultExt,
 };
 use schemars::Schema;
 use serde::{Deserialize, Serialize};
@@ -150,9 +150,9 @@ where
 /// This is a helper that gives the signature expected by `ToolContext::step`.
 async fn publish_result_step(
     params: PublishResultParams,
-    state: ToolAppState,
+    step_state: StepState<ToolAppState>,
 ) -> anyhow::Result<()> {
-    publish_result(params, state.t0_client().as_ref()).await
+    publish_result(params, step_state.state.t0_client().as_ref()).await
 }
 
 /// Publish the tool result to the autopilot API.
@@ -164,7 +164,7 @@ async fn publish_result(
         .create_autopilot_event(
             params.session_id,
             CreateEventGatewayRequest {
-                payload: EventPayload::ToolResult(EventPayloadToolResult {
+                payload: CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                     tool_call_event_id: params.tool_call_event_id,
                     outcome: params.outcome,
                 }),
@@ -315,9 +315,11 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
 /// causing step retries.
 async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo>>(
     params: SimpleToolStepParams<T::LlmParams, AutopilotSideInfo>,
-    state: ToolAppState,
+    step_state: StepState<ToolAppState>,
 ) -> anyhow::Result<Result<T::Output, ToolFailure>> {
-    let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client());
+    let heartbeater = step_state.heartbeater.clone();
+    let state = &step_state.state;
+    let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client(), &heartbeater);
     let idempotency_key = format!(
         "simple_tool:{}:{}",
         params.tool_name, params.tool_call_event_id
@@ -406,6 +408,7 @@ mod tests {
                 &self,
                 snapshot_hash: SnapshotHash,
                 params: ActionInput,
+                heartbeater: std::sync::Arc<dyn durable_tools::Heartbeater>,
             ) -> Result<ActionResponse, TensorZeroClientError>;
 
             async fn get_config_snapshot(
@@ -515,6 +518,7 @@ mod tests {
             async fn run_evaluation(
                 &self,
                 params: durable_tools::RunEvaluationParams,
+                heartbeater: std::sync::Arc<dyn durable_tools::Heartbeater>,
             ) -> Result<durable_tools::RunEvaluationResponse, TensorZeroClientError>;
         }
     }
@@ -666,7 +670,7 @@ mod tests {
                 *sid == expected_session_id
                     && matches!(
                         &request.payload,
-                        EventPayload::ToolResult(EventPayloadToolResult {
+                        CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                             tool_call_event_id: tceid,
                             outcome: ToolOutcome::Success(_),
                         }) if *tceid == expected_tool_call_event_id
@@ -706,7 +710,7 @@ mod tests {
             .withf(move |_sid, request| {
                 matches!(
                     &request.payload,
-                    EventPayload::ToolResult(EventPayloadToolResult {
+                    CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                         tool_call_event_id: tceid,
                         outcome: ToolOutcome::Failure {
                             error: ToolFailure::Tool {

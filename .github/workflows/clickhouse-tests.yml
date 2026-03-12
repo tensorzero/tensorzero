@@ -55,6 +55,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -73,6 +74,7 @@ jobs:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
+          workspaces: "crates -> target"
 
       - name: "Free up disk space"
         run: bash ci/free-disk-space.sh
@@ -85,6 +87,7 @@ jobs:
       # Start building the tests in the background while we download conatiners, fixtures, etc.
       # The subsequent cargo command will wait for this to complete.
       - name: Start building tests in the background
+        working-directory: crates
         run: cargo test-clickhouse --no-run &
 
       - name: Set ClickHouse replicated cluster name
@@ -210,6 +213,7 @@ jobs:
           done
 
       - name: Test (Rust)
+        working-directory: crates
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests

@@ -53,7 +53,30 @@ docker run \
 
 <Accordion title="Run with Docker Compose">
 
-We provide an example production-grade [`docker-compose.yml`](https://github.com/tensorzero/tensorzero/blob/main/examples/production-deployment/docker-compose.yml) for reference.
+You can run the TensorZero Gateway using Docker Compose:
+
+```yaml
+services:
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    env_file:
+      - ${ENV_FILE:-.env}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3000/status
+      interval: 15s
+      timeout: 1s
+      retries: 2
+```
+
+Make sure to create a `.env` file with the relevant environment variables (e.g. `TENSORZERO_CLICKHOUSE_URL` and model provider API keys).
 
 </Accordion>
 
@@ -111,12 +134,6 @@ Unless customized in your configuration file, the following credentials are used
 | OpenRouter              | `OPENROUTER_API_KEY`                                                                                      |
 | Together                | `TOGETHER_API_KEY`                                                                                        |
 | xAI                     | `XAI_API_KEY`                                                                                             |
-
-<Tip>
-
-See [`.env.example`](https://github.com/tensorzero/tensorzero/blob/main/examples/production-deployment/.env.example) for a complete example with every supported environment variable.
-
-</Tip>
 
 ### Set up custom configuration
 

@@ -814,6 +814,7 @@ async fn test_dynamic_variant_namespace_match_ok() {
                         },
                     ),
                     timeouts: None,
+                    namespace: None,
                 },
             ),
             ..Default::default()
@@ -848,6 +849,7 @@ async fn test_dynamic_variant_namespace_mismatch_rejected() {
                         },
                     ),
                     timeouts: None,
+                    namespace: None,
                 },
             ),
             ..Default::default()
@@ -883,6 +885,7 @@ async fn test_dynamic_variant_namespace_none_rejected() {
                         },
                     ),
                     timeouts: None,
+                    namespace: None,
                 },
             ),
             ..Default::default()
