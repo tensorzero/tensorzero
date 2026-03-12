@@ -14,6 +14,7 @@ use std::time::Duration;
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
+use tracing::Level;
 
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
 use durable_tools::{EmbeddedClient, WorkerOptions};
@@ -21,10 +22,11 @@ use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::delegating_connection::PrimaryDatastore;
-use tensorzero_core::db::postgres::{
-    PostgresConnectionInfo, manual_run_postgres_migrations,
-    postgres_setup::check_pgcron_configured_correctly,
+use tensorzero_core::db::postgres::postgres_setup::{
+    check_pgcron_configured_correctly, check_pgvector_configured_correctly,
+    check_trigram_indexes_configured_correctly,
 };
+use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{self, DelayedError, Error, ErrorDetails};
@@ -134,11 +136,31 @@ async fn validate_pgcron_setup_for_postgres_primary(
         return Err(ExitCode::FAILURE);
     };
 
-    check_pgcron_configured_correctly(pgpool).await.map_err(|e| {
-        tracing::error!("Postgres is configured to be the primary observability backend, but pgcron is not configured correctly.");
-        e.log();
-        ExitCode::FAILURE
-    })?;
+    let (pgcron_result, trigram_result, pgvector_result) = tokio::join!(
+        check_pgcron_configured_correctly(pgpool),
+        check_trigram_indexes_configured_correctly(pgpool),
+        check_pgvector_configured_correctly(pgpool),
+    );
+
+    let mut has_fatal_error = false;
+
+    if let Err(e) = pgcron_result {
+        e.log_at_level("Postgres is configured to be the primary observability backend, but pgcron is not configured correctly: ", Level::ERROR);
+        has_fatal_error = true;
+    }
+
+    if let Err(e) = trigram_result {
+        e.log_at_level("Postgres is configured to be the primary observability backend, but trigram indices are not configured correctly: ", Level::ERROR);
+        has_fatal_error = true;
+    }
+
+    if let Err(e) = pgvector_result {
+        e.log_at_level("TensorZero will require pgvector soon for deployments with Postgres, and pgvector is not configured correctly: ", Level::ERROR);
+    }
+
+    if has_fatal_error {
+        return Err(ExitCode::FAILURE);
+    }
 
     Ok(())
 }

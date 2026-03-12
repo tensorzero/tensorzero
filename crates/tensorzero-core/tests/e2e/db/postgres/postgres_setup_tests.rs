@@ -130,6 +130,27 @@ async fn test_check_pgcron_configured_correctly_returns_error_without_pgcron(poo
     );
 }
 
+// ===== pgvector tests =====
+
+/// Tests that `check_pgvector_configured_correctly` returns an error when pgvector is not installed.
+/// Uses `#[sqlx::test]` to get a fresh database without pgvector.
+#[sqlx::test]
+async fn test_check_pgvector_configured_correctly_returns_error_without_pgvector(pool: PgPool) {
+    let result = postgres_setup::check_pgvector_configured_correctly(&pool).await;
+
+    assert!(
+        result.is_err(),
+        "check_pgvector_configured_correctly should return error when pgvector is not installed"
+    );
+
+    let err = result.unwrap_err();
+    let err_msg = err.suppress_logging_of_error_message();
+    assert!(
+        err_msg.contains("pgvector"),
+        "Error message should mention pgvector, got: {err_msg}"
+    );
+}
+
 // ===== Trigram index tests =====
 
 /// Tests that trigram indexes are available in our e2e test Postgres setup
