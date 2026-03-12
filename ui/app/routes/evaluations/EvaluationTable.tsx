@@ -36,7 +36,7 @@ import {
 } from "~/utils/config/feedback";
 import type {
   InferenceEvaluationConfig,
-  MetricConfig,
+  RunMetricMetadata,
   JsonInferenceOutput,
   ContentBlockChatOutput,
 } from "~/types/tensorzero";
@@ -217,7 +217,7 @@ interface EvaluationTableProps {
   evaluator_names: string[];
   evaluation_name: string;
   evaluationConfig: InferenceEvaluationConfig;
-  metricsConfig: Record<string, MetricConfig>;
+  metricsConfig: Record<string, RunMetricMetadata>;
   /** Maps evaluator_name → metric_name. */
   evaluatorMetricNames: Record<string, string>;
   selectedRows: Map<string, SelectedRowData>;
@@ -438,7 +438,6 @@ export function EvaluationTable({
                             evaluator_name={evaluator_name}
                             metric_name={metric_name}
                             summaryStats={filteredStats}
-                            evaluationConfig={evaluationConfig}
                             metricsConfig={metricsConfig}
                           />
                         </TableHead>
@@ -586,8 +585,11 @@ export function EvaluationTable({
                                   resolveMetricName(evaluator_name);
                                 const metricValue =
                                   data.metrics.get(metric_name);
-                                const metricType =
-                                  metricsConfig[metric_name]?.type;
+                                const metricType = metricsConfig[metric_name]
+                                  ?.value_type as
+                                  | "boolean"
+                                  | "float"
+                                  | undefined;
                                 const evaluatorConfig =
                                   evaluationConfig.evaluators[evaluator_name];
 
@@ -683,23 +685,14 @@ const EvaluatorHeader = ({
   evaluator_name,
   metric_name,
   summaryStats,
-  evaluationConfig,
   metricsConfig,
 }: {
   evaluation_name: string;
   evaluator_name: string;
   metric_name: string;
   summaryStats: EvaluationStatistics[];
-  evaluationConfig: InferenceEvaluationConfig;
-  metricsConfig: Record<string, MetricConfig>;
+  metricsConfig: Record<string, RunMetricMetadata>;
 }) => {
-  const evaluatorConfig = evaluationConfig.evaluators[evaluator_name];
-  if (!evaluatorConfig) {
-    logger.warn(
-      `Evaluator config not found for evaluation ${evaluation_name} and evaluator ${evaluator_name}`,
-    );
-    return null;
-  }
   const metricProperties = metricsConfig[metric_name];
   if (!metricProperties) {
     logger.warn(
@@ -722,12 +715,14 @@ const EvaluatorHeader = ({
         <div className="space-y-1 text-left text-xs">
           <div>
             <span className="font-medium">Type:</span>
-            <span className="ml-2 font-medium">{metricProperties.type}</span>
+            <span className="ml-2 font-medium">
+              {metricProperties.value_type}
+            </span>
           </div>
           <div>
             <span className="font-medium">Optimize:</span>
             <span className="ml-2 font-medium">
-              {metricProperties.optimize}
+              {metricProperties.optimize ?? "unknown"}
             </span>
           </div>
         </div>
@@ -740,7 +735,7 @@ const EvaluatorProperties = ({
   metricConfig,
   summaryStats,
 }: {
-  metricConfig: MetricConfig;
+  metricConfig: RunMetricMetadata;
   summaryStats: EvaluationStatistics[];
 }) => {
   const [searchParams] = useSearchParams();
@@ -780,15 +775,15 @@ const EvaluatorProperties = ({
                   className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}
                 ></div>
                 <span>
-                  {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
+                  {formatMetricSummaryValue(stat.mean_metric, {
+                    type: metricConfig.value_type,
+                  })}
                   {stat.ci_lower != null && stat.ci_upper != null ? (
                     <>
                       {" "}
-                      {formatConfidenceInterval(
-                        stat.ci_lower,
-                        stat.ci_upper,
-                        metricConfig,
-                      )}
+                      {formatConfidenceInterval(stat.ci_lower, stat.ci_upper, {
+                        type: metricConfig.value_type,
+                      })}
                     </>
                   ) : null}{" "}
                   (n={stat.datapoint_count})

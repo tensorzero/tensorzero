@@ -3,18 +3,10 @@ import { JsonOutputElement } from "./JsonOutputElement";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { JsonInferenceOutput } from "~/types/tensorzero";
 import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
-import { GlobalToastProvider } from "~/providers/global-toast-provider";
 
 const meta = {
   title: "Input Output/JsonOutputElement",
   component: JsonOutputElement,
-  decorators: [
-    (Story) => (
-      <GlobalToastProvider>
-        <Story />
-      </GlobalToastProvider>
-    ),
-  ],
 } satisfies Meta<typeof JsonOutputElement>;
 
 export default meta;

@@ -27,6 +27,12 @@ describe("URL helper functions", () => {
         "/observability/functions/func%3Fquery",
       );
     });
+
+    it("should append snapshot_hash when provided", () => {
+      expect(toFunctionUrl("my_function", "abc123")).toBe(
+        "/observability/functions/my_function?snapshot_hash=abc123",
+      );
+    });
   });
 
   describe("toVariantUrl", () => {
@@ -36,6 +42,20 @@ describe("URL helper functions", () => {
       );
       expect(toVariantUrl("func/abc", "var/xyz")).toBe(
         "/observability/functions/func%2Fabc/variants/var%2Fxyz",
+      );
+    });
+
+    it("should append snapshot_hash when provided", () => {
+      expect(toVariantUrl("my_function", "variant_1", "abc123")).toBe(
+        "/observability/functions/my_function/variants/variant_1?snapshot_hash=abc123",
+      );
+    });
+
+    it("should encode snapshot_hash with special characters", () => {
+      expect(
+        toVariantUrl("my_function", "variant_1", "hash/with#special"),
+      ).toBe(
+        "/observability/functions/my_function/variants/variant_1?snapshot_hash=hash%2Fwith%23special",
       );
     });
   });

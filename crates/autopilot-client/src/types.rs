@@ -197,6 +197,25 @@ pub struct EventPayloadStatusUpdate {
 pub struct EventPayloadToolResult {
     pub tool_call_event_id: Uuid,
     pub outcome: ToolOutcome,
+    /// Populated by the server from the originating tool call event.
+    /// Optional for backwards compatibility until the API is deployed with enrichment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_name: Option<String>,
+    /// Populated by the server from the originating tool call event.
+    /// Optional for backwards compatibility until the API is deployed with enrichment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_arguments: Option<serde_json::Value>,
+    /// Authorization source (Ui/Automatic/Whitelist). Optional because interrupted
+    /// tool results may not have a corresponding authorization event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_authorization_source: Option<ToolCallDecisionSource>,
+    /// Authorization status (Approved/Rejected/NotAvailable). Optional for same reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_authorization_status: Option<ToolCallAuthorizationStatus>,
 }
 
 /// Internal event payload type - consumers should use `GatewayEventPayload` instead.
@@ -222,18 +241,29 @@ pub enum EventPayload {
     Unknown,
 }
 
-impl EventPayload {
-    /// Returns true if this payload type can be written by API clients.
-    /// System-generated types (e.g. AutopilotEventPayloadStatusUpdate) return false.
-    pub fn is_client_writable(&self) -> bool {
-        matches!(self, EventPayload::Message(msg) if msg.role == Role::User)
-            || matches!(
-                self,
-                EventPayload::ToolCallAuthorization(_)
-                    | EventPayload::ToolResult(_)
-                    | EventPayload::UserQuestionsAnswers(_)
-            )
-    }
+/// Minimal tool result payload for creating events.
+/// Omits server-enriched fields like `tool_call_name`, `tool_call_arguments`, etc.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateEventPayloadToolResult {
+    pub tool_call_event_id: Uuid,
+    pub outcome: ToolOutcome,
+}
+
+/// Payload enum restricted to client-writable event types.
+///
+/// Unlike `EventPayload`, this only includes variants that API clients are allowed
+/// to create. Server-enriched fields (e.g. `tool_call_name`, `tool_call_arguments`)
+/// are omitted from the inner structs.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(tag = "type", rename_all = "snake_case"))]
+pub enum CreateEventPayload {
+    Message(EventPayloadMessage),
+    ToolCallAuthorization(CreateEventPayloadToolCallAuthorization),
+    ToolResult(CreateEventPayloadToolResult),
+    UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
 }
 
 /// Event payload as seen by gateway consumers.
@@ -465,6 +495,25 @@ pub struct EventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
     pub status: ToolCallAuthorizationStatus,
+    /// Populated by the server from the originating tool call event.
+    /// Optional for backwards compatibility until the API is deployed with enrichment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_name: Option<String>,
+    /// Populated by the server from the originating tool call event.
+    /// Optional for backwards compatibility until the API is deployed with enrichment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_arguments: Option<serde_json::Value>,
+}
+
+/// Minimal input payload for creating a tool call authorization event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateEventPayloadToolCallAuthorization {
+    pub source: ToolCallDecisionSource,
+    pub tool_call_event_id: Uuid,
+    pub status: ToolCallAuthorizationStatus,
 }
 
 /// Tool call authorization payload as seen by gateway consumers.
@@ -476,6 +525,16 @@ pub struct GatewayEventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
     pub status: GatewayToolCallAuthorizationStatus,
+    /// Populated by the server from the originating tool call event.
+    /// Optional for backwards compatibility until the API is deployed with enrichment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_name: Option<String>,
+    /// Populated by the server from the originating tool call event.
+    /// Optional for backwards compatibility until the API is deployed with enrichment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub tool_call_arguments: Option<serde_json::Value>,
 }
 
 impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallAuthorization {
@@ -486,6 +545,8 @@ impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallA
             source: auth.source,
             tool_call_event_id: auth.tool_call_event_id,
             status: auth.status.try_into()?,
+            tool_call_name: auth.tool_call_name,
+            tool_call_arguments: auth.tool_call_arguments,
         })
     }
 }
@@ -804,7 +865,7 @@ pub enum AutoEvalContentBlock {
 pub struct CreateEventRequest {
     pub deployment_id: String,
     pub tensorzero_version: String,
-    pub payload: EventPayload,
+    pub payload: CreateEventPayload,
     /// Used for idempotency when adding events to an existing session.
     ///
     /// When provided (for non-nil `session_id`), the server validates that this ID matches

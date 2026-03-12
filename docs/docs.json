@@ -59,10 +59,8 @@
               "gateway/guides/metrics-feedback",
               "gateway/guides/multimodal-inference",
               "gateway/guides/retries-fallbacks",
-              "gateway/guides/streaming-inference",
               "gateway/guides/tool-use",
               "gateway/benchmarks",
-              "gateway/clients",
               "gateway/configuration-reference",
               "gateway/data-model",
               {
@@ -429,6 +427,22 @@
     {
       "source": "/recipes/",
       "destination": "/optimization"
+    },
+    {
+      "source": "/gateway/guides/streaming-inference",
+      "destination": "/gateway"
+    },
+    {
+      "source": "/gateway/guides/streaming-inference/",
+      "destination": "/gateway"
+    },
+    {
+      "source": "/gateway/clients",
+      "destination": "/gateway"
+    },
+    {
+      "source": "/gateway/clients/",
+      "destination": "/gateway"
     }
   ]
 }

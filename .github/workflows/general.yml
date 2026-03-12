@@ -1324,24 +1324,24 @@ jobs:
 
       - name: Set up .env file for production deployment tests
         run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
-          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > ci/check-production-deployment-docker-compose/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> ci/check-production-deployment-docker-compose/.env
+          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> ci/check-production-deployment-docker-compose/.env
 
       - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+        run: docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml up -d --wait
 
       - name: Run inference for production deployment tests
-        run: examples/production-deployment/run.sh
+        run: ci/check-production-deployment-docker-compose/run.sh
 
       - name: Print Docker compose logs
         if: always()
         run: |
-          docker compose -f examples/production-deployment/docker-compose.yml logs -t
+          docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml logs -t
 
       - name: Take down docker compose for production deployment tests
         run: |
-          docker compose -f examples/production-deployment/docker-compose.yml down
+          docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml down
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml down
 
   live-tests:
@@ -1405,9 +1405,9 @@ jobs:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
 
+  # We run this unconditionally, so that all tensorzero SHAs can be used in autopilot
   publish-dev-docker-hub-images:
-    needs: [detect-changes]
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group' && needs.detect-changes.outputs.code == 'true'
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     permissions:
       contents: read
       actions: read
