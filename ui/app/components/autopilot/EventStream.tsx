@@ -249,6 +249,7 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
     case "user_questions":
     case "user_questions_answers":
     case "auto_eval_example_labeling":
+    case "auto_eval_example_labeling_answers":
     case "visualization":
     case "unknown":
       return {};
@@ -431,6 +432,16 @@ function renderEventTitle(event: GatewayEvent) {
     }
     case "auto_eval_example_labeling":
       return "Example Labeling";
+    case "auto_eval_example_labeling_answers": {
+      const answerCount = Object.keys(payload.responses).length;
+      return (
+        <span className="inline-flex items-center gap-2">
+          {answerCount === 1 ? "Example Label" : "Example Labels"}
+          <DotSeparator />
+          Submitted
+        </span>
+      );
+    }
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -616,6 +627,7 @@ function EventItemContent({
     case "tool_call_authorization":
     case "visualization":
     case "auto_eval_example_labeling":
+    case "auto_eval_example_labeling_answers":
     case "unknown":
       return (
         <p className="text-fg-secondary text-sm whitespace-pre-wrap">

@@ -236,6 +236,7 @@ pub enum EventPayload {
     UserQuestions(EventPayloadUserQuestions),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     AutoEvalExampleLabeling(EventPayloadAutoEvalExampleLabeling),
+    AutoEvalExampleLabelingAnswers(EventPayloadAutoEvalExampleLabelingAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -264,6 +265,7 @@ pub enum CreateEventPayload {
     ToolCallAuthorization(CreateEventPayloadToolCallAuthorization),
     ToolResult(CreateEventPayloadToolResult),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
+    AutoEvalExampleLabelingAnswers(EventPayloadAutoEvalExampleLabelingAnswers),
 }
 
 /// Event payload as seen by gateway consumers.
@@ -287,6 +289,7 @@ pub enum GatewayEventPayload {
     UserQuestions(EventPayloadUserQuestions),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     AutoEvalExampleLabeling(EventPayloadAutoEvalExampleLabeling),
+    AutoEvalExampleLabelingAnswers(EventPayloadAutoEvalExampleLabelingAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -312,6 +315,9 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             }
             EventPayload::AutoEvalExampleLabeling(l) => {
                 Ok(GatewayEventPayload::AutoEvalExampleLabeling(l))
+            }
+            EventPayload::AutoEvalExampleLabelingAnswers(a) => {
+                Ok(GatewayEventPayload::AutoEvalExampleLabelingAnswers(a))
             }
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
@@ -856,6 +862,30 @@ pub enum AutoEvalContentBlock {
     },
 }
 
+/// User responses to autoeval example labeling questions.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadAutoEvalExampleLabelingAnswers {
+    /// Map from question UUID to response.
+    pub responses: HashMap<Uuid, AutoEvalLabelingAnswer>,
+    /// The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
+    pub auto_eval_example_labeling_event_id: Uuid,
+}
+
+/// A user's response to an autoeval labeling question.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum AutoEvalLabelingAnswer {
+    /// Answer to a label question (multiple-choice selection).
+    Label(MultipleChoiceAnswer),
+    /// Answer to an explanation question (free-text).
+    Explanation(FreeResponseAnswer),
+    Skipped,
+}
+
 // =============================================================================
 // Request Types
 // =============================================================================
@@ -962,6 +992,9 @@ pub struct ListEventsResponse {
     /// All user_questions events that do not have a matching user_questions_answers event.
     #[serde(default)]
     pub pending_user_questions: Vec<Event>,
+    /// All auto_eval_example_labeling events that do not have a matching answers event.
+    #[serde(default)]
+    pub pending_auto_eval_example_labeling: Vec<Event>,
 }
 
 /// Response from listing events as seen by gateway consumers.
@@ -985,6 +1018,9 @@ pub struct GatewayListEventsResponse {
     /// All user_questions events that do not have a matching user_questions_answers event.
     #[serde(default)]
     pub pending_user_questions: Vec<GatewayEvent>,
+    /// All auto_eval_example_labeling events that do not have a matching answers event.
+    #[serde(default)]
+    pub pending_auto_eval_example_labeling: Vec<GatewayEvent>,
 }
 
 /// Response from listing sessions.
