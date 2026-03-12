@@ -1405,9 +1405,9 @@ jobs:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
 
+  # We run this unconditionally, so that all tensorzero SHAs can be used in autopilot
   publish-dev-docker-hub-images:
-    needs: [detect-changes]
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group' && needs.detect-changes.outputs.code == 'true'
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     permissions:
       contents: read
       actions: read
