@@ -2,11 +2,7 @@ import { Suspense, useEffect, useState } from "react";
 import { AlertCircle, Loader2, StopCircle } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import type { Route } from "./+types/runs";
-import type {
-  EvaluationConfig,
-  EvaluationResultRow,
-  MetricConfig,
-} from "~/types/tensorzero";
+import type { EvaluationConfig, EvaluationResultRow } from "~/types/tensorzero";
 import {
   getConfig,
   getFunctionConfig,
@@ -61,6 +57,7 @@ import { handleBulkAddToDataset } from "~/routes/evaluations/bulkAddToDataset.se
 import { useBulkAddToDatasetToast } from "~/routes/evaluations/useBulkAddToDatasetToast";
 import { useCancelEvaluation } from "~/routes/evaluations/useCancelEvaluation";
 import { useReadOnly } from "~/context/read-only";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import BasicInfo from "~/routes/evaluations/EvaluationBasicInfo";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
@@ -149,21 +146,6 @@ async function fetchEvaluationData(
   };
 }
 
-/// TODO(#6636): Stop constructing metric configs.
-function buildMetricsConfigFromRunMetadata(
-  metrics: RunMetricMetadata[],
-): Record<string, MetricConfig> {
-  const metricsConfig: Record<string, MetricConfig> = {};
-  for (const metric of metrics) {
-    metricsConfig[metric.name] = {
-      type: metric.value_type === "boolean" ? "boolean" : "float",
-      level: "inference",
-      optimize: metric.optimize ?? "max",
-    };
-  }
-  return metricsConfig;
-}
-
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
@@ -204,6 +186,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const config = await getConfig();
   let evaluationConfig = config.evaluations[evaluation_name];
   let effectiveConfig = config;
+  let snapshotHash: string | undefined;
 
   if (!evaluationConfig) {
     const runs = await client.listEvaluationRuns(100, 0);
@@ -211,6 +194,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       (r) => r.evaluation_name === evaluation_name,
     );
     if (matchingRun?.snapshot_hash) {
+      snapshotHash = matchingRun.snapshot_hash;
       effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
       evaluationConfig = effectiveConfig.evaluations[evaluation_name];
     }
@@ -218,7 +202,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   let evaluator_names: string[];
   let metric_names: string[];
-  let metricsConfig: Record<string, MetricConfig>;
+  let metricsConfig: Record<string, RunMetricMetadata>;
   let evaluatorMetricNames: Record<string, string>;
 
   if (evaluationConfig) {
@@ -232,10 +216,16 @@ export async function loader({ request }: Route.LoaderArgs) {
       evaluatorMetricNames[evaluator_names[i]] = metric_names[i];
     }
     metricsConfig = {};
-    for (const metricName of metric_names) {
+    for (let i = 0; i < metric_names.length; i++) {
+      const metricName = metric_names[i];
       const metricConfig = effectiveConfig.metrics[metricName];
       if (metricConfig) {
-        metricsConfig[metricName] = metricConfig;
+        metricsConfig[metricName] = {
+          name: metricName,
+          evaluator_name: evaluator_names[i],
+          value_type: metricConfig.type,
+          optimize: metricConfig.optimize,
+        };
       }
     }
   } else {
@@ -244,7 +234,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     evaluator_names = firstRunMetadata.metrics
       .map((m) => m.evaluator_name)
       .filter((name): name is string => name != null);
-    metricsConfig = buildMetricsConfigFromRunMetadata(firstRunMetadata.metrics);
+    metricsConfig = {};
+    for (const metric of firstRunMetadata.metrics) {
+      metricsConfig[metric.name] = metric;
+    }
     // Build evaluator_name → metric_name mapping from DB metadata
     evaluatorMetricNames = {};
     for (const metric of firstRunMetadata.metrics) {
@@ -321,6 +314,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     evaluation_name,
     evaluationConfig,
+    snapshotHash,
     function_type,
     metricsConfig,
     evaluationData: fetchEvaluationData(
@@ -450,7 +444,7 @@ function ResultsContent({
 }: {
   evaluation_name: string;
   evaluationConfig: EvaluationConfig;
-  metricsConfig: Record<string, MetricConfig>;
+  metricsConfig: Record<string, RunMetricMetadata>;
   evaluatorMetricNames: Record<string, string>;
   data: EvaluationData;
   evaluator_names: string[];
@@ -548,6 +542,7 @@ export default function EvaluationRunsPage({
   const {
     evaluation_name,
     evaluationConfig: evaluation_config,
+    snapshotHash,
     function_type,
     metricsConfig,
     evaluationData,
@@ -620,6 +615,7 @@ export default function EvaluationRunsPage({
   return (
     <PageLayout>
       <PageHeader
+        banner={snapshotHash ? <SnapshotBanner /> : undefined}
         eyebrow={
           <Breadcrumbs
             segments={[{ label: "Evaluations", href: "/evaluations" }]}
@@ -630,6 +626,7 @@ export default function EvaluationRunsPage({
         <BasicInfo
           evaluation_config={evaluation_config}
           functionType={function_type}
+          snapshotHash={snapshotHash}
         />
         <ActionBar>
           <DatasetSelect

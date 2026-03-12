@@ -2,10 +2,14 @@ import type { Route } from "./+types/route";
 import { data, useLocation } from "react-router";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
+import { useSnapshotHash } from "~/hooks/use-snapshot-hash";
+import {
+  getConfigFromRequest,
+  getFunctionConfig,
+} from "~/utils/config/index.server";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
-import { useFunctionConfig } from "~/context/config";
 import {
   PageHeader,
   PageLayout,
@@ -39,9 +43,11 @@ function FunctionDetailPageHeader({
   functionConfig: FunctionConfig | null;
 }) {
   const autopilotAvailable = useAutopilotAvailable();
+  const snapshotHash = useSnapshotHash();
 
   return (
     <PageHeader
+      banner={snapshotHash ? <SnapshotBanner /> : undefined}
       eyebrow={
         <Breadcrumbs
           segments={[{ label: "Functions", href: "/observability/functions" }]}
@@ -64,8 +70,8 @@ function FunctionDetailPageHeader({
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
+  const config = await getConfigFromRequest(request);
   const url = new URL(request.url);
-  const config = await getConfig();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const limit = Number(url.searchParams.get("limit")) || 10;
@@ -91,6 +97,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     function_name,
+    function_config,
     variantsData: fetchVariantsSectionData({ function_name, function_config }),
     experimentationData:
       function_name !== DEFAULT_FUNCTION
@@ -125,6 +132,7 @@ export default function FunctionDetailPage({
 }: Route.ComponentProps) {
   const {
     function_name,
+    function_config,
     variantsData,
     experimentationData,
     throughputData,
@@ -133,11 +141,6 @@ export default function FunctionDetailPage({
     inferencesData,
   } = loaderData;
   const location = useLocation();
-  const function_config = useFunctionConfig(function_name);
-
-  if (!function_config) {
-    throw data(`Function ${function_name} not found`, { status: 404 });
-  }
 
   return (
     <PageLayout>
