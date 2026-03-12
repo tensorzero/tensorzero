@@ -20,7 +20,12 @@ use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_error::Error;
+use tensorzero_types::inference_params::JsonMode;
 use tensorzero_types::{ApiType, Text, Thought, ToolCall, Unknown};
+use tensorzero_types_providers::fireworks::FireworksFinishReason;
+use tensorzero_types_providers::openai::{OpenAIFinishReason, OpenAIUsage};
+use tensorzero_types_providers::together::TogetherFinishReason;
+use tensorzero_types_providers::xai::XAIUsage;
 use url::Url;
 use uuid::Uuid;
 
@@ -536,12 +541,6 @@ impl std::fmt::Display for RequestMessage {
 // =============================================================================
 // From impls for provider-specific types
 // =============================================================================
-
-use tensorzero_types::inference_params::JsonMode;
-use tensorzero_types_providers::fireworks::FireworksFinishReason;
-use tensorzero_types_providers::openai::{OpenAIFinishReason, OpenAIUsage};
-use tensorzero_types_providers::together::TogetherFinishReason;
-use tensorzero_types_providers::xai::XAIUsage;
 
 impl From<JsonMode> for ModelInferenceRequestJsonMode {
     fn from(mode: JsonMode) -> Self {
