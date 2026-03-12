@@ -24,6 +24,7 @@ use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, ProviderInferenceResponseArgs, Thought,
+    build_provider_inference_response,
 };
 use crate::inference::types::{
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -882,7 +883,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
         }
 
-        Ok(ProviderInferenceResponse::new(
+        Ok(build_provider_inference_response(
             ProviderInferenceResponseArgs {
                 output: content,
                 system,

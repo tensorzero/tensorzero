@@ -41,6 +41,7 @@ use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 use tensorzero_types::{UninitializedCostConfig, UninitializedUnifiedCostConfig};
 
 use crate::inference::WrappedProvider;
+use crate::inference::types::ProviderInferenceResponseExt;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,

@@ -36,6 +36,7 @@ use crate::{
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
+            build_provider_inference_response,
             chat_completion_inference_params::{
                 ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
             },
@@ -929,7 +930,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         let usage = mistral_usage_to_tensorzero_usage(response.usage);
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
+        Ok(build_provider_inference_response(
             ProviderInferenceResponseArgs {
                 output: content,
                 system,

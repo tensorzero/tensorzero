@@ -47,7 +47,7 @@ use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, Usage,
+    ProviderInferenceResponseStreamInner, TextChunk, Usage, build_provider_inference_response,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
@@ -632,10 +632,10 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = response.usage.into_usage();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
+        Ok(build_provider_inference_response(
             ProviderInferenceResponseArgs {
                 output: content,
                 system,
@@ -646,7 +646,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: finish_reason.map(Into::into),
+                finish_reason: finish_reason.map(TGIFinishReason::into_finish_reason),
                 id: model_inference_id,
             },
         ))
@@ -689,11 +689,11 @@ struct TGIUsage {
     completion_tokens: u32,
 }
 
-impl From<TGIUsage> for Usage {
-    fn from(usage: TGIUsage) -> Self {
+impl TGIUsage {
+    fn into_usage(self) -> Usage {
         Usage {
-            input_tokens: Some(usage.prompt_tokens),
-            output_tokens: Some(usage.completion_tokens),
+            input_tokens: Some(self.prompt_tokens),
+            output_tokens: Some(self.completion_tokens),
             cost: None,
         }
     }
@@ -743,9 +743,9 @@ pub(super) enum TGIFinishReason {
     Unknown,
 }
 
-impl From<TGIFinishReason> for FinishReason {
-    fn from(finish_reason: TGIFinishReason) -> Self {
-        match finish_reason {
+impl TGIFinishReason {
+    fn into_finish_reason(self) -> FinishReason {
+        match self {
             TGIFinishReason::Stop => FinishReason::Stop,
             TGIFinishReason::StopSequence => FinishReason::StopSequence,
             TGIFinishReason::Length => FinishReason::Length,
@@ -839,12 +839,12 @@ fn tgi_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(Into::into);
+    let usage = chunk.usage.map(TGIUsage::into_usage);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
         if let Some(reason) = choice.finish_reason {
-            finish_reason = Some(reason.into());
+            finish_reason = Some(reason.into_finish_reason());
         }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {

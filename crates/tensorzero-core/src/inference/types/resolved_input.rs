@@ -3,19 +3,15 @@ use std::future::Future;
 use std::pin::Pin;
 
 use futures::FutureExt;
-use futures::future::Shared;
-use mime::MediaType;
 use object_store::{PutMode, PutOptions};
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 use super::{
-    Base64File, ObjectStorageFile, PendingObjectStoreFile, RawText, Role, System, Text, Thought,
-    Unknown, storage::StoragePath,
+    Base64File, ObjectStorageFile, RawText, Role, System, Text, Thought, Unknown,
+    storage::StoragePath,
 };
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::file::{Base64FileMetadata, Detail};
 use crate::inference::types::stored_input::{
     StoredFile, StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
@@ -42,40 +38,14 @@ pub struct LazyResolvedInputMessage {
     pub content: Vec<LazyResolvedInputMessageContent>,
 }
 
-// This gets serialized as part of a `ModelInferenceRequest` when we compute a cache key.
-// TODO: decide on the precise caching behavior that we want for file URLs and object storage paths.
-#[derive(Clone, Debug, Serialize)]
-pub enum LazyFile {
-    // Client sent a file URL → must fetch & store
-    Url {
-        file_url: FileUrl,
-        #[serde(skip)]
-        future: FileFuture,
-    },
-    // Client sent a base64-encoded file → skip fetch, must store
-    Base64(PendingObjectStoreFile),
-    // Client sent an object storage file → must fetch, skip store
-    ObjectStoragePointer {
-        metadata: Base64FileMetadata,
-        storage_path: StoragePath,
-        #[serde(skip)]
-        future: FileFuture,
-    },
-    // Client sent a resolved object storage file → skip fetch & store
-    ObjectStorage(ObjectStorageFile),
+pub use tensorzero_provider_types::{FileFuture, FileUrl, LazyFile};
+
+pub trait LazyFileExt {
+    async fn resolve(&self) -> Result<Cow<'_, ObjectStorageFile>, Error>;
 }
 
-#[cfg(any(test, feature = "e2e_tests"))]
-impl std::cmp::PartialEq for LazyFile {
-    // This is only used in tests, so it's fine to panic
-    #[expect(clippy::panic)]
-    fn eq(&self, _other: &Self) -> bool {
-        panic!("Tried to check LazyFile equality")
-    }
-}
-
-impl LazyFile {
-    pub async fn resolve(&self) -> Result<Cow<'_, ObjectStorageFile>, Error> {
+impl LazyFileExt for LazyFile {
+    async fn resolve(&self) -> Result<Cow<'_, ObjectStorageFile>, Error> {
         match self {
             LazyFile::Url {
                 future,
@@ -88,25 +58,7 @@ impl LazyFile {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-pub struct FileUrl {
-    pub url: Url,
-    pub mime_type: Option<MediaType>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<Detail>,
-    pub filename: Option<String>,
-}
-
-/// Holds a lazily-resolved file from a `LazyResolvedInputMessageContent::File`.
-/// This is constructed as either:
-/// 1. An immediately-ready future, when we're converting a `ResolvedInputMessageContent` to a `LazyResolvedInputMessageContent`
-/// 2. A network fetch future, when we're resolving an image url in `InputMessageContent::File`.
-///
-/// This future is `Shared`, so that we can `.await` it from multiple different model providers
-/// (if we're not forwarding an image url to the model provider), as well as when writing the
-/// file to the object store (if enabled).
-pub type FileFuture =
-    Shared<Pin<Box<dyn Future<Output = Result<ObjectStorageFile, Error>> + Send>>>;
+// FileUrl and FileFuture are re-exported from tensorzero_provider_types above
 
 #[derive(Clone, Debug)]
 pub enum LazyResolvedInputMessageContent {

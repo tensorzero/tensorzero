@@ -6995,6 +6995,7 @@ dependencies = [
  "tensorzero-config-paths",
  "tensorzero-derive",
  "tensorzero-error",
+ "tensorzero-provider-types",
  "tensorzero-types",
  "tensorzero-types-providers",
  "tensorzero-unsafe-helpers",
@@ -7097,6 +7098,26 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "ts-rs",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "tensorzero-provider-types"
+version = "2026.3.1"
+dependencies = [
+ "futures",
+ "mime 0.4.0-a.0",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "sqlx",
+ "tensorzero-derive",
+ "tensorzero-error",
+ "tensorzero-types",
+ "tensorzero-types-providers",
  "ts-rs",
  "url",
  "uuid",

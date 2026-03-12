@@ -19,9 +19,10 @@ use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
+use crate::inference::types::build_provider_inference_response;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ApiType, FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs,
 };
@@ -54,8 +55,7 @@ use crate::providers::chat_completions::{
     ChatCompletionTool, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
 };
 use tensorzero_types_providers::together::{
-    TogetherChatChunk, TogetherFinishReason, TogetherResponse, TogetherResponseChoice,
-    TogetherResponseToolCall,
+    TogetherChatChunk, TogetherResponse, TogetherResponseChoice, TogetherResponseToolCall,
 };
 use uuid::Uuid;
 
@@ -781,19 +781,6 @@ fn together_tool_call_to_tool_call(together_tool_call: TogetherResponseToolCall)
 
 // The thinking block processing has been moved to helpers_thinking_block.rs
 
-impl From<TogetherFinishReason> for FinishReason {
-    fn from(finish_reason: TogetherFinishReason) -> Self {
-        match finish_reason {
-            TogetherFinishReason::Stop => FinishReason::Stop,
-            TogetherFinishReason::Eos => FinishReason::Stop,
-            TogetherFinishReason::Length => FinishReason::Length,
-            TogetherFinishReason::ToolCalls => FinishReason::ToolCall,
-            TogetherFinishReason::FunctionCall => FinishReason::ToolCall,
-            TogetherFinishReason::Unknown => FinishReason::Unknown,
-        }
-    }
-}
-
 struct TogetherResponseWithMetadata<'a> {
     response: TogetherResponse,
     latency: Latency,
@@ -885,7 +872,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
+        Ok(build_provider_inference_response(
             ProviderInferenceResponseArgs {
                 output: content,
                 system,
@@ -1097,10 +1084,10 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
+    use crate::inference::types::{FinishReason, FunctionType, RequestMessage, Role, Usage};
     use tensorzero_types_providers::together::{
-        TogetherChatChunkChoice, TogetherDelta, TogetherFunctionCallChunk, TogetherResponseMessage,
-        TogetherToolCallChunk,
+        TogetherChatChunkChoice, TogetherDelta, TogetherFinishReason, TogetherFunctionCallChunk,
+        TogetherResponseMessage, TogetherToolCallChunk,
     };
 
     use crate::providers::chat_completions::{

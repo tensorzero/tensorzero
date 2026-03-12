@@ -23,6 +23,7 @@ use crate::inference::types::{
     ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, Thought, batch::StartBatchProviderInferenceResponse,
+    build_provider_inference_response,
 };
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ProviderInferenceResponseChunk,
@@ -332,9 +333,9 @@ enum SGLangFinishReason {
     Unknown,
 }
 
-impl From<SGLangFinishReason> for FinishReason {
-    fn from(reason: SGLangFinishReason) -> Self {
-        match reason {
+impl SGLangFinishReason {
+    fn into_finish_reason(self) -> FinishReason {
+        match self {
             SGLangFinishReason::Stop => FinishReason::Stop,
             SGLangFinishReason::Length => FinishReason::Length,
             SGLangFinishReason::ToolCalls => FinishReason::ToolCall,
@@ -479,7 +480,7 @@ fn sglang_to_tensorzero_chunk(
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
         if let Some(reason) = choice.finish_reason {
-            finish_reason = Some(reason.into());
+            finish_reason = Some(reason.into_finish_reason());
         }
         if let Some(reasoning) = choice.delta.reasoning_content {
             content.push(ContentBlockChunk::Thought(ThoughtChunk {
@@ -818,7 +819,7 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
+        Ok(build_provider_inference_response(
             ProviderInferenceResponseArgs {
                 output: content,
                 system,

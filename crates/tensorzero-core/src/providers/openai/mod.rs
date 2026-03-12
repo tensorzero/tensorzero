@@ -42,11 +42,11 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::{Detail, mime_type_to_audio_format, mime_type_to_ext};
-use crate::inference::types::resolved_input::{FileUrl, LazyFile};
+use crate::inference::types::resolved_input::{FileUrl, LazyFile, LazyFileExt};
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ApiType, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
-    ThoughtChunk,
+    ApiType, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
+    build_provider_inference_response,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -2662,28 +2662,9 @@ impl<'a> OpenAIBatchRequest<'a> {
     }
 }
 
-pub(super) use tensorzero_types_providers::openai::{
+pub(crate) use tensorzero_types_providers::openai::{
     OpenAIFinishReason, OpenAIResponseToolCall, OpenAIUsage,
 };
-
-impl From<OpenAIUsage> for Usage {
-    fn from(usage: OpenAIUsage) -> Self {
-        Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens: usage.completion_tokens,
-            cost: None,
-        }
-    }
-}
-
-impl From<Option<OpenAIUsage>> for Usage {
-    fn from(usage: Option<OpenAIUsage>) -> Self {
-        match usage {
-            Some(u) => u.into(),
-            None => Usage::default(),
-        }
-    }
-}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(super) struct OpenAIEmbeddingUsage {
@@ -2727,19 +2708,6 @@ pub(super) struct OpenAIResponseMessage {
     pub(super) reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
-}
-
-impl From<OpenAIFinishReason> for FinishReason {
-    fn from(finish_reason: OpenAIFinishReason) -> Self {
-        match finish_reason {
-            OpenAIFinishReason::Stop => FinishReason::Stop,
-            OpenAIFinishReason::Length => FinishReason::Length,
-            OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
-            OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenAIFinishReason::FunctionCall => FinishReason::ToolCall,
-            OpenAIFinishReason::Unknown => FinishReason::Unknown,
-        }
-    }
 }
 
 // Leaving out logprobs and finish_reason for now
@@ -2836,7 +2804,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
+        Ok(build_provider_inference_response(
             ProviderInferenceResponseArgs {
                 output: content,
                 system,
@@ -3261,8 +3229,8 @@ mod tests {
     use crate::inference::types::file::Detail;
     use crate::inference::types::storage::{StorageKind, StoragePath};
     use crate::inference::types::{
-        FunctionType, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
-        RequestMessage,
+        FinishReason, FunctionType, ObjectStorageFile, ObjectStoragePointer,
+        PendingObjectStoreFile, RequestMessage,
     };
     use crate::providers::test_helpers::{
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,

@@ -1,94 +1,7 @@
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
 pub use tensorzero_types::{ApiType, RawResponseEntry};
 
-/// A single entry in the raw usage array, representing usage data from one model inference.
-/// This preserves the original provider-specific usage object for fields that TensorZero
-/// normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct RawUsageEntry {
-    pub model_inference_id: Uuid,
-    pub provider_type: String,
-    pub api_type: ApiType,
-    pub data: serde_json::Value,
-}
-
-pub fn raw_usage_entries_from_value(
-    model_inference_id: Uuid,
-    provider_type: &str,
-    api_type: ApiType,
-    usage: serde_json::Value,
-) -> Vec<RawUsageEntry> {
-    vec![RawUsageEntry {
-        model_inference_id,
-        provider_type: provider_type.to_string(),
-        api_type,
-        data: usage,
-    }]
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct Usage {
-    pub input_tokens: Option<u32>,
-    pub output_tokens: Option<u32>,
-    #[serde(default, with = "decimal_float_option")]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
-    pub cost: Option<Decimal>,
-}
-
-/// Custom serde module for `Option<Decimal>` as float.
-///
-/// Serializes identically to `rust_decimal::serde::float_option`.
-/// Deserializes via `Option<f64>` instead of `deserialize_option` so that
-/// serde's untagged-enum `ContentDeserializer` (which maps JSON `null` to
-/// `Content::Unit` → `visit_unit`) is handled correctly.  The upstream
-/// `OptionDecimalVisitor` only implements `visit_none`, not `visit_unit`,
-/// which causes failures inside `#[serde(untagged)]` enums.
-mod decimal_float_option {
-    use rust_decimal::Decimal;
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    // Signature is required by serde's `with` attribute.
-    #[expect(clippy::ref_option)]
-    pub fn serialize<S>(value: &Option<Decimal>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        rust_decimal::serde::float_option::serialize(value, serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Decimal>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Option::<f64>::deserialize(deserializer)?
-            .map(|f| Decimal::try_from(f).map_err(serde::de::Error::custom))
-            .transpose()
-    }
-}
-
-impl Usage {
-    pub fn zero() -> Usage {
-        Usage {
-            input_tokens: Some(0),
-            output_tokens: Some(0),
-            cost: Some(Decimal::ZERO),
-        }
-    }
-
-    pub fn total_tokens(&self) -> Option<u32> {
-        match (self.input_tokens, self.output_tokens) {
-            (Some(input), Some(output)) => Some(input + output),
-            _ => None,
-        }
-    }
-}
+// Re-export from tensorzero-provider-types
+pub use tensorzero_provider_types::{RawUsageEntry, Usage, raw_usage_entries_from_value};
 
 /// Aggregate `Usage` from a single streaming model inference.
 ///
@@ -221,6 +134,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_decimal::Decimal;
+    use uuid::Uuid;
 
     #[test]
     fn test_api_type_serialization() {

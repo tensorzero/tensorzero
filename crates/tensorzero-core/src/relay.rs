@@ -25,6 +25,7 @@ use crate::inference::types::extra_body::{prepare_relay_extra_body, prepare_rela
 use crate::inference::types::{
     ApiType, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, RawResponseEntry, TextChunk, Usage,
+    build_provider_inference_response,
 };
 use crate::model::Credential;
 use crate::{
@@ -395,7 +396,7 @@ impl TensorzeroRelay {
         // Extract relay_raw_response entries from downstream response for passthrough
         let relay_raw_response = non_streaming.raw_response().cloned();
 
-        Ok(ProviderInferenceResponse::new(
+        Ok(build_provider_inference_response(
             ProviderInferenceResponseArgs {
                 output: match non_streaming {
                     InferenceResponse::Chat(chat) => chat

@@ -29,6 +29,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::file::mime_type_to_ext;
+use crate::inference::types::resolved_input::LazyFileExt;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
@@ -37,7 +38,10 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
     Role as TensorZeroRole, Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
+use crate::inference::types::{
+    FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk,
+    build_provider_inference_response,
+};
 use crate::model::ModelProvider;
 use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 use crate::tool::{
@@ -917,7 +921,7 @@ fn convert_converse_response(
         )
     });
 
-    Ok(ProviderInferenceResponse::new(
+    Ok(build_provider_inference_response(
         ProviderInferenceResponseArgs {
             output: content,
             system: ctx.system,

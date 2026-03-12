@@ -27,18 +27,17 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
-    batch::StartBatchProviderInferenceResponse,
+    batch::StartBatchProviderInferenceResponse, build_provider_inference_response,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::providers::openai::{
-    OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
-    OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
-    SystemOrDeveloper, get_chat_url, handle_openai_error,
-    openai_response_tool_call_to_tensorzero_tool_call, prepare_system_or_developer_message,
-    tensorzero_to_openai_messages,
+    OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIRequestMessage,
+    OpenAISystemRequestMessage, OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
+    get_chat_url, handle_openai_error, openai_response_tool_call_to_tensorzero_tool_call,
+    prepare_system_or_developer_message, tensorzero_to_openai_messages,
 };
 use crate::tool::ToolCallChunk;
 use serde_json::Value;
@@ -554,7 +553,7 @@ fn deepseek_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(OpenAIUsage::into);
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
@@ -734,7 +733,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
+        Ok(build_provider_inference_response(
             ProviderInferenceResponseArgs {
                 output: content,
                 system,
@@ -745,7 +744,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: finish_reason.map(OpenAIFinishReason::into),
+                finish_reason: finish_reason.map(Into::into),
                 id: model_inference_id,
             },
         ))
@@ -845,6 +844,7 @@ mod tests {
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use tensorzero_types_providers::deepseek::DeepSeekResponseMessage;
+    use tensorzero_types_providers::openai::OpenAIFinishReason;
 
     #[tokio::test]
     async fn test_deepseek_request_new() {

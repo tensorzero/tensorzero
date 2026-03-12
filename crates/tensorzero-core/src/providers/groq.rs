@@ -26,6 +26,7 @@ use crate::inference::types::chat_completion_inference_params::{
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+    build_provider_inference_response,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -33,7 +34,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Thought, ThoughtChunk, Unknown, Usage,
     batch::StartBatchProviderInferenceResponse,
-    resolved_input::{FileUrl, LazyFile},
+    resolved_input::{FileUrl, LazyFile, LazyFileExt},
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{Credential, ModelProvider};
@@ -1349,7 +1350,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let usage = groq_usage_to_tensorzero_usage(response.usage);
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
+        Ok(build_provider_inference_response(
             ProviderInferenceResponseArgs {
                 output: content,
                 system,

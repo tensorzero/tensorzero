@@ -4,8 +4,6 @@
 //! - `InferenceResponseToolCallExt` - Extension trait for `InferenceResponseToolCall`
 //! - `ToolCallChunk` - A streaming chunk of a tool call
 
-use serde::{Deserialize, Serialize, Serializer};
-
 use super::config::ToolCallConfig;
 use super::wire::ToolCall;
 
@@ -72,25 +70,4 @@ impl InferenceResponseToolCallExt for InferenceResponseToolCall {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct ToolCallChunk {
-    pub id: String,
-    #[serde(serialize_with = "serialize_option_string_as_empty")]
-    pub raw_name: Option<String>,
-    pub raw_arguments: String,
-}
-
-// Signature dictated by Serde
-#[expect(clippy::ref_option)]
-fn serialize_option_string_as_empty<S>(
-    value: &Option<String>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    match value {
-        Some(s) => serializer.serialize_str(s),
-        None => serializer.serialize_str(""),
-    }
-}
+pub use tensorzero_provider_types::ToolCallChunk;
