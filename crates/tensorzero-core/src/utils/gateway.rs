@@ -632,7 +632,7 @@ pub async fn setup_clickhouse_without_config(
 pub async fn setup_clickhouse(
     config: &UnwrittenConfig,
     clickhouse_url: Option<String>,
-    embedded_client: bool,
+    _embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
     // TODO(#5691): we should stop checking an explicit observability.enabled config when setting up
     // ClickHouse.
@@ -660,14 +660,7 @@ pub async fn setup_clickhouse(
         }
         // Observability default and no ClickHouse URL
         (None, None) => {
-            let msg_suffix = if embedded_client {
-                "`clickhouse_url` was not provided."
-            } else {
-                "`TENSORZERO_CLICKHOUSE_URL` is not set."
-            };
-            tracing::warn!(
-                "Disabling ClickHouse: `gateway.observability.enabled` is not explicitly specified in config and {msg_suffix}"
-            );
+            tracing::debug!("Disabling ClickHouse: `TENSORZERO_CLICKHOUSE_URL` is not set.");
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability default and ClickHouse URL provided
@@ -1127,9 +1120,7 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"
         ));
-        assert!(logs_contain(
-            "`gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."
-        ));
+        assert!(!logs_contain("Disabling observability"));
 
         // We do not test the case where a ClickHouse URL is provided but observability is default,
         // as this would require a working ClickHouse and we don't have one in unit tests.

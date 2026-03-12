@@ -140,8 +140,7 @@ impl PrimaryDatastore {
             None => {
                 if resolved == Self::Disabled {
                     tracing::warn!(
-                        "No observability backend available. \
-                         Observability writes will be disabled."
+                        "Disabling observability: `gateway.observability.enabled` is not explicitly enabled in the configuration and no backend is available (`TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL`)."
                     );
                 }
                 Ok(resolved)
