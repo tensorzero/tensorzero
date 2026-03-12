@@ -35,6 +35,7 @@ fn create_mock_run_evaluation_response() -> RunEvaluationResponse {
         num_errors: 5,
         stats,
         datapoint_results: None,
+        evaluation_infos: None,
     }
 }
 
@@ -472,6 +473,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
         num_errors: 1,
         stats,
         datapoint_results: Some(datapoint_results),
+        evaluation_infos: None,
     };
     let expected_response = mock_response.clone();
 
