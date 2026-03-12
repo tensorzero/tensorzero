@@ -1,0 +1,11 @@
+{
+  "name": "tensorzero-examples-docs-guides-quickstart",
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "openai": "^6.27.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}
