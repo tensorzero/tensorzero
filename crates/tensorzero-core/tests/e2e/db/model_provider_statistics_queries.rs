@@ -902,18 +902,14 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
     ]
 }
 
-/// ClickHouse-only test: insert model inferences with known costs, then verify
-/// the materialized view aggregates the cost correctly.
-async fn test_cost_aggregation_clickhouse(
-    conn: tensorzero_core::db::clickhouse::ClickHouseConnectionInfo,
-) {
-    let model_name = format!("cost-aggregation-test-ch-{}", uuid::Uuid::now_v7());
+/// Insert model inferences with known costs and verify the statistics are
+/// aggregated correctly on both backends.
+async fn test_cost_aggregation(conn: impl ModelInferenceQueries + Sync) {
+    let model_name = format!("cost-aggregation-test-{}", uuid::Uuid::now_v7());
     let inferences = make_cost_test_inferences(&model_name);
 
     conn.insert_model_inferences(&inferences).await.unwrap();
-
-    // Wait for the ClickHouse MV to process the inserts
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    conn.flush_model_provider_statistics().await;
 
     let usage = conn
         .get_model_usage_timeseries(TimeWindow::Cumulative, 1)
@@ -956,90 +952,19 @@ async fn test_cost_aggregation_clickhouse(
         "count_with_cost should be 2 (only inferences with non-null cost)"
     );
 }
-
-#[tokio::test]
-async fn test_cost_aggregation_clickhouse_clickhouse() {
-    let conn = tensorzero_core::db::clickhouse::test_helpers::get_clickhouse().await;
-    test_cost_aggregation_clickhouse(conn).await;
-}
-
-/// Postgres-only test: insert model inferences with known costs, trigger the
-/// incremental refresh function, then verify the aggregated cost.
-#[tokio::test]
-async fn test_cost_aggregation_postgres() {
-    let conn = crate::db::get_test_postgres().await;
-    let pool = conn.get_pool().expect("Pool should be available");
-
-    let model_name = format!("cost-aggregation-test-pg-{}", uuid::Uuid::now_v7());
-    let inferences = make_cost_test_inferences(&model_name);
-
-    conn.insert_model_inferences(&inferences).await.unwrap();
-
-    // Trigger the incremental refresh to populate the statistics table
-    sqlx::query(
-        "SELECT tensorzero.refresh_model_provider_statistics_incremental(full_refresh => TRUE)",
-    )
-    .execute(pool)
-    .await
-    .expect("refresh_model_provider_statistics_incremental should succeed");
-
-    let usage = conn
-        .get_model_usage_timeseries(TimeWindow::Cumulative, 1)
-        .await
-        .unwrap();
-
-    let our_model = usage.iter().find(|u| u.model_name == model_name);
-    assert!(
-        our_model.is_some(),
-        "Should find aggregated data for test model `{model_name}`"
-    );
-    let our_model = our_model.unwrap();
-
-    assert_eq!(
-        our_model.count,
-        Some(3),
-        "Should have 3 inferences for test model"
-    );
-    assert_eq!(
-        our_model.input_tokens,
-        Some(600),
-        "Input tokens should sum to 100 + 200 + 300 = 600"
-    );
-    assert_eq!(
-        our_model.output_tokens,
-        Some(300),
-        "Output tokens should sum to 50 + 100 + 150 = 300"
-    );
-    // SUM of costs: 0.000500 + 0.001500 = 0.002000 (NULL excluded)
-    assert_eq!(
-        our_model.cost,
-        Some(Decimal::new(2000, 6)),
-        "Cost should sum to 0.002000 (NULL costs excluded from SUM)"
-    );
-    // count_with_cost counts only inferences with non-null cost (per-inference granularity).
-    // 2 of 3 inferences have cost data.
-    assert_eq!(
-        our_model.count_with_cost,
-        Some(2),
-        "count_with_cost should be 2 (only inferences with non-null cost)"
-    );
-}
+make_db_test!(test_cost_aggregation);
 
 // ===== CROSS-MINUTE COST AGGREGATION TESTS =====
 
-/// ClickHouse test: verify count_with_cost works correctly across separate
-/// minute buckets. Inferences with cost in minute A should be counted, while
-/// inferences without cost in minute B should not.
-async fn test_cost_aggregation_cross_minute_clickhouse(
-    conn: tensorzero_core::db::clickhouse::ClickHouseConnectionInfo,
-) {
-    let model_name = format!("cost-cross-minute-test-ch-{}", uuid::Uuid::now_v7());
+/// Verify `count_with_cost` is computed correctly per-minute on both backends.
+/// Minute A (5 min ago) has 2 inferences with cost; minute B (3 min ago) has 1
+/// inference without cost. count_with_cost should be 2 total and 0 for minute B.
+async fn test_cost_aggregation_cross_minute(conn: impl ModelInferenceQueries + Sync) {
+    let model_name = format!("cost-cross-minute-test-{}", uuid::Uuid::now_v7());
     let inferences = make_cross_minute_cost_test_inferences(&model_name);
 
     conn.insert_model_inferences(&inferences).await.unwrap();
-
-    // Wait for the ClickHouse MV to process the inserts
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    conn.flush_model_provider_statistics().await;
 
     let usage = conn
         .get_model_usage_timeseries(TimeWindow::Minute, 10)
@@ -1100,71 +1025,4 @@ async fn test_cost_aggregation_cross_minute_clickhouse(
         "Minute without cost data should have count_with_cost = 0"
     );
 }
-
-#[tokio::test]
-async fn test_cost_aggregation_cross_minute_clickhouse_clickhouse() {
-    let conn = tensorzero_core::db::clickhouse::test_helpers::get_clickhouse().await;
-    test_cost_aggregation_cross_minute_clickhouse(conn).await;
-}
-
-/// Postgres test: verify count_with_cost works correctly across separate
-/// minute buckets. Inferences with cost in minute A should be counted, while
-/// inferences without cost in minute B should not.
-#[tokio::test]
-async fn test_cost_aggregation_cross_minute_postgres() {
-    let conn = crate::db::get_test_postgres().await;
-    let pool = conn.get_pool().expect("Pool should be available");
-
-    let model_name = format!("cost-cross-minute-test-pg-{}", uuid::Uuid::now_v7());
-    let inferences = make_cross_minute_cost_test_inferences(&model_name);
-
-    conn.insert_model_inferences(&inferences).await.unwrap();
-
-    // Trigger the incremental refresh to populate the statistics table
-    sqlx::query(
-        "SELECT tensorzero.refresh_model_provider_statistics_incremental(full_refresh => TRUE)",
-    )
-    .execute(pool)
-    .await
-    .expect("refresh_model_provider_statistics_incremental should succeed");
-
-    let usage = conn
-        .get_model_usage_timeseries(TimeWindow::Cumulative, 1)
-        .await
-        .unwrap();
-
-    let our_model = usage.iter().find(|u| u.model_name == model_name);
-    assert!(
-        our_model.is_some(),
-        "Should find aggregated data for test model `{model_name}`"
-    );
-    let our_model = our_model.unwrap();
-
-    assert_eq!(
-        our_model.count,
-        Some(3),
-        "Should have 3 total inferences across both minutes"
-    );
-    assert_eq!(
-        our_model.input_tokens,
-        Some(600),
-        "Input tokens should sum to 100 + 200 + 300 = 600"
-    );
-    assert_eq!(
-        our_model.output_tokens,
-        Some(300),
-        "Output tokens should sum to 50 + 100 + 150 = 300"
-    );
-    // SUM of costs: 0.000500 + 0.001500 = 0.002000 (minute B has NULL cost)
-    assert_eq!(
-        our_model.cost,
-        Some(Decimal::new(2000, 6)),
-        "Cost should sum to 0.002000 (only minute A has cost data)"
-    );
-    // count_with_cost should be 2: only the 2 inferences with non-null cost.
-    assert_eq!(
-        our_model.count_with_cost,
-        Some(2),
-        "count_with_cost should be 2 (only inferences with non-null cost)"
-    );
-}
+make_db_test!(test_cost_aggregation_cross_minute);

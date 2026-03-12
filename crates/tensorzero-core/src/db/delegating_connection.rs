@@ -714,6 +714,10 @@ impl ModelInferenceQueries for DelegatingDatabaseConnection {
 
         self.get_database().insert_model_inferences(rows).await
     }
+
+    async fn flush_model_provider_statistics(&self) {
+        self.get_database().flush_model_provider_statistics().await;
+    }
 }
 #[async_trait]
 impl WorkflowEvaluationQueries for DelegatingDatabaseConnection {
