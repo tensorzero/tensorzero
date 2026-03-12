@@ -12,7 +12,8 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use evaluations::{
-    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationVariant, run_evaluation_core_streaming,
+    ClientInferenceExecutor, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationVariant,
+    run_evaluation_core_streaming,
 };
 use futures::StreamExt;
 use pyo3::{
@@ -31,6 +32,7 @@ use python_helpers::{
 use crate::gil_helpers::in_tokio_runtime_no_gil;
 use tensorzero_core::{
     config::{ConfigPyClass, FunctionsConfigPyClass, Namespace, UninitializedVariantInfo},
+    evaluations::EvaluatorConfig,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         ResolvedInput, ResolvedInputMessage,
@@ -614,51 +616,36 @@ fn parse_datapoint_ids(datapoint_ids: Option<Vec<String>>) -> PyResult<Option<Ve
         .transpose()
 }
 
+/// Resolved evaluation configuration from either the old or new request path.
+struct ResolvedEvaluationConfig {
+    function_name: String,
+    evaluators: HashMap<String, EvaluatorConfig>,
+    function_config: EvaluationFunctionConfig,
+    /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
+    evaluation_name: Option<String>,
+}
+
 /// Builds `EvaluationCoreArgs` for running an evaluation in embedded mode.
 #[expect(clippy::too_many_arguments)]
 fn build_embedded_evaluation_args(
     client: &Client,
     app_state: &tensorzero_core::utils::gateway::AppStateData,
-    evaluation_name: String,
+    resolved: ResolvedEvaluationConfig,
     dataset_name: Option<String>,
     datapoint_ids: Option<Vec<Uuid>>,
     variant: EvaluationVariant,
     concurrency: usize,
     inference_cache: tensorzero_core::cache::CacheEnabledMode,
-) -> PyResult<EvaluationCoreArgs> {
-    let evaluation_config = app_state
-        .config
-        .evaluations
-        .get(&evaluation_name)
-        .ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "evaluation `{evaluation_name}` not found"
-            ))
-        })?;
-
-    let tensorzero_core::evaluations::EvaluationConfig::Inference(ref inference_eval_config) =
-        **evaluation_config;
-    let function_name = inference_eval_config.function_name.clone();
-    let evaluators = inference_eval_config.evaluators.clone();
-
-    let function_config = app_state
-        .config
-        .functions
-        .get(&function_name)
-        .map(|f| tensorzero_core::evaluations::EvaluationFunctionConfig::from(f.as_ref()))
-        .ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err(format!("function `{function_name}` not found"))
-        })?;
-
+) -> EvaluationCoreArgs {
     let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
 
-    Ok(EvaluationCoreArgs {
+    EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(app_state.get_delegating_database()),
-        function_name,
-        function_config,
-        evaluators,
-        evaluation_name: Some(evaluation_name),
+        function_name: resolved.function_name,
+        function_config: resolved.function_config,
+        evaluators: resolved.evaluators,
+        evaluation_name: resolved.evaluation_name,
         evaluation_run_id: uuid::Uuid::now_v7(),
         dataset_name,
         datapoint_ids,
@@ -666,7 +653,7 @@ fn build_embedded_evaluation_args(
         concurrency,
         inference_cache,
         tags: HashMap::new(),
-    })
+    }
 }
 
 /// Builds `RunEvaluationHttpParams` for running an evaluation over HTTP.
@@ -732,6 +719,73 @@ fn build_http_evaluation_params(
 
 /// Helper function to construct an EvaluationVariant from the optional variant_name and internal_dynamic_variant_config parameters.
 /// Deserializes the internal_dynamic_variant_config if provided and validates that exactly one of the two is provided.
+/// Resolves evaluation configuration from either `evaluation_name` or `function_name` + `evaluator_names`.
+fn resolve_evaluation_config(
+    app_state: &tensorzero_core::utils::gateway::AppStateData,
+    evaluation_name: Option<String>,
+    function_name: Option<String>,
+    evaluator_names: Option<Vec<String>>,
+) -> PyResult<ResolvedEvaluationConfig> {
+    match (evaluation_name, function_name, evaluator_names) {
+        (Some(evaluation_name), None, None) => {
+            let evaluation_config = app_state
+                .config
+                .evaluations
+                .get(&evaluation_name)
+                .ok_or_else(|| {
+                    PyValueError::new_err(format!("evaluation `{evaluation_name}` not found"))
+                })?;
+            let tensorzero_core::evaluations::EvaluationConfig::Inference(
+                ref inference_eval_config,
+            ) = **evaluation_config;
+            let function_name = inference_eval_config.function_name.clone();
+            let evaluators = inference_eval_config.evaluators.clone();
+            let function_config = app_state
+                .config
+                .functions
+                .get(&function_name)
+                .map(|f| tensorzero_core::evaluations::EvaluationFunctionConfig::from(f.as_ref()))
+                .ok_or_else(|| {
+                    PyValueError::new_err(format!("function `{function_name}` not found"))
+                })?;
+            Ok(ResolvedEvaluationConfig {
+                function_name,
+                evaluators,
+                function_config,
+                evaluation_name: Some(evaluation_name),
+            })
+        }
+        (None, Some(function_name), Some(evaluator_names)) => {
+            let function_config = app_state
+                .config
+                .functions
+                .get(&function_name)
+                .map(|f| tensorzero_core::evaluations::EvaluationFunctionConfig::from(f.as_ref()))
+                .ok_or_else(|| {
+                    PyValueError::new_err(format!("function `{function_name}` not found"))
+                })?;
+            let mut evaluators = HashMap::new();
+            for name in &evaluator_names {
+                let evaluator = app_state.config.evaluators.get(name).ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "top-level evaluator `{name}` not found in config"
+                    ))
+                })?;
+                evaluators.insert(name.clone(), (**evaluator).clone());
+            }
+            Ok(ResolvedEvaluationConfig {
+                function_name,
+                evaluators,
+                function_config,
+                evaluation_name: None,
+            })
+        }
+        _ => Err(PyValueError::new_err(
+            "Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+        )),
+    }
+}
+
 fn construct_evaluation_variant(
     py: Python<'_>,
     internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
@@ -1352,7 +1406,9 @@ impl TensorZeroGateway {
     ///
     /// # Arguments
     ///
-    /// * `evaluation_name` - User chosen name of the evaluation.
+    /// * `evaluation_name` - Name of a configured evaluation (mutually exclusive with `function_name`/`evaluator_names`).
+    /// * `function_name` - Name of the function to evaluate (requires `evaluator_names`, mutually exclusive with `evaluation_name`).
+    /// * `evaluator_names` - List of top-level evaluator names (requires `function_name`, mutually exclusive with `evaluation_name`).
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
     /// * `variant_name` - Optional name of the variant to evaluate
     /// * `concurrency` - The maximum number of examples to process in parallel
@@ -1367,7 +1423,9 @@ impl TensorZeroGateway {
     ///                         i.e. the width of the larger of the two halves of its confidence interval
     ///                         is <= the precision target.
     #[pyo3(signature = (*,
-                        evaluation_name,
+                        evaluation_name=None,
+                        function_name=None,
+                        evaluator_names=None,
                         dataset_name=None,
                         datapoint_ids=None,
                         variant_name=None,
@@ -1377,12 +1435,14 @@ impl TensorZeroGateway {
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name=None, function_name=None, evaluator_names=None, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
-        evaluation_name: String,
+        evaluation_name: Option<String>,
+        function_name: Option<String>,
+        evaluator_names: Option<Vec<String>>,
         dataset_name: Option<String>,
         datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
@@ -1411,16 +1471,23 @@ impl TensorZeroGateway {
                     &inference_cache.into_pyobject(this.py())?.into_any(),
                 )?;
 
+            let resolved = resolve_evaluation_config(
+                app_state,
+                evaluation_name,
+                function_name,
+                evaluator_names,
+            )?;
+
             let core_args = build_embedded_evaluation_args(
                 &client,
                 app_state,
-                evaluation_name,
+                resolved,
                 dataset_name,
                 datapoint_ids,
                 variant,
                 concurrency,
                 inference_cache_enum,
-            )?;
+            );
 
             let stream_result = tokio_block_on_without_gil(
                 this.py(),
@@ -1437,6 +1504,12 @@ impl TensorZeroGateway {
             }
         } else {
             // HTTP mode: use SSE endpoint
+            let evaluation_name = evaluation_name.ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err(
+                    "`evaluation_name` is required for HTTP mode",
+                )
+            })?;
+
             let params = build_http_evaluation_params(
                 evaluation_name,
                 dataset_name,
@@ -2360,7 +2433,9 @@ impl AsyncTensorZeroGateway {
     ///
     /// # Arguments
     ///
-    /// * `evaluation_name` - User chosen name of the evaluation.
+    /// * `evaluation_name` - Name of a configured evaluation (mutually exclusive with `function_name`/`evaluator_names`).
+    /// * `function_name` - Name of the function to evaluate (requires `evaluator_names`, mutually exclusive with `evaluation_name`).
+    /// * `evaluator_names` - List of top-level evaluator names (requires `function_name`, mutually exclusive with `evaluation_name`).
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
     /// * `variant_name` - Optional name of the variant to evaluate
     /// * `concurrency` - The maximum number of examples to process in parallel
@@ -2375,7 +2450,9 @@ impl AsyncTensorZeroGateway {
     ///                         i.e. the width of the larger of the two halves of its confidence interval
     ///                         is <= the precision target.
     #[pyo3(signature = (*,
-                        evaluation_name,
+                        evaluation_name=None,
+                        function_name=None,
+                        evaluator_names=None,
                         dataset_name=None,
                         datapoint_ids=None,
                         variant_name=None,
@@ -2385,12 +2462,14 @@ impl AsyncTensorZeroGateway {
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name=None, function_name=None, evaluator_names=None, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,
-        evaluation_name: String,
+        evaluation_name: Option<String>,
+        function_name: Option<String>,
+        evaluator_names: Option<Vec<String>>,
         dataset_name: Option<String>,
         datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
@@ -2440,16 +2519,23 @@ impl AsyncTensorZeroGateway {
                     )
                 })?;
 
+                let resolved = resolve_evaluation_config(
+                    app_state,
+                    evaluation_name,
+                    function_name,
+                    evaluator_names,
+                )?;
+
                 let core_args = build_embedded_evaluation_args(
                     &client,
                     app_state,
-                    evaluation_name,
+                    resolved,
                     dataset_name,
                     datapoint_ids,
                     variant,
                     concurrency,
                     inference_cache_enum,
-                )?;
+                );
 
                 let stream_result =
                     run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map)
@@ -2467,6 +2553,12 @@ impl AsyncTensorZeroGateway {
                 }
             } else {
                 // HTTP mode: use SSE endpoint
+                let evaluation_name = evaluation_name.ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(
+                        "`evaluation_name` is required for HTTP mode",
+                    )
+                })?;
+
                 let params = build_http_evaluation_params(
                     evaluation_name,
                     dataset_name,

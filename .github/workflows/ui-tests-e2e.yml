@@ -497,6 +497,8 @@ jobs:
           if [ "${{ matrix.auth_mode }}" = "gateway_auth_with_ui_server_key" ]; then
             # Server key mode: UI server uses this key to authenticate all requests to the gateway
             echo "TENSORZERO_API_KEY=$API_KEY" >> fixtures/.env
+            # Also expose to Playwright for tests that make direct gateway API calls
+            echo "TENSORZERO_API_KEY=$API_KEY" >> "$GITHUB_ENV"
           elif [ "${{ matrix.auth_mode }}" = "gateway_auth_with_browser_key" ]; then
             # Browser key mode: pass to test runner so e2e tests can submit it via the browser auth endpoint
             echo "TENSORZERO_API_KEY_FOR_BROWSER_AUTH=$API_KEY" >> "$GITHUB_ENV"

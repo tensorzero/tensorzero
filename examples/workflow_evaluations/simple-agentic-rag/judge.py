@@ -1,10 +1,13 @@
+import json
 from asyncio import Semaphore, gather
 
-from tensorzero import AsyncTensorZeroGateway, JsonInferenceResponse
+from openai import AsyncOpenAI
+from tensorzero import AsyncTensorZeroGateway
 from tensorzero.util import UUID
 
 
 async def judge_answer(
+    openai_client: AsyncOpenAI,
     t0: AsyncTensorZeroGateway,
     semaphore: Semaphore,
     question: dict,
@@ -13,27 +16,40 @@ async def judge_answer(
     t: int,
 ):
     async with semaphore:
-        response = await t0.inference(
-            function_name="judge_answer",
-            input={
-                "system": {
-                    "question": question["question"],
-                    "answers": question["answers"],
+        response = await openai_client.chat.completions.create(
+            model="tensorzero::function_name::judge_answer",
+            messages=[
+                {
+                    "role": "system",
+                    "content": [  # type: ignore
+                        {
+                            "type": "text",
+                            "tensorzero::arguments": {
+                                "question": question["question"],
+                                "answers": question["answers"],
+                            },
+                        }
+                    ],
                 },
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "arguments": {"answer": ai_answer}}],
-                    }
-                ],
-            },
+                {
+                    "role": "user",
+                    "content": [  # type: ignore
+                        {
+                            "type": "text",
+                            "tensorzero::arguments": {"answer": ai_answer},
+                        }
+                    ],
+                },
+            ],
+            extra_body={"tensorzero::episode_id": str(episode_id)},
         )
-    assert isinstance(response, JsonInferenceResponse)
 
-    if response.output.parsed is None:
+    content = response.choices[0].message.content
+    if content is None:
         raise ValueError("The judge failed to generate a valid output.")
 
-    score = response.output.parsed.get("score")
+    parsed = json.loads(content)
+    score = parsed.get("score")
 
     if score is None:
         raise ValueError("The judge output is missing the 'score' field.")
