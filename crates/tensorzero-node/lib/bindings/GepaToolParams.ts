@@ -65,4 +65,8 @@ export type GepaToolParams = {
    * Maximum number of concurrent inference calls.
    */
   max_concurrency?: number;
+  /**
+   * Maximum number of datapoints to load from each dataset.
+   */
+  max_datapoints?: number;
 };
