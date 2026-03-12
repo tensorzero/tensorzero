@@ -244,9 +244,6 @@ importers:
       storybook:
         specifier: ^10.2.17
         version: 10.2.17(@testing-library/dom@10.4.0)(prettier@3.6.2)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
-      storybook-addon-remix-react-router:
-        specifier: ^6.0.0
-        version: 6.0.0(react-dom@19.2.1(react@19.2.1))(react-router@7.12.0(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react@19.2.1)(storybook@10.2.17(@testing-library/dom@10.4.0)(prettier@3.6.2)(react-dom@19.2.1(react@19.2.1))(react@19.2.1))
       tailwindcss:
         specifier: ^4.1.11
         version: 4.1.11
@@ -1129,15 +1126,6 @@ packages:
     peerDependencies:
       '@types/react': '>=16'
       react: '>=16'
-
-  '@mjackson/form-data-parser@0.4.0':
-    resolution: {integrity: sha512-zDQ0sFfXqn2bJaZ/ypXfGUe0lUjCzXybBHYEoyWaO2w1dZ0nOM9nRER8tVVv3a8ZIgO/zF6p2I5ieWJAUOzt3w==}
-
-  '@mjackson/headers@0.5.1':
-    resolution: {integrity: sha512-sJpFgecPT/zJvwk3GRNVWNs8EkwaJoUNU2D0VMlp+gDJs6cuSTm1q/aCZi3ZtuV6CgDEQ4l2ZjUG3A9JrQlbNA==}
-
-  '@mjackson/multipart-parser@0.6.3':
-    resolution: {integrity: sha512-aQhySnM6OpAYMMG+m7LEygYye99hB1md/Cy1AFE0yD5hfNW+X4JDu7oNVY9Gc6IW8PZ45D1rjFLDIUdnkXmwrA==}
 
   '@mjackson/node-fetch-server@0.2.0':
     resolution: {integrity: sha512-EMlH1e30yzmTpGLQjlFmaDAjyOeZhng1/XCd7DExR8PNAnG/G1tyruZxEoUe11ClnwGhGrtsdnyyUx1frSzjng==}
@@ -3483,9 +3471,6 @@ packages:
   comma-separated-tokens@2.0.3:
     resolution: {integrity: sha512-Fu4hJdvzeylCfQPp9SGWidpzrMs7tTrlu6Vb8XGaRGck8QSNZJJp538Wrb60Lax4fPwR64ViY468OIUTbRlGZg==}
 
-  compare-versions@6.1.1:
-    resolution: {integrity: sha512-4hm4VPpIecmlg59CHXnRDnqGplJFrbLG4aFEl5vl6cK1u76ws3LLvX7ikFnTDl5vo39sjWD6AaDPYodJp/NNHg==}
-
   compressible@2.0.18:
     resolution: {integrity: sha512-AF3r7P5dWxL8MxyITRMlORQNaOA2IkAFaTr4k7BUumjPtRpGDTZpl0Pb1XCO6JeDCBdp126Cgs9sMxqSjgYyRg==}
     engines: {node: '>= 0.6'}
@@ -4732,11 +4717,6 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17 || ^18 || ^19
 
-  react-inspector@6.0.2:
-    resolution: {integrity: sha512-x+b7LxhmHXjHoU/VrFAzw5iutsILRoYyDq97EDYdFpPLcvqtEzk4ZSZSQjnFPbr5T57tLXnHcqFYoN1pI6u8uQ==}
-    peerDependencies:
-      react: ^16.8.4 || ^17.0.0 || ^18.0.0
-
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
 
@@ -4985,19 +4965,6 @@ packages:
 
   std-env@3.10.0:
     resolution: {integrity: sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg==}
-
-  storybook-addon-remix-react-router@6.0.0:
-    resolution: {integrity: sha512-G79cRlU0vn6L4Cr1A22z2k63YoYuzT5qS+JfQzL5lm94LMpUpOBNF8E4FMoQSXD9UGfYFSKzmtZzIvmhTmlK/w==}
-    peerDependencies:
-      react: '>=18.0.0'
-      react-dom: '>=18.0.0'
-      react-router: '>=7.12.0'
-      storybook: ^10.0.0
-    peerDependenciesMeta:
-      react:
-        optional: true
-      react-dom:
-        optional: true
 
   storybook@10.2.17:
     resolution: {integrity: sha512-yueTpl5YJqLzQqs3CanxNdAAfFU23iP0j+JVJURE4ghfEtRmWfWoZWLGkVcyjmgum7UmjwAlqRuOjQDNvH89kw==}
@@ -6258,16 +6225,6 @@ snapshots:
       '@types/mdx': 2.0.13
       '@types/react': 19.2.7
       react: 19.2.1
-
-  '@mjackson/form-data-parser@0.4.0':
-    dependencies:
-      '@mjackson/multipart-parser': 0.6.3
-
-  '@mjackson/headers@0.5.1': {}
-
-  '@mjackson/multipart-parser@0.6.3':
-    dependencies:
-      '@mjackson/headers': 0.5.1
 
   '@mjackson/node-fetch-server@0.2.0': {}
 
@@ -8554,8 +8511,6 @@ snapshots:
 
   comma-separated-tokens@2.0.3: {}
 
-  compare-versions@6.1.1: {}
-
   compressible@2.0.18:
     dependencies:
       mime-db: 1.54.0
@@ -10063,10 +10018,6 @@ snapshots:
     dependencies:
       react: 19.2.1
 
-  react-inspector@6.0.2(react@19.2.1):
-    dependencies:
-      react: 19.2.1
-
   react-is@16.13.1: {}
 
   react-is@17.0.2: {}
@@ -10377,17 +10328,6 @@ snapshots:
   statuses@2.0.1: {}
 
   std-env@3.10.0: {}
-
-  storybook-addon-remix-react-router@6.0.0(react-dom@19.2.1(react@19.2.1))(react-router@7.12.0(react-dom@19.2.1(react@19.2.1))(react@19.2.1))(react@19.2.1)(storybook@10.2.17(@testing-library/dom@10.4.0)(prettier@3.6.2)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)):
-    dependencies:
-      '@mjackson/form-data-parser': 0.4.0
-      compare-versions: 6.1.1
-      react-inspector: 6.0.2(react@19.2.1)
-      react-router: 7.12.0(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
-      storybook: 10.2.17(@testing-library/dom@10.4.0)(prettier@3.6.2)(react-dom@19.2.1(react@19.2.1))(react@19.2.1)
-    optionalDependencies:
-      react: 19.2.1
-      react-dom: 19.2.1(react@19.2.1)
 
   storybook@10.2.17(@testing-library/dom@10.4.0)(prettier@3.6.2)(react-dom@19.2.1(react@19.2.1))(react@19.2.1):
     dependencies:

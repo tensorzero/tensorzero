@@ -125,7 +125,7 @@ from openai import OpenAI
 client = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
 
 result = client.chat.completions.create(
-    model="tensorzero::function_name::your_function",
+    model="tensorzero::model_name::openai::gpt-4o-mini",
     messages=[
         {
             "role": "user",
@@ -158,7 +158,7 @@ const client = new OpenAI({
 
 const result = await client.chat.completions.create(
   {
-    model: "tensorzero::function_name::your_function",
+    model: "tensorzero::model_name::openai::gpt-4o-mini",
     messages: [
       {
         role: "user",
@@ -189,7 +189,7 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "tensorzero-otlp-traces-extra-header-user-id: user-123" \
   -H "tensorzero-otlp-traces-extra-header-request-source: mobile-app" \
   -d '{
-    "model": "tensorzero::function_name::your_function_name",
+    "model": "tensorzero::model_name::openai::gpt-4o-mini",
     "messages": [
       {
         "role": "user",
@@ -223,7 +223,7 @@ from openai import OpenAI
 client = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
 
 result = client.chat.completions.create(
-    model="tensorzero::function_name::your_function_name",
+    model="tensorzero::model_name::openai::gpt-4o-mini",
     messages=[
         {
             "role": "user",
@@ -271,7 +271,7 @@ from openai import OpenAI
 client = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
 
 result = client.chat.completions.create(
-    model="tensorzero::function_name::your_function_name",
+    model="tensorzero::model_name::openai::gpt-4o-mini",
     messages=[
         {
             "role": "user",

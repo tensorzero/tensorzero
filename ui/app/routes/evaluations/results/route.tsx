@@ -33,7 +33,6 @@ import {
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
 import MetricValue from "~/components/metric/MetricValue";
-import { getMetricType } from "~/utils/config/evaluations";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 import {
   Tooltip,
@@ -45,15 +44,12 @@ import {
   ColorAssignerProvider,
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import { getConfig, getConfigForSnapshot } from "~/utils/config/index.server";
 import type {
-  EvaluatorConfig,
   InferenceEvaluationConfig,
-  MetricConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
-} from "~/types/tensorzero";
-import type {
   EvaluationRunMetadata,
   RunMetricMetadata,
 } from "~/types/tensorzero";
@@ -147,21 +143,6 @@ async function fetchEvaluationResultsData(
   };
 }
 
-/// TODO(#6636): Stop constructing metric configs.
-function buildMetricsConfigFromRunMetadata(
-  metrics: RunMetricMetadata[],
-): Record<string, MetricConfig> {
-  const metricsConfig: Record<string, MetricConfig> = {};
-  for (const metric of metrics) {
-    metricsConfig[metric.name] = {
-      type: metric.value_type === "boolean" ? "boolean" : "float",
-      level: "inference",
-      optimize: metric.optimize ?? "max",
-    };
-  }
-  return metricsConfig;
-}
-
 function buildEvaluatorMetricNames(
   metrics: RunMetricMetadata[],
 ): Record<string, string> {
@@ -208,6 +189,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
   let evaluationConfig = config.evaluations[evaluation_name];
   let effectiveConfig = config;
+  let snapshotHash: string | undefined;
 
   if (!evaluationConfig) {
     const runs = await client.listEvaluationRuns(100, 0);
@@ -215,12 +197,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       (r) => r.evaluation_name === evaluation_name,
     );
     if (matchingRun?.snapshot_hash) {
+      snapshotHash = matchingRun.snapshot_hash;
       effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
       evaluationConfig = effectiveConfig.evaluations[evaluation_name];
     }
   }
 
-  let metricsConfig: Record<string, MetricConfig>;
+  let metricsConfig: Record<string, RunMetricMetadata>;
   let evaluatorMetricNames: Record<string, string>;
 
   if (evaluationConfig) {
@@ -232,11 +215,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       evaluatorMetricNames[evaluatorName] = metricName;
       const metricConfig = effectiveConfig.metrics[metricName];
       if (metricConfig) {
-        metricsConfig[metricName] = metricConfig;
+        metricsConfig[metricName] = {
+          name: metricName,
+          evaluator_name: evaluatorName,
+          value_type: metricConfig.type,
+          optimize: metricConfig.optimize,
+        };
       }
     }
   } else {
-    metricsConfig = buildMetricsConfigFromRunMetadata(firstRunMetadata.metrics);
+    metricsConfig = {};
+    for (const metric of firstRunMetadata.metrics) {
+      metricsConfig[metric.name] = metric;
+    }
     evaluatorMetricNames = buildEvaluatorMetricNames(firstRunMetadata.metrics);
     // Build a minimal evaluationConfig for the components
     const evaluators: Record<string, { type: "exact_match" }> = {};
@@ -277,6 +268,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     evaluation_name,
     evaluationConfig,
+    snapshotHash,
     functionType: function_type,
     metricsConfig,
     evaluatorMetricNames,
@@ -371,12 +363,14 @@ function BasicInfoWithData({
   evaluationConfig: evaluation_config,
   functionType,
   datapoint_id,
+  snapshotHash,
 }: {
   data: EvaluationResultsData;
   evaluation_name: string;
   evaluationConfig: InferenceEvaluationConfig;
   functionType: "chat" | "json";
   datapoint_id: string;
+  snapshotHash?: string;
 }) {
   const { consolidatedEvaluationResults, datapoint_staled_at } = data;
   const fetcher = useFetcher();
@@ -403,6 +397,7 @@ function BasicInfoWithData({
       datapoint_name={consolidatedEvaluationResults[0].name}
       datapoint_staled_at={datapoint_staled_at}
       onRenameDatapoint={handleRenameDatapoint}
+      snapshotHash={snapshotHash}
     />
   );
 }
@@ -410,15 +405,15 @@ function BasicInfoWithData({
 function MainContent({
   data,
   evaluation_name,
-  evaluationConfig: evaluation_config,
+  function_name,
   metricsConfig,
   evaluatorMetricNames,
   datapoint_id,
 }: {
   data: EvaluationResultsData;
   evaluation_name: string;
-  evaluationConfig: InferenceEvaluationConfig;
-  metricsConfig: Record<string, MetricConfig>;
+  function_name: string;
+  metricsConfig: Record<string, RunMetricMetadata>;
   evaluatorMetricNames: Record<string, string>;
   datapoint_id: string;
 }) {
@@ -460,7 +455,7 @@ function MainContent({
       <OutputsSection
         outputsToDisplay={outputsToDisplay}
         evaluation_name={evaluation_name}
-        evaluation_config={evaluation_config}
+        function_name={function_name}
         metricsConfig={metricsConfig}
         evaluatorMetricNames={evaluatorMetricNames}
         datapointId={datapoint_id}
@@ -492,6 +487,7 @@ export default function EvaluationDatapointPage({
   const {
     evaluation_name,
     evaluationConfig,
+    snapshotHash,
     functionType,
     metricsConfig,
     evaluatorMetricNames,
@@ -518,6 +514,7 @@ export default function EvaluationDatapointPage({
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
         <PageHeader
+          banner={snapshotHash ? <SnapshotBanner /> : undefined}
           eyebrow={
             <Breadcrumbs
               segments={[
@@ -548,6 +545,7 @@ export default function EvaluationDatapointPage({
                   evaluationConfig={evaluationConfig}
                   functionType={functionType}
                   datapoint_id={params.datapoint_id}
+                  snapshotHash={snapshotHash}
                 />
               )}
             </Await>
@@ -595,7 +593,7 @@ export default function EvaluationDatapointPage({
               <MainContent
                 data={resultsData}
                 evaluation_name={evaluation_name}
-                evaluationConfig={evaluationConfig}
+                function_name={evaluationConfig.function_name}
                 metricsConfig={metricsConfig}
                 evaluatorMetricNames={evaluatorMetricNames}
                 datapoint_id={params.datapoint_id}
@@ -610,7 +608,6 @@ export default function EvaluationDatapointPage({
 
 const MetricsDisplay = ({
   metrics,
-  evaluatorsConfig,
   metricsConfig,
   evaluatorMetricNames,
   datapointId,
@@ -619,8 +616,7 @@ const MetricsDisplay = ({
   variantName,
 }: {
   metrics: ConsolidatedMetric[];
-  evaluatorsConfig: Record<string, EvaluatorConfig | undefined>;
-  metricsConfig: Record<string, MetricConfig>;
+  metricsConfig: Record<string, RunMetricMetadata>;
   evaluatorMetricNames: Record<string, string>;
   datapointId: string;
   inferenceId: string | null;
@@ -630,27 +626,22 @@ const MetricsDisplay = ({
   return (
     <div className="pt-2">
       <div className="space-y-1">
-        {metrics.map((metricObj) => {
-          const evaluatorConfig = evaluatorsConfig[metricObj.evaluator_name];
-          if (!evaluatorConfig) return null;
-
-          return (
-            <MetricRow
-              key={metricObj.evaluator_name}
-              evaluatorName={metricObj.evaluator_name}
-              metricValue={metricObj.metric_value}
-              evaluatorConfig={evaluatorConfig}
-              metricsConfig={metricsConfig}
-              evaluatorMetricNames={evaluatorMetricNames}
-              datapointId={datapointId}
-              inferenceId={inferenceId}
-              evaluatorInferenceId={metricObj.evaluator_inference_id}
-              evalRunId={evalRunId}
-              variantName={variantName}
-              isHumanFeedback={metricObj.is_human_feedback}
-            />
-          );
-        })}
+        {metrics.map((metricObj) => (
+          <MetricRow
+            key={metricObj.evaluator_name}
+            evaluatorName={metricObj.evaluator_name}
+            metricValue={metricObj.metric_value}
+            isLlmJudgeEvaluation={!!metricObj.evaluator_inference_id}
+            metricsConfig={metricsConfig}
+            evaluatorMetricNames={evaluatorMetricNames}
+            datapointId={datapointId}
+            inferenceId={inferenceId}
+            evaluatorInferenceId={metricObj.evaluator_inference_id}
+            evalRunId={evalRunId}
+            variantName={variantName}
+            isHumanFeedback={metricObj.is_human_feedback}
+          />
+        ))}
       </div>
     </div>
   );
@@ -659,7 +650,7 @@ const MetricsDisplay = ({
 const MetricRow = ({
   evaluatorName,
   metricValue,
-  evaluatorConfig,
+  isLlmJudgeEvaluation,
   metricsConfig,
   evaluatorMetricNames,
   datapointId,
@@ -671,8 +662,8 @@ const MetricRow = ({
 }: {
   evaluatorName: string;
   metricValue: string;
-  evaluatorConfig: EvaluatorConfig;
-  metricsConfig: Record<string, MetricConfig>;
+  isLlmJudgeEvaluation: boolean;
+  metricsConfig: Record<string, RunMetricMetadata>;
   evaluatorMetricNames: Record<string, string>;
   datapointId: string;
   inferenceId: string | null;
@@ -695,7 +686,6 @@ const MetricRow = ({
       `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
     );
   }
-  const evaluationType = evaluatorConfig.type;
   return (
     <div className="group flex items-center gap-2">
       <Tooltip>
@@ -708,12 +698,14 @@ const MetricRow = ({
           <div className="space-y-1 text-left text-xs">
             <div>
               <span className="font-medium">Type:</span>
-              <span className="ml-2 font-medium">{metricProperties.type}</span>
+              <span className="ml-2 font-medium">
+                {metricProperties.value_type}
+              </span>
             </div>
             <div>
               <span className="font-medium">Optimize:</span>
               <span className="ml-2 font-medium">
-                {metricProperties.optimize}
+                {metricProperties.optimize ?? "unknown"}
               </span>
             </div>
           </div>
@@ -721,16 +713,12 @@ const MetricRow = ({
       </Tooltip>
       <MetricValue
         value={String(metricValue)}
-        metricType={getMetricType(evaluatorConfig)}
-        optimize={
-          evaluatorConfig.type === "llm_judge"
-            ? evaluatorConfig.optimize
-            : "max"
-        }
+        metricType={metricProperties.value_type as "boolean" | "float"}
+        optimize={metricProperties.optimize}
         isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />
-      {inferenceId !== null && evaluationType === "llm_judge" && (
+      {inferenceId !== null && isLlmJudgeEvaluation && (
         <div className="flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <EvaluationFeedbackEditor
             inferenceId={inferenceId}
@@ -767,15 +755,15 @@ type OutputsSectionProps = {
     episodeId: string | null;
   }>;
   evaluation_name: string;
-  evaluation_config: InferenceEvaluationConfig;
-  metricsConfig: Record<string, MetricConfig>;
+  function_name: string;
+  metricsConfig: Record<string, RunMetricMetadata>;
   evaluatorMetricNames: Record<string, string>;
   datapointId: string;
 };
 
 function OutputsSection({
   outputsToDisplay,
-  evaluation_config,
+  function_name,
   metricsConfig,
   evaluatorMetricNames,
   datapointId,
@@ -820,7 +808,7 @@ function OutputsSection({
                       {result.inferenceId && result.episodeId && (
                         <AddToDatasetButton
                           inferenceId={result.inferenceId}
-                          functionName={evaluation_config.function_name}
+                          functionName={function_name}
                           variantName={result.variant_name}
                           episodeId={result.episodeId}
                           hasDemonstration={false}
@@ -848,7 +836,6 @@ function OutputsSection({
               result.metrics.length > 0 && (
                 <MetricsDisplay
                   metrics={result.metrics}
-                  evaluatorsConfig={evaluation_config.evaluators}
                   metricsConfig={metricsConfig}
                   evaluatorMetricNames={evaluatorMetricNames}
                   datapointId={datapointId}

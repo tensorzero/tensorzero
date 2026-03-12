@@ -18,18 +18,16 @@ Here, we'll export traces to a local instance of Jaeger.
 First, let's make an inference request to the gateway.
 
 ```bash
-curl -X POST "http://localhost:3000/inference" \
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "openai::gpt-4o-mini",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::openai::gpt-4o-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a haiku about TensorZero."
+      }
+    ]
   }'
 ```
 

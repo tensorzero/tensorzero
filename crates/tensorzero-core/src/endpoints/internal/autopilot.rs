@@ -18,11 +18,11 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use autopilot_client::{
-    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventRequest,
-    CreateEventResponse, EventPayload, EventPayloadMessageContent, EventPayloadMessageMetadata,
-    GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
-    ListConfigWritesParams, ListEventsParams, ListSessionsParams, ListSessionsResponse,
-    S3UploadRequest, S3UploadResponse, StreamEventsParams,
+    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, AutopilotClient, CreateEventPayload,
+    CreateEventRequest, CreateEventResponse, EventPayloadMessageContent,
+    EventPayloadMessageMetadata, GatewayListConfigWritesResponse, GatewayListEventsResponse,
+    GatewayStreamUpdate, ListConfigWritesParams, ListEventsParams, ListSessionsParams,
+    ListSessionsResponse, S3UploadRequest, S3UploadResponse, StreamEventsParams,
 };
 use tensorzero_types::ResolveUuidResponse;
 
@@ -46,7 +46,7 @@ static UUID_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CreateEventGatewayRequest {
-    pub payload: EventPayload,
+    pub payload: CreateEventPayload,
     /// Used for idempotency when adding events to an existing session.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default)]
@@ -348,7 +348,7 @@ pub async fn create_event_handler(
     };
 
     // Enrich Message payloads with resolved UUIDs
-    if let EventPayload::Message(msg) = &mut http_request.payload {
+    if let CreateEventPayload::Message(msg) = &mut http_request.payload {
         if !msg.metadata.resolved_uuids.is_empty() {
             // We require this to be empty when invoked from the UI,
             // since we want to fill it in ourselves.
