@@ -37,9 +37,6 @@ function JsonBlock({ data }: { data: unknown }) {
 const CONTEXT_MAX_HEIGHT = 200;
 
 function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
-  const labelColor = "text-purple-500";
-  const borderColor = "border-purple-200";
-
   const content = (() => {
     switch (block.type) {
       case "json":
@@ -65,16 +62,11 @@ function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       {block.label && (
-        <span className={cn("text-sm font-medium", labelColor)}>
+        <span className="text-sm font-medium text-purple-500">
           {block.label}
         </span>
       )}
-      <div
-        className={cn(
-          "border-l-2 pl-2 [&_.cm-editor]:!bg-purple-50/10 dark:[&_.cm-editor]:!bg-purple-950/3",
-          borderColor,
-        )}
-      >
+      <div className="border-l-2 border-purple-200 pl-2">
         <ExpandableElement maxHeight={CONTEXT_MAX_HEIGHT}>
           {content}
         </ExpandableElement>
@@ -194,7 +186,7 @@ export function AutoEvalExampleLabelingCard({
   };
 
   return (
-    <div className="mt-4 flex flex-col rounded-md border border-purple-200 bg-white dark:bg-neutral-950 dark:border-purple-800 dark:bg-purple-950/10">
+    <div className="mt-4 flex flex-col rounded-md border border-purple-200 bg-white dark:border-purple-800 dark:bg-purple-950/10">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-3">
         <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
