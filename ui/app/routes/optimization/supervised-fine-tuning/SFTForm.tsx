@@ -95,7 +95,7 @@ export function SFTForm({
 
   // Reset variant when function changes since variants are function-specific
   useEffect(() => {
-    form.setValue("variant", "", { shouldValidate: true });
+    form.setValue("variant", "");
   }, [functionName, form]);
 
   // Form submission using formFetcher
