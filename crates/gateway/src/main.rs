@@ -27,7 +27,7 @@ use tensorzero_core::db::postgres::{
 };
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error::{self, Error, ErrorDetails};
+use tensorzero_core::error::{self, DelayedError, Error, ErrorDetails};
 use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
@@ -96,14 +96,16 @@ async fn run_optimization_postgres_migrations() -> Result<(), Error> {
             message: e.to_string(),
         })
     })?;
-    tensorzero_optimizers::postgres::make_migrator()
+
+    // TODO(#6912): require optimization migrations to run correctly soon.
+    if let Err(e) = tensorzero_optimizers::postgres::make_migrator()
         .run(&pool)
         .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresMigration {
-                message: format!("Failed to run optimization migrations: {e}"),
-            })
-        })?;
+    {
+        tracing::warn!(
+            "Failed to run Postgres migrations for optimization: {e}. This is non-fatal, but TensorZero will require them soon."
+        )
+    }
     Ok(())
 }
 
@@ -188,14 +190,11 @@ async fn run() -> Result<(), ExitCode> {
         manual_run_postgres_migrations()
             .await
             .log_err_pretty("Failed to run Postgres migrations")?;
-        if args
-            .postgres_migration_args
-            .enable_optimization_postgres_migrations
-        {
-            run_optimization_postgres_migrations()
-                .await
-                .log_err_pretty("Failed to run optimization Postgres migrations")?;
-        }
+
+        run_optimization_postgres_migrations()
+            .await
+            .log_err_pretty("Failed to run optimization Postgres migrations.")?;
+
         tracing::info!("Postgres is ready.");
         return Ok(());
     }
