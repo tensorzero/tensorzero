@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import EventStream from "./EventStream";
 import type { GatewayEvent } from "~/types/tensorzero";
-import { GlobalToastProvider } from "~/providers/global-toast-provider";
 import { AutopilotSessionProvider } from "~/contexts/AutopilotSessionContext";
 
 const baseTime = new Date("2026-04-12T10:00:00Z").getTime();
@@ -482,9 +481,7 @@ const meta = {
   decorators: [
     (Story) => (
       <AutopilotSessionProvider>
-        <GlobalToastProvider>
-          <Story />
-        </GlobalToastProvider>
+        <Story />
       </AutopilotSessionProvider>
     ),
   ],
