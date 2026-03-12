@@ -25,7 +25,9 @@ use tensorzero_core::{
     tool::StaticToolConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
-use tensorzero_optimizers::gepa::{analyze::analyze_inferences, validate::FunctionContext};
+use tensorzero_optimizers::gepa::{
+    GatewayGepaClient, analyze::analyze_inferences, validate::FunctionContext,
+};
 use uuid::Uuid;
 
 // ============================================================================
@@ -630,7 +632,7 @@ async fn test_analyze_inferences_invalid_model() {
 
     // Execute: Should fail when all analyses fail
     let result = analyze_inferences(
-        &client,
+        &GatewayGepaClient(&client),
         &eval_infos,
         &function_context,
         &variant_config,
@@ -677,7 +679,7 @@ async fn test_analyze_inferences_with_schemas() {
 
     // Execute: Should handle schemas correctly
     let result = analyze_inferences(
-        &client,
+        &GatewayGepaClient(&client),
         &eval_infos,
         &function_context,
         &variant_config,
@@ -717,7 +719,7 @@ async fn test_analyze_input_echo_helper(
     };
 
     let result = analyze_inferences(
-        &client,
+        &GatewayGepaClient(&client),
         &eval_infos,
         &function_context,
         &variant_config,

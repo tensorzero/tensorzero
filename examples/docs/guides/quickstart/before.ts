@@ -1,11 +1,9 @@
 import OpenAI from "openai";
 
-const client = new OpenAI({
-  baseURL: "http://localhost:3000/openai/v1",
-});
+const client = new OpenAI();
 
 const response = await client.chat.completions.create({
-  model: "tensorzero::function_name::generate_haiku",
+  model: "gpt-4o-mini",
   messages: [
     {
       role: "user",

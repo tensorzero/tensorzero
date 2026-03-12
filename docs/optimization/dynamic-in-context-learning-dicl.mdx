@@ -108,41 +108,8 @@ Please return the entities in the following JSON format:
 
 <Step title="Collect your optimization data">
 
-<Tabs>
-
-<Tab title="TensorZero Dataset">
-
 After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) of good examples for the `extract_entities` function you configured.
 You can create datapoints from historical inferences or external/synthetic datasets.
-
-```python
-from tensorzero import ListDatapointsRequest
-
-datapoints = t0.list_datapoints(
-    dataset_name="extract_entities_dataset",
-    request=ListDatapointsRequest(
-        function_name="extract_entities",
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=datapoints.datapoints,
-    variants={"extract_entities": "baseline"},
-)
-```
-
-</Tab>
-
-<Tab title="Historical Inferences">
-
-After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
-TensorZero automatically collects structured data about those inferences, which can later be used as training examples for DICL.
-
-You can curate good examples in multiple ways:
-
-- **Collecting demonstrations:** Collect demonstrations of good behavior (or labels) from human annotation or other sources.
-- **Filtering with metrics:** Query inferences that scored well on your metrics (e.g. `output_source="inference"` with a filter for high scores).
-- **Examples from an expensive model:** Run inferences with a powerful model (e.g. GPT-5) and use those outputs as demonstrations for a smaller model (e.g. GPT-5 Mini).
 
 <Tip>
 
@@ -150,39 +117,6 @@ The performance of DICL degrades as the curated examples become noisier with bad
 There is a trade-off between dataset size and quality of datapoints.
 
 </Tip>
-
-For this example, we'll use demonstrations.
-You can submit demonstration feedback using the `demonstration` metric:
-
-```python
-t0.feedback(
-    metric_name="demonstration",
-    value=corrected_output,  # Provide the ideal output for that inference
-    inference_id=response.inference_id,
-)
-```
-
-Then, query inferences with `output_source="demonstration"` to get examples where the output has been corrected:
-
-```python
-from tensorzero import ListInferencesRequest
-
-inferences_response = t0.list_inferences(
-    request=ListInferencesRequest(
-        function_name="extract_entities",
-        output_source="demonstration",  # Retrieve demonstrations instead of historical outputs
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=inferences_response.inferences,
-    variants={"extract_entities": "baseline"},
-)
-```
-
-</Tab>
-
-</Tabs>
 
 </Step>
 
@@ -196,7 +130,7 @@ from tensorzero import DICLOptimizationConfig
 optimization_config = DICLOptimizationConfig(
     function_name="extract_entities",
     variant_name="dicl",
-    embedding_model="openai::text_embedding_3_small",
+    embedding_model="openai::text-embedding-3-small",
     k=10,  # how many examples are retrieved and injected as context
     model="openai::gpt-5-mini",  # LLM that will generate outputs using the retrieved examples
 )
@@ -224,9 +158,11 @@ If you see inferences with irrelevant examples, consider setting a `max_distance
 You can now launch your DICL optimization job using the TensorZero Gateway:
 
 ```python
-job_handle = t0.experimental_launch_optimization(
-    train_samples=rendered_samples,
-    optimization_config=optimization_config,
+job_handle = t0.experimental_launch_optimization_workflow(
+    function_name="extract_entities",
+    template_variant_name="baseline",
+    dataset_name="extract_entities_dataset",
+    optimizer_config=optimization_config,
 )
 
 job_info = t0.experimental_poll_optimization(
@@ -245,7 +181,7 @@ After optimization completes, add the DICL variant to your configuration:
 ```toml title="tensorzero.toml"
 [functions.extract_entities.variants.dicl]
 type = "experimental_dynamic_in_context_learning"
-embedding_model = "openai::text_embedding_3_small"
+embedding_model = "openai::text-embedding-3-small"
 k = 10
 model = "openai::gpt-5-mini"
 json_mode = "strict"

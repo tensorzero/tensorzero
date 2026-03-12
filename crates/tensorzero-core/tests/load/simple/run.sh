@@ -2,7 +2,7 @@
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 
-echo 'POST http://localhost:3000/inference' \
+echo 'POST http://localhost:3000/openai/v1/chat/completions' \
 | vegeta attack \
     -header="Content-Type: application/json" \
     -body=$SCRIPT_DIR/body.json \
