@@ -1,9 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { StepTab } from "~/components/autopilot/question-cards/StepTab";
-import { InputElement } from "~/components/input_output/InputElement";
-import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
 import { ScrollFadeContainer } from "~/components/input_output/ScrollFadeContainer";
 import {
   Tooltip,
@@ -17,40 +16,10 @@ import type {
   AutoEvalContentBlock,
   EventPayloadAutoEvalExampleLabeling,
   UserQuestionAnswer,
-  Input,
-  ContentBlockChatOutput,
 } from "~/types/tensorzero";
 
 const CONTEXT_MAX_HEIGHT = 300;
 const MAX_TEXTAREA_ROWS = 3;
-
-function asInferenceInput(data: unknown): Input | undefined {
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "messages" in data &&
-    Array.isArray((data as Record<string, unknown>).messages)
-  ) {
-    return data as Input;
-  }
-  return undefined;
-}
-
-function asChatOutput(data: unknown): ContentBlockChatOutput[] | undefined {
-  if (Array.isArray(data)) {
-    if (data.length === 0) return data as ContentBlockChatOutput[];
-    const first = data[0];
-    if (
-      first &&
-      typeof first === "object" &&
-      "type" in first &&
-      typeof first.type === "string"
-    ) {
-      return data as ContentBlockChatOutput[];
-    }
-  }
-  return undefined;
-}
 
 function ScrollCard({
   maxHeight,
@@ -68,6 +37,24 @@ function ScrollCard({
   );
 }
 
+function JsonBlock({ data, maxHeight }: { data: unknown; maxHeight: number }) {
+  const formatted = useFormattedJson(
+    data as Parameters<typeof useFormattedJson>[0],
+  );
+  return (
+    <div className="flex flex-1 flex-col">
+      <CodeEditor
+        value={formatted}
+        readOnly
+        showLineNumbers={false}
+        maxHeight={`${maxHeight}px`}
+        allowedLanguages={["json"]}
+        autoDetectLanguage={false}
+      />
+    </div>
+  );
+}
+
 function ContextBlock({
   block,
   maxHeight,
@@ -81,36 +68,12 @@ function ContextBlock({
 
   const content = (() => {
     switch (block.type) {
-      case "json": {
-        const inferenceInput = asInferenceInput(block.data);
-        if (inferenceInput) {
-          return (
-            <InputElement
-              input={inferenceInput}
-              overflow={{ type: "scroll", maxHeight }}
-            />
-          );
-        }
-        const chatOutput = asChatOutput(block.data);
-        if (chatOutput) {
-          return (
-            <ChatOutputElement
-              output={chatOutput}
-              overflow={{ type: "scroll", maxHeight }}
-            />
-          );
-        }
-        // JSON fallback
-        return (
-          <ScrollCard maxHeight={maxHeight}>
-            <pre className="text-xs">{JSON.stringify(block.data, null, 2)}</pre>
-          </ScrollCard>
-        );
-      }
+      case "json":
+        return <JsonBlock data={block.data} maxHeight={maxHeight} />;
       case "markdown":
         return (
           <ScrollCard maxHeight={maxHeight}>
-            <Markdown className="text-sm">{block.text}</Markdown>
+            <Markdown className="font-mono text-sm">{block.text}</Markdown>
           </ScrollCard>
         );
       default: {
@@ -178,6 +141,45 @@ export function AutoEvalExampleLabelingCard({
   );
 
   const totalExamples = payload.examples.length;
+
+  // Keyboard shortcuts: 1-9 select options, Enter advances/submits
+  useEffect(() => {
+    if (isLoading || totalExamples === 0) return;
+    const handler = (e: KeyboardEvent) => {
+      // Don't intercept when typing in the rationale textarea
+      if (
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLInputElement
+      )
+        return;
+
+      const options = payload.examples[activeIndex]?.label_question.options;
+      if (!options) return;
+
+      // Number keys select options
+      const num = parseInt(e.key, 10);
+      if (num >= 1 && num <= options.length) {
+        e.preventDefault();
+        setSelections((prev) => ({
+          ...prev,
+          [activeIndex]: options[num - 1].id,
+        }));
+        return;
+      }
+
+      // Enter advances to next step or submits
+      if (e.key === "Enter") {
+        if (!selections[activeIndex]) return;
+        e.preventDefault();
+        if (activeIndex < totalExamples - 1) {
+          setActiveIndex((s) => s + 1);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [activeIndex, isLoading, totalExamples, payload.examples, selections]);
+
   if (totalExamples === 0) return null;
 
   const isSingleExample = totalExamples === 1;
@@ -186,7 +188,10 @@ export function AutoEvalExampleLabelingCard({
   const example = payload.examples[activeIndex];
 
   const isStepAnswered = (idx: number) => Boolean(selections[idx]);
-  const isCurrentComplete = isStepAnswered(activeIndex);
+  const answeredCount = payload.examples.filter((_, i) =>
+    isStepAnswered(i),
+  ).length;
+  const allAnswered = answeredCount === totalExamples;
 
   const getStepTabState = (idx: number) => {
     if (idx === activeIndex) return "active" as const;
@@ -280,8 +285,9 @@ export function AutoEvalExampleLabelingCard({
               {example.label_question.question}
             </span>
             <div className="flex flex-wrap gap-2">
-              {example.label_question.options.map((opt) => {
+              {example.label_question.options.map((opt, optIdx) => {
                 const isSelected = selections[activeIndex] === opt.id;
+                const shortcut = optIdx < 9 ? optIdx + 1 : undefined;
                 const button = (
                   <OptionButton
                     key={opt.id}
@@ -300,6 +306,11 @@ export function AutoEvalExampleLabelingCard({
                         : "text-fg-primary",
                     )}
                   >
+                    {shortcut && (
+                      <kbd className="text-fg-tertiary mr-0.5 font-mono text-[10px] opacity-50">
+                        {shortcut}
+                      </kbd>
+                    )}
                     {opt.label}
                   </OptionButton>
                 );
@@ -369,10 +380,15 @@ export function AutoEvalExampleLabelingCard({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {!isSingleExample && (
+            <span className="text-fg-tertiary text-xs">
+              {answeredCount}/{totalExamples} labeled
+            </span>
+          )}
           {isSingleExample || isLast ? (
             <Button
               size="xs"
-              disabled={!isCurrentComplete || isLoading}
+              disabled={!allAnswered || isLoading}
               onClick={handleSubmit}
               className="gap-1 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
             >
@@ -382,7 +398,7 @@ export function AutoEvalExampleLabelingCard({
           ) : (
             <Button
               size="xs"
-              disabled={!isCurrentComplete || isLoading}
+              disabled={!isStepAnswered(activeIndex) || isLoading}
               onClick={() => setActiveIndex((s) => s + 1)}
               className="gap-0.5 bg-purple-600 pr-1 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
             >

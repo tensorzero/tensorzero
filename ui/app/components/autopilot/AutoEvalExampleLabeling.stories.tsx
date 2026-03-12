@@ -663,7 +663,7 @@ const jsonFallbackPayload: EventPayloadAutoEvalExampleLabeling = {
             url: "/api/v1/inference",
             headers: {
               "Content-Type": "application/json",
-              Authorization: "Bearer tz-****-****",
+              Authorization: "Bearer t0-****-****",
             },
             body: {
               function_name: "classify_intent",
@@ -980,6 +980,212 @@ const longMarkdownShortResponsePayload: EventPayloadAutoEvalExampleLabeling = {
   ],
 };
 
+// ── Cross-type and single-block edge cases ────────────────────────────
+
+const jsonLeftMarkdownRightPayload: EventPayloadAutoEvalExampleLabeling = {
+  examples: [
+    {
+      context: [
+        {
+          type: "json",
+          label: "Function Call",
+          data: {
+            function_name: "generate_summary",
+            input: {
+              messages: [
+                {
+                  role: "user",
+                  content:
+                    "Summarize the key findings from Q3 2024 revenue data.",
+                },
+              ],
+            },
+            params: { temperature: 0.3, max_tokens: 512 },
+          },
+        },
+        {
+          type: "markdown",
+          label: "Model Output",
+          text: "## Q3 2024 Revenue Summary\n\n**Total Revenue:** $12.4M (+18% YoY)\n\n### Key Findings\n1. Enterprise segment grew 34%, driven by 12 new contracts\n2. Self-serve revenue declined 8% due to pricing tier changes\n3. APAC region became the fastest-growing market at 42% QoQ\n\n### Risks\n- Churn rate increased from 4.2% to 5.1% in SMB segment\n- Two enterprise renewals ($800K ARR combined) at risk for Q4",
+        },
+      ],
+      label_question: {
+        id: "q1",
+        header: "Accuracy",
+        question: "Does the summary accurately reflect the data?",
+        options: [
+          { id: "yes", label: "Yes", description: "Accurate summary" },
+          { id: "no", label: "No", description: "Contains inaccuracies" },
+          {
+            id: "partial",
+            label: "Partially",
+            description: "Some claims are unsupported",
+          },
+        ],
+      },
+    },
+  ],
+};
+
+const markdownLeftJsonRightPayload: EventPayloadAutoEvalExampleLabeling = {
+  examples: [
+    {
+      context: [
+        {
+          type: "markdown",
+          label: "Instructions",
+          text: "Extract all named entities from the following customer support ticket and return them as structured JSON.\n\nEntity types to extract:\n- **person**: Customer or agent names\n- **product**: Product names or SKUs\n- **date**: Dates or time references\n- **order_id**: Order identifiers\n- **amount**: Monetary amounts",
+        },
+        {
+          type: "json",
+          label: "Model Output",
+          data: {
+            entities: [
+              { type: "person", value: "Sarah Chen", span: [12, 22] },
+              {
+                type: "product",
+                value: "UltraFit Pro Running Shoes",
+                span: [45, 71],
+              },
+              { type: "date", value: "March 3rd", span: [89, 98] },
+              { type: "order_id", value: "ORD-2024-71832", span: [112, 126] },
+              { type: "amount", value: "$149.99", span: [140, 147] },
+            ],
+            confidence: 0.92,
+          },
+        },
+      ],
+      label_question: {
+        id: "q1",
+        header: "Extraction Quality",
+        question: "Were all entities correctly extracted and typed?",
+        options: [
+          { id: "yes", label: "Yes", description: "All correct" },
+          { id: "no", label: "No", description: "Missing or incorrect" },
+        ],
+      },
+      explanation_question: {
+        id: "eq1",
+        header: "Details",
+        question: "Which entities were missed or misclassified?",
+      },
+    },
+  ],
+};
+
+const singleJsonBlockPayload: EventPayloadAutoEvalExampleLabeling = {
+  examples: [
+    {
+      context: [
+        {
+          type: "json",
+          label: "Classification Result",
+          data: {
+            input: "I need to cancel my subscription immediately",
+            predicted_intent: "subscription_cancellation",
+            confidence: 0.97,
+            alternative_intents: [
+              { intent: "billing_inquiry", confidence: 0.02 },
+              { intent: "general_complaint", confidence: 0.01 },
+            ],
+          },
+        },
+      ],
+      label_question: {
+        id: "q1",
+        header: "Classification",
+        question: "Is the predicted intent correct?",
+        options: [
+          { id: "yes", label: "Yes", description: "Correct intent" },
+          { id: "no", label: "No", description: "Wrong intent" },
+        ],
+      },
+    },
+  ],
+};
+
+const singleMarkdownBlockPayload: EventPayloadAutoEvalExampleLabeling = {
+  examples: [
+    {
+      context: [
+        {
+          type: "markdown",
+          label: "Generated Documentation",
+          text: '# `POST /api/v1/inference`\n\nRun a single inference against a configured function.\n\n## Request Body\n\n| Field | Type | Required | Description |\n|-------|------|----------|-------------|\n| `function_name` | string | Yes | Name of the function to invoke |\n| `input` | object | Yes | Input payload matching the function schema |\n| `params` | object | No | Override model parameters (temperature, max_tokens) |\n| `stream` | boolean | No | Enable streaming response (default: false) |\n\n## Response\n\n```json\n{\n  "inference_id": "inf_01H2X4Y5Z6A7B8C9",\n  "episode_id": "ep_01H2X4Y5Z6A7B8C9",\n  "variant_name": "gpt4o_v2",\n  "content": [\n    { "type": "text", "text": "..." }\n  ]\n}\n```\n\n## Error Codes\n\n- `400` — Invalid input format\n- `404` — Unknown function name\n- `429` — Rate limit exceeded\n- `500` — Internal server error',
+        },
+      ],
+      label_question: {
+        id: "q1",
+        header: "Completeness",
+        question: "Is the documentation complete and accurate?",
+        options: [
+          { id: "yes", label: "Yes", description: "Complete and accurate" },
+          { id: "no", label: "No", description: "Missing or incorrect info" },
+          {
+            id: "partial",
+            label: "Partially",
+            description: "Has gaps but mostly correct",
+          },
+        ],
+      },
+    },
+  ],
+};
+
+const longJsonShortMarkdownPayload: EventPayloadAutoEvalExampleLabeling = {
+  examples: [
+    {
+      context: [
+        {
+          type: "json",
+          label: "Input",
+          data: {
+            system: LONG_SYSTEM_PROMPT,
+            messages: LONG_CONVERSATION_MESSAGES,
+          },
+        },
+        {
+          type: "markdown",
+          label: "Model Response",
+          text: "Agree with the cardiologist's assessment. Add SGLT2i.",
+        },
+      ],
+      label_question: simpleLabelQuestion,
+      explanation_question: simpleExplanation,
+    },
+  ],
+};
+
+const shortJsonLongMarkdownPayload: EventPayloadAutoEvalExampleLabeling = {
+  examples: [
+    {
+      context: [
+        {
+          type: "json",
+          label: "Input",
+          data: {
+            messages: [{ role: "user", content: "Review the API docs" }],
+          },
+        },
+        {
+          type: "markdown",
+          label: "Model Response",
+          text: LONG_MARKDOWN_RESPONSE,
+        },
+      ],
+      label_question: {
+        id: "q1",
+        header: "Quality",
+        question: "Is the review thorough and accurate?",
+        options: [
+          { id: "yes", label: "Yes", description: "Thorough review" },
+          { id: "no", label: "No", description: "Superficial or inaccurate" },
+        ],
+      },
+    },
+  ],
+};
+
 // ── Meta ──────────────────────────────────────────────────────────────
 
 const meta = {
@@ -1114,6 +1320,54 @@ export const MarkdownBothShort: Story = {
 export const MarkdownLongPromptShortResponse: Story = {
   args: {
     payload: longMarkdownShortResponsePayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
+export const JsonLeftMarkdownRight: Story = {
+  args: {
+    payload: jsonLeftMarkdownRightPayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
+export const MarkdownLeftJsonRight: Story = {
+  args: {
+    payload: markdownLeftJsonRightPayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
+export const SingleJsonBlock: Story = {
+  args: {
+    payload: singleJsonBlockPayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
+export const SingleMarkdownBlock: Story = {
+  args: {
+    payload: singleMarkdownBlockPayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
+export const LongJsonShortMarkdown: Story = {
+  args: {
+    payload: longJsonShortMarkdownPayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
+export const ShortJsonLongMarkdown: Story = {
+  args: {
+    payload: shortJsonLongMarkdownPayload,
     isLoading: false,
     onSubmit: () => {},
   },
