@@ -6,8 +6,12 @@
 //! TODO(#5744): These tests currently run as part of the ClickHouse test job, but they
 //! don't depend on ClickHouse. Refactor CI to run Postgres and Valkey tests separately.
 
+use std::time::Duration;
+
 use tensorzero_core::db::{ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest};
 use tensorzero_core::rate_limiting::{ActiveRateLimitKey, RateLimitInterval};
+
+use crate::utils::poll_for_result::poll_for_result_with_interval_and_timeout;
 
 /// Invokes a callback macro for each rate limit test.
 /// This ensures both Postgres and Valkey test suites include all tests.
@@ -508,20 +512,52 @@ pub async fn test_refill_mechanics(conn: impl RateLimitQueries + Clone, test_id:
         .unwrap();
     assert_eq!(results[0].tickets_remaining, 60);
 
-    // Phase 2: Wait for single refill (1 second + buffer)
-    tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
-    let balance = conn
-        .get_balance(&key, 100, 30, RateLimitInterval::Second)
+    // Phase 2: Poll until at least one refill has occurred (balance >= 90 = 60 + 30).
+    // Refills are computed server-side using the DB clock, so we poll instead of sleeping.
+    let balance = {
+        let conn = conn.clone();
+        let key = key.clone();
+        poll_for_result_with_interval_and_timeout(
+            || {
+                let conn = conn.clone();
+                let key = key.clone();
+                async move {
+                    conn.get_balance(&key, 100, 30, RateLimitInterval::Second)
+                        .await
+                }
+            },
+            |b| *b >= 90,
+            Duration::from_millis(100),
+            Duration::from_secs(10),
+            "Balance did not reach 90 (expected at least one refill of 30 from 60)",
+        )
         .await
-        .unwrap();
-    assert_eq!(balance, 90); // 60 + 30 refill
+    };
+    assert!(
+        (90..=100).contains(&balance),
+        "Expected balance between 90 and 100 after refill, got {balance}"
+    );
 
-    // Phase 3: Wait for another refill and verify capping (1 more second)
-    tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
-    let balance = conn
-        .get_balance(&key, 100, 30, RateLimitInterval::Second)
+    // Phase 3: Poll until balance is capped at capacity
+    let balance = {
+        let conn = conn.clone();
+        let key = key.clone();
+        poll_for_result_with_interval_and_timeout(
+            || {
+                let conn = conn.clone();
+                let key = key.clone();
+                async move {
+                    conn.get_balance(&key, 100, 30, RateLimitInterval::Second)
+                        .await
+                }
+            },
+            |b| *b >= 100,
+            Duration::from_millis(100),
+            Duration::from_secs(10),
+            "Balance did not reach capacity (100)",
+        )
         .await
-        .unwrap();
+    };
     assert_eq!(balance, 100); // Should be capped at capacity
 }
 
