@@ -215,7 +215,7 @@ struct GepaNamespace {
 #[pymethods]
 impl GepaNamespace {
     #[expect(clippy::too_many_arguments)]
-    #[pyo3(signature = (*, function_name, analysis_model, mutation_model, max_iterations, dataset_name=None, train_dataset_name=None, val_dataset_name=None, evaluation_name=None, evaluators=None, initial_variants=None, variant_prefix=None, batch_size=None, seed=None, include_inference_for_mutation=None, max_concurrency=None))]
+    #[pyo3(signature = (*, function_name, analysis_model, mutation_model, max_iterations, dataset_name=None, train_dataset_name=None, val_dataset_name=None, evaluation_name=None, evaluators=None, initial_variants=None, variant_prefix=None, batch_size=None, seed=None, include_inference_for_mutation=None, max_concurrency=None, max_datapoints=None))]
     fn launch(
         &self,
         py: Python<'_>,
@@ -234,6 +234,7 @@ impl GepaNamespace {
         seed: Option<u32>,
         include_inference_for_mutation: Option<bool>,
         max_concurrency: Option<u32>,
+        max_datapoints: Option<u32>,
     ) -> PyResult<GepaLaunchResponse> {
         let request = GepaLaunchRequest {
             function_name,
@@ -251,6 +252,7 @@ impl GepaNamespace {
             seed,
             include_inference_for_mutation,
             max_concurrency,
+            max_datapoints,
         };
         let client = self.client.clone();
         let fut = client.gepa_launch(request);
@@ -274,7 +276,7 @@ struct AsyncGepaNamespace {
 #[pymethods]
 impl AsyncGepaNamespace {
     #[expect(clippy::too_many_arguments)]
-    #[pyo3(signature = (*, function_name, analysis_model, mutation_model, max_iterations, dataset_name=None, train_dataset_name=None, val_dataset_name=None, evaluation_name=None, evaluators=None, initial_variants=None, variant_prefix=None, batch_size=None, seed=None, include_inference_for_mutation=None, max_concurrency=None))]
+    #[pyo3(signature = (*, function_name, analysis_model, mutation_model, max_iterations, dataset_name=None, train_dataset_name=None, val_dataset_name=None, evaluation_name=None, evaluators=None, initial_variants=None, variant_prefix=None, batch_size=None, seed=None, include_inference_for_mutation=None, max_concurrency=None, max_datapoints=None))]
     fn launch<'py>(
         &self,
         py: Python<'py>,
@@ -293,6 +295,7 @@ impl AsyncGepaNamespace {
         seed: Option<u32>,
         include_inference_for_mutation: Option<bool>,
         max_concurrency: Option<u32>,
+        max_datapoints: Option<u32>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let request = GepaLaunchRequest {
             function_name,
@@ -310,6 +313,7 @@ impl AsyncGepaNamespace {
             seed,
             include_inference_for_mutation,
             max_concurrency,
+            max_datapoints,
         };
         let client = self.client.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {

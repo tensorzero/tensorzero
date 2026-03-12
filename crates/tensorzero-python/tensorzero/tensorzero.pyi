@@ -372,6 +372,7 @@ class _GepaNamespace:
         seed: Optional[int] = None,
         include_inference_for_mutation: Optional[bool] = None,
         max_concurrency: Optional[int] = None,
+        max_datapoints: Optional[int] = None,
     ) -> GepaLaunchResponse: ...
     def get(self, *, task_id: str) -> Dict[str, Any]: ...
 
@@ -395,6 +396,7 @@ class _AsyncGepaNamespace:
         seed: Optional[int] = None,
         include_inference_for_mutation: Optional[bool] = None,
         max_concurrency: Optional[int] = None,
+        max_datapoints: Optional[int] = None,
     ) -> GepaLaunchResponse: ...
     async def get(self, *, task_id: str) -> Dict[str, Any]: ...
 
