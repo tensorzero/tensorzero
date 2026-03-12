@@ -630,7 +630,7 @@ Each inference object is the same as the response from a regular inference reque
 ## `GET /batch_inference/:batch_id/inference/:inference_id`
 
 This endpoint can be used to poll the status of a single inference in a batch.
-Since the polling involves pulling data on all the inferences in the batch, we also store the status of all those inference in ClickHouse.
+Since the polling involves pulling data on all the inferences in the batch, we also store the status of all those inference in your database.
 The response format depends on the function type as well as the batch status when polled.
 
 ### Pending
