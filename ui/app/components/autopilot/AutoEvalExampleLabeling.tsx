@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { StepTab } from "~/components/autopilot/question-cards/StepTab";
@@ -142,44 +142,6 @@ export function AutoEvalExampleLabelingCard({
 
   const totalExamples = payload.examples.length;
 
-  // Keyboard shortcuts: 1-9 select options, Enter advances/submits
-  useEffect(() => {
-    if (isLoading || totalExamples === 0) return;
-    const handler = (e: KeyboardEvent) => {
-      // Don't intercept when typing in the rationale textarea
-      if (
-        e.target instanceof HTMLTextAreaElement ||
-        e.target instanceof HTMLInputElement
-      )
-        return;
-
-      const options = payload.examples[activeIndex]?.label_question.options;
-      if (!options) return;
-
-      // Number keys select options
-      const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= options.length) {
-        e.preventDefault();
-        setSelections((prev) => ({
-          ...prev,
-          [activeIndex]: options[num - 1].id,
-        }));
-        return;
-      }
-
-      // Enter advances to next step or submits
-      if (e.key === "Enter") {
-        if (!selections[activeIndex]) return;
-        e.preventDefault();
-        if (activeIndex < totalExamples - 1) {
-          setActiveIndex((s) => s + 1);
-        }
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [activeIndex, isLoading, totalExamples, payload.examples, selections]);
-
   if (totalExamples === 0) return null;
 
   const isSingleExample = totalExamples === 1;
@@ -285,9 +247,8 @@ export function AutoEvalExampleLabelingCard({
               {example.label_question.question}
             </span>
             <div className="flex flex-wrap gap-2">
-              {example.label_question.options.map((opt, optIdx) => {
+              {example.label_question.options.map((opt) => {
                 const isSelected = selections[activeIndex] === opt.id;
-                const shortcut = optIdx < 9 ? optIdx + 1 : undefined;
                 const button = (
                   <OptionButton
                     key={opt.id}
@@ -306,11 +267,6 @@ export function AutoEvalExampleLabelingCard({
                         : "text-fg-primary",
                     )}
                   >
-                    {shortcut && (
-                      <kbd className="text-fg-tertiary mr-0.5 font-mono text-[10px] opacity-50">
-                        {shortcut}
-                      </kbd>
-                    )}
                     {opt.label}
                   </OptionButton>
                 );
