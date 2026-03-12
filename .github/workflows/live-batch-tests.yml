@@ -64,6 +64,13 @@ jobs:
           done
         shell: bash
 
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          cache-provider: "buildjet"
+          shared-key: "build-gateway-cache"
+          save-if: false
+          workspaces: "crates -> target"
+
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
