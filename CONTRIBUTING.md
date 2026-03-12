@@ -89,7 +89,6 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Rust (1.80+) [→](https://www.rust-lang.org/tools/install)
 - Install `cargo-deny` [→](https://github.com/EmbarkStudios/cargo-deny)
 - Install `cargo-nextest` [→](https://nexte.st/docs/installation/pre-built-binaries/)
-- Install `mold` linker (Linux) [→](https://github.com/rui314/mold#installation) — required on Linux, configured in `.cargo/config.toml`
 - Install `pre-commit` [→](https://pre-commit.com/#install)
 - Enable `pre-commit` in your repository: `pre-commit install`
 - Install Docker [→](https://docs.docker.com/get-docker/)

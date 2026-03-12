@@ -56,11 +56,6 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-      - name: Install mold linker
-        run: |
-          sudo apt-get install -y mold
-          echo 'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS=-C link-arg=-fuse-ld=mold' >> $GITHUB_ENV
-          echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS=-C link-arg=-fuse-ld=mold' >> $GITHUB_ENV
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6

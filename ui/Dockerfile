@@ -38,10 +38,8 @@ ARG DEBUG_BUILD
 
 # Install Node.js 24 (required by @napi-rs/cli v3)
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
-    apt-get install -y nodejs mold && \
+    apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
-ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-fuse-ld=mold"
-ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-fuse-ld=mold"
 RUN npm install -g pnpm
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /build/

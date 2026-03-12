@@ -193,7 +193,6 @@ doc_lazy_continuation = "allow"
 [profile.dev]
 debug = "line-tables-only"
 
-
 [profile.performance]
 inherits = "release"
 lto = "fat"

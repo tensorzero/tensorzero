@@ -11,9 +11,7 @@ ARG PROFILE
 WORKDIR /src
 ENV CARGO_INCREMENTAL=0
 
-RUN apt-get update && apt-get install -y clang libc++-dev mold && rm -rf /var/lib/apt/lists/*
-ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-fuse-ld=mold"
-ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-fuse-ld=mold"
+RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
 COPY crates/ crates/
 WORKDIR /src/crates

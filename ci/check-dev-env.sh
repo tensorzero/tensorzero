@@ -45,18 +45,9 @@ check "node"          "node --version"                        "https://nodejs.or
 check "pnpm"          "pnpm --version"                        "npm install -g pnpm@10.15.0"
 check "pre-commit"    "pre-commit --version"                  "https://pre-commit.com/#install"
 
-# mold is required on Linux (configured in .cargo/config.toml)
-if [[ "$(uname -s)" == "Linux" ]]; then
-    check "mold"      "mold --version"                        "https://github.com/rui314/mold#installation"
-fi
-
 echo ""
 echo "Optional tools:"
 check_optional "cargo-hack"   "cargo hack --version"          "https://github.com/DevinR528/cargo-hack"
-
-if [[ "$(uname -s)" == "Darwin" ]]; then
-    check_optional "mold"     "mold --version"                "brew install mold — faster linking on macOS"
-fi
 
 echo ""
 if [[ $errors -gt 0 ]]; then
