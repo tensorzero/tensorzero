@@ -1,7 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { AlertTriangle, Check } from "lucide-react";
-import { Toaster } from "./toaster";
-import { GlobalToastProvider } from "~/providers/global-toast-provider";
 import { useToast } from "~/hooks/use-toast";
 import { Button } from "./button";
 
@@ -30,7 +28,6 @@ function ToastDemo({ variant }: { variant: "info" | "success" | "error" }) {
   return (
     <div>
       <Button onClick={trigger}>Show Toast</Button>
-      <Toaster />
     </div>
   );
 }
@@ -59,20 +56,12 @@ function ToastIconDemo({
       >
         Show Toast
       </Button>
-      <Toaster />
     </div>
   );
 }
 
 const meta = {
   title: "DS/Toast",
-  decorators: [
-    (Story) => (
-      <GlobalToastProvider>
-        <Story />
-      </GlobalToastProvider>
-    ),
-  ],
 } satisfies Meta;
 
 export default meta;
